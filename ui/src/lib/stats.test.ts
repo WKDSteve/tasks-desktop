@@ -73,8 +73,26 @@ describe('the headline numbers', () => {
     const wins = new Set(['a/one']);
     const figures = figuresOf(tasks, wins);
     for (const figure of ['open', 'ready', 'doing', 'blocked', 'quickWins', 'noEffort'] as const) {
-      const shown = applyFilter(tasks, figureFilter(freshFilter(), figure), '2026-11-01', undefined, wins);
+      const filter = figureFilter(freshFilter(), figure, figures);
+      expect(filter).not.toBeNull();
+      const shown = applyFilter(tasks, filter!, '2026-11-01', undefined, wins);
       expect(shown.length).toBe(figures[figure]);
+    }
+  });
+
+  it('open nothing for a number of none, so a field the filter keeps out is not set', () => {
+    // Only open tasks are kept: doing and blocked count none, and "doing" must not open the doing tasks.
+    const base = { ...freshFilter(), statuses: ['open'] };
+    const kept = applyFilter(tasks, base, '2026-11-01');
+    const figures = figuresOf(kept, new Set(['a/one']));
+    expect(figures.doing).toBe(0);
+    expect(figureFilter(base, 'doing', figures)).toBeNull();
+    expect(figureFilter(base, 'blocked', figures)).toBeNull();
+    expect(figureFilter(base, 'quickWins', figures)).toBeNull();
+    // A number above none opens the tasks it counts, inside the filter that is on.
+    for (const figure of ['open', 'ready', 'noEffort'] as const) {
+      const filter = figureFilter(base, figure, figures);
+      expect(applyFilter(tasks, filter!, '2026-11-01').length, figure).toBe(figures[figure]);
     }
   });
 });

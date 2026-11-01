@@ -154,8 +154,13 @@ export function filterFor(
   return out;
 }
 
-/** The filter of a headline number (the filter that is on, narrowed to what the number counts). */
-export function figureFilter(base: Filter, figure: Figure): Filter {
+/**
+ * The filter of a headline number: the filter that is on, narrowed to what the number counts. Null for a number of
+ * none: the field it sets may be one the filter keeps out (doing while only open is chosen), and setting it would show
+ * tasks the number did not count. A number above none has a task the filter keeps, so the field's choice holds it.
+ */
+export function figureFilter(base: Filter, figure: Figure, figures: StatFigures): Filter | null {
+  if (!figures[figure]) return null;
   switch (figure) {
     case 'open':
       return base;

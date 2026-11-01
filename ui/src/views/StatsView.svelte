@@ -79,16 +79,27 @@
     <ul class="figures">
       {#each figureList as f (f.figure)}
         <li>
-          <button
-            type="button"
-            class="figure"
-            data-figure={f.figure}
-            aria-label={t('stats.open_figure', { label: f.label, n: f.n })}
-            onclick={() => app.openStatsInList(figureFilter(app.filter, f.figure))}
-          >
-            <span class="label">{f.label}</span>
-            <span class="n">{f.n}</span>
-          </button>
+          {#if figureFilter(app.filter, f.figure, figures)}
+            <button
+              type="button"
+              class="figure"
+              data-figure={f.figure}
+              aria-label={t('stats.open_figure', { label: f.label, n: f.n })}
+              onclick={() => {
+                const filter = figureFilter(app.filter, f.figure, figures);
+                if (filter) app.openStatsInList(filter);
+              }}
+            >
+              <span class="label">{f.label}</span>
+              <span class="n">{f.n}</span>
+            </button>
+          {:else}
+            <!-- A number of none opens nothing. -->
+            <div class="figure" data-figure={f.figure}>
+              <span class="label">{f.label}</span>
+              <span class="n">{f.n}</span>
+            </div>
+          {/if}
         </li>
       {/each}
     </ul>
@@ -286,7 +297,10 @@
     color: var(--text);
     cursor: pointer;
   }
-  .figure:hover {
+  div.figure {
+    cursor: default;
+  }
+  button.figure:hover {
     border-color: var(--accent);
   }
   .figure .label {
