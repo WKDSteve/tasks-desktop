@@ -4,10 +4,12 @@
   // list. The counting is `lib/stats.ts`; the bars are drawn for the eye and the table is what the keyboard and a
   // screen reader take (the bars repeat its buttons, out of the tab order).
   import type { App } from '../lib/app.svelte';
+  import type { Estimate } from '../lib/contract';
   import { areaLabel, NONE } from '../lib/filter';
-  import { translate, type Key } from '../lib/i18n';
+  import { formatNumber, translate, type Key } from '../lib/i18n';
   import {
     DAYS,
+    effortSource,
     figureFilter,
     figuresOf,
     filterFor,
@@ -25,7 +27,7 @@
   const t = (key: Key, params: Record<string, string | number> = {}) => translate(app.lang, key, params);
 
   const tasks = $derived(app.shown);
-  const stats = $derived(statsOf(tasks, app.statsDim, app.statsSort));
+  const stats = $derived(statsOf(tasks, app.statsDim, app.statsSort, (area) => nameOf(area)));
   const figures = $derived(figuresOf(tasks, app.quickWinSet));
   const widest = $derived(Math.max(1, ...stats.rows.map((r) => r.total)));
 
@@ -63,6 +65,35 @@
     return /^[A-Za-z0-9]+$/.test(bucket) ? `v-${bucket}` : 'other';
   }
   const nameOf = (area: string) => areaLabel(area, app.allAreaNames);
+
+  // The effort of the tasks the filter keeps is the engine's figure (WEB-13): asked again when they or the vault change.
+  const source = $derived(app.can('estimate') ? effortSource(tasks, app.tasks) : null);
+  const askKey = $derived(source?.from === 'engine' ? `${app.snapshot?.rev ?? ''}|${source.ids.join(',')}` : '');
+  let asked = $state.raw<{ key: string; figure: Estimate } | null>(null);
+  $effect(() => {
+    const key = askKey;
+    if (key === '' || source?.from !== 'engine') return;
+    const abort = new AbortController();
+    app.estimateOf(source.ids, abort.signal).then(
+      (figure) => {
+        if (!abort.signal.aborted) asked = { key, figure };
+      },
+      () => {
+        // No figure: the number is left out, the rest of the view stands.
+      },
+    );
+    return () => abort.abort();
+  });
+  const effort = $derived.by((): { days: number; low?: number; high?: number; without: number } | null => {
+    if (source?.from === 'snapshot') {
+      const all = app.snapshot?.estimate;
+      return all ? { days: all.days, without: all.n_without_effort } : null;
+    }
+    if (source?.from !== 'engine' || asked?.key !== askKey) return null;
+    const f = asked.figure;
+    return { days: f.days, low: f.range.low, high: f.range.high, without: f.n_without_effort };
+  });
+  const days = (n: number) => formatNumber(app.lang, Math.round(n * 10) / 10);
 
   function open(bucket: string | null, area: string | null): void {
     app.openStatsInList(filterFor(app.filter, app.statsDim, bucket, area, tasks));
@@ -102,6 +133,20 @@
           {/if}
         </li>
       {/each}
+      {#if effort}
+        <li>
+          <div class="figure" data-figure="effort" data-hint={t('hint.stats.effort')}>
+            <span class="label">{t('stats.effort')}</span>
+            <span class="n">{t('stats.days_n', { n: days(effort.days) })}</span>
+            {#if effort.low !== undefined && effort.high !== undefined}
+              <span class="sub">{t('stats.range', { low: days(effort.low), high: days(effort.high) })}</span>
+            {/if}
+            {#if effort.without > 0}
+              <span class="sub">{t('stats.without', { n: effort.without })}</span>
+            {/if}
+          </div>
+        </li>
+      {/if}
     </ul>
     <div class="bar">
       <div class="dims" role="group" aria-label={t('stats.by')}>
@@ -305,6 +350,10 @@
   }
   .figure .label {
     color: var(--muted);
+  }
+  .figure .sub {
+    color: var(--muted);
+    font-size: 0.85em;
   }
   .figure .n {
     font-size: 1.6em;

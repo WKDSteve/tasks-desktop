@@ -1278,6 +1278,11 @@ const en = {
   'stats.open_area': '{area}: {n} open tasks - show in the list',
   'stats.open_cell': '{area}, {bucket}: {n} - show in the list',
   'stats.open_bucket': 'All areas, {bucket}: {n} - show in the list',
+  'stats.effort': 'Effort',
+  'stats.days_n': '{n} d',
+  'stats.range': '{low} to {high} d',
+  'stats.without': '{n} without effort',
+  'hint.stats.effort': 'The days of the tasks the filter keeps, as the engine adds them up, and the range with every size at its low and at its high end. A task without an effort is not in it.',
 } as const;
 
 export type Key = keyof typeof en;
@@ -2556,6 +2561,11 @@ const de: Record<Key, string> = {
   'stats.open_area': '{area}: {n} offene Tasks - in der Liste zeigen',
   'stats.open_cell': '{area}, {bucket}: {n} - in der Liste zeigen',
   'stats.open_bucket': 'Alle Bereiche, {bucket}: {n} - in der Liste zeigen',
+  'stats.effort': 'Aufwand',
+  'stats.days_n': '{n} T',
+  'stats.range': '{low} bis {high} T',
+  'stats.without': '{n} ohne Aufwand',
+  'hint.stats.effort': 'Die Tage der Tasks, die der Filter lässt, wie die Engine sie zusammenzählt, und die Spanne mit jeder Größe an ihrem unteren und oberen Ende. Eine Task ohne Aufwand ist nicht darin.',
 };
 
 export const dictionaries: Record<Lang, Record<Key, string>> = { en, de };

@@ -21,6 +21,7 @@ import { ApiError, type Hub, type HubArea, type HubAreas, type SearchResult, typ
 import { cacheableClass, cacheableList, type CachedList, type ListStore } from './cache';
 import type {
   DonePreview,
+  Estimate,
   Finished,
   Links,
   MovePlan,
@@ -2583,6 +2584,11 @@ export class App {
     this.statsDim = dim;
     this.statsSort = sort;
     safe(() => this.env.prefs.setItem('tasks-desktop.stats', JSON.stringify({ dim, sort })));
+  }
+
+  /** The engine's estimate of some open tasks (the statistics ask it for the tasks the filter keeps). */
+  estimateOf(ids: string[], signal: AbortSignal): Promise<Estimate> {
+    return this.env.hub.estimate({ ids }, signal);
   }
 
   /** What a number of the statistics counts, in the list: `filter` is the one that is on, narrowed by the click. */

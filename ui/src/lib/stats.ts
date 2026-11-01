@@ -65,9 +65,15 @@ export interface Stats {
 
 /**
  * The tasks counted per area and stack. Every task is in one row and one stack, so the rows add up to the tasks.
- * `count` puts the area with the most tasks first (a tie by name), `name` sorts by name.
+ * `count` puts the area with the most tasks first (a tie by name), `name` sorts by name. The name is the one shown
+ * (`label`, e.g. without the prefix `wkdbook-`), so the order is the one the eye reads.
  */
-export function statsOf(tasks: readonly TaskEntry[], dim: StatDim, sort: StatSort = 'count'): Stats {
+export function statsOf(
+  tasks: readonly TaskEntry[],
+  dim: StatDim,
+  sort: StatSort = 'count',
+  label: (area: string) => string = (area) => area,
+): Stats {
   const rows = new Map<string, StatRow>();
   const totals: Record<string, number> = {};
   for (const task of tasks) {
@@ -86,7 +92,7 @@ export function statsOf(tasks: readonly TaskEntry[], dim: StatDim, sort: StatSor
     .filter((b) => !known.includes(b))
     .sort();
   const buckets = [...known.filter((b) => totals[b] !== undefined), ...extra];
-  const byName = (a: StatRow, b: StatRow) => a.area.localeCompare(b.area);
+  const byName = (a: StatRow, b: StatRow) => label(a.area).localeCompare(label(b.area)) || a.area.localeCompare(b.area);
   const list = [...rows.values()].sort(sort === 'name' ? byName : (a, b) => b.total - a.total || byName(a, b));
   return { buckets, rows: list, totals, total: tasks.length };
 }
@@ -174,6 +180,23 @@ export function figureFilter(base: Filter, figure: Figure, figures: StatFigures)
     case 'noEffort':
       return { ...base, fields: { ...base.fields, effort: [NONE] } };
   }
+}
+
+/** The most ids the engine's estimate takes in one question (the hub's `ESTIMATE_MAX`). */
+export const ESTIMATE_MAX = 1000;
+
+/**
+ * Where the figure of the effort comes from: the engine asked for the ids the filter keeps (its answer has the range
+ * of the sizes too); beyond what one question takes, the snapshot's estimate when the filter keeps every open task
+ * (the engine reckoned it for all of them); else null, as for no task (the page reckons no sum itself).
+ */
+export function effortSource(
+  shown: readonly TaskEntry[],
+  all: readonly TaskEntry[],
+): { from: 'snapshot' } | { from: 'engine'; ids: string[] } | null {
+  if (shown.length === 0) return null;
+  if (shown.length <= ESTIMATE_MAX) return { from: 'engine', ids: shown.map((t) => t.id) };
+  return shown.length === all.length ? { from: 'snapshot' } : null;
 }
 
 /** The stored choice of the view read back: only a field and an order that exist. */

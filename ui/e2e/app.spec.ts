@@ -6651,6 +6651,10 @@ test('the statistics count the open tasks per area, cut up by a field, and a num
   await expect(open).toHaveText(/^\d+$/);
   const total = table.locator('tfoot td').first();
   await expect(total).toHaveText((await open.textContent()) ?? '');
+  // The effort is the engine's figure for the tasks the filter keeps, with the range of the sizes.
+  const effort = page.locator('[data-figure="effort"]');
+  await expect(effort.locator('.n')).toHaveText(/^[\d.,]+ d$/);
+  await expect(effort).toContainText(/[\d.,]+ to [\d.,]+ d/);
   // A field cuts the areas up; the choice is pressed and outlives a reload.
   const kind = page.getByRole('group', { name: 'Cut up by' }).getByRole('button', { name: 'Kind' });
   await kind.click();

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { TaskEntry } from './contract';
 import { task } from './fixtures';
 import { applyFilter, freshFilter, NONE } from './filter';
-import { bucketOf, DAYS, figureFilter, figuresOf, filterFor, parseStatsPrefs, STAT_DIMS, statsOf } from './stats';
+import { bucketOf, DAYS, effortSource, ESTIMATE_MAX, figureFilter, figuresOf, filterFor, parseStatsPrefs, STAT_DIMS, statsOf } from './stats';
 
 const state = (s: string) => ({ state: s, rank: 1, leverage: 0, open_blockers: [] }) as unknown as TaskEntry['readiness'];
 
@@ -42,6 +42,16 @@ describe('the statistics', () => {
     expect(statsOf(tasks, 'status', 'name').rows.map((r) => r.area)).toEqual(['a', 'b', 'c']);
     const tie = [task('z/1'), task('m/1')];
     expect(statsOf(tie, 'status').rows.map((r) => r.area)).toEqual(['m', 'z']);
+  });
+
+  it('sort by the name shown, so a prefix that is left out does not move an area', () => {
+    const some = [task('wkdbook-zeta/1'), task('beta/1'), task('wkdbook-alpha/1')];
+    const label = (area: string) => area.replace(/^wkdbook-/, '');
+    expect(statsOf(some, 'status', 'name', label).rows.map((r) => r.area)).toEqual([
+      'wkdbook-alpha',
+      'beta',
+      'wkdbook-zeta',
+    ]);
   });
 
   it('list only the stacks that have a task, in their order, and an unknown value after them', () => {
@@ -124,6 +134,18 @@ describe('a click on a stack', () => {
 
   it('on an area alone sets only the area', () => {
     expect(filterFor(freshFilter(), 'status', null, 'b', tasks)).toEqual({ ...freshFilter(), areas: ['b'] });
+  });
+});
+
+describe('where the effort comes from', () => {
+  it('is the engine for what one question takes, the snapshot for every task beyond it, else nothing', () => {
+    expect(effortSource(tasks, tasks)?.from).toBe('engine');
+    expect(effortSource(tasks.slice(0, 2), tasks)).toEqual({ from: 'engine', ids: ['a/one', 'a/two'] });
+    expect(effortSource([], tasks)).toBeNull();
+    const many = Array.from({ length: ESTIMATE_MAX + 2 }, (_, i) => task(`a/t${i}`));
+    expect(effortSource(many, many)).toEqual({ from: 'snapshot' });
+    expect(effortSource(many.slice(1), many)).toBeNull();
+    expect(effortSource(many.slice(0, ESTIMATE_MAX), many)?.from).toBe('engine');
   });
 });
 
