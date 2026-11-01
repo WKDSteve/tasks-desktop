@@ -42,6 +42,7 @@
   import VaultsDialog from './views/VaultsDialog.svelte';
   import AboutDialog from './views/AboutDialog.svelte';
   import ShortcutDialog from './views/ShortcutDialog.svelte';
+  import UpdateDialog from './views/UpdateDialog.svelte';
   import Toast from './views/Toast.svelte';
 
   let { app, code }: { app: App; code: string | null } = $props();
@@ -53,6 +54,7 @@
   // The page opened from disk (the web variant): a shortcut can point to its file. Served pages have their own address.
   const fromDisk = location.protocol === 'file:';
   let shortcutOpen = $state(false);
+  let updateOpen = $state(false);
   // A view of the menu opens in a new tab with a middle click, Ctrl+click or Ctrl+Enter, where the page can open one.
   const apart = (view: View) => (app.canDetach ? { onopennew: () => app.openViewApart(view) } : {});
   let chordTimer: ReturnType<typeof setTimeout> | undefined;
@@ -568,6 +570,12 @@
                   hint: t('hint.item.menu.shortcut'),
                   onselect: () => (shortcutOpen = true),
                 },
+                {
+                  kind: 'action' as const,
+                  label: t('menu.update'),
+                  hint: t('hint.item.menu.update'),
+                  onselect: () => (updateOpen = true),
+                },
               ]
             : []),
         ],
@@ -782,6 +790,7 @@
   <!-- Outside the ready block: the Info dialog and its report are there when the engine is not (app.canAbout). -->
   <AboutDialog {app} />
   {#if fromDisk}<ShortcutDialog {app} open={shortcutOpen} onclose={() => (shortcutOpen = false)} />{/if}
+  {#if fromDisk}<UpdateDialog {app} open={updateOpen} onclose={() => (updateOpen = false)} />{/if}
   <!-- While the float of a task is open the toast is drawn inside it: the float is modal, and the Undo out here could not
        be reached. -->
   {#if !app.taskFloatOpen}<Toast {app} />{/if}

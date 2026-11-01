@@ -64,7 +64,10 @@ For a machine where no program may be installed: the page runs alone in Chrome o
 one).
 
 1. Get the file: `git clone` (later `git pull`) of the public repository
-   [tasks-web](https://github.com/WKDSteve/tasks-web); compare `Get-FileHash tasks.html` with `SHA256SUMS`.
+   [tasks-web](https://github.com/WKDSteve/tasks-web); compare `Get-FileHash tasks.html` with `SHA256SUMS`. The start
+   script below pulls and checks the sums at every start (`start-tasks.cmd /update` does only that), and Options >
+   "Update the page ..." in the page names its build (ref, commit, day) and gives the lines to copy; the page itself
+   fetches nothing.
 2. Open `file:///<path>/tasks-web/tasks.html` in Chrome, or run `start-tasks.cmd` there (it finds Chrome, `/app` for a
    window of its own, `/shortcut` for a shortcut on the desktop and in the Start menu). Without the script: Options >
    "Create a shortcut ..." in the page gives the line for Windows' "New > Shortcut" (Chrome as a window of its own, or

@@ -46,6 +46,7 @@ import { changesOf, failedIdsOf, MATRIX_MAX, matrixIds, type Draft } from './est
 import { MatrixState } from './state/matrix.svelte';
 import { bumped, parseFrecency, type Frecency } from 'appkit-ui/palette';
 import { AboutState, type AboutDialog } from './state/about.svelte';
+import type { About } from './about';
 import { ConflictsState } from './state/conflicts.svelte';
 import { VaultsState } from './state/vaults.svelte';
 import { ViewsState } from './state/views.svelte';
@@ -480,6 +481,10 @@ export class App {
   });
   get about(): AboutDialog {
     return this.aboutState.dialog;
+  }
+  /** What this build is, for the dialog that updates the web variant (the Info dialog keeps its own). */
+  readAbout(): Promise<About> {
+    return this.env.hub.about();
   }
   /**
    * How the page runs, as the page that made the app says it (`Env.mode`): `web` for the web variant, `null` for the

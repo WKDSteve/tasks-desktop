@@ -62,9 +62,8 @@ jobs:
         run: node ../tools/run-with-temp.mjs -- pnpm web:test
       - name: Build the page
         working-directory: ui
-        env:
-          WEB_BUILD: ${{ github.ref_name }}
-        run: pnpm web:build
+        # The build the page names (Options > Update the page, Help > Info): the ref, its commit and the day it was built.
+        run: WEB_BUILD="$GITHUB_REF_NAME@${GITHUB_SHA::7} $(date -u +%Y-%m-%d)" pnpm web:build
       # The same project as in ci.yml (ui/e2e-web/): the built file itself, from disk, in Chrome. What is published is
       # what was tested. Both test steps run through tools/run-with-temp.mjs, as in ci.yml: a temp dir of their own, and
       # the step fails when a test left a folder of its own in it.
