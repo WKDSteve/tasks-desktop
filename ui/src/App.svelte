@@ -10,6 +10,7 @@
   import InboxView from './views/InboxView.svelte';
   import AbnahmeView from './views/AbnahmeView.svelte';
   import CrossView from './views/CrossView.svelte';
+  import StatsView from './views/StatsView.svelte';
   import FinishedView from './views/FinishedView.svelte';
   import ViewsView from './views/ViewsView.svelte';
   import Matrix from './views/Matrix.svelte';
@@ -447,6 +448,14 @@
             onselect: () => app.setView('cross'),
             ...apart('cross'),
           },
+          {
+            kind: 'radio',
+            label: t('nav.stats'),
+            hint: t('hint.item.nav.stats'),
+            checked: app.view === 'stats',
+            onselect: () => app.setView('stats'),
+            ...apart('stats'),
+          },
           ...(app.can('finished')
             ? [
                 {
@@ -688,6 +697,8 @@
                     ? t('nav.abnahme')
                   : app.view === 'cross'
                     ? t('nav.cross')
+                  : app.view === 'stats'
+                    ? t('nav.stats')
                     : app.view === 'done'
                       ? t('nav.done')
                       : app.view === 'views'
@@ -710,6 +721,8 @@
           <AbnahmeView {app} />
         {:else if app.view === 'cross'}
           <CrossView {app} />
+        {:else if app.view === 'stats'}
+          <StatsView {app} />
         {:else if app.view === 'done'}
           <FinishedView {app} />
         {:else if app.view === 'views'}

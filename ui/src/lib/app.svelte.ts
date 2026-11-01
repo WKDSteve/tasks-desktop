@@ -57,6 +57,7 @@ import { GraphState } from './state/graph.svelte';
 import type { DailyPrefs } from './daily';
 import { parseConflictMode, type ConflictMode } from 'appkit-ui/conflicts';
 import type { CountKey, CountView } from './counts';
+import { parseStatsPrefs, type StatDim, type StatSort } from './stats';
 import { conflictsOf, conflictsOfRequest, retryOp, type Conflict } from './conflicts';
 import { Preferences, StreamSession } from 'appkit-ui/session';
 import type { SseMessage } from 'appkit-ui/sse';
@@ -103,7 +104,7 @@ const NOTE_MAX = 1000;
 
 export type Phase = 'starting' | 'needs_pairing' | 'offline' | 'unavailable' | 'ready';
 export type Connection = 'live' | 'reconnecting' | 'offline';
-export type View = 'today' | 'list' | 'board' | 'plan' | 'inbox' | 'abnahme' | 'cross' | 'done' | 'views';
+export type View = 'today' | 'list' | 'board' | 'plan' | 'inbox' | 'abnahme' | 'cross' | 'stats' | 'done' | 'views';
 export type Theme = 'auto' | 'light' | 'dark';
 /** The blocks of the Today view that a person may hide. */
 export { ORDERED_TILES, TILES, type OrderedTile, type Tile } from './tiles-list';
@@ -298,6 +299,9 @@ export class App {
   shortAreas = $state(true);
   /** The choice of the areas shows beside each area how many tasks it would keep (`areaCounts`). */
   areaCountsShown = $state(true);
+  /** The field the statistics cut the areas up by, and the order of the areas there (`lib/stats.ts`). */
+  statsDim = $state<StatDim>('status');
+  statsSort = $state<StatSort>('count');
   /**
    * `auto`: a field of the detail is written as soon as it changes (the default). `manual`: the changes of the fields
    * of a task are held as a draft (`drafts`) until the person saves them, all in one write; the other ways to change
@@ -596,6 +600,9 @@ export class App {
     );
     this.shortAreas = safe(() => env.prefs.getItem('tasks-desktop.short-areas')) !== 'off';
     this.areaCountsShown = safe(() => env.prefs.getItem('tasks-desktop.area-counts')) !== 'off';
+    const stats = parseStatsPrefs(safe(() => env.prefs.getItem('tasks-desktop.stats')));
+    this.statsDim = stats.dim;
+    this.statsSort = stats.sort;
     this.saveMode = safe(() => env.prefs.getItem('tasks-desktop.save-mode')) === 'manual' ? 'manual' : 'auto';
     this.listColumns = parseColumns(safe(() => env.prefs.getItem('tasks-desktop.list-columns')));
     this.folds = parseFolds(safe(() => env.prefs.getItem('tasks-desktop.folds')));
@@ -618,6 +625,7 @@ export class App {
       view === 'inbox' ||
       view === 'abnahme' ||
       view === 'cross' ||
+      view === 'stats' ||
       view === 'done' ||
       view === 'views'
         ? view
@@ -2568,6 +2576,19 @@ export class App {
       counts.set(group.name, applyFilter(this.tasks, only, this.today, this.crossIndex, this.quickWinSet).length);
     }
     return counts;
+  }
+
+  /** The field and the order of the statistics, remembered. */
+  setStats(dim: StatDim, sort: StatSort): void {
+    this.statsDim = dim;
+    this.statsSort = sort;
+    safe(() => this.env.prefs.setItem('tasks-desktop.stats', JSON.stringify({ dim, sort })));
+  }
+
+  /** What a number of the statistics counts, in the list: `filter` is the one that is on, narrowed by the click. */
+  openStatsInList(filter: Filter): void {
+    this.filter = filter;
+    this.setView('list');
   }
 
   /** Take every chosen area, status and actor and the search words away. */

@@ -6636,3 +6636,42 @@ test('a tick the hub refuses leaves the box as the task says and writes nothing'
   await expect(box).toBeChecked({ checked: was });
   expect(readFileSync(file, 'utf8')).toBe(before);
 });
+
+test('the statistics count the open tasks per area, cut up by a field, and a number opens its tasks in the list', async ({ page }) => {
+  await pair(page);
+  await showList(page);
+  await page.keyboard.press('g');
+  await page.keyboard.press('s');
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Statistics');
+  const table = page.getByRole('table', { name: 'The numbers per area' });
+  await expect(table).toBeVisible();
+  await expectAccessible(page, 'statistics');
+  // The headline "open" is the sum of the table: every task is in one row.
+  const open = page.locator('button.figure[data-figure="open"] .n');
+  await expect(open).toHaveText(/^\d+$/);
+  const total = table.locator('tfoot td').first();
+  await expect(total).toHaveText((await open.textContent()) ?? '');
+  // A field cuts the areas up; the choice is pressed and outlives a reload.
+  const kind = page.getByRole('group', { name: 'Cut up by' }).getByRole('button', { name: 'Kind' });
+  await kind.click();
+  await expect(kind).toHaveAttribute('aria-pressed', 'true');
+  await expect(table.locator('thead th').nth(2)).not.toHaveText('doing');
+  await page.reload();
+  await expect(page.getByRole('group', { name: 'Cut up by' }).getByRole('button', { name: 'Kind' })).toHaveAttribute('aria-pressed', 'true');
+  // The total of an area opens the list with that area chosen, and the list shows only its tasks.
+  await page.getByRole('button', { name: /^lib\.nvim: \d+ open tasks - show in the list$/ }).click();
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('List');
+  await expect(page.locator('button.row').first()).toBeVisible();
+  const filter = await page.evaluate(() => JSON.parse(localStorage.getItem('tasks-desktop.filter') ?? '{}'));
+  expect(filter.areas).toEqual(['lib.nvim']);
+  // A cell sets the field too.
+  await page.keyboard.press('g');
+  await page.keyboard.press('s');
+  await page.getByRole('button', { name: /^lib\.nvim, [^:]+: \d+ - show in the list$/ }).first().click();
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('List');
+  const cell = await page.evaluate(() => JSON.parse(localStorage.getItem('tasks-desktop.filter') ?? '{}'));
+  expect(cell.areas).toEqual(['lib.nvim']);
+  expect(cell.fields.kind).toHaveLength(1);
+  await page.evaluate(() => localStorage.removeItem('tasks-desktop.stats'));
+  expect(consoleProblems.get(page)).toEqual([]);
+});

@@ -43,6 +43,7 @@ export function paletteActions(app: App): PaletteAction[] {
   add('go.inbox', t('palette.go', { view: t('nav.inbox') }), () => app.setView('inbox'));
   add('go.abnahme', t('palette.go', { view: t('nav.abnahme') }), () => app.setView('abnahme'));
   add('go.cross', t('palette.go', { view: t('nav.cross') }), () => app.setView('cross'));
+  add('go.stats', t('palette.go', { view: t('nav.stats') }), () => app.setView('stats'));
   if (app.can('finished')) add('go.done', t('palette.go', { view: t('nav.done') }), () => app.setView('done'));
   if (app.can('views')) {
     add('go.views', t('palette.go', { view: t('nav.views') }), () => app.setView('views'));
