@@ -62,6 +62,18 @@ jobs:
       # contract that did not reach the UI fails here.
       - name: UI contract types equal the engine's
         run: cmp engine/tasks.nvim/schemas/tasks-export/1/tasks-export.d.ts ui/src/lib/contract.d.ts
+      # The golden sheet block is a contract with testing.nvim: the copy here is the file at the pinned commit
+      # (ui/src/lib/fixtures/sheet-block.source), byte for byte, with its checksum file.
+      - name: Golden sheet block equals testing.nvim's at the pinned commit
+        shell: bash
+        run: |
+          sha="$(awk '{print $2}' ui/src/lib/fixtures/sheet-block.source)"
+          base="https://raw.githubusercontent.com/WKDSteve/testing.nvim/${sha}/TESTS/golden/sheet-block"
+          curl -fsSL "${base}/sheet-block.golden.md" -o "${RUNNER_TEMP}/golden.md"
+          curl -fsSL "${base}/SHA256" -o "${RUNNER_TEMP}/golden.sha"
+          cmp "${RUNNER_TEMP}/golden.md" ui/src/lib/fixtures/sheet-block.golden.md
+          cmp "${RUNNER_TEMP}/golden.sha" ui/src/lib/fixtures/sheet-block.SHA256
+
       # The interface is part of the binary: it is built first.
       - name: Build the interface
         working-directory: ui
