@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { TaskEntry } from './contract';
+import golden from './fixtures/sheet-block.golden.md?raw';
+import sums from './fixtures/sheet-block.SHA256?raw';
 import { abnahmeOf, allTicked, parseSheets, progress, rowsOf, tickItem, waiting } from './abnahme';
 
 const BLOCK = [
@@ -101,6 +103,44 @@ describe('a tick', () => {
     const item = sheets[0]!.items[0]!;
     expect(item.text).toBe('The rows and texts of the float read well');
     expect(tickItem(text, item, true)).toContain('    - [x] The rows and texts of the float read well\r\n');
+  });
+});
+
+// The block is a contract with testing.nvim (docs/SHEETS.md there): this app reads its text and ticks boxes back. The
+// golden block is a copy of testing.nvim's TESTS/golden/sheet-block/sheet-block.golden.md; its checksum file is a copy of
+// the one next to it. A copy that was edited by hand fails the first test; a new golden block from testing.nvim is taken
+// over by copying both files (and the expectations below, when the format was extended on purpose).
+describe('the golden block of testing.nvim', () => {
+  it('is the copy its checksum names (an edited copy is reported here)', async () => {
+    const bytes = new TextEncoder().encode(golden);
+    const sha = [...new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))].map((b) => b.toString(16).padStart(2, '0')).join('');
+    expect(`${sha}  sheet-block.golden.md
+`).toBe(sums);
+  });
+
+  it('is read as the sheets, criteria, ticks and snapshots testing.nvim wrote', () => {
+    const sheets = parseSheets(body(golden.trimEnd()));
+    // the third sheet of the golden block does not load: its line has a path and no id, and this parser gives it no
+    // id and no state (found with this test; the states line still says broken=red)
+    expect(sheets.slice(0, 2).map((s) => [s.id, s.state, s.title])).toEqual([
+      ['picker', 'inbox', 'The picker opens and closes'],
+      ['menu', 'manual', 'The menu'],
+    ]);
+    expect(sheets).toHaveLength(3);
+    const picker = sheets[0]!;
+    expect(picker.items.map((i) => [i.kind, i.text, i.checked])).toEqual([
+      ['judge', 'the border is visible', true],
+      ['judge', 'the title is centred', false],
+      ['manual', 'open it with the real mouse', false],
+    ]);
+    expect(picker.snapshots).toEqual([
+      'ui.nvim/TESTS/__snapshots__/sheets/picker.sheet/open.80x24.snap',
+      'ui.nvim/TESTS/__snapshots__/sheets/picker.sheet/closed.80x24.snap',
+    ]);
+    expect(sheets[1]!.items.map((i) => [i.kind, i.text])).toEqual([
+      ['manual', 'right-click a file'],
+      ['manual', 'choose Rename'],
+    ]);
   });
 });
 
