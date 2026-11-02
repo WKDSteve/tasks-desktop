@@ -76,7 +76,11 @@ export function parseSheets(body: string): Sheet[] {
       // `(`id`, `where`)`: two spans with an id, one for a sheet that does not load.
       const id = spans.length > 1 ? spans[0] : undefined;
       sheet = { title: head[1] ?? '', ...(id ? { id } : {}), items: [], snapshots: [] };
-      const state = id ? states.get(id) : undefined;
+      // a sheet that does not load has no id: its key in the states line is its file name without `.sheet.lua`, with
+      // everything but letters, digits and `_-.` turned into `-` (`state_key` of testing.nvim)
+      const file = (spans[0] ?? '').split('/').pop() ?? '';
+      const key = id ?? file.replace(/\.sheet\.lua$/, '').replace(/[^\w.-]/g, '-');
+      const state = key ? states.get(key) : undefined;
       if (state) sheet.state = state;
       sheets.push(sheet);
       kind = null;

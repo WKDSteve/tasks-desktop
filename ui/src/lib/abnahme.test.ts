@@ -120,11 +120,11 @@ describe('the golden block of testing.nvim', () => {
 
   it('is read as the sheets, criteria, ticks and snapshots testing.nvim wrote', () => {
     const sheets = parseSheets(body(golden.trimEnd()));
-    // the third sheet of the golden block does not load: its line has a path and no id, and this parser gives it no
-    // id and no state (found with this test; the states line still says broken=red)
-    expect(sheets.slice(0, 2).map((s) => [s.id, s.state, s.title])).toEqual([
+    // the third sheet does not load: no id, but its state comes from its file name in the states line
+    expect(sheets.map((s) => [s.id, s.state, s.title])).toEqual([
       ['picker', 'inbox', 'The picker opens and closes'],
       ['menu', 'manual', 'The menu'],
+      [undefined, 'red', 'ui.nvim/TESTS/sheets/broken.sheet.lua'],
     ]);
     expect(sheets).toHaveLength(3);
     const picker = sheets[0]!;
