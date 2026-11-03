@@ -153,10 +153,10 @@ test('a hint goes where it covers no other control: the one of Help in a wide wi
 });
 
 test('a hint that lies on the next control lets the pointer through, so the first press reaches the control', async ({ page }) => {
-  // At 420 px the popup of Help finds no free place (no room above the menu bar, none beside it) and stays below Help,
+  // At 448 px the popup of Help finds no free place (no room above the menu bar, none beside it) and stays below Help,
   // over the upper edge of the filter Areas. Raw mouse events, as a person moves (Playwright's click would scroll and
   // wait until the target is free); the pointer rests on Help first, as a person reading it does.
-  await page.setViewportSize({ width: 420, height: 800 });
+  await page.setViewportSize({ width: 448, height: 800 });
   await pair(page);
   await showList(page);
   await page.keyboard.press('Escape');

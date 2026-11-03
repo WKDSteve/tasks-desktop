@@ -1745,6 +1745,8 @@ test('the German page has no violations either', async ({ page }) => {
   // The name of the app is a name: it stays "Tasks" in German. The menus: the appearance is in the view,
   // the vaults in the project, and the language is in the options.
   await expect(page.locator('.kit-brand')).toHaveText('Tasks');
+  // Its icon is really drawn: the policy of the page lets it through.
+  await expect.poll(() => page.locator('.kit-brand img').evaluate((i: HTMLImageElement) => i.naturalWidth)).toBeGreaterThan(0);
   const bar = page.getByRole('menubar').getByRole('menuitem');
   await expect(bar).toHaveText(['Arbeit', 'Projekt', 'Ansicht', 'Optionen', 'Hilfe']);
   await showListDe(page);

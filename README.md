@@ -1,3 +1,5 @@
+![tasks-desktop](assets/icons/tasks-desktop/png/tasks-desktop-128.png)
+
 # tasks-desktop
 
 A local web UI and desktop app for [tasks.nvim](https://github.com/WKDSteve/tasks.nvim):

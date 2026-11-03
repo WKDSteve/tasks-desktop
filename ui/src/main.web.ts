@@ -12,6 +12,7 @@ import { App as AppState, type Env } from './lib/app.svelte';
 import { indexedDbStore } from './lib/cache';
 import { copyText, printSheet, saveText } from './lib/exportDom';
 import { detectLang, translate } from './lib/i18n';
+import { logo } from './lib/logo';
 import { trackHistory } from './lib/trackHistory.svelte';
 import { routedTask } from './lib/route';
 import { placeAddress } from './lib/history';
@@ -33,6 +34,9 @@ import { watchFolder, type Watcher } from 'appkit-web/watch';
 const ROOT = '/vault';
 /** The code the page trades for its session: the web hub takes any (there is no server to pair with). */
 const CODE = 'web';
+
+// The shell may name no file, so the icon of the tab comes in here, as a data: URL.
+document.head.append(Object.assign(document.createElement('link'), { rel: 'icon', href: logo }));
 
 const target = document.getElementById('app') as HTMLElement;
 const lang = detectLang(navigator.languages);

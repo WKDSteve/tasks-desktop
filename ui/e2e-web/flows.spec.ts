@@ -453,6 +453,9 @@ test('the German page has no violations either, and the name of the app stays', 
   await page.getByRole('menuitemradio', { name: 'Deutsch' }).click();
   await expect(page.getByRole('menuitem', { name: 'Ansicht' })).toBeVisible();
   await expect(page.locator('.kit-brand')).toHaveText('Tasks');
+  // The icons are in the file: the bar and the tab name a data: URL, and the policy lets it through.
+  await expect.poll(() => page.locator('.kit-brand img').evaluate((i: HTMLImageElement) => i.naturalWidth)).toBeGreaterThan(0);
+  await expect(page.locator('head link[rel="icon"]')).toHaveAttribute('href', /^data:image\/svg\+xml/);
   await expect(page.getByRole('menubar').getByRole('menuitem')).toHaveText(['Arbeit', 'Projekt', 'Ansicht', 'Optionen', 'Hilfe']);
   await page.getByRole('menuitem', { name: 'Ansicht', exact: true }).click();
   await page.getByRole('menuitemradio', { name: 'Liste', exact: true }).click();

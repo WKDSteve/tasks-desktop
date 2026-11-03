@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, tick } from 'svelte';
   import type { App, View } from './lib/app.svelte';
+  import { logo } from './lib/logo';
   import { matches } from 'appkit-ui/keymap';
   import { keymap, pressOf } from './lib/keymap';
   import { ago, dictionaries, translate, type Key } from './lib/i18n';
@@ -650,7 +651,9 @@
 
 <div class="shell">
   <header class="bar">
-    <Brand label={t('app.title')} hint={t('hint.ui.brand')} onclick={() => app.setView('today')} />
+    <Brand label={t('app.title')} hint={t('hint.ui.brand')} onclick={() => app.setView('today')}>
+      <span class="brand-mark"><img src={logo} alt="" width="20" height="20" />{t('app.title')}</span>
+    </Brand>
     <MenuBar {menus} label={t('menu.label')} />
     <span class="spacer"></span>
     {#if app.conflicts.length > 0}
@@ -807,6 +810,11 @@
 </div>
 
 <style>
+  .brand-mark {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
   .shell {
     display: flex;
     flex-direction: column;
