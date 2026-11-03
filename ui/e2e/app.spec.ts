@@ -512,6 +512,8 @@ test('the context menu opens a selection as a view to try: by key from a row, Es
   await expect(menu.getByRole('menuitem', { name: 'Show in the list' })).toBeFocused();
   await expectAccessible(page, 'the context menu');
   await page.keyboard.press('ArrowDown');
+  await expect(menu.getByRole('menuitem', { name: 'Open in a new tab' })).toBeFocused();
+  await page.keyboard.press('ArrowDown');
   await expect(menu.getByRole('menuitem', { name: 'Copy the id' })).toBeFocused();
   await page.keyboard.press('Escape');
   await expect(menu).toHaveCount(0);

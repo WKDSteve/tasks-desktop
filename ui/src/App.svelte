@@ -37,6 +37,7 @@
   import ContextMenu from 'appkit-ui/ContextMenu.svelte';
   import { contextTarget } from 'appkit-ui/contextmenu';
   import { routeHref } from 'appkit-ui/route';
+  import { installTaskApart } from './lib/taskApart';
   import { createContextRegistry, taskTarget, viewTarget } from './lib/context';
   import { vaultMenuItems } from './lib/vaultMenu';
   import ConflictCenter from './views/ConflictCenter.svelte';
@@ -70,7 +71,10 @@
     void app.start(code);
     const onFocus = () => void app.focused();
     window.addEventListener('focus', onFocus);
+    // A middle click or Ctrl+click on a task opens it in a new tab, as a link does.
+    const stopApart = installTaskApart(app, window);
     return () => {
+      stopApart();
       window.removeEventListener('focus', onFocus);
       clearTimeout(chordTimer);
       app.stop();

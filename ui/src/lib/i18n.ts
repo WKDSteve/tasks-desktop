@@ -341,6 +341,9 @@ const en = {
   'ctx.label': 'Context menu',
   'ctx.show': 'Show in the list',
   'hint.ctx.show': 'Opens the task in the list, with its details.',
+  'ctx.open_new': 'Open in a new tab',
+  'hint.ctx.open_new':
+    "Opens the task alone in a new tab of this page, with this tab's session. A middle click or Ctrl+click on the task does the same.",
   'hint.ctx.copy_tasks':
     'Puts these tasks on the clipboard (the marked ones, when this one is marked); none of a private or unclassified area.',
   'ctx.copy_id': 'Copy the id',
@@ -1636,6 +1639,9 @@ const de: Record<Key, string> = {
   'ctx.label': 'Kontextmenü',
   'ctx.show': 'In der Liste zeigen',
   'hint.ctx.show': 'Öffnet den Task in der Liste, mit seinen Details.',
+  'ctx.open_new': 'In neuem Tab öffnen',
+  'hint.ctx.open_new':
+    'Öffnet den Task allein in einem neuen Tab dieser Seite, mit der Sitzung dieses Tabs. Ein Mittelklick oder Strg+Klick auf den Task tut dasselbe.',
   'hint.ctx.copy_tasks':
     'Legt diese Tasks in die Zwischenablage (die markierten, wenn dieser markiert ist); keine aus privaten oder nicht eingestuften Bereichen.',
   'ctx.copy_id': 'Id kopieren',

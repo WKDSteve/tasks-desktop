@@ -146,6 +146,30 @@ test('a task is detached from its float into a window of its own, which shows th
   expect(problems).toEqual([]);
 });
 
+test('a task opens in a new tab like a link: middle click, Ctrl+click and the context menu; this page stays', async ({ page, context }) => {
+  const problems = await pair(page);
+  await showList(page);
+  const row = page.locator('button.row', { hasText: 'lib.nvim/beta' }).first();
+  const alone = async (opening: Promise<unknown>): Promise<void> => {
+    const [tab] = await Promise.all([context.waitForEvent('page'), opening]);
+    await tab.waitForLoadState();
+    // The new tab is paired (a copy of this tab's session) and shows the task alone.
+    await expect(tab.locator('main aside.detail .id')).toHaveText('lib.nvim/beta');
+    expect(new URL(tab.url()).hash).toBe('#task=lib.nvim%2Fbeta');
+    await tab.close();
+  };
+  await alone(row.click({ button: 'middle' }));
+  await alone(row.click({ modifiers: ['ControlOrMeta'] }));
+  // This page did not choose the task: no float opened over the list.
+  await expect(float(page)).toHaveCount(0);
+  await row.click({ button: 'right' });
+  const menu = page.getByRole('menu', { name: 'Context menu' });
+  await alone(menu.getByRole('menuitem', { name: 'Open in a new tab' }).click());
+  await expect(float(page)).toHaveCount(0);
+  await expect(page.locator('section.list')).toBeVisible();
+  expect(problems).toEqual([]);
+});
+
 test('a view of the menu is a link: a new tab at its address takes the session of an open tab, a reload keeps the place, Back walks the places', async ({ page, context }) => {
   const problems = await pair(page);
   await showList(page);

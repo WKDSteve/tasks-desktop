@@ -2714,6 +2714,14 @@ export class App {
     else this.say('error', 'peek.detach_failed');
   }
 
+  /**
+   * Open the task alone in a new tab, the way a link opens (a middle click or Ctrl+click on it, the context menu,
+   * lib/taskApart.ts); this page stays as it is. A browser that refuses the window is told.
+   */
+  openTaskApart(id: string): void {
+    if (!(this.env.openWindow?.(taskRoute(id)) ?? false)) this.say('error', 'peek.detach_failed');
+  }
+
   /** Look at a task without leaving the view: it is selected (its detail is read) and the popup opens over the view. */
   peek(id: string): void {
     this.select(id);

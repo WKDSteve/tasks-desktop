@@ -59,6 +59,17 @@ export function createContextRegistry(app: App): ContextRegistry {
     const task = target.data as TaskEntry;
     const items: MenuItem[] = [
       { kind: 'action', label: t('ctx.show'), hint: t('hint.ctx.show'), onselect: () => app.reveal(task.id) },
+      // Where the page can open a window: the task alone in a new tab, with this tab's session.
+      ...(app.canDetach
+        ? [
+            {
+              kind: 'action',
+              label: t('ctx.open_new'),
+              hint: t('hint.ctx.open_new'),
+              onselect: () => app.openTaskApart(task.id),
+            } satisfies MenuItem,
+          ]
+        : []),
       {
         kind: 'action',
         label: t('ctx.copy_id'),
