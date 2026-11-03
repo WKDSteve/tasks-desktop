@@ -109,7 +109,8 @@ test('a window of one task keeps the task in its address until it lets go of it:
   await page.locator('main').focus();
   await page.keyboard.press('Escape');
   await expect(page.locator('section.list')).toBeVisible();
-  await expect.poll(() => new URL(page.url()).hash).toBe('');
+  // The task left the address; the place of the page (the history's) took it.
+  await expect.poll(() => new URL(page.url()).hash).toBe('#view=list');
   await page.reload();
   await page.getByRole('button', { name: /Choose folder|fixture-vault/ }).first().click({ timeout: 30_000 });
   await expect(page.locator('section.list')).toBeVisible({ timeout: 30_000 });
@@ -244,12 +245,12 @@ test('a middle click on a view of the menu opens the same file in a new window a
   expect(seen.errors).toEqual([]);
 });
 
-test('the file opened at a view shows that view once the folder is open, and the view leaves the address', async ({ page }) => {
+test('the file opened at a view shows that view once the folder is open, and the view stays in the address', async ({ page }) => {
   const seen = await watchPage(page);
   await fakePicker(page, vaultFiles());
   await page.goto(`${pageUrl()}#view=plan`);
-  // Out of the address at once: a reload opens on the view the window was left on.
-  expect(page.url()).toBe(pageUrl());
+  // The address is the place of the window: a reload opens on it again.
+  expect(page.url()).toBe(`${pageUrl()}#view=plan`);
   await page.getByRole('button', { name: /Choose folder/ }).click();
   await expect(page.locator('.stage-list').first()).toBeVisible({ timeout: 30_000 });
   await expect(page.getByRole('menuitem', { name: 'View', exact: true })).toBeVisible();

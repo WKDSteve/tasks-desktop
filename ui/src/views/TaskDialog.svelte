@@ -36,6 +36,11 @@
   use:floating={{ kind: 'task', moveLabel: t('float.move'), moveHint: t('hint.float.move'), handle: false }}
   class="peek"
   aria-label={t('peek.label')}
+  oncancel={() => {
+    // Escape: the page lets go of the float at once. The close event comes a moment later, and a key pressed in that
+    // moment would still count as one inside the float (and be kept from the list under it).
+    app.closePeek();
+  }}
   onclose={() => {
     // The event comes a moment after the close: a float the page opened again meanwhile (a task that moved to another
     // area comes back under its new id) stays open.
@@ -74,7 +79,14 @@
           onclick={() => app.detach(app.selectedId as string)}><span aria-hidden="true">⧉</span></button
         >
       {/if}
-      <button type="button" data-close onclick={() => dialog?.close()}>{t('peek.close')}</button>
+      <button
+        type="button"
+        data-close
+        onclick={() => {
+          dialog?.close();
+          app.closePeek();
+        }}>{t('peek.close')}</button
+      >
     </div>
     <Detail {app} />
     <!-- The float is modal: the toast of a change made in it, with its Undo, stands inside it (App draws it otherwise). -->

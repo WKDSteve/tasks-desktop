@@ -222,8 +222,9 @@ test('an unpaired page says how to pair, and has no violation', async ({ page })
 
 test('the link pairs the tab, the code leaves the address bar, the list is there', async ({ page }) => {
   await pairByLink(page);
-  expect(page.url()).toBe(`${origin()}/`);
-  expect(await page.evaluate(() => location.hash)).toBe('');
+  // No code is left in the address; what is there is the place of the page.
+  expect(page.url()).not.toContain('pair');
+  await expect.poll(() => page.evaluate(() => location.hash)).toMatch(/^#view=[a-z]+$/);
   await showList(page);
   const rows = await page.locator('button.row').count();
   // The fixture's 14 tasks and the hostile ones added by the test.
