@@ -385,6 +385,7 @@ function make(
     mode?: 'web';
     readOnly?: boolean;
     openWindow?: (route: string) => boolean;
+    askSession?: () => Promise<string | null>;
     fetchFn?: typeof fetch;
     sleep?: (ms: number) => Promise<void>;
   } = {},
@@ -430,6 +431,7 @@ function make(
     ...(overrides.mode ? { mode: overrides.mode } : {}),
     ...(overrides.readOnly ? { readOnly: true } : {}),
     ...(overrides.openWindow ? { openWindow: overrides.openWindow } : {}),
+    ...(overrides.askSession ? { askSession: overrides.askSession } : {}),
     out: {
       save: (name, text, type) => {
         files.push({ name, text, type });
@@ -822,6 +824,8 @@ describe('App', () => {
     // Named before the list is read (main.ts does it before the start).
     app.openRoute('pub/b');
     expect(app.solo).toBe(false);
+    // While it waits for the list the address is already the window's, not the history's.
+    expect(app.oneTask).toBe(true);
     await app.start(null);
     expect(app.solo).toBe(true);
     expect(app.selectedId).toBe('pub/b');
@@ -833,6 +837,70 @@ describe('App', () => {
     app.setView('list');
     expect(app.solo).toBe(false);
     app.stop();
+  });
+
+  it('opens the place the address named: its view, and its task once the list has it, not alone', async () => {
+    const { app, hub } = make({ token: 't' });
+    hub.doc = snapshot([task('pub/a'), task('pub/b')], 'rev:1');
+    // Named before the list is read (main.ts does it before the start).
+    app.openPlace('list', 'pub/b');
+    expect(app.view).toBe('list');
+    expect(app.selectedId).toBeNull();
+    await app.start(null);
+    expect(app.view).toBe('list');
+    expect(app.selectedId).toBe('pub/b');
+    expect(app.solo).toBe(false);
+    // Taken once: a later read does not select it again.
+    app.select('pub/a');
+    await app.refresh();
+    expect(app.selectedId).toBe('pub/a');
+    app.stop();
+  });
+
+  it('opens the view of a place whose task is gone, and says so', async () => {
+    const { app, hub } = make({ token: 't' });
+    hub.doc = snapshot([task('pub/a')], 'rev:1');
+    app.openPlace('board', 'pub/gone');
+    await app.start(null);
+    expect(app.view).toBe('board');
+    expect(app.selectedId).toBeNull();
+    expect(app.toast?.text).toContain('pub/gone');
+    app.stop();
+  });
+
+  it('a tab without a session and without a code takes the session of an open tab, and keeps it', async () => {
+    let asked = 0;
+    const { app, session } = make({
+      askSession: async () => {
+        asked += 1;
+        return 'handed';
+      },
+    });
+    await app.start(null);
+    expect(asked).toBe(1);
+    expect(app.phase).not.toBe('needs_pairing');
+    expect(session.get('tasks-desktop.session')).toBe('handed');
+    app.stop();
+  });
+
+  it('asks no other tab with a session of its own or with a code, and pairs when none answers', async () => {
+    let asked = 0;
+    const ask = async () => {
+      asked += 1;
+      return null;
+    };
+    const own = make({ token: 't', askSession: ask });
+    await own.app.start(null);
+    own.app.stop();
+    const coded = make({ askSession: ask });
+    await coded.app.start('ab'.repeat(16));
+    coded.app.stop();
+    expect(asked).toBe(0);
+    const lone = make({ askSession: ask });
+    await lone.app.start(null);
+    expect(asked).toBe(1);
+    expect(lone.app.phase).toBe('needs_pairing');
+    lone.app.stop();
   });
 
   it('tells a task the address named that the list does not have, and shows the page as it is', async () => {

@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { routedTask, routedView, taskRoute, viewRoute, withTaskRoute, withoutViewRoute } from './route';
+import { readRoute } from 'appkit-ui/route';
+import { routePlace } from './history';
+import { routedTask, taskRoute, viewRoute, withTaskRoute } from './route';
 
 describe('the route of a task in a window of its own', () => {
   it('names the task in the fragment and reads it back', () => {
@@ -32,23 +34,15 @@ describe('the route of a task in a window of its own', () => {
 });
 
 describe('the route of a view in a new tab', () => {
-  it('names the view in the fragment and reads it back, beside a task', () => {
+  const viewOf = (hash: string) => routePlace(readRoute(hash))?.view ?? null;
+
+  it('names the view in the fragment and the history reads it back, beside a task', () => {
     expect(viewRoute('plan')).toBe('#view=plan');
-    expect(routedView('#view=plan')).toBe('plan');
-    expect(routedView('#task=a%2Fb&view=done')).toBe('done');
+    expect(viewOf(viewRoute('plan'))).toBe('plan');
+    expect(viewOf('#task=a%2Fb&view=done')).toBe('done');
   });
 
   it('takes no name that is no view, and nothing from another fragment', () => {
-    expect(routedView('#view=<img src=x>')).toBeNull();
-    expect(routedView('#view=')).toBeNull();
-    expect(routedView('#view=PLAN')).toBeNull();
-    expect(routedView('#pair=abc')).toBeNull();
-    expect(routedView('')).toBeNull();
-  });
-
-  it('leaves the address without the view and keeps the rest', () => {
-    expect(withoutViewRoute('#view=plan')).toBe('');
-    expect(withoutViewRoute('#task=a&view=plan')).toBe('#task=a');
-    expect(withoutViewRoute('#task=a')).toBe('#task=a');
+    for (const hash of ['#view=<img src=x>', '#view=', '#view=PLAN', '#pair=abc', '']) expect(viewOf(hash)).toBeNull();
   });
 });

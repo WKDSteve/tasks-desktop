@@ -241,7 +241,8 @@ test('a link pasted into the tab that is open pairs it without a reload', async 
     window.location.hash = `#pair=${c}`;
   }, code);
   await showList(page);
-  expect(await page.evaluate(() => location.hash)).toBe('');
+  // The code left the address; what is there now is the place of the page.
+  expect(await page.evaluate(() => location.hash)).toBe('#view=list');
   await expect(page.getByRole('heading', { name: /not paired/i })).toHaveCount(0);
   expect(await violations(page)).toEqual([]);
 });
@@ -6444,7 +6445,8 @@ test('a middle click on a view of the menu opens it in a new tab, paired; this t
   // The new tab has the session of this one (a copy of its session storage) and opens on the plan.
   await expect(tab.locator('.stage-list').first()).toBeVisible();
   await expect(tab.getByRole('menuitem', { name: 'View', exact: true })).toBeVisible();
-  expect(new URL(tab.url()).hash).toBe('');
+  // Its address names its place, so that a reload of it stays there.
+  expect(new URL(tab.url()).hash).toBe('#view=plan');
   await tab.close();
   await expect(page.locator('button.row').first()).toBeVisible();
   expect(await page.evaluate(() => localStorage.getItem('tasks-desktop.view'))).toBe('list');

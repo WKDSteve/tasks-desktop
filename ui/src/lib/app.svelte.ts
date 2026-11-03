@@ -99,7 +99,7 @@ import { localToday } from './remind';
 import { defaultColumns, parseColumns, serializeColumns, type ListColumns } from './columns';
 import { emptyFolds, foldOf, parseFolds, serializeFolds, type FoldMemory, type Folds, type FoldView } from './fold';
 import { parseSizes, serializeSizes, withSize, type Size, type Sizes } from './sizes';
-import { taskRoute, viewRoute, type RoutedView } from './route';
+import { taskRoute, viewRoute } from './route';
 
 /** The longest line of the notes the engine takes (`append_note`), in characters. */
 const NOTE_MAX = 1000;
@@ -152,6 +152,11 @@ export interface Env {
    * (a blocked popup). Left out where the page cannot open windows: a task then cannot be detached.
    */
   openWindow?(route: string): boolean;
+  /**
+   * Ask the open tabs of the page for their session (appkit-ui/handoff): a tab the browser opened from a link has none
+   * of its own. The token, or null when no tab answered. Left out where there is no hub (the web variant).
+   */
+  askSession?(): Promise<string | null>;
   /** The ways out of the page for an export: a file the browser saves, the clipboard, the printer. Replaced in tests. */
   out: {
     save(name: string, text: string, type: string): boolean;
@@ -160,7 +165,8 @@ export interface Env {
   };
 }
 
-const TOKEN_KEY = 'tasks-desktop.session';
+/** Where the tab keeps its session (the open tabs hand it to a new one from here, main.ts). */
+export const TOKEN_KEY = 'tasks-desktop.session';
 /** The saved view that was open last (its id). */
 const OPEN_VIEW_KEY = 'tasks-desktop.view-open';
 /** The key the palette remembers a choice of a saved view under (`view.<id>` of `paletteActions`, as an action). */
@@ -2644,14 +2650,41 @@ export class App {
   /** The task the address named, waiting for the list to know it. */
   #route: string | null = null;
 
+  /**
+   * The page is a window of one task, or waits for the list to become one: the address is that window's (`#task=<id>`),
+   * not the history's (history.ts).
+   */
+  get oneTask(): boolean {
+    return this.solo || this.#route !== null;
+  }
+
   /** The address named a task (`#task=<id>`): it is shown alone as soon as the list has it. */
   openRoute(id: string): void {
     this.#route = id;
     if (this.tasks.some((t) => t.id === id)) this.takeRoute();
   }
 
+  /** The task the address named open in its view (`#view=list&open=<id>`, history.ts), waiting for the list. */
+  #openRoute: string | null = null;
+
+  /**
+   * The address named a place (a reload, a copied address, a link opened in a new tab): the page opens on its view,
+   * with its task open as soon as the list has it.
+   */
+  openPlace(view: View, open: string | null): void {
+    this.view = view;
+    this.#openRoute = open;
+    if (open !== null && this.tasks.some((t) => t.id === open)) this.takeRoute();
+  }
+
   /** After a read of the list: the task the address named is shown, or told to be gone. */
   private takeRoute(): void {
+    const open = this.#openRoute;
+    if (open !== null) {
+      this.#openRoute = null;
+      if (this.tasks.some((t) => t.id === open)) this.select(open);
+      else this.say('error', 'peek.missing', { id: open });
+    }
     const id = this.#route;
     if (id === null) return;
     this.#route = null;
@@ -2662,14 +2695,6 @@ export class App {
     this.peeking = false;
     this.select(id);
     this.solo = true;
-  }
-
-  /**
-   * The address named a view (`#view=<name>`, a view opened in a new tab): the page opens on it, as on the view it was
-   * left on, and does not keep it (the tab it came from keeps its own).
-   */
-  openViewRoute(view: RoutedView): void {
-    this.view = view;
   }
 
   /** Open the view in a new tab (a window of the same page), the way a link opens; a refused window is told. */
@@ -2771,6 +2796,14 @@ export class App {
     this.phase = 'starting';
     if (code) this.pendingCode = code;
     let stored = safe(() => this.env.session.getItem(TOKEN_KEY));
+    // A tab without a session and without a code (opened from a link) takes the session of an open tab of the page.
+    if (!stored && !code && this.env.askSession) {
+      stored = await this.env.askSession();
+      if (stored) {
+        const taken = stored;
+        safe(() => this.env.session.setItem(TOKEN_KEY, taken));
+      }
+    }
     // The session of the tab was handed to the client: when it is gone from it later, the hub refused it.
     let given = false;
 

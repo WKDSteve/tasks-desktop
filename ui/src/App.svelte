@@ -36,6 +36,7 @@
   import { DOCS, LICENSE, REPO_URL } from './lib/docs';
   import ContextMenu from 'appkit-ui/ContextMenu.svelte';
   import { contextTarget } from 'appkit-ui/contextmenu';
+  import { routeHref } from 'appkit-ui/route';
   import { createContextRegistry, taskTarget, viewTarget } from './lib/context';
   import { vaultMenuItems } from './lib/vaultMenu';
   import ConflictCenter from './views/ConflictCenter.svelte';
@@ -55,8 +56,13 @@
   const fromDisk = location.protocol === 'file:';
   let shortcutOpen = $state(false);
   let updateOpen = $state(false);
-  // A view of the menu opens in a new tab with a middle click, Ctrl+click or Ctrl+Enter, where the page can open one.
-  const apart = (view: View) => (app.canDetach ? { onopennew: () => app.openViewApart(view) } : {});
+  // A view of the menu is a link to its place: the browser's context menu (and Shift+click) opens it in a new tab, which
+  // takes the session of an open tab. A middle click, Ctrl+click or Ctrl+Enter opens it in a new tab from here, with
+  // the session of this one, where the page can open one.
+  const apart = (view: View) => ({
+    href: routeHref(location, { view }),
+    ...(app.canDetach ? { onopennew: () => app.openViewApart(view) } : {}),
+  });
   let chordTimer: ReturnType<typeof setTimeout> | undefined;
   let searchBox = $state<HTMLInputElement | null>(null);
 

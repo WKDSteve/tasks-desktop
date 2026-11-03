@@ -1,16 +1,27 @@
 import type { NavHistory, NavWindow } from 'appkit-ui/nav';
 import type { App } from './app.svelte';
-import { installAppHistory } from './history';
+import { installAppHistory, placeAddress } from './history';
 
-/** Make every change of the view or of the open task an entry of the history of the tab. */
-export function trackHistory(app: App, win: NavWindow & { history: NavHistory }): () => void {
-  const history = installAppHistory(app, win);
+/**
+ * Make every change of the view or of the open task an entry of the history of the tab, with the place in the
+ * address (history.ts).
+ */
+export function trackHistory(
+  app: App,
+  win: NavWindow & { history: NavHistory; location: { pathname: string; search: string; hash: string } },
+): () => void {
+  const history = installAppHistory(
+    app,
+    win,
+    placeAddress(win.location, () => app.oneTask),
+  );
   const stopEffect = $effect.root(() => {
     $effect(() => {
       // Only the place is watched; reading the list for it (a vanished task) happens untracked.
       void app.view;
       void app.selectedId;
       void app.peeking;
+      void app.solo;
       history.sync();
     });
   });

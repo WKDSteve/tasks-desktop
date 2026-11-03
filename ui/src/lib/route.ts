@@ -43,34 +43,17 @@ export function routedTask(hash: string): string | null {
   return null;
 }
 
-// A view in a new tab: a middle click (Ctrl+click, Ctrl+Enter) on a view of the menu opens the same page in a new
-// window at that view, `#view=<name>`. It is read once at the start, as the view the page was left on is, and is not
-// kept: a reload, and the other tabs, open on the view of their own.
+// A view in a new tab: a view of the menu is a link to `#view=<name>` (its context menu opens it in a new tab), and a
+// middle click (Ctrl+click, Ctrl+Enter) opens the same page in a new window at that view, with the session of the tab.
+// The page reads the place of the address at the start and keeps it there (history.ts).
 
 /** The views a fragment may name (the `View` of app.svelte.ts). */
 const VIEWS = ['today', 'list', 'board', 'plan', 'inbox', 'abnahme', 'cross', 'stats', 'done', 'views'] as const;
 export type RoutedView = (typeof VIEWS)[number];
+/** Every view of the page (the history takes its places from this list too). */
+export const ROUTED_VIEWS: readonly RoutedView[] = VIEWS;
 
 /** The fragment that opens the view `view`. */
 export function viewRoute(view: RoutedView): string {
   return `#view=${view}`;
-}
-
-/** The view a fragment names, or null (none, or a name that is no view). */
-export function routedView(hash: string): RoutedView | null {
-  const text = hash.startsWith('#') ? hash.slice(1) : hash;
-  for (const part of text.split('&')) {
-    const at = part.indexOf('=');
-    if (at < 0 || part.slice(0, at) !== 'view') continue;
-    const name = part.slice(at + 1);
-    return (VIEWS as readonly string[]).includes(name) ? (name as RoutedView) : null;
-  }
-  return null;
-}
-
-/** The fragment `hash` without its view part; the other parts stay. Empty when nothing is left. */
-export function withoutViewRoute(hash: string): string {
-  const text = hash.startsWith('#') ? hash.slice(1) : hash;
-  const rest = text.split('&').filter((part) => part !== '' && part.split('=')[0] !== 'view');
-  return rest.length === 0 ? '' : `#${rest.join('&')}`;
 }

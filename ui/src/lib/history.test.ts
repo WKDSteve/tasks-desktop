@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { installAppHistory, isPlace, type HistoryApp, type Place } from './history';
+import { readRoute, routeHash } from 'appkit-ui/route';
+import {
+  installAppHistory,
+  isPlace,
+  placeAddress,
+  placeRoute,
+  routePlace,
+  type HistoryApp,
+  type Place,
+} from './history';
 import type { View } from './app.svelte';
 
 /** A tab: a list of entries and a position, like the real history. */
@@ -175,5 +184,83 @@ describe('installAppHistory', () => {
     h.sync();
     tb.go(-1);
     expect([app.view, app.selectedId, app.peeking]).toEqual(['plan', null, false]);
+  });
+
+  it('Back reaches every view of the page (abnahme, stats and views were skipped)', () => {
+    const t = tab();
+    const app = fakeApp([]);
+    const h = installAppHistory(app, t);
+    h.sync();
+    for (const view of ['abnahme', 'stats', 'views', 'done'] as View[]) {
+      app.view = view;
+      h.sync();
+    }
+    t.go(-1);
+    expect(app.view).toBe('views');
+    t.go(-1);
+    expect(app.view).toBe('stats');
+    t.go(-1);
+    expect(app.view).toBe('abnahme');
+  });
+});
+
+describe('the place in the address', () => {
+  /** A tab that also keeps the address each entry was given. */
+  function addressedTab(hash = '') {
+    const t = tab();
+    const location = { pathname: '/', search: '', hash };
+    const urls: unknown[] = [];
+    const keep = (url: unknown) => {
+      urls.push(url);
+      if (typeof url === 'string') location.hash = url.includes('#') ? url.slice(url.indexOf('#')) : '';
+    };
+    const history = {
+      pushState(data: unknown, unused: string, url?: unknown) {
+        t.history.pushState(data);
+        keep(url);
+      },
+      replaceState(data: unknown, unused: string, url?: unknown) {
+        t.history.replaceState(data);
+        keep(url);
+      },
+    };
+    return { t, location, urls, win: { ...t, history } };
+  }
+
+  it('keeps the view and the open task in the fragment; the popup is not part of it', () => {
+    const a = addressedTab();
+    const app = fakeApp(['pub/a b']);
+    const h = installAppHistory(app, a.win, placeAddress(a.location, () => false));
+    h.sync();
+    app.view = 'list';
+    h.sync();
+    app.peek('pub/a b');
+    h.sync();
+    expect(a.urls).toEqual(['/#view=today', '/#view=list', '/#view=list&open=pub%2Fa%20b']);
+  });
+
+  it('reads a place back from a route, and no place from a route without a view', () => {
+    expect(routePlace(readRoute(routeHash(placeRoute({ view: 'board', selectedId: 'pub/x' }))))).toEqual({
+      view: 'board',
+      selectedId: 'pub/x',
+    });
+    expect(routePlace(readRoute('#view=stats'))).toEqual({ view: 'stats', selectedId: null });
+    expect(routePlace(readRoute('#task=pub%2Fx'))).toBeNull();
+    expect(routePlace(readRoute('#view=nope&open=pub%2Fx'))).toBeNull();
+  });
+
+  it('leaves the address of a window of one task to it', () => {
+    const a = addressedTab('#task=pub%2Fa');
+    const app = fakeApp(['pub/a']);
+    let solo = true;
+    const h = installAppHistory(app, a.win, placeAddress(a.location, () => solo));
+    app.selectedId = 'pub/a';
+    h.sync();
+    expect(a.urls).toEqual([undefined]);
+    expect(a.location.hash).toBe('#task=pub%2Fa');
+    solo = false;
+    app.view = 'list';
+    h.sync();
+    expect(a.location.hash).toBe('#view=list&open=pub%2Fa');
   });
 });

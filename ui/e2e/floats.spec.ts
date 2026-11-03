@@ -125,19 +125,53 @@ test('a task is detached from its float into a window of its own, which shows th
   // The float here closes: the task went to the other window.
   await expect(f).toHaveCount(0);
   await win.waitForLoadState();
-  // The new window is paired (the tab's session came with it), shows the task alone, and the fragment left the address.
+  // The new window is paired (the tab's session came with it) and shows the task alone; the fragment stays in the
+  // address while it does, so that a reload opens the task again.
   await expect(win.getByRole('menubar')).toBeVisible();
   await expect(win.locator('main aside.detail .id')).toHaveText('lib.nvim/beta');
   await expect(win.locator('section.list')).toHaveCount(0);
   await expect(win.getByRole('dialog', { name: 'Task' })).toHaveCount(0);
-  expect(await win.evaluate(() => location.hash)).toBe('');
+  expect(await win.evaluate(() => location.hash)).toBe('#task=lib.nvim%2Fbeta');
+  await win.reload();
+  await expect(win.locator('main aside.detail .id')).toHaveText('lib.nvim/beta');
   await expectAccessible(win, 'the window of one task');
   // A view chosen in that window makes it a page of views again.
   await win.getByRole('menuitem', { name: 'View', exact: true }).click();
   await win.getByRole('menuitemradio', { name: 'List', exact: true }).click();
   await expect(win.locator('section.list')).toBeVisible();
   await expect(win.locator('aside.detail')).toHaveCount(0);
+  // The address is the history's again: the view, and the task that stays chosen in it.
+  await expect.poll(() => win.evaluate(() => location.hash)).toBe('#view=list&open=lib.nvim%2Fbeta');
   await win.close();
+  expect(problems).toEqual([]);
+});
+
+test('a view of the menu is a link: a new tab at its address takes the session of an open tab, a reload keeps the place, Back walks the places', async ({ page, context }) => {
+  const problems = await pair(page);
+  await showList(page);
+  await expect.poll(() => page.evaluate(() => location.hash)).toBe('#view=list');
+  await page.getByRole('menuitem', { name: 'View', exact: true }).click();
+  const inbox = page.getByRole('menuitemradio', { name: 'Inbox', exact: true });
+  expect(await inbox.evaluate((e) => e.tagName)).toBe('A');
+  const href = await inbox.getAttribute('href');
+  expect(href).toBe('/#view=inbox');
+  await page.keyboard.press('Escape');
+  // A tab the browser opens itself (its context menu): it gets no copy of this tab's session storage.
+  const tab = await context.newPage();
+  await tab.goto(href!);
+  await expect(tab.getByRole('menubar')).toBeVisible();
+  await expect(tab.locator('section.inbox')).toBeVisible();
+  expect(await tab.evaluate(() => sessionStorage.getItem('tasks-desktop.session'))).toBe(state().token);
+  await tab.close();
+  // A reload opens the place the address names.
+  await page.reload();
+  await expect(page.locator('section.list')).toBeVisible();
+  // The open task is part of the place; Back closes it again, and the address follows.
+  await openTask(page, 'lib.nvim/beta');
+  await expect.poll(() => page.evaluate(() => location.hash)).toBe('#view=list&open=lib.nvim%2Fbeta');
+  await page.goBack();
+  await expect(float(page)).toHaveCount(0);
+  await expect.poll(() => page.evaluate(() => location.hash)).toBe('#view=list');
   expect(problems).toEqual([]);
 });
 
