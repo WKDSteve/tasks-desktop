@@ -65,7 +65,6 @@ jobs:
       # The golden sheet block is a contract with testing.nvim: the copy here is the file at the pinned commit
       # (ui/src/lib/fixtures/sheet-block.source), byte for byte, with its checksum file.
       - name: Golden sheet block equals testing.nvim's at the pinned commit
-        shell: bash
         run: |
           sha="$(awk '{print $2}' ui/src/lib/fixtures/sheet-block.source)"
           base="https://raw.githubusercontent.com/WKDSteve/testing.nvim/${sha}/TESTS/golden/sheet-block"
