@@ -224,6 +224,7 @@ pub async fn start_with(cfg: ServerConfig, extras: Extras) -> std::io::Result<Ru
             instance: cfg.instance,
             app: APP_NAME,
             version: crate::VERSION,
+            build_id: crate::BUILD,
             guard_rules: guard_rules(),
             ui: Arc::new(cfg.ui),
             runtime,

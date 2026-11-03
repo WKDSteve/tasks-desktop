@@ -195,6 +195,13 @@ async fn without_an_engine_the_data_routes_say_so_and_hello_still_answers() {
     let hello: Value = serde_json::from_str(&hello.body).unwrap();
     assert_eq!(hello["engine"]["ready"], false);
     assert_eq!(hello["engine"]["problem"], "no_vault");
+    // A missing vault is the one problem a person fixes by setting the app up (the table of codes is the kit's).
+    assert_eq!(hello["setup_required"], true);
+    // The hub hands its build to the kit; the hub of a rolling build says its commit, any other says nothing.
+    assert_eq!(
+        hello["build"],
+        serde_json::json!(tasks_hub::BUILD.filter(|b| !b.is_empty()))
+    );
 }
 
 #[tokio::test]
