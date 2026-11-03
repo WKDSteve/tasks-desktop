@@ -23,6 +23,7 @@ pub const REQUIRED_CAPABILITIES: &[&str] = &["hello", "snapshot", "list", "task"
 /// What the seam must know about the tasks engine.
 pub const DIALECT: EngineDialect = EngineDialect {
     schema: SCHEMA,
+    schema_tag: None,
     error_kind: "tasks.error",
     host_script: "tasks-host.lua",
     vault_var: "TASKS_VAULT",
