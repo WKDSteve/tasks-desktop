@@ -156,7 +156,7 @@ export interface Env {
    * Ask the open tabs of the page for their session (appkit-ui/handoff): a tab the browser opened from a link has none
    * of its own. The token, or null when no tab answered. Left out where there is no hub (the web variant).
    */
-  askSession?(): Promise<string | null>;
+  askSession?(onLate: (token: string) => void): Promise<string | null>;
   /** The ways out of the page for an export: a file the browser saves, the clipboard, the printer. Replaced in tests. */
   out: {
     save(name: string, text: string, type: string): boolean;
@@ -2806,7 +2806,7 @@ export class App {
     let stored = safe(() => this.env.session.getItem(TOKEN_KEY));
     // A tab without a session and without a code (opened from a link) takes the session of an open tab of the page.
     if (!stored && !code && this.env.askSession) {
-      stored = await this.env.askSession();
+      stored = await this.env.askSession((late) => this.takeLateSession(late));
       if (stored) {
         const taken = stored;
         safe(() => this.env.session.setItem(TOKEN_KEY, taken));
@@ -2921,6 +2921,13 @@ export class App {
     if (this.sessionHeld) return;
     this.pendingCode = code;
     if (this.phase === 'needs_pairing') void this.start(code);
+  }
+
+  /** An open tab answered after the wait, so this tab offers to pair: it takes the session, unless it has paired since. */
+  private takeLateSession(token: string): void {
+    if (this.stopped || this.phase !== 'needs_pairing') return;
+    safe(() => this.env.session.setItem(TOKEN_KEY, token));
+    void this.start(null);
   }
 
   stop(): void {

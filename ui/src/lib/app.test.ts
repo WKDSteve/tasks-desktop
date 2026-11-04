@@ -385,7 +385,7 @@ function make(
     mode?: 'web';
     readOnly?: boolean;
     openWindow?: (route: string) => boolean;
-    askSession?: () => Promise<string | null>;
+    askSession?: (onLate: (token: string) => void) => Promise<string | null>;
     fetchFn?: typeof fetch;
     sleep?: (ms: number) => Promise<void>;
   } = {},
@@ -901,6 +901,45 @@ describe('App', () => {
     expect(asked).toBe(1);
     expect(lone.app.phase).toBe('needs_pairing');
     lone.app.stop();
+  });
+
+  it('takes an answer that comes after the wait, and keeps it', async () => {
+    let late: (token: string) => void = () => {};
+    const { app, session } = make({
+      askSession: async (onLate) => {
+        late = onLate;
+        return null;
+      },
+    });
+    await app.start(null);
+    expect(app.phase).toBe('needs_pairing');
+    late('handed');
+    expect(session.get('tasks-desktop.session')).toBe('handed');
+    await vi.waitFor(() => expect(app.phase).not.toBe('needs_pairing'));
+    app.stop();
+  });
+
+  it('a late answer changes nothing in a tab that left the pairing page, or was stopped', async () => {
+    let late: (token: string) => void = () => {};
+    const askSession = async (onLate: (token: string) => void): Promise<null> => {
+      late = onLate;
+      return null;
+    };
+    const paired = make({ askSession });
+    await paired.app.start(null);
+    const answer = late;
+    await paired.app.start('ab'.repeat(16));
+    expect(paired.app.phase).not.toBe('needs_pairing');
+    const own = paired.session.get('tasks-desktop.session');
+    answer('late-token-of-another-tab');
+    expect(paired.session.get('tasks-desktop.session')).toBe(own);
+    paired.app.stop();
+
+    const gone = make({ askSession });
+    await gone.app.start(null);
+    gone.app.stop();
+    late('handed');
+    expect(gone.session.get('tasks-desktop.session')).toBeUndefined();
   });
 
   it('tells a task the address named that the list does not have, and shows the page as it is', async () => {

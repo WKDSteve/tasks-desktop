@@ -170,6 +170,27 @@ test('a task opens in a new tab like a link: middle click, Ctrl+click and the co
   expect(problems).toEqual([]);
 });
 
+test('a new tab takes the session of an open tab that answers late', async ({ page, context }) => {
+  // It keeps a tab busy on purpose, and on a loaded machine that tab is the last to run.
+  test.slow();
+  await pair(page);
+  // Only a tab with an open stream answers.
+  await expect(page.locator('header .conn')).toHaveText('live', { timeout: 60_000 });
+  const tab = await context.newPage();
+  // A busy machine: the open tab answers long after the new tab stopped waiting and offered to pair. Only the new tab
+  // is waited for: when the block ends says nothing, and a loaded machine can take very long to report it.
+  void page
+    .evaluate(() => {
+      const end = performance.now() + 1500;
+      while (performance.now() < end);
+    })
+    .catch(() => {});
+  await tab.goto('/#view=inbox');
+  await expect(tab.locator('section.inbox')).toBeVisible({ timeout: 60_000 });
+  expect(await tab.evaluate(() => sessionStorage.getItem('tasks-desktop.session'))).toBe(state().token);
+  await tab.close();
+});
+
 test('a view of the menu is a link: a new tab at its address takes the session of an open tab, a reload keeps the place, Back walks the places', async ({ page, context }) => {
   const problems = await pair(page);
   await showList(page);
