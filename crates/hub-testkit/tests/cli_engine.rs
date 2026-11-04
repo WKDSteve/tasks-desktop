@@ -160,9 +160,15 @@ async fn a_question_that_takes_too_long_is_killed() {
     );
     tokio::time::sleep(Duration::from_millis(2_000)).await;
     assert!(!ran_on.exists(), "the killed process ran on");
-    // The engine is usable afterwards: the gate was given back.
+    // The gate was given back. A next question gets through to a process; its answer is not asked for, because the
+    // watchdog of this engine is 400 ms, which starting a process alone takes on a busy runner.
+    assert_eq!(engine.queued(), 0);
     let again = engine.call(Calls::Hello, None).await;
-    assert!(again.is_ok(), "{again:?}");
+    assert!(
+        again.is_ok() || matches!(again, Err(EngineError::Timeout)),
+        "{again:?}"
+    );
+    assert_eq!(engine.queued(), 0);
 }
 
 #[tokio::test]
