@@ -218,6 +218,8 @@ export class App {
   pairRefused = $state(false);
   /** A code that arrived while the page was still starting: the pending start trades it. */
   private pendingCode: string | null = null;
+  /** The session an open tab answered with while `start` still waited for the hub (`takeLateSession`). */
+  private lateSession: string | null = null;
   problem = $state<string | null>(null);
   view = $state<View>('today');
   /** What the person chose for the whole page (the kit's `Preferences`): the language, the theme, the single keys. */
@@ -2895,6 +2897,13 @@ export class App {
       offered = this.pendingCode;
       this.pendingCode = null;
     }
+    // An open tab answered while this waited for the hub. A code that worked goes first.
+    const late = this.lateSession;
+    this.lateSession = null;
+    if (!token && late) {
+      safe(() => this.env.session.setItem(TOKEN_KEY, late));
+      token = late;
+    }
     // Said only when the code left the tab without a session.
     this.pairRefused = !token && refused;
     if (!token) {
@@ -2923,9 +2932,17 @@ export class App {
     if (this.phase === 'needs_pairing') void this.start(code);
   }
 
-  /** An open tab answered after the wait, so this tab offers to pair: it takes the session, unless it has paired since. */
+  /**
+   * An open tab answered after the wait. A tab that offers to pair takes the session now; one still on its way there
+   * (waiting for the hub) takes it when it gets there, since the question is not asked again. A tab that has paired
+   * since keeps its own.
+   */
   private takeLateSession(token: string): void {
-    if (this.stopped || this.phase !== 'needs_pairing') return;
+    if (this.stopped || this.sessionHeld) return;
+    if (this.phase !== 'needs_pairing') {
+      this.lateSession = token;
+      return;
+    }
     safe(() => this.env.session.setItem(TOKEN_KEY, token));
     void this.start(null);
   }

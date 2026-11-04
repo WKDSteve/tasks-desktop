@@ -942,6 +942,64 @@ describe('App', () => {
     expect(gone.session.get('tasks-desktop.session')).toBeUndefined();
   });
 
+  describe('an answer that comes while the page still waits for the hub', () => {
+    const held = (hub: ReturnType<typeof make>['hub']): (() => void) => {
+      const hello = hub.hello.bind(hub);
+      let release = (): void => {};
+      const gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      hub.hello = async () => {
+        await gate;
+        return hello();
+      };
+      return release;
+    };
+
+    it('is taken when the page gets there: the question is not asked twice', async () => {
+      let late: (token: string) => void = () => {};
+      let asked = 0;
+      const { app, hub, session } = make({
+        askSession: async (onLate) => {
+          asked += 1;
+          late = onLate;
+          return null;
+        },
+      });
+      const release = held(hub);
+      const started = app.start(null);
+      await new Promise((resolve) => setTimeout(resolve, 1));
+      expect(app.phase).toBe('starting');
+      late('handed');
+      release();
+      await started;
+      expect(app.phase).not.toBe('needs_pairing');
+      expect(session.get('tasks-desktop.session')).toBe('handed');
+      expect(asked).toBe(1);
+      app.stop();
+    });
+
+    it('gives way to a code that was pasted meanwhile and works', async () => {
+      let late: (token: string) => void = () => {};
+      const { app, hub, session } = make({
+        askSession: async (onLate) => {
+          late = onLate;
+          return null;
+        },
+      });
+      const release = held(hub);
+      const started = app.start(null);
+      await new Promise((resolve) => setTimeout(resolve, 1));
+      late('late-token-of-another-tab');
+      app.offerCode('ab'.repeat(16));
+      release();
+      await started;
+      expect(app.phase).not.toBe('needs_pairing');
+      expect(session.get('tasks-desktop.session')).not.toBe('late-token-of-another-tab');
+      app.stop();
+    });
+  });
+
   it('tells a task the address named that the list does not have, and shows the page as it is', async () => {
     const { app, hub } = make({ token: 't' });
     hub.doc = snapshot([task('pub/a')], 'rev:1');
