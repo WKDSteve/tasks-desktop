@@ -473,9 +473,15 @@ test('the detail: the title on a line of its own, a summary of several lines, Do
     await expect(f.getByLabel('Summary', { exact: true })).toBeEditable();
     await expect(f.getByLabel('Summary', { exact: true })).toBeFocused();
     // The toast of the change stands in the float (it is modal: one outside could not be reached), and its Undo works.
+    const undone = page.waitForResponse((r) => r.request().method() === 'POST' && new URL(r.url()).pathname === '/api/tasks/ops', {
+      timeout: WRITE_BUDGET,
+    });
     await f.getByRole('button', { name: 'Undo', exact: true }).click();
+    await undone;
     await expect.poll(() => readFileSync(file, 'utf8'), { timeout: WRITE_BUDGET }).toMatch(/^summary: First words$/m);
-    await expect(f.getByLabel('Summary', { exact: true })).toHaveValue('First words');
+    // The file can have it before the page: the field stays read-only until the write is through (CI, d0cffd1).
+    await expect(f.getByLabel('Summary', { exact: true })).toHaveJSProperty('readOnly', false, { timeout: WRITE_BUDGET });
+    await expect(f.getByLabel('Summary', { exact: true })).toHaveValue('First words', { timeout: WRITE_BUDGET });
 
     // Done: its name, larger than the buttons around it, in the lower right corner of the float.
     const done = f.getByRole('button', { name: 'Done', exact: true });
