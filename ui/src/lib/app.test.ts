@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ApiError, type Hub, type HubArea, type HubAreas, type OpsRequest, type VaultList } from './api';
-import { App, type Env } from './app.svelte';
+import { App, EXCHANGE_RETRIES, type Env } from './app.svelte';
 import type { CachedList, ListStore } from './cache';
 import type { DonePreview, Groupings, Result, Snapshot, TaskDocument, TaskEntry, View, Views } from './contract';
 import { task } from './fixtures';
@@ -39,6 +39,8 @@ class FakeHub {
   hubDown = false;
   exchanged: string[] = [];
   exchangeFails = false;
+  /** The next n trades are turned away for too many attempts (a 429), the ones after are not. */
+  limitNext = 0;
   /** The next n trades are refused (a 401), the ones after are not. */
   failNext = 0;
   /** A trade that fails the way a dead network does, with no answer from the hub. */
@@ -95,6 +97,10 @@ class FakeHub {
     this.exchanged.push(code);
     if (this.exchangeGate) await this.exchangeGate;
     if (this.exchangeNetworkFail) throw new TypeError('network');
+    if (this.limitNext > 0) {
+      this.limitNext -= 1;
+      throw new ApiError(429, 'too_many_attempts', 'x');
+    }
     if (this.failNext > 0) {
       this.failNext -= 1;
       throw new ApiError(401, 'bad_code', 'x');
@@ -504,6 +510,80 @@ describe('App', () => {
     app.stop();
   });
 
+  describe('a hub that turns a code away for too many attempts (429) has not looked at it', () => {
+    const CODE_A = 'ab'.repeat(16);
+
+    it('trades it again, and a code that is still good pairs', async () => {
+      const { app, hub, session } = make();
+      hub.limitNext = EXCHANGE_RETRIES;
+      await app.start(CODE_A);
+      expect(hub.exchanged).toEqual(Array(EXCHANGE_RETRIES + 1).fill(CODE_A));
+      expect(app.phase).not.toBe('needs_pairing');
+      expect(session.get('tasks-desktop.session')).toBe('token-1');
+      expect(app.pairLimited).toBe(false);
+      expect(app.pairRefused).toBe(false);
+      app.stop();
+    });
+
+    it('says so when it stays that way, and not that the code was used up', async () => {
+      const { app, hub } = make();
+      hub.limitNext = 100;
+      await app.start(CODE_A);
+      expect(hub.exchanged).toHaveLength(EXCHANGE_RETRIES + 1);
+      expect(app.phase).toBe('needs_pairing');
+      expect(app.pairLimited).toBe(true);
+      expect(app.pairRefused).toBe(false);
+      app.stop();
+    });
+
+    it('keeps the session the tab has, and says nothing', async () => {
+      const { app, hub, session } = make({ token: 't' });
+      hub.limitNext = 100;
+      await app.start(CODE_A);
+      expect(app.phase).toBe('ready');
+      expect(session.get('tasks-desktop.session')).toBe('t');
+      expect(app.pairLimited).toBe(false);
+      expect(app.pairRefused).toBe(false);
+      app.stop();
+    });
+
+    it('a code pasted during the wait goes on in its place, and clears the notice when it works', async () => {
+      const { app, hub } = make();
+      hub.limitNext = 100;
+      await app.start(CODE_A);
+      expect(app.pairLimited).toBe(true);
+      hub.limitNext = 1;
+      app.offerCode('cd'.repeat(16));
+      await vi.waitFor(() => expect(app.phase).toBe('ready'));
+      expect(app.pairLimited).toBe(false);
+      app.stop();
+
+      const waiting = make({
+        sleep: async () => {
+          // The link is pasted while the page waits for the next try.
+          waiting.app.offerCode('ef'.repeat(16));
+        },
+      });
+      waiting.hub.limitNext = 1;
+      await waiting.app.start(CODE_A);
+      expect(waiting.hub.exchanged).toEqual([CODE_A, 'ef'.repeat(16)]);
+      expect(waiting.app.phase).toBe('ready');
+      waiting.app.stop();
+    });
+
+    it('stops when the page is stopped during the wait', async () => {
+      const stopping = make({
+        sleep: async () => {
+          stopping.app.stop();
+        },
+      });
+      stopping.hub.limitNext = 100;
+      await stopping.app.start(CODE_A);
+      expect(stopping.hub.exchanged).toEqual([CODE_A]);
+      expect(stopping.session.has('tasks-desktop.session')).toBe(false);
+    });
+  });
+
   it('does not say a code was refused when the tab kept its session, or when the hub did not answer', async () => {
     const paired = make({ token: 't' });
     paired.hub.exchangeFails = true;
@@ -543,9 +623,11 @@ describe('App', () => {
     const { app, hub } = make({ token: 't' });
     await app.start(null);
     app.pairRefused = true;
+    app.pairLimited = true;
     hub.onUnauthorized();
     expect(app.phase).toBe('needs_pairing');
     expect(app.pairRefused).toBe(false);
+    expect(app.pairLimited).toBe(false);
     app.stop();
   });
 

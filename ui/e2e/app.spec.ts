@@ -258,6 +258,23 @@ test('a code that is refused is said so, with the way out', async ({ page }) => 
   expect(await violations(page)).toEqual([]);
 });
 
+test('a hub that stays at its limit for pairing is said so, not that the code was used up', async ({ page }) => {
+  await watchViolations(page);
+  let trades = 0;
+  await page.route('**/auth/exchange', (route) => {
+    trades += 1;
+    return route.fulfill({ status: 429, contentType: 'application/json', body: '{"error":"too_many_attempts"}' });
+  });
+  await page.goto(`/#pair=${'ab'.repeat(16)}`);
+  // Three tries more, three seconds apart.
+  await expect(page.getByRole('alert').filter({ hasText: /too many pairing attempts/i })).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByRole('alert').filter({ hasText: /not accepted/i })).toHaveCount(0);
+  await expect(page.getByText('tasks-hub open')).toBeVisible();
+  expect(trades).toBe(4);
+  await expectAccessible(page, 'the pairing page at the limit');
+  expect(await violations(page)).toEqual([]);
+});
+
 test('the browser enforces Trusted Types and no inline or eval script', async ({ page }) => {
   await pair(page);
   const result = await page.evaluate(() => {

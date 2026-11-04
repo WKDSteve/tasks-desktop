@@ -680,6 +680,8 @@ const en = {
     'Start the link from the hub: run the command below in a terminal. It opens this page with a one-time code that works for 60 seconds.',
   'state.needs_pairing.refused':
     'The code was not accepted: it is used up or older than 60 seconds. Run the command below again and open the new link.',
+  'state.needs_pairing.limited':
+    'Too many pairing attempts just now. Wait a minute, then run the command below and open the new link.',
   'web.entry.title': 'Open a vault',
   'web.entry.lead':
     'Choose the folder of your vault. This page reads it in your browser and sends nothing anywhere.',
@@ -1978,6 +1980,8 @@ const de: Record<Key, string> = {
     'Starte den Link vom Hub: Führe den Befehl unten in einem Terminal aus. Er öffnet diese Seite mit einem Einmal-Code, der 60 Sekunden gilt.',
   'state.needs_pairing.refused':
     'Der Code wurde nicht angenommen: er ist verbraucht oder älter als 60 Sekunden. Führe den Befehl unten erneut aus und öffne den neuen Link.',
+  'state.needs_pairing.limited':
+    'Gerade zu viele Kopplungsversuche. Warte eine Minute, führe dann den Befehl unten aus und öffne den neuen Link.',
   'web.entry.title': 'Vault öffnen',
   'web.entry.lead':
     'Wähle den Ordner deines Vaults. Diese Seite liest ihn im Browser und schickt nichts irgendwohin.',

@@ -167,6 +167,9 @@ export interface Env {
 
 /** Where the tab keeps its session (the open tabs hand it to a new one from here, main.ts). */
 export const TOKEN_KEY = 'tasks-desktop.session';
+/** A pairing code the hub turned away for too many attempts (429) is still good: it is traded again a few times. */
+export const EXCHANGE_RETRIES = 3;
+const EXCHANGE_RETRY_MS = 3000;
 /** The saved view that was open last (its id). */
 const OPEN_VIEW_KEY = 'tasks-desktop.view-open';
 /** The key the palette remembers a choice of a saved view under (`view.<id>` of `paletteActions`, as an action). */
@@ -216,6 +219,8 @@ export class App {
   phase = $state<Phase>('starting');
   /** The last pairing code was refused (spent or older than its minute): the page says so and what to do. */
   pairRefused = $state(false);
+  /** The hub turned the code away for too many attempts and the tab has no session: it did not look at the code. */
+  pairLimited = $state(false);
   /** A code that arrived while the page was still starting: the pending start trades it. */
   private pendingCode: string | null = null;
   /** The session an open tab answered with while `start` still waited for the hub (`takeLateSession`). */
@@ -2882,6 +2887,8 @@ export class App {
     let offered = this.pendingCode;
     this.pendingCode = null;
     let refused = false;
+    let limited = false;
+    let tries = 0;
     while (offered) {
       try {
         const fresh = await this.env.hub.exchange(offered);
@@ -2891,11 +2898,21 @@ export class App {
         break;
       } catch (error) {
         // A code that is spent or too old: the session of this tab, if it has one, is still good. Only a
-        // refusal of the hub (a 4xx) says "used up or too old"; a hub that did not answer says nothing of it.
-        refused = error instanceof ApiError && error.status >= 400 && error.status < 500;
+        // refusal of the hub (a 4xx) says "used up or too old"; a hub that did not answer says nothing of it, and
+        // one that turned it away for too many attempts (a 429) did not look at it: it is tried again.
+        limited = error instanceof ApiError && error.status === 429;
+        refused = !limited && error instanceof ApiError && error.status >= 400 && error.status < 500;
+        if (limited && tries < EXCHANGE_RETRIES) {
+          tries += 1;
+          await this.env.sleep(EXCHANGE_RETRY_MS);
+          if (this.stopped) return;
+          // A link pasted during the wait goes on in place of this one.
+          if (!this.pendingCode) continue;
+        }
       }
       offered = this.pendingCode;
       this.pendingCode = null;
+      tries = 0;
     }
     // An open tab answered while this waited for the hub. A code that worked goes first.
     const late = this.lateSession;
@@ -2906,6 +2923,7 @@ export class App {
     }
     // Said only when the code left the tab without a session.
     this.pairRefused = !token && refused;
+    this.pairLimited = !token && limited;
     if (!token) {
       this.phase = 'needs_pairing';
       this.tasks = [];
@@ -2962,6 +2980,7 @@ export class App {
     this.sessionHeld = false;
     // The loss is not about a code that was refused at the start.
     this.pairRefused = false;
+    this.pairLimited = false;
     // What was asked of the hub is not valid without the session: the dialogs and the graph close, the job is forgotten.
     this.closeGraph();
     this.closeMatrix();
