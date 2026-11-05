@@ -1747,6 +1747,12 @@ for (const scheme of ['light', 'dark'] as const) {
     await chooseView(page, 'View', 'Board');
     await expect(page.getByRole('group', { name: 'Board' })).toBeVisible();
     await expectAccessible(page, 'the board');
+    // Hover and focus show the colours of the app's palette (the accent, the focus ring): no violation either.
+    await page.getByRole('menubar').getByRole('menuitem').first().hover();
+    await expectAccessible(page, `the board with the pointer on the menu bar (${scheme})`);
+    await page.locator('.card').first().focus();
+    await expect(page.locator('.card').first()).toBeFocused();
+    await expectAccessible(page, `the board with a card in focus (${scheme})`);
     await page.keyboard.press('Control+k');
     await expect(page.getByRole('dialog', { name: 'Command palette' })).toBeVisible();
     await expectAccessible(page, 'the command palette');

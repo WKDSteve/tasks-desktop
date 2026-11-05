@@ -486,7 +486,10 @@
     border-top: 2px solid var(--line);
   }
 
-  /* The colours of the stacks: each comes from a token, a shade by mixing it with the surface. */
+  /* The colours of the stacks: each comes from a token, a shade by mixing it with the surface. A value without a
+     meaning of its own takes a series of the palette (--chart-*); a meaning colour (--ok, --warn, --bad) is kept for
+     what is good, waits for a decision or is in trouble, so it does not stand for a mere kind (the accent of the app
+     can be close to one of them in hue). The legend names every value. */
   .none {
     background: var(--line);
   }
@@ -494,10 +497,10 @@
     background: var(--muted);
   }
   .dim-status .v-doing {
-    background: var(--accent);
+    background: var(--chart-1);
   }
   .dim-status .v-open {
-    background: var(--ok);
+    background: var(--chart-2);
   }
   .dim-status .v-decision {
     background: var(--warn);
@@ -527,19 +530,19 @@
     background: var(--warn);
   }
   .dim-kind .v-feature {
-    background: var(--accent);
+    background: var(--chart-1);
   }
   .dim-kind .v-task {
-    background: var(--ok);
+    background: var(--chart-2);
   }
   .dim-kind .v-bug {
     background: var(--bad);
   }
   .dim-kind .v-idea {
-    background: var(--warn);
+    background: var(--chart-3);
   }
   .dim-kind .v-research {
-    background: var(--mark);
+    background: var(--chart-4);
   }
   .dim-prio .v-1 {
     background: color-mix(in srgb, var(--accent) 60%, var(--text));
@@ -560,7 +563,7 @@
     background: var(--warn);
   }
   .dim-state .v-waiting {
-    background: var(--accent);
+    background: var(--chart-2);
   }
   .dim-state .v-stuck {
     background: var(--bad);

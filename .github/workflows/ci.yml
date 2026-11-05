@@ -208,6 +208,6 @@ jobs:
       - run: node --test "tools/*.test.mjs"
       - run: python tools/check-control-chars.py
       # A colour the CSS of the page states is a token of appkit-ui (the same check runs in appkit).
-      - run: python tools/check-color-literals.py
+      - run: python tools/check-color-literals.py --root ui/src --tokens ui/src/palette.css
       # The shell scripts of the repository (NREL-16): ShellCheck is on the runner (`scoop install shellcheck`).
       - run: shellcheck scripts/*.sh
