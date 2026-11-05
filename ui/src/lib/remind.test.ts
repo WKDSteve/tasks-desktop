@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { dueItems, dueTasks, isDue, localToday } from './remind';
+import { dueItems, dueTasks, isDue, isOverdue, localToday } from './remind';
 import { task } from './fixtures';
 
 describe('reminders', () => {
@@ -14,6 +14,14 @@ describe('reminders', () => {
     expect(isDue('2026-03-02', '2026-03-01')).toBe(false);
     expect(isDue(undefined, '2026-03-01')).toBe(false);
     expect(isDue('soon', '2026-03-01')).toBe(false);
+  });
+
+  it('is overdue only after the due day, never on it, never for a non-date', () => {
+    expect(isOverdue('2026-02-28', '2026-03-01')).toBe(true);
+    expect(isOverdue('2026-03-01', '2026-03-01')).toBe(false);
+    expect(isOverdue('2026-03-02', '2026-03-01')).toBe(false);
+    expect(isOverdue(undefined, '2026-03-01')).toBe(false);
+    expect(isOverdue('soon', '2026-03-01')).toBe(false);
   });
 
   it('puts the finished ones among the open ones, by date', () => {

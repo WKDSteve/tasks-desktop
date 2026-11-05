@@ -446,6 +446,21 @@
             {/each}
           </select>
         </label>
+        {#each ['due', 'start'] as const as key (key)}
+          <label>
+            <span>{t(`field.${key}`)}</span>
+            <input
+              type="date"
+              value={shown[key] ?? ''}
+              data-field={key}
+              disabled={app.locked}
+              onchange={(e) => {
+                const value = e.currentTarget.value;
+                if (value !== (shown[key] ?? '')) void app.editField(shown.id, key, value === '' ? null : value);
+              }}
+            />
+          </label>
+        {/each}
       </div>
       <!-- The plan and the phase are free text, often a long name: a line each, as the title. -->
       <label class="line">

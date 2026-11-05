@@ -95,6 +95,21 @@ describe('filtering by a field', () => {
   });
 });
 
+describe('filtering by the due and start dates', () => {
+  const dated = task('x/dated', { due: '2026-11-01', start: '2026-10-20' });
+  const undated = task('x/undated');
+  it('keeps a task whose date lies in the span, ends included', () => {
+    expect(matches(dated, only({ dates: { due: { from: '2026-11-01', to: '2026-11-01' } } }), TODAY)).toBe(true);
+    expect(matches(dated, only({ dates: { due: { from: '2026-11-02' } } }), TODAY)).toBe(false);
+    expect(matches(dated, only({ dates: { start: { to: '2026-10-19' } } }), TODAY)).toBe(false);
+    expect(matches(dated, only({ dates: { start: { from: '2026-10-01', to: '2026-10-31' } } }), TODAY)).toBe(true);
+  });
+  it('puts a task without the date in no span', () => {
+    expect(matches(undated, only({ dates: { due: { from: '2000-01-01' } } }), TODAY)).toBe(false);
+    expect(matches(undated, only({ dates: { start: { to: '2100-01-01' } } }), TODAY)).toBe(false);
+  });
+});
+
 describe('filtering by time and reminder', () => {
   it('knows how long ago a task changed; a task without a date is in no window', () => {
     expect(ids(only({ updated: '7' }))).toEqual(['lib/a']);

@@ -4,7 +4,7 @@
   import { hintOf, translate, type Lang } from '../lib/i18n';
   import { markHidden } from '../lib/text';
   import { statusTags } from '../lib/statusTags';
-  import { isDue } from '../lib/remind';
+  import { isDue, isOverdue } from '../lib/remind';
 
   let {
     task,
@@ -48,6 +48,8 @@
     statusTags(lang, task.status, task.readiness?.state === 'unknown' ? undefined : task.readiness?.state),
   );
   const due = $derived(isDue(task.remind, today));
+  // A task that waits on purpose (parked) is not late.
+  const overdue = $derived(task.status !== 'parked' && isOverdue(task.due, today));
 
   /**
    * A cell whose text is cut shows all of it in the hint popup. The kit reads `data-hint` when the pointer comes over
@@ -88,6 +90,7 @@
     {#if flagged > 0}<span class="tag bad" data-hint={flagTitle}><span aria-hidden="true">⚑ {flagged}</span><span class="sr-only">{translate(lang, 'mark.flagged', { n: flagged })}</span></span>{/if}
     {#if crossAreas.length >= 2}<span class="tag soft" data-hint={crossTitle}><span aria-hidden="true">↔ {crossAreas.length}</span><span class="sr-only">{translate(lang, 'mark.cross', { n: crossAreas.length })}</span></span>{/if}
     {#if drafted > 0}<span class="tag draft" data-hint={translate(lang, 'mark.draft', { n: drafted })}><span aria-hidden="true">✎ {drafted}</span><span class="sr-only">{translate(lang, 'mark.draft', { n: drafted })}</span></span>{/if}
+    {#if overdue}<span class="tag overdue" data-hint={translate(lang, 'overdue.hint', { date: task.due ?? '' })}><span aria-hidden="true">⚑ {task.due}</span><span class="sr-only">{translate(lang, 'mark.overdue', { date: task.due ?? '' })}</span></span>{/if}
     {#if due}<span class="tag due" data-hint={translate(lang, 'remind.due', { date: task.remind ?? '' })}><span aria-hidden="true">⏰ {task.remind}</span><span class="sr-only">{translate(lang, 'mark.due', { date: task.remind ?? '' })}</span></span>{/if}
     <span class="tag" data-hint={tags.status.hint}>{tags.status.label}</span>
     {#if tags.state}<span class="tag soft" data-hint={tags.state.hint}>{tags.state.label}</span>{/if}
@@ -178,7 +181,8 @@
   .tag {
     white-space: nowrap;
   }
-  .tag.due {
+  .tag.due,
+  .tag.overdue {
     color: var(--warn);
     border-color: var(--warn);
   }

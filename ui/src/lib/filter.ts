@@ -44,7 +44,7 @@ export interface Bound {
   n: number;
 }
 /** The time fields a range of days can be put on. */
-export const DATE_KEYS = ['created', 'updated', 'remind'] as const;
+export const DATE_KEYS = ['created', 'updated', 'remind', 'due', 'start'] as const;
 export type DateKey = (typeof DATE_KEYS)[number];
 
 export interface Filter {

@@ -3534,6 +3534,16 @@ describe('writing', () => {
         expect(again.app.saveMode).toBe('manual');
       });
 
+      it('sets the due and the start date, and takes one away with null', async () => {
+        const { app, hub } = await ready([task('pub/a', { etag: 'e1', due: '2026-11-01' })]);
+        await app.editField('pub/a', 'start', '2026-10-20');
+        await app.editField('pub/a', 'due', null);
+        expect(hub.sent.map((r) => r.ops[0])).toMatchObject([
+          { op: 'set', id: 'pub/a', patch: { start: '2026-10-20' } },
+          { op: 'set', id: 'pub/a', patch: { due: null } },
+        ]);
+      });
+
       it('holds the changes as a draft and writes them in one request against the version that was shown', async () => {
         const { app, hub } = await manual();
         await app.editField('pub/a', 'prio', 1);

@@ -30,6 +30,11 @@ export function isDue(remind: string | undefined, today: string): boolean {
   return remind !== undefined && DATE.test(remind) && remind <= today;
 }
 
+/** A deadline that has passed: the `due` date is before today (the day itself is not overdue). Not a date: never. */
+export function isOverdue(due: string | undefined, today: string): boolean {
+  return due !== undefined && DATE.test(due) && due < today;
+}
+
 /** The tasks whose reminder is due, the oldest date first (the engine's order inside a day). */
 export function dueTasks(tasks: readonly TaskEntry[], today: string): TaskEntry[] {
   return tasks
