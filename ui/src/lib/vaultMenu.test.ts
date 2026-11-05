@@ -3,7 +3,7 @@ import { task } from './fixtures';
 import { vaultMenuItems, type VaultMenuApp } from './vaultMenu';
 
 const shown: string[] = [];
-const app = (machineActions: boolean): VaultMenuApp =>
+const app = (machineActions: boolean, canChooseFolder = false): VaultMenuApp =>
   ({
     lang: 'en',
     phase: 'ready',
@@ -15,6 +15,8 @@ const app = (machineActions: boolean): VaultMenuApp =>
     selectVault: async (name: string) => void shown.push(`select ${name}`),
     revealVault: async () => void shown.push('reveal'),
     openVaults: () => void shown.push('manage'),
+    canChooseFolder,
+    chooseFolder: () => void shown.push('choose folder'),
   }) as unknown as VaultMenuApp;
 const labels = (a: VaultMenuApp) => vaultMenuItems(a).map((i) => ('label' in i ? i.label : i.kind));
 
@@ -38,5 +40,18 @@ describe('the vault part of the menu', () => {
     const out = labels(app(false));
     expect(out).not.toContain('Show vault folder');
     expect(out).toContain('Manage vaults ...');
+  });
+
+  it('goes back to the choice of a folder where there is no hub that manages vaults (the web variant)', () => {
+    // The web variant has no list of vaults: the entry is not a dead "Manage vaults", it opens another folder.
+    const web = { ...app(false, true), vaultList: null } as unknown as VaultMenuApp;
+    const out = labels(web);
+    expect(out).not.toContain('Manage vaults ...');
+    expect(out).toContain('Open another vault ...');
+    const other = vaultMenuItems(web).find((i) => 'label' in i && i.label === 'Open another vault ...');
+    expect(other?.kind === 'action' && other.disabled).toBe(false);
+    if (other?.kind === 'action') other.onselect();
+    expect(shown).toContain('choose folder');
+    expect(shown).not.toContain('manage');
   });
 });

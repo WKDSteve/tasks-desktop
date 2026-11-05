@@ -88,9 +88,11 @@ test('the search finds a word only the text holds, and the page names the web mo
   await expect(page.locator('aside.detail')).not.toContainText(/Attach screenshot|Screenshot anhängen/);
   await closeFloat(page);
 
-  // The menu of the project has no entry that shows the folder in the file explorer.
+  // The menu of the project has no entry that shows the folder in the file explorer, and none that manages the vaults
+  // of a hub: in its place one that opens another vault folder, and it is not greyed out.
   await page.getByRole('menuitem', { name: /^(Project|Projekt)$/ }).click();
-  await expect(page.getByRole('menuitem', { name: /Manage vaults|Vaults verwalten/ })).toBeVisible();
+  await expect(page.getByRole('menuitem', { name: /Manage vaults|Vaults verwalten/ })).toHaveCount(0);
+  await expect(page.getByRole('menuitem', { name: /Open another vault|Anderen Vault öffnen/ })).toBeEnabled();
   await expect(page.getByRole('menuitem', { name: /Show vault folder|Vault-Ordner zeigen/ })).toHaveCount(0);
   await page.keyboard.press('Escape');
 
@@ -125,6 +127,23 @@ test('a file changed in the folder shows when the window gets the focus back', a
   );
   await expect(page.getByText('Eta was edited').first()).toBeVisible({ timeout: 30_000 });
   await expect(page.getByText('Eta tests')).toHaveCount(0);
+  expect(seen.requests).toEqual([]);
+  expect(await violations(page)).toEqual([]);
+});
+
+test('"Open another vault" leads back to the choice of a folder, without the view of the folder that was left', async ({ page }) => {
+  const seen = await watchPage(page);
+  await fakePicker(page, vaultFiles());
+  await page.goto(pageUrl());
+  await page.getByRole('button', { name: /Choose folder|Ordner wählen/ }).click();
+  await expect(page.getByText('Eta tests').first()).toBeVisible({ timeout: 30_000 });
+
+  await page.getByRole('menuitem', { name: /^(Project|Projekt)$/ }).click();
+  await page.getByRole('menuitem', { name: /Open another vault|Anderen Vault öffnen/ }).click();
+  // The way in again; the address names no view or task of the folder that was left (the history put them there).
+  await expect(page.getByRole('heading', { name: /Open a vault|Vault öffnen/ })).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByRole('button', { name: /Choose folder|Ordner wählen/ })).toBeVisible();
+  expect(new URL(page.url()).hash).toBe('');
   expect(seen.requests).toEqual([]);
   expect(await violations(page)).toEqual([]);
 });

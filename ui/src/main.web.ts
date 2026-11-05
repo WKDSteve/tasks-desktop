@@ -189,6 +189,9 @@ async function begin(folder: string | null, readOnly: boolean): Promise<void> {
     fetchFn,
     sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
     reload: () => window.location.reload(),
+    // Another vault is another folder: the page starts again at the way in (a folder used before is one click). The
+    // fragment goes, so that neither the view nor a task of this folder is taken into the next one.
+    chooseFolder: () => window.location.assign(`${window.location.pathname}${window.location.search}`),
     // The same file in a new window, at the task. The new window has its own engine: it asks for the folder again (a
     // folder used before is one click) and then shows the task.
     openWindow: (route) => window.open(`${window.location.pathname}${window.location.search}${route}`, '_blank') !== null,

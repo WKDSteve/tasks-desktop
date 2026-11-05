@@ -392,6 +392,7 @@ function make(
     readOnly?: boolean;
     openWindow?: (route: string) => boolean;
     askSession?: (onLate: (token: string) => void) => Promise<string | null>;
+    chooseFolder?: () => void;
     fetchFn?: typeof fetch;
     sleep?: (ms: number) => Promise<void>;
   } = {},
@@ -438,6 +439,7 @@ function make(
     ...(overrides.readOnly ? { readOnly: true } : {}),
     ...(overrides.openWindow ? { openWindow: overrides.openWindow } : {}),
     ...(overrides.askSession ? { askSession: overrides.askSession } : {}),
+    ...(overrides.chooseFolder ? { chooseFolder: overrides.chooseFolder } : {}),
     out: {
       save: (name, text, type) => {
         files.push({ name, text, type });
@@ -3972,6 +3974,18 @@ describe('writing', () => {
       await app.removeVault('native');
       expect(hub.vaultCalls).toEqual(['remove native']);
       expect(app.vaultList?.vaults.map((v) => v.name)).toEqual(['main']);
+    });
+
+    it('goes back to the choice of a folder where the page has one (the web variant), and has none beside a hub', () => {
+      let chosen = 0;
+      const web = make({ token: 't', mode: 'web', chooseFolder: () => void (chosen += 1) });
+      expect(web.app.canChooseFolder).toBe(true);
+      web.app.chooseFolder();
+      expect(chosen).toBe(1);
+      const hubPage = make({ token: 't' });
+      expect(hubPage.app.canChooseFolder).toBe(false);
+      hubPage.app.chooseFolder();
+      expect(hubPage.reloads()).toBe(0);
     });
   });
 });

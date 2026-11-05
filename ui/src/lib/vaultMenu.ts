@@ -1,6 +1,7 @@
 // The vault part of the menu "Project": which vault is read, the others the hub can read, and what is done with its
 // folder. The web variant has no hub and nothing on the machine it could start: it reads the one folder the person
-// chose in the browser, so the entry that shows the folder in the file explorer (`vault_reveal`) is not offered there.
+// chose in the browser, so the entry that shows the folder in the file explorer (`vault_reveal`) is not offered there,
+// and in place of managing the vaults of a hub it goes back to the way in, where another folder is chosen.
 
 import type { MenuItem } from 'appkit-ui/menu';
 import type { App } from './app.svelte';
@@ -9,7 +10,7 @@ import { translate, type Key } from './i18n';
 /** What the entries need of the page. */
 export type VaultMenuApp = Pick<
   App,
-  'lang' | 'phase' | 'snapshot' | 'tasks' | 'vaultList' | 'vaultBusy' | 'machineActions' | 'selectVault' | 'revealVault' | 'openVaults'
+  'lang' | 'phase' | 'snapshot' | 'tasks' | 'vaultList' | 'vaultBusy' | 'machineActions' | 'selectVault' | 'revealVault' | 'openVaults' | 'canChooseFolder' | 'chooseFolder'
 >;
 
 export function vaultMenuItems(app: VaultMenuApp): MenuItem[] {
@@ -40,12 +41,20 @@ export function vaultMenuItems(app: VaultMenuApp): MenuItem[] {
           },
         ]
       : []),
-    {
-      kind: 'action' as const,
-      label: t('menu.vaults_manage'),
-      hint: t('hint.item.menu.vaults_manage'),
-      disabled: !ready || !app.vaultList,
-      onselect: () => app.openVaults(),
-    },
+    app.canChooseFolder
+      ? {
+          kind: 'action' as const,
+          label: t('menu.vault_open_other'),
+          hint: t('hint.item.menu.vault_open_other'),
+          disabled: app.vaultBusy,
+          onselect: () => app.chooseFolder(),
+        }
+      : {
+          kind: 'action' as const,
+          label: t('menu.vaults_manage'),
+          hint: t('hint.item.menu.vaults_manage'),
+          disabled: !ready || !app.vaultList,
+          onselect: () => app.openVaults(),
+        },
   ];
 }

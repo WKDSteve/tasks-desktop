@@ -140,6 +140,11 @@ export interface Env {
   sleep(ms: number): Promise<void>;
   /** Load the page again (after another vault was chosen); replaced in tests. */
   reload?(): void;
+  /**
+   * Go back to the way in, where another folder is chosen (the web variant: it reads one folder and has no hub with a
+   * list of vaults). Left out where the hub manages the vaults.
+   */
+  chooseFolder?(): void;
   /** `web`: the page is the web variant (`main.web.ts`), with no hub and nothing of the machine. The hub's page leaves it out. */
   mode?: 'web';
   /**
@@ -3240,6 +3245,16 @@ export class App {
 
   openVaults(): void {
     this.vaultsState.open();
+  }
+
+  /** Another folder can be chosen instead of the vaults of a hub (`Env.chooseFolder`, the web variant). */
+  get canChooseFolder(): boolean {
+    return this.env.chooseFolder !== undefined;
+  }
+
+  /** Leave this folder for the way in, where another one is chosen. */
+  chooseFolder(): void {
+    this.env.chooseFolder?.();
   }
 
   closeVaults(): void {

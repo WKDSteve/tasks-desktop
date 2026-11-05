@@ -76,7 +76,8 @@ one).
    the plain address); Chrome saves no downloaded `.lnk` or `.url`, so the page offers none.
 3. Press "Choose folder ..." and pick the vault folder. The page reads the `*.md` files, `areas.json` and
    `vault.json` into memory (`.git` and hidden folders are skipped). After a restart of Chrome, press "Allow
-   access" once for the folder used last.
+   access" once for the folder used last. Project > "Open another vault ..." goes back to this first screen, where
+   another folder is chosen (the page reads one folder at a time; it has no list of vaults like the app).
 4. Changes made on disk (Neovim, git, agents) show up when the tab gets focus, or within 30 seconds. Writing from the
    page (create, set a field, done, move) compares each file with what was read and writes nothing on a conflict.
 
