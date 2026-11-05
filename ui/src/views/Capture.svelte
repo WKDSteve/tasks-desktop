@@ -5,7 +5,7 @@
   // engine gives the task its place and its file; the page selects it.
   import type { App } from '../lib/app.svelte';
   import { areaLabel } from '../lib/filter';
-  import { badLink, badTag, bodyFromSections, parseList, parseTags, splitOther } from '../lib/fields';
+  import { badLink, badTag, bodyFromSections, parseList, parseTags, scaffoldRows, severityApplies, splitOther } from '../lib/fields';
   import { labelOf, translate, type Key } from '../lib/i18n';
 
   let { app }: { app: App } = $props();
@@ -26,6 +26,8 @@
   let categories = $state<string[]>([]);
   let scopes = $state<string[]>([]);
   let other = $state('');
+  // The ids of the scaffold lines the person unticked (a line that comes back keeps its state).
+  let scaffoldOff = $state<string[]>([]);
   let status = $state('');
   let after = $state('');
   let plan = $state('');
@@ -42,6 +44,16 @@
   let notes = $state('');
   let attach = $state(false);
   let busy = $state(false);
+
+  const scaffold = $derived(
+    scaffoldRows(
+      app.ranges.scaffold,
+      { kind, categories, scopes },
+      { categories: app.ranges.categories, scopes: app.ranges.scopes },
+      app.lang,
+    ),
+  );
+  const severityFits = $derived(severityApplies(kind, categories));
 
   const areas = $derived(
     [...app.allAreaNames]
@@ -66,6 +78,7 @@
       categories = [];
       scopes = [];
       other = '';
+      scaffoldOff = [];
       status = '';
       after = '';
       plan = '';
@@ -111,7 +124,7 @@
       if (categories.length > 0) fields['category'] = categories;
       if (split.scope.length > 0) fields['scope'] = split.scope;
       if (status !== '') fields['status'] = status;
-      if (severity !== '') fields['severity'] = severity;
+      if (severity !== '' && severityFits) fields['severity'] = severity;
       const refList = parseList(refs);
       if (refList.length > 0) fields['refs'] = refList;
       const linkList = parseList(links);
@@ -133,7 +146,13 @@
       }
       // One task in each area named (the one chosen first), the same text in all of them.
       const names = [area, ...extraAreas.filter((name) => name !== area)];
-      const body = bodyFromSections({ context, acceptance, notes }, app.lang);
+      // the ticked scaffold lines open the Acceptance section, the person's own lines follow
+      const picked = scaffold.filter((row) => !scaffoldOff.includes(row.id)).map((row) => `- [ ] ${row.text}`);
+      const ownAcceptance = acceptance.trim();
+      const body = bodyFromSections(
+        { context, acceptance: [...picked, ...(ownAcceptance !== '' ? [ownAcceptance] : [])].join('\n'), notes },
+        app.lang,
+      );
       // The engine refuses a body over 20000 characters; the three fields together can be more (and the headings add
       // to it), so say it here instead of failing the whole write of several areas.
       if (body.length > BODY_MAX) {
@@ -268,8 +287,8 @@
         <input type="text" bind:value={other} />
       </label>
       <label>
-        <span>{t('field.severity')}</span>
-        <select bind:value={severity}>
+        <span>{t('field.severity')}{#if !severityFits} <small>({t('field.severity_only')})</small>{/if}</span>
+        <select bind:value={severity} disabled={!severityFits}>
           <option value="">{t('field.none')}</option>
           {#each app.ranges.severities as v (v)}<option value={v}>{labelOf(app.lang, 'severity', v)}</option>{/each}
         </select>
@@ -299,6 +318,25 @@
       <span>{t('capture.context')} <small>({t('capture.sections_hint')})</small></span>
       <textarea bind:value={context} rows="3" maxlength="20000"></textarea>
     </label>
+    {#if scaffold.length > 0}
+      <fieldset class="cats">
+        <legend>{t('capture.scaffold')} <small>({t('capture.scaffold_hint')})</small></legend>
+        <div class="checks">
+          {#each scaffold as row (row.id)}
+            <label class="check">
+              <input
+                type="checkbox"
+                checked={!scaffoldOff.includes(row.id)}
+                onchange={(e) => {
+                  scaffoldOff = e.currentTarget.checked ? scaffoldOff.filter((id) => id !== row.id) : [...scaffoldOff, row.id];
+                }}
+              />
+              <span>{row.text}</span>
+            </label>
+          {/each}
+        </div>
+      </fieldset>
+    {/if}
     <label>
       <span>{t('capture.acceptance')} <small>({t('capture.acceptance_hint')})</small></span>
       <textarea bind:value={acceptance} rows="3" maxlength="20000"></textarea>

@@ -19,6 +19,24 @@ export const CATEGORIES = ['bug', 'security', 'performance', 'docs', 'ruleset'] 
 export const SCOPES = ['usercmd', 'keymap', 'config', 'ui', 'api', 'docs', 'tests', 'health', 'migration', 'multi-repo'] as const;
 export const SEVERITIES = ['low', 'medium', 'high', 'critical'] as const;
 
+/** One fixed acceptance line, in both languages of the task headings. */
+export interface ScaffoldRow {
+  id: string;
+  de: string;
+  en: string;
+}
+
+/** The engine's acceptance scaffold (`hello.enums.scaffold`): rows by kind, category and scope. */
+export interface Scaffold {
+  kind: Record<string, readonly ScaffoldRow[]>;
+  category: Record<string, readonly ScaffoldRow[]>;
+  scope: Record<string, readonly ScaffoldRow[]>;
+  /** Scopes whose rows a kind with one of the categories also gets (a feature with bindings: keymap, usercmd, ...). */
+  implied: readonly { kind: string; category: readonly string[]; scope: readonly string[] }[];
+}
+
+export const NO_SCAFFOLD: Scaffold = { kind: {}, category: {}, scope: {}, implied: [] };
+
 /** The ranges the forms and filters offer. */
 export interface Ranges {
   kinds: readonly string[];
@@ -31,6 +49,7 @@ export interface Ranges {
   categories: readonly string[];
   scopes: readonly string[];
   severities: readonly string[];
+  scaffold: Scaffold;
 }
 
 export const DEFAULT_RANGES: Ranges = {
@@ -43,6 +62,7 @@ export const DEFAULT_RANGES: Ranges = {
   categories: CATEGORIES,
   scopes: SCOPES,
   severities: SEVERITIES,
+  scaffold: NO_SCAFFOLD,
 };
 
 const MOST = 50;
@@ -58,6 +78,76 @@ function words(list: unknown, keep: (word: string) => boolean = () => true): str
 function numbers(list: unknown): number[] | null {
   if (!Array.isArray(list) || list.length === 0 || list.length > MOST) return null;
   return list.every((n) => Number.isInteger(n) && n >= 0 && n < 1000) ? [...new Set(list as number[])] : null;
+}
+
+const isRow = (r: unknown): r is ScaffoldRow => {
+  if (r === null || typeof r !== 'object') return false;
+  const o = r as Record<string, unknown>;
+  return [o['id'], o['de'], o['en']].every((x) => typeof x === 'string' && x !== '' && x.length <= 200);
+};
+
+function rowsByWord(given: unknown): Record<string, readonly ScaffoldRow[]> {
+  const out: Record<string, readonly ScaffoldRow[]> = {};
+  if (given === null || typeof given !== 'object' || Array.isArray(given)) return out;
+  for (const [word, rows] of Object.entries(given as Record<string, unknown>)) {
+    if (word.length <= 40 && Array.isArray(rows) && rows.length <= MOST && rows.every(isRow)) out[word] = rows;
+  }
+  return out;
+}
+
+/** The scaffold of `hello.enums`; anything that is not what it should be is no scaffold (an answer is data). */
+export function scaffoldOf(given: unknown): Scaffold {
+  if (given === null || typeof given !== 'object') return NO_SCAFFOLD;
+  const o = given as Record<string, unknown>;
+  const implied = Array.isArray(o['implied']) ? o['implied'] : [];
+  const list = (v: unknown): string[] | null => (Array.isArray(v) && v.every((w) => typeof w === 'string') ? (v as string[]) : null);
+  return {
+    kind: rowsByWord(o['kind']),
+    category: rowsByWord(o['category']),
+    scope: rowsByWord(o['scope']),
+    implied: implied.flatMap((r) => {
+      if (r === null || typeof r !== 'object') return [];
+      const x = r as Record<string, unknown>;
+      const category = list(x['category']);
+      const scope = list(x['scope']);
+      return typeof x['kind'] === 'string' && category && scope ? [{ kind: x['kind'], category, scope }] : [];
+    }),
+  };
+}
+
+/**
+ * The acceptance lines for a choice, the way the engine's `model.scaffold` joins them: the rows of the kind, then of
+ * the categories (in the order of `categories`), then of the scopes (in the order of `scopes`), each `id` once. A kind
+ * and category that match an `implied` rule also bring the rows of its scopes.
+ */
+export function scaffoldRows(
+  scaffold: Scaffold,
+  choice: { kind: string; categories: readonly string[]; scopes: readonly string[] },
+  order: { categories: readonly string[]; scopes: readonly string[] },
+  lang: 'de' | 'en',
+): { id: string; text: string }[] {
+  const scopes = new Set(choice.scopes);
+  for (const rule of scaffold.implied) {
+    if (rule.kind === choice.kind && rule.category.some((c) => choice.categories.includes(c))) rule.scope.forEach((s) => scopes.add(s));
+  }
+  const out: { id: string; text: string }[] = [];
+  const seen = new Set<string>();
+  const add = (rows: readonly ScaffoldRow[] | undefined): void => {
+    for (const row of rows ?? []) {
+      if (seen.has(row.id)) continue;
+      seen.add(row.id);
+      out.push({ id: row.id, text: row[lang] });
+    }
+  };
+  add(scaffold.kind[choice.kind]);
+  for (const c of order.categories) if (choice.categories.includes(c)) add(scaffold.category[c]);
+  for (const s of order.scopes) if (scopes.has(s)) add(scaffold.scope[s]);
+  return out;
+}
+
+/** Whether a severity fits: a bug, or a bug / security category (the engine's `model.severity_applies`). */
+export function severityApplies(kind: string, categories: readonly string[]): boolean {
+  return kind === 'bug' || categories.includes('bug') || categories.includes('security');
 }
 
 /**
@@ -77,6 +167,7 @@ export function rangesOf(enums: unknown): Ranges {
     categories: words(given['category']) ?? DEFAULT_RANGES.categories,
     scopes: words(given['scope']) ?? DEFAULT_RANGES.scopes,
     severities: words(given['severity']) ?? DEFAULT_RANGES.severities,
+    scaffold: scaffoldOf(given['scaffold']),
   };
 }
 

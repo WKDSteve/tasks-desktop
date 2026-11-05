@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_RANGES, badLink, badTag, bodyFromSections, isWebLink, listEditable, oneLine, parseTags, rangesOf, splitOther, tagsChanged, tagsText } from './fields';
+import { DEFAULT_RANGES, badLink, badTag, bodyFromSections, isWebLink, listEditable, oneLine, parseTags, rangesOf, scaffoldOf, scaffoldRows, severityApplies, splitOther, tagsChanged, tagsText } from './fields';
 
 describe('splitOther (the Other line under the scope list)', () => {
   const scopes = ['ui', 'api', 'multi-repo'];
@@ -9,6 +9,39 @@ describe('splitOther (the Other line under the scope list)', () => {
   it('counts a word ticked and typed once, and an empty line as nothing', () => {
     expect(splitOther('ui ui', scopes, ['ui'])).toEqual({ scope: ['ui'], tags: [] });
     expect(splitOther('  ', scopes, [])).toEqual({ scope: [], tags: [] });
+  });
+});
+
+describe('the acceptance scaffold (the same join as model.scaffold of the engine)', () => {
+  const row = (id: string) => ({ id, de: `${id} de`, en: `${id} en` });
+  const scaffold = scaffoldOf({
+    kind: { bug: [row('repro'), row('regression-test')] },
+    category: { bug: [row('repro'), row('regression-test')], security: [row('proof-test')] },
+    scope: { usercmd: [row('usercmd')], keymap: [row('keymap')], api: [row('api-types')], docs: [row('docs')] },
+    implied: [{ kind: 'feature', category: ['ux', 'bindings'], scope: ['keymap', 'usercmd', 'docs'] }],
+  });
+  const order = { categories: ['bug', 'security', 'bindings', 'ux'], scopes: ['usercmd', 'keymap', 'api', 'docs'] };
+  const ids = (rows: { id: string }[]) => rows.map((r) => r.id);
+
+  it('joins kind, category and scope, each id once', () => {
+    expect(ids(scaffoldRows(scaffold, { kind: 'bug', categories: ['bug', 'security'], scopes: [] }, order, 'en'))).toEqual(['repro', 'regression-test', 'proof-test']);
+    expect(scaffoldRows(scaffold, { kind: 'task', categories: [], scopes: [] }, order, 'en')).toEqual([]);
+  });
+  it('gives a feature with bindings the rows of its implied scopes, in the order of the scopes', () => {
+    expect(ids(scaffoldRows(scaffold, { kind: 'feature', categories: ['bindings'], scopes: ['api'] }, order, 'en'))).toEqual(['usercmd', 'keymap', 'api-types', 'docs']);
+    expect(scaffoldRows(scaffold, { kind: 'task', categories: ['bindings'], scopes: [] }, order, 'en')).toEqual([]);
+  });
+  it('writes the language of the task headings', () => {
+    expect(scaffoldRows(scaffold, { kind: 'bug', categories: [], scopes: [] }, order, 'de')[0]?.text).toBe('repro de');
+  });
+  it('takes nothing that is not rows (an answer is data)', () => {
+    expect(scaffoldOf(null)).toEqual({ kind: {}, category: {}, scope: {}, implied: [] });
+    expect(scaffoldOf({ kind: { bug: [{ id: 1 }] }, implied: [{ kind: 3 }] })).toEqual({ kind: {}, category: {}, scope: {}, implied: [] });
+  });
+  it('lets a severity fit a bug or a security task only', () => {
+    expect(severityApplies('bug', [])).toBe(true);
+    expect(severityApplies('task', ['docs', 'security'])).toBe(true);
+    expect(severityApplies('feature', ['ux'])).toBe(false);
   });
 });
 
