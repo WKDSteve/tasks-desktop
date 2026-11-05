@@ -11,6 +11,7 @@
   import InboxView from './views/InboxView.svelte';
   import AbnahmeView from './views/AbnahmeView.svelte';
   import CrossView from './views/CrossView.svelte';
+  import CalendarView from './views/CalendarView.svelte';
   import StatsView from './views/StatsView.svelte';
   import FinishedView from './views/FinishedView.svelte';
   import ViewsView from './views/ViewsView.svelte';
@@ -463,6 +464,14 @@
           },
           {
             kind: 'radio',
+            label: t('nav.calendar'),
+            hint: t('hint.item.nav.calendar'),
+            checked: app.view === 'calendar',
+            onselect: () => app.setView('calendar'),
+            ...apart('calendar'),
+          },
+          {
+            kind: 'radio',
             label: t('nav.stats'),
             hint: t('hint.item.nav.stats'),
             checked: app.view === 'stats',
@@ -720,6 +729,8 @@
                     ? t('nav.abnahme')
                   : app.view === 'cross'
                     ? t('nav.cross')
+                  : app.view === 'calendar'
+                    ? t('nav.calendar')
                   : app.view === 'stats'
                     ? t('nav.stats')
                     : app.view === 'done'
@@ -744,6 +755,8 @@
           <AbnahmeView {app} />
         {:else if app.view === 'cross'}
           <CrossView {app} />
+        {:else if app.view === 'calendar'}
+          <CalendarView {app} />
         {:else if app.view === 'stats'}
           <StatsView {app} />
         {:else if app.view === 'done'}

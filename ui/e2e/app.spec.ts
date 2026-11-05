@@ -2007,6 +2007,10 @@ test('the capture dialog writes after, plan, phase, due and start into the file'
   // The dates the detail shows are the ones of the file.
   await expect(taskFloat(page).locator('input[data-field="due"]')).toHaveValue('2026-09-01');
   await closeFloat(page);
+
+  // The task lies in the plan that connects two areas: left in the shared vault it adds a link and the counts of the
+  // connections tests are off by one. Its file is taken away again (the hub reads the folder anew).
+  rmSync(join(dir, file!));
 });
 
 test('the capture dialog offers the acceptance lines of the choice and writes the ticked ones', async ({ page }) => {
@@ -4400,6 +4404,53 @@ test('the detail sets scope, category and severity, and a severity only fits a b
   await write(page, () => severity.selectOption(''));
   await write(page, () => category.getByRole('checkbox', { name: 'security' }).uncheck());
   expect(readFileSync(file, 'utf8')).not.toMatch(/^severity:/m);
+  expect(await violations(page)).toEqual([]);
+});
+
+test('the calendar shows a task on its due day; dragging sets the date, dragging to the list takes it away', async ({ page }) => {
+  await watchViolations(page);
+  await pair(page);
+  const title = `Calendar drag ${Date.now()}`;
+  await capture(page, title);
+  await chooseView(page, 'View', 'Calendar');
+  const heading = page.locator('[data-calendar-heading]');
+  await expect(heading).toBeVisible();
+  const today = page.locator('td.today');
+  await expect(today).toHaveCount(1);
+  const day = (await today.getAttribute('data-day')) ?? '';
+  expect(day).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+
+  const dir = join(state().vault, 'lib.nvim', 'ROADMAP', 'tasks');
+  const fileOf = () => readdirSync(dir).find((name) => readFileSync(join(dir, name), 'utf8').includes(`title: ${title}`));
+
+  // A new task has no date: it is in the list on the right. Dragged onto today it gets that due date.
+  // The calendar has no card or title that tells a write is over: the answer of the write is waited for.
+  const answered = async (p: Page, step: () => Promise<unknown>) => {
+    const answer = nextAnswer(p);
+    await step();
+    await answer;
+  };
+  const loose = page.locator('aside.loose');
+  const chip = loose.locator('.chip', { hasText: title });
+  await expect(chip).toBeVisible();
+  await answered(page, () => chip.dragTo(today));
+  expect(fileOf(), 'the task file').toBeDefined();
+  await expect.poll(() => readFileSync(join(dir, fileOf()!), 'utf8')).toContain(`due: ${day}`);
+  await expect(today.locator('.chip.due', { hasText: title })).toBeVisible();
+  await expect(loose.locator('.chip', { hasText: title })).toHaveCount(0);
+
+  // The week shows the same day, and a click on the chip opens the task.
+  await page.locator('label.mode select').selectOption('week');
+  await expect(page.locator('td.today .chip.due', { hasText: title })).toBeVisible();
+  await page.locator('td.today .chip.due', { hasText: title }).click();
+  await expect(taskFloat(page)).toBeVisible();
+  await closeFloat(page);
+  await page.locator('label.mode select').selectOption('month');
+
+  // Dragged back to the list the date is gone.
+  await answered(page, () => page.locator('td.today .chip.due', { hasText: title }).dragTo(loose));
+  await expect.poll(() => readFileSync(join(dir, fileOf()!), 'utf8')).not.toContain('due:');
+  await expect(loose.locator('.chip', { hasText: title })).toBeVisible();
   expect(await violations(page)).toEqual([]);
 });
 

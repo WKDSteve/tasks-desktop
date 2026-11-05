@@ -106,7 +106,7 @@ const NOTE_MAX = 1000;
 
 export type Phase = 'starting' | 'needs_pairing' | 'offline' | 'unavailable' | 'ready';
 export type Connection = 'live' | 'reconnecting' | 'offline';
-export type View = 'today' | 'list' | 'board' | 'plan' | 'inbox' | 'abnahme' | 'cross' | 'stats' | 'done' | 'views';
+export type View = 'today' | 'list' | 'board' | 'plan' | 'inbox' | 'abnahme' | 'cross' | 'calendar' | 'stats' | 'done' | 'views';
 export type Theme = 'auto' | 'light' | 'dark';
 /** The blocks of the Today view that a person may hide. */
 export { ORDERED_TILES, TILES, type OrderedTile, type Tile } from './tiles-list';
@@ -649,6 +649,7 @@ export class App {
       view === 'inbox' ||
       view === 'abnahme' ||
       view === 'cross' ||
+      view === 'calendar' ||
       view === 'stats' ||
       view === 'done' ||
       view === 'views'
@@ -2219,6 +2220,17 @@ export class App {
     if (!this.saving || this.phase !== 'ready') return false;
     this.say('error', 'write.busy');
     return true;
+  }
+
+  /**
+   * `id` dropped on a day of the calendar: its `due` date is set to `date`, or taken away for `null` (dropped on the
+   * list of the tasks without a date). The engine judges the date (`start` after `due` is refused, in its words).
+   */
+  async dropOnDay(id: string, date: string | null): Promise<void> {
+    if (this.refusedReadOnly() || this.refusedWhileSaving()) return;
+    const task = this.tasks.find((t) => t.id === id);
+    if (!task || (task.due ?? null) === date) return;
+    await this.setField(id, 'due', date);
   }
 
   /** `id` dropped on `target`: before or after it. */
