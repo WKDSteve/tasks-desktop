@@ -16,6 +16,7 @@ const FORM_FIELDS = [
   'plan',
   'prio',
   'refs',
+  'scope',
   'severity',
   'start',
   'status',

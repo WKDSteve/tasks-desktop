@@ -1,5 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_RANGES, badLink, badTag, bodyFromSections, isWebLink, listEditable, oneLine, parseTags, rangesOf, tagsChanged, tagsText } from './fields';
+import { DEFAULT_RANGES, badLink, badTag, bodyFromSections, isWebLink, listEditable, oneLine, parseTags, rangesOf, splitOther, tagsChanged, tagsText } from './fields';
+
+describe('splitOther (the Other line under the scope list)', () => {
+  const scopes = ['ui', 'api', 'multi-repo'];
+  it('puts scope words with the ticks and the rest into the tags', () => {
+    expect(splitOther('api, shiny new-thing', scopes, ['ui'])).toEqual({ scope: ['ui', 'api'], tags: ['shiny', 'new-thing'] });
+  });
+  it('counts a word ticked and typed once, and an empty line as nothing', () => {
+    expect(splitOther('ui ui', scopes, ['ui'])).toEqual({ scope: ['ui'], tags: [] });
+    expect(splitOther('  ', scopes, [])).toEqual({ scope: [], tags: [] });
+  });
+});
 
 describe('a summary of several lines', () => {
   it('is kept as one line: each line break with the blanks around it is one space', () => {

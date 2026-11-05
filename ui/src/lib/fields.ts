@@ -16,6 +16,7 @@ export const STATUSES = ['doing', 'decision', 'blocked', 'open', 'parked'] as co
 export const PRIOS = [1, 2, 3] as const;
 export const ACTORS = ['me', 'cdx', 'pair'] as const;
 export const CATEGORIES = ['bug', 'security', 'performance', 'docs', 'ruleset'] as const;
+export const SCOPES = ['usercmd', 'keymap', 'config', 'ui', 'api', 'docs', 'tests', 'health', 'migration', 'multi-repo'] as const;
 export const SEVERITIES = ['low', 'medium', 'high', 'critical'] as const;
 
 /** The ranges the forms and filters offer. */
@@ -28,6 +29,7 @@ export interface Ranges {
   prios: readonly number[];
   actors: readonly string[];
   categories: readonly string[];
+  scopes: readonly string[];
   severities: readonly string[];
 }
 
@@ -39,6 +41,7 @@ export const DEFAULT_RANGES: Ranges = {
   prios: PRIOS,
   actors: ACTORS,
   categories: CATEGORIES,
+  scopes: SCOPES,
   severities: SEVERITIES,
 };
 
@@ -72,6 +75,7 @@ export function rangesOf(enums: unknown): Ranges {
     prios: numbers(given['prio']) ?? DEFAULT_RANGES.prios,
     actors: words(given['actor']) ?? DEFAULT_RANGES.actors,
     categories: words(given['category']) ?? DEFAULT_RANGES.categories,
+    scopes: words(given['scope']) ?? DEFAULT_RANGES.scopes,
     severities: words(given['severity']) ?? DEFAULT_RANGES.severities,
   };
 }
@@ -90,6 +94,28 @@ export function parseTags(text: string): string[] {
     out.push(tag);
   }
   return out;
+}
+
+/**
+ * The `Other` line under the scope list, as in the editor's form: a word that is a scope joins the ticked scopes, any
+ * other word becomes a tag (and is named, so that it is not a silent change). Words are separated by commas or blanks.
+ */
+export function splitOther(
+  text: string,
+  scopes: readonly string[],
+  ticked: readonly string[],
+): { scope: string[]; tags: string[] } {
+  const scope = [...ticked];
+  const tags: string[] = [];
+  for (const word of text.split(/[,\s]+/)) {
+    if (word === '') continue;
+    if (scopes.includes(word)) {
+      if (!scope.includes(word)) scope.push(word);
+    } else if (!tags.includes(word)) {
+      tags.push(word);
+    }
+  }
+  return { scope, tags };
 }
 
 /** A list the same way (ids, references): comma separated, trimmed, no duplicate. */

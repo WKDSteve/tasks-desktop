@@ -5,7 +5,7 @@
   // engine gives the task its place and its file; the page selects it.
   import type { App } from '../lib/app.svelte';
   import { areaLabel } from '../lib/filter';
-  import { badLink, badTag, bodyFromSections, parseList, parseTags } from '../lib/fields';
+  import { badLink, badTag, bodyFromSections, parseList, parseTags, splitOther } from '../lib/fields';
   import { labelOf, translate, type Key } from '../lib/i18n';
 
   let { app }: { app: App } = $props();
@@ -24,6 +24,8 @@
   let summary = $state('');
   let tags = $state('');
   let categories = $state<string[]>([]);
+  let scopes = $state<string[]>([]);
+  let other = $state('');
   let status = $state('');
   let after = $state('');
   let plan = $state('');
@@ -62,6 +64,8 @@
       summary = '';
       tags = '';
       categories = [];
+      scopes = [];
+      other = '';
       status = '';
       after = '';
       plan = '';
@@ -94,7 +98,9 @@
       if (value !== '') fields['value'] = Number(value);
       if (actor !== '') fields['actor'] = actor;
       if (summary.trim() !== '') fields['summary'] = summary.trim();
-      const tagList = parseTags(tags);
+      // `Other`: a scope word joins the ticks, any other word is a tag (named after the task is made)
+      const split = splitOther(other, app.ranges.scopes, scopes);
+      const tagList = parseTags([tags, ...split.tags].filter((x) => x.trim() !== '').join(', '));
       const bad = badTag(tagList);
       if (bad !== null) {
         problem = t('field.tags_invalid', { tag: bad });
@@ -103,6 +109,7 @@
       problem = '';
       if (tagList.length > 0) fields['tags'] = tagList;
       if (categories.length > 0) fields['category'] = categories;
+      if (split.scope.length > 0) fields['scope'] = split.scope;
       if (status !== '') fields['status'] = status;
       if (severity !== '') fields['severity'] = severity;
       const refList = parseList(refs);
@@ -136,13 +143,14 @@
       const created = await app.createTask(names, title.trim(), fields, body);
       // After the task is made: a plain task becomes the folder of its asset.
       if (created && attach) await app.attachScreenshot(created);
+      if (created && split.tags.length > 0) app.tell('ok', 'capture.other_to_tags', { words: split.tags.join(', ') });
     } finally {
       busy = false;
     }
   }
 </script>
 
-<dialog bind:this={dialog} use:floating={{ kind: 'capture', moveLabel: t('float.move'), moveHint: t('hint.float.move') }} use:closeOnBackdrop={{ closeable: () => [title, context, acceptance, notes, summary, tags, refs, links].every((v) => v.trim() === '') }} aria-labelledby="capture-title" onclose={() => app.closeCapture()}>
+<dialog bind:this={dialog} use:floating={{ kind: 'capture', moveLabel: t('float.move'), moveHint: t('hint.float.move') }} use:closeOnBackdrop={{ closeable: () => [title, context, acceptance, notes, summary, tags, other, refs, links].every((v) => v.trim() === '') }} aria-labelledby="capture-title" onclose={() => app.closeCapture()}>
   <form onsubmit={submit}>
     <h2 id="capture-title">{t('capture.title')}</h2>
     <label>
@@ -244,6 +252,21 @@
           {/each}
         </div>
       </fieldset>
+      <fieldset class="cats">
+        <legend>{t('field.scope')}</legend>
+        <div class="checks">
+          {#each app.ranges.scopes as c (c)}
+            <label class="check">
+              <input type="checkbox" value={c} bind:group={scopes} />
+              <span>{labelOf(app.lang, 'scope', c)}</span>
+            </label>
+          {/each}
+        </div>
+      </fieldset>
+      <label>
+        <span>{t('field.scope_other')} <small>({t('field.scope_other_hint')})</small></span>
+        <input type="text" bind:value={other} />
+      </label>
       <label>
         <span>{t('field.severity')}</span>
         <select bind:value={severity}>
