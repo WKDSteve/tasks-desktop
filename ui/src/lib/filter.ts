@@ -2,7 +2,7 @@
 // (plan order), and a filter only takes tasks out of it.
 
 import { connectsAreas } from './cross';
-import { isDue, localToday } from './remind';
+import { isDue, isOverdue, localToday } from './remind';
 import type { TaskEntry } from './contract';
 
 /** The fields a task can be filtered by besides area, status and actor. */
@@ -69,6 +69,8 @@ export interface Filter {
   cross: boolean;
   /** Only the quick wins of the engine (a value at the threshold or above, an effort at the threshold or below). */
   quickWin: boolean;
+  /** Only the tasks past their `due` date (a parked task waits on purpose and is never late). */
+  overdue: boolean;
 }
 
 export const emptyFilter: Filter = {
@@ -84,6 +86,7 @@ export const emptyFilter: Filter = {
   dates: {},
   cross: false,
   quickWin: false,
+  overdue: false,
 };
 
 /** A filter with nothing on, sharing no list or record with another (a state that is changed by copying, never in place). */
@@ -269,6 +272,7 @@ export function matches(
   if (!inWindow(task.updated, filter.updated, today)) return false;
   if (filter.reminder === 'set' && task.remind === undefined) return false;
   if (filter.reminder === 'due' && !isDue(task.remind, today)) return false;
+  if (filter.overdue && !(task.status !== 'parked' && isOverdue(task.due, today))) return false;
   if (filter.cross && !connectsAreas(touched?.get(task.id), filter.areas)) return false;
   if (filter.quickWin && !(quickWins?.has(task.id) ?? false)) return false;
   const query = filter.query.trim().toLowerCase();
@@ -345,6 +349,7 @@ export type ActiveKind =
   | 'reminder'
   | 'cross'
   | 'quickWin'
+  | 'overdue'
   | 'range'
   | 'date';
 export interface ActiveFilter {
@@ -371,6 +376,7 @@ export function activeFilters(filter: Filter): ActiveFilter[] {
   if (filter.reminder !== '') out.push({ kind: 'reminder', value: filter.reminder });
   if (filter.cross) out.push({ kind: 'cross', value: 'on' });
   if (filter.quickWin) out.push({ kind: 'quickWin', value: 'on' });
+  if (filter.overdue) out.push({ kind: 'overdue', value: 'on' });
   return out;
 }
 
@@ -403,6 +409,8 @@ export function without(filter: Filter, item: ActiveFilter): Filter {
       return { ...filter, cross: false };
     case 'quickWin':
       return { ...filter, quickWin: false };
+    case 'overdue':
+      return { ...filter, overdue: false };
     case 'range':
       return { ...filter, ranges: { ...filter.ranges, [item.value]: undefined } };
     case 'date':
@@ -474,6 +482,7 @@ export function parseFilter(text: string | null): Filter {
   out.actors = strings(o.actors);
   out.cross = o.cross === true;
   out.quickWin = o.quickWin === true;
+  out.overdue = o.overdue === true;
   if (typeof o.updated === 'string' && (o.updated === '' || (UPDATED_WINDOWS as readonly string[]).includes(o.updated)))
     out.updated = o.updated as UpdatedWindow;
   if (typeof o.reminder === 'string' && (o.reminder === '' || (REMINDER_CHOICES as readonly string[]).includes(o.reminder)))

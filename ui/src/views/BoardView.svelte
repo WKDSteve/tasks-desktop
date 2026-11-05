@@ -11,6 +11,7 @@
   import Info from 'appkit-ui/Info.svelte';
   import { marksLegend } from '../lib/legend';
   import { markHidden } from '../lib/text';
+  import { isOverdue } from '../lib/remind';
   import Detail from './Detail.svelte';
   import FilterNote from './FilterNote.svelte';
   import FoldButton from './FoldButton.svelte';
@@ -297,6 +298,9 @@
                     <span class="tag draft" data-hint={t('mark.draft', { n })}><span aria-hidden="true">✎ {n}</span><span class="sr-only">{t('mark.draft', { n })}</span></span>
                   {/if}
                   {#if !card.valid}<span class="tag bad" data-hint={t('hint.invalid')}><span aria-hidden="true">!</span><span class="sr-only">{t('mark.invalid')}</span></span>{/if}
+                  {#if card.status !== 'parked' && isOverdue(card.due, app.today)}
+                    <span class="tag overdue" data-hint={t('overdue.hint', { date: card.due ?? '' })}><span aria-hidden="true">⚑ {card.due}</span><span class="sr-only">{t('mark.overdue', { date: card.due ?? '' })}</span></span>
+                  {/if}
                   {#if app.crossAreas(card.id).length >= 2}
                     <span class="tag soft" data-hint={t('cross.mark', { n: app.crossAreas(card.id).length, areas: app.crossAreas(card.id).join(', ') })}><span aria-hidden="true">↔ {app.crossAreas(card.id).length}</span><span class="sr-only">{t('mark.cross', { n: app.crossAreas(card.id).length })}</span></span>
                   {/if}
@@ -330,6 +334,10 @@
 </div>
 
 <style>
+  .tag.overdue {
+    color: var(--warn);
+    border-color: var(--warn);
+  }
   .tag.draft {
     color: var(--accent);
     border-color: var(--accent);

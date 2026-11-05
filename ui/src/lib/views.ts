@@ -115,7 +115,8 @@ export function selectOfFilter(filter: Filter): { select: ViewSelect; dropped: b
     filter.updated !== '' ||
     filter.reminder !== '' ||
     filter.cross ||
-    filter.quickWin
+    filter.quickWin ||
+    filter.overdue
   ) {
     dropped = true;
   }

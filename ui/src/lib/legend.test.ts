@@ -6,7 +6,7 @@ describe('the legend of the marks', () => {
     for (const lang of ['en', 'de'] as const) {
       const text = marksLegend(lang);
       for (const sign of ['↔', '⚑', '⏰', '!', '?']) expect(text, `${lang} ${sign}`).toContain(sign);
-      expect(text.split('\n')).toHaveLength(9);
+      expect(text.split('\n')).toHaveLength(10);
       expect(text).not.toMatch(/mark\.legend|hint\./);
     }
     expect(marksLegend('en')).toContain('Priority: 1');

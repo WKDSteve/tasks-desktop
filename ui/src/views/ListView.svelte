@@ -503,6 +503,14 @@
           searchLabel={t('multi.search')}
         />
       {/each}
+      <label class="pick" data-hint={t('hint.overdue')}>
+        <input
+          type="checkbox"
+          checked={app.filter.overdue}
+          onchange={(e) => (app.filter = { ...app.filter, overdue: e.currentTarget.checked })}
+        />
+        <span>{t('filter.overdue')}</span>
+      </label>
       {#if app.quickWinSet !== undefined || app.filter.quickWin}
         <label class="pick" data-hint={t('hint.quick_win')}>
           <input

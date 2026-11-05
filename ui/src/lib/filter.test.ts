@@ -1,11 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
+  activeFilters,
   applyFilter,
   areaLabel,
   emptyFilter,
   moveSelection,
+  narrows,
   toggled,
   waitingForMe,
+  without,
 } from './filter';
 import { task } from './fixtures';
 
@@ -14,6 +17,30 @@ const list = [
   task('a/two', { status: 'open', actor: 'cdx' }),
   task('b/three', { status: 'decision' }),
 ];
+
+describe('the overdue filter', () => {
+  const today = '2026-11-05';
+  const tasks = [
+    task('a/late', { due: '2026-11-01' }),
+    task('a/today', { due: '2026-11-05' }),
+    task('a/soon', { due: '2026-12-01' }),
+    task('a/none'),
+    task('a/parked', { due: '2026-10-01', status: 'parked' }),
+  ];
+
+  it('keeps the tasks past their due date, not the day itself, not a parked task', () => {
+    const ids = applyFilter(tasks, { ...emptyFilter, overdue: true }, today).map((t) => t.id);
+    expect(ids).toEqual(['a/late']);
+    expect(applyFilter(tasks, emptyFilter, today)).toHaveLength(5);
+  });
+
+  it('shows as a chip and goes off again', () => {
+    const on = { ...emptyFilter, overdue: true };
+    expect(activeFilters(on)).toEqual([{ kind: 'overdue', value: 'on' }]);
+    expect(without(on, { kind: 'overdue', value: 'on' }).overdue).toBe(false);
+    expect(narrows(on)).toBe(true);
+  });
+});
 
 describe('filter', () => {
   it('keeps the engine order and only removes', () => {

@@ -53,6 +53,8 @@ export function chipLabel(
       return t('filter.cross.on');
     case 'quickWin':
       return t('filter.quick_win.on');
+    case 'overdue':
+      return t('filter.overdue.on');
     case 'range': {
       const key = item.value as RangeKey;
       const r = filter.ranges[key];

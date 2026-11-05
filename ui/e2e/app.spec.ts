@@ -4454,6 +4454,42 @@ test('the calendar shows a task on its due day; dragging sets the date, dragging
   expect(await violations(page)).toEqual([]);
 });
 
+test('a task past its due date is marked on its board card and found by the overdue filter', async ({ page }) => {
+  await watchViolations(page);
+  await pair(page);
+  const title = `Overdue card ${Date.now()}`;
+  await capture(page, title, { keep: true });
+  const dir = join(state().vault, 'lib.nvim', 'ROADMAP', 'tasks');
+  const fileOf = () => readdirSync(dir).find((name) => readFileSync(join(dir, name), 'utf8').includes(`title: ${title}`));
+  // a day long gone
+  const due = taskFloat(page).locator('input[data-field="due"]');
+  await write(page, () => due.fill('2020-01-02'));
+  await expect.poll(() => readFileSync(join(dir, fileOf()!), 'utf8')).toContain('due: 2020-01-02');
+  await closeFloat(page);
+
+  // the card of the board carries the mark
+  await chooseView(page, 'View', 'Board');
+  const card = page.locator('button.card', { hasText: title });
+  await expect(card).toBeVisible();
+  await expect(card.locator('.tag.overdue')).toContainText('2020-01-02');
+
+  // the list: the filter keeps only the late tasks, with a chip that takes it off again
+  await showList(page);
+  const row = page.locator('button.row', { hasText: title });
+  await expect(row).toBeVisible();
+  await page.getByText('More filters', { exact: false }).first().click();
+  const pick = page.getByLabel('Overdue only');
+  await pick.check();
+  await expect(row).toBeVisible();
+  await expect(page.locator('button.row', { hasText: 'alpha' })).toHaveCount(0);
+  await pick.uncheck();
+  await expect(page.locator('button.row').nth(1)).toBeVisible();
+  expect(await violations(page)).toEqual([]);
+
+  // the task lies in the shared vault: taken away again
+  rmSync(join(dir, fileOf()!));
+});
+
 test('a step is ticked in the detail, the file changes when the engine wrote it, and undo takes it back', async ({ page }) => {
   await watchViolations(page);
   await pair(page);

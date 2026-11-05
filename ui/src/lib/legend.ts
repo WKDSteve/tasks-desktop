@@ -15,6 +15,7 @@ export function marksLegend(lang: Lang): string {
     `↔ n: ${t('mark.legend.cross')}`,
     `⚑ n: ${t('mark.legend.flag')}`,
     `⏰: ${t('mark.legend.due')}`,
+    `⚑ ${t('mark.legend.overdue_date')}: ${t('mark.legend.overdue')}`,
     `!: ${t('hint.invalid')}`,
     `?: ${t('mark.legend.unknown')}`,
   ].join('\n');

@@ -39,7 +39,7 @@ const FIELDS: readonly (readonly [string, FieldKey])[] = [
 ];
 
 /** The options that are only a name for the list or are dealt with on their own. */
-const HANDLED = new Set(['status', 'prio', 'effort', 'value', 'actor', 'area', 'sort', 'reminders', 'readiness', 'quick_win']);
+const HANDLED = new Set(['status', 'prio', 'effort', 'value', 'actor', 'area', 'sort', 'reminders', 'readiness', 'quick_win', 'overdue']);
 
 /**
  * The filter and the order of `list`. `tasks` are the tasks of the vault: an effort bound (`<=S`) compares by the days
@@ -61,6 +61,8 @@ export function fromEngineList(list: EngineList, tasks: readonly TaskEntry[], co
   const area = text('area');
   if (area) filter.areas = [area];
   if (options.reminders === true) filter.reminder = 'set';
+  // Past its due date and not parked: the page's own filter of that name says the same.
+  if (options.overdue === true) filter.overdue = true;
   // The engine's `--ready` is a task whose readiness is ready or decision, `--waiting` one that waits or is stuck: the
   // states of the page's own choice of that name, so the words mean the same.
   const readiness = text('readiness');
