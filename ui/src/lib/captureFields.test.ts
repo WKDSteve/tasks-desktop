@@ -6,13 +6,18 @@ import source from '../views/Capture.svelte?raw';
 // added on the other, or the test names it.
 const FORM_FIELDS = [
   'actor',
+  'after',
   'category',
+  'due',
   'effort',
   'kind',
   'links',
+  'phase',
+  'plan',
   'prio',
   'refs',
   'severity',
+  'start',
   'status',
   'summary',
   'tags',

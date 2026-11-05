@@ -1974,6 +1974,41 @@ test('the start page has a small summary of today: tasks finished, made and chan
   await expect(card).toBeVisible();
 });
 
+test('the capture dialog writes after, plan, phase, due and start into the file', async ({ page }) => {
+  await pair(page);
+  await closeFloat(page);
+  const dialog = page.getByRole('dialog', { name: 'New task' });
+  await expect(async () => {
+    if (!(await dialog.isVisible())) await page.keyboard.press('c');
+    await expect(dialog).toBeVisible({ timeout: 1000 });
+  }).toPass({ timeout: 10000 });
+  const title = `Capture relations ${Date.now()}`;
+  await dialog.getByLabel('Title').fill(title);
+  await dialog.locator('select').first().selectOption('lib.nvim');
+  await dialog.getByLabel('Due').fill('2026-09-01');
+  await dialog.getByLabel('Start').fill('2026-08-01');
+  await dialog.getByText('More fields', { exact: true }).click();
+  await dialog.getByLabel('After').fill('lib.nvim/alpha');
+  await dialog.getByLabel('Plan', { exact: true }).fill('lib.nvim/the-plan');
+  await dialog.getByLabel('Phase').fill('build');
+  await dialog.getByRole('button', { name: 'Create' }).click();
+  await expect(dialog).toHaveCount(0, { timeout: WRITE_BUDGET });
+  await expect(taskFloat(page).locator('aside.detail .task-title')).toHaveText(title, { timeout: WRITE_BUDGET });
+  const dir = join(state().vault, 'lib.nvim', 'ROADMAP', 'tasks');
+  const file = readdirSync(dir).find((name) => readFileSync(join(dir, name), 'utf8').includes(`title: ${title}`));
+  expect(file, 'the task file was written').toBeDefined();
+  const text = readFileSync(join(dir, file!), 'utf8');
+  expect(text).toContain('plan: lib.nvim/the-plan');
+  expect(text).toContain('phase: build');
+  expect(text).toContain('after: [lib.nvim/alpha]');
+  expect(text).toContain('due: 2026-09-01');
+  expect(text).toContain('start: 2026-08-01');
+
+  // The dates the detail shows are the ones of the file.
+  await expect(taskFloat(page).locator('input[data-field="due"]')).toHaveValue('2026-09-01');
+  await closeFloat(page);
+});
+
 test('the tile Today turns to a week, a month and days that are named, counts what was chosen, and leaves as an image and as a page to print', async ({ page }) => {
   await pair(page);
   const card = page.locator('section[data-tile="daily"]');
@@ -3552,7 +3587,7 @@ test('the plan wizard names the plan with a dry run, refuses what the engine ref
 
   // The plan view opens on the new plan, and the file is what the engine makes.
   await expect(page.getByRole('heading', { name: 'Plan', level: 1 })).toBeAttached();
-  await expect(page.getByLabel('Plan', { exact: true }).or(page.locator('.plan-select select'))).toHaveValue(
+  await expect(page.getByRole('combobox', { name: 'Plan', exact: true }).or(page.locator('.plan-select select'))).toHaveValue(
     'lib.nvim/wizard-e2e-plan',
   );
   const text = readFileSync(file, 'utf8');

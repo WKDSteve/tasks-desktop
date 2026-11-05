@@ -25,6 +25,11 @@
   let tags = $state('');
   let categories = $state<string[]>([]);
   let status = $state('');
+  let after = $state('');
+  let plan = $state('');
+  let phase = $state('');
+  let due = $state('');
+  let start = $state('');
   let extraAreas = $state<string[]>([]);
   let severity = $state('');
   let refs = $state('');
@@ -58,6 +63,11 @@
       tags = '';
       categories = [];
       status = '';
+      after = '';
+      plan = '';
+      phase = '';
+      due = '';
+      start = '';
       extraAreas = [];
       severity = '';
       refs = '';
@@ -104,6 +114,16 @@
         return;
       }
       if (linkList.length > 0) fields['links'] = linkList;
+      const afterList = parseList(after);
+      if (afterList.length > 0) fields['after'] = afterList;
+      if (plan.trim() !== '') fields['plan'] = plan.trim();
+      if (phase.trim() !== '') fields['phase'] = phase.trim();
+      if (due !== '') fields['due'] = due;
+      if (start !== '') fields['start'] = start;
+      if (due !== '' && start !== '' && start > due) {
+        problem = t('capture.dates_order');
+        return;
+      }
       // One task in each area named (the one chosen first), the same text in all of them.
       const names = [area, ...extraAreas.filter((name) => name !== area)];
       const body = bodyFromSections({ context, acceptance, notes }, app.lang);
@@ -194,6 +214,14 @@
           {#each app.ranges.statuses as s (s)}<option value={s}>{labelOf(app.lang, 'status', s)}</option>{/each}
         </select>
       </label>
+      <label>
+        <span>{t('field.due')}</span>
+        <input type="date" bind:value={due} />
+      </label>
+      <label>
+        <span>{t('field.start')}</span>
+        <input type="date" bind:value={start} max={due === '' ? undefined : due} />
+      </label>
     </div>
     <details class="more">
       <summary>{t('capture.more')}</summary>
@@ -230,6 +258,18 @@
       <label>
         <span>{t('field.links')} <small>({t('field.tags_hint')})</small></span>
         <input type="text" bind:value={links} placeholder="https://" />
+      </label>
+      <label>
+        <span>{t('field.after')} <small>({t('field.tags_hint')})</small></span>
+        <input type="text" bind:value={after} placeholder="area/task" />
+      </label>
+      <label>
+        <span>{t('field.plan')}</span>
+        <input type="text" bind:value={plan} placeholder="area/plan" />
+      </label>
+      <label>
+        <span>{t('field.phase')}</span>
+        <input type="text" bind:value={phase} />
       </label>
     </details>
     <label>
