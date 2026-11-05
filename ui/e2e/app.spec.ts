@@ -4369,6 +4369,40 @@ test('the conflict center keeps a refused change, shows wanted and now, and trie
   expect(consoleProblems.get(page)).toEqual([]);
 });
 
+test('the detail sets scope, category and severity, and a severity only fits a bug or security task', async ({ page }) => {
+  await watchViolations(page);
+  await pair(page);
+  await showList(page);
+  await open(page, 'lib.nvim/alpha');
+  const detail = page.locator('aside.detail');
+  const file = join(state().vault, 'lib.nvim', 'ROADMAP', 'tasks', 'alpha.md');
+  const scope = detail.locator('fieldset[data-field="scope"]');
+  const category = detail.locator('fieldset[data-field="category"]');
+  const severity = detail.locator('select[data-field="severity"]');
+
+  // a scope word: written as a list, taken away again
+  await write(page, () => scope.getByRole('checkbox', { name: 'health' }).check());
+  expect(readFileSync(file, 'utf8')).toMatch(/^scope: \[.*health.*\]$/m);
+  await expect(scope.getByRole('checkbox', { name: 'health' })).toBeChecked();
+  await write(page, () => scope.getByRole('checkbox', { name: 'health' }).uncheck());
+  expect(readFileSync(file, 'utf8')).not.toMatch(/^scope:.*health/m);
+
+  // a task that is no bug or security: the severity is greyed out
+  await expect(severity).toBeDisabled();
+  await expect(detail.getByText('only for bug and security')).toBeVisible();
+  await write(page, () => category.getByRole('checkbox', { name: 'security' }).check());
+  expect(readFileSync(file, 'utf8')).toMatch(/^category: \[.*security.*\]$/m);
+  await expect(severity).toBeEnabled();
+  await write(page, () => severity.selectOption('high'));
+  expect(readFileSync(file, 'utf8')).toMatch(/^severity: high$/m);
+
+  // put it back
+  await write(page, () => severity.selectOption(''));
+  await write(page, () => category.getByRole('checkbox', { name: 'security' }).uncheck());
+  expect(readFileSync(file, 'utf8')).not.toMatch(/^severity:/m);
+  expect(await violations(page)).toEqual([]);
+});
+
 test('a step is ticked in the detail, the file changes when the engine wrote it, and undo takes it back', async ({ page }) => {
   await watchViolations(page);
   await pair(page);
@@ -4378,7 +4412,7 @@ test('a step is ticked in the detail, the file changes when the engine wrote it,
   const file = join(state().vault, 'lib.nvim', 'ROADMAP', 'tasks', 'alpha.md');
 
   // Steps 1 and 2 have a box; step 3 is dropped and has none.
-  await expect(detail.getByRole('checkbox')).toHaveCount(2);
+  await expect(detail.getByRole('checkbox', { name: /^\d+\. / })).toHaveCount(2);
   const box = detail.getByRole('checkbox', { name: /2\. second/ });
   await expect(box).not.toBeChecked();
   expect(readFileSync(file, 'utf8')).toContain('- [ ] 2. second');

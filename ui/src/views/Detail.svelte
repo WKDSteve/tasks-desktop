@@ -17,6 +17,7 @@
     oneLine,
     parseList,
     parseTags,
+    severityApplies,
     tagsChanged,
     tagsText,
   } from '../lib/fields';
@@ -461,7 +462,66 @@
             />
           </label>
         {/each}
+        <label>
+          <span data-hint={hintOf(app.lang, 'hint.field', 'severity')}>
+            {t('field.severity')}{#if !severityApplies(shown.kind ?? '', shown.category as string[]) && !shown.severity} <small>({t('field.severity_only')})</small>{/if}
+          </span>
+          <select
+            value={shown.severity ?? ''}
+            data-field="severity"
+            disabled={app.locked || (!severityApplies(shown.kind ?? '', shown.category as string[]) && !shown.severity)}
+            onchange={(e) => void app.editField(shown.id, 'severity', e.currentTarget.value === '' ? null : e.currentTarget.value)}
+          >
+            <option value="">{t('field.none')}</option>
+            {#each app.ranges.severities as v (v)}
+              <option value={v}>{labelOf(app.lang, 'severity', v)}</option>
+            {/each}
+          </select>
+        </label>
       </div>
+      <!-- The categories and the scopes: several each. The categories of the entry are the effective ones (a bug is
+           always in `bug`), so that one cannot be taken away here; the engine's answer is what the boxes show next. -->
+      <fieldset class="cats" data-field="category">
+        <legend>{t('field.category')}</legend>
+        <div class="checks">
+          {#each app.ranges.categories as c (c)}
+            <label class="check">
+              <input
+                type="checkbox"
+                checked={(shown.category as string[]).includes(c)}
+                disabled={app.locked || (c === 'bug' && shown.kind === 'bug')}
+                onchange={(e) => {
+                  const next = app.ranges.categories.filter((x) => (x === c ? e.currentTarget.checked : (shown.category as string[]).includes(x)));
+                  void app.editField(shown.id, 'category', next.length === 0 ? null : next);
+                }}
+              />
+              <span>{labelOf(app.lang, 'category', c)}</span>
+            </label>
+          {/each}
+        </div>
+      </fieldset>
+      {#if app.ranges.scopes.length > 0}
+        <fieldset class="cats" data-field="scope">
+          <legend>{t('field.scope')}</legend>
+          <div class="checks">
+            {#each app.ranges.scopes as c (c)}
+              <label class="check">
+                <input
+                  type="checkbox"
+                  checked={(shown.scope ?? []).includes(c as never)}
+                  disabled={app.locked}
+                  onchange={(e) => {
+                    const have = (shown.scope ?? []) as string[];
+                    const next = app.ranges.scopes.filter((x) => (x === c ? e.currentTarget.checked : have.includes(x)));
+                    void app.editField(shown.id, 'scope', next.length === 0 ? null : next);
+                  }}
+                />
+                <span>{labelOf(app.lang, 'scope', c)}</span>
+              </label>
+            {/each}
+          </div>
+        </fieldset>
+      {/if}
       <!-- The plan and the phase are free text, often a long name: a line each, as the title. -->
       <label class="line">
         <span data-hint={hintOf(app.lang, 'hint.field', 'plan')}>{t('field.plan')}</span>
@@ -871,6 +931,25 @@
 </aside>
 
 <style>
+  .cats {
+    border: 0;
+    padding: 0;
+    margin: 0 0 0.7rem;
+  }
+  .cats legend {
+    padding: 0;
+    margin-bottom: 0.2rem;
+  }
+  .checks {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.2rem 0.9rem;
+  }
+  label.check {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
   /* One field per line for the texts, then the choices in columns that fit their values: nothing is cut to share a
      line with its neighbour. */
   .draft {
