@@ -6,6 +6,7 @@
   import type { App } from '../lib/app.svelte';
   import type { Estimate } from '../lib/contract';
   import { areaLabel, NONE } from '../lib/filter';
+  import { rangeOf } from '../lib/finished';
   import { formatNumber, translate, type Key } from '../lib/i18n';
   import {
     chosenBuckets,
@@ -14,6 +15,7 @@
     figureFilter,
     figuresOf,
     filterFor,
+    finishedPerArea,
     STAT_DIMS,
     STAT_SORTS,
     statsOf,
@@ -100,6 +102,29 @@
     const f = asked.figure;
     return { days: f.days, low: f.range.low, high: f.range.high, without: f.n_without_effort };
   });
+  // What was finished in the last 30 days comes from the engine too: a question of its own, asked again when the vault
+  // changes. No answer: the number and the column stay away, the rest of the view stands.
+  const period = $derived(rangeOf('30', app.today, { from: '', to: '' }));
+  let finishedDoc = $state.raw<{ area: string; count: number }[] | null>(null);
+  $effect(() => {
+    if (!app.can('finished')) return;
+    void app.snapshot?.rev;
+    const abort = new AbortController();
+    app.finished({ ...period, limit: 1 }, abort.signal).then(
+      (doc) => {
+        if (!abort.signal.aborted) finishedDoc = doc.stats.by_area;
+      },
+      () => {
+        if (!abort.signal.aborted) finishedDoc = null;
+      },
+    );
+    return () => abort.abort();
+  });
+  const finished = $derived(finishedDoc ? finishedPerArea(finishedDoc, app.matchAreas) : null);
+  function openFinished(): void {
+    app.setFinishedPrefs({ ...app.finishedPrefs, preset: '30' });
+    app.setView('done');
+  }
   const days = (n: number) => formatNumber(app.lang, Math.round(n * 10) / 10);
 
   function open(bucket: string | null, area: string | null): void {
@@ -140,6 +165,20 @@
           {/if}
         </li>
       {/each}
+      {#if finished}
+        <li>
+          <button
+            type="button"
+            class="figure"
+            data-figure="finished"
+            aria-label={t('stats.open_finished', { n: finished.total })}
+            onclick={openFinished}
+          >
+            <span class="label">{t('stats.finished30')}</span>
+            <span class="n">{finished.total}</span>
+          </button>
+        </li>
+      {/if}
       {#if effort}
         <li>
           <div class="figure" data-figure="effort" data-hint={t('hint.stats.effort')}>
@@ -244,6 +283,7 @@
               {#each stats.buckets as bucket (bucket)}
                 <th scope="col" class="num">{bucketLabel(app.statsDim, bucket)}</th>
               {/each}
+              {#if finished}<th scope="col" class="num" data-col="finished">{t('stats.finished30')}</th>{/if}
             </tr>
           </thead>
           <tbody>
@@ -276,6 +316,7 @@
                     {/if}
                   </td>
                 {/each}
+                {#if finished}<td class="num" data-col="finished">{finished.counts[row.area] ?? 0}</td>{/if}
               </tr>
             {/each}
           </tbody>
@@ -296,6 +337,7 @@
                   >
                 </td>
               {/each}
+              {#if finished}<td class="num" data-col="finished">{finished.total}</td>{/if}
             </tr>
           </tfoot>
         </table>

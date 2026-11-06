@@ -6876,6 +6876,37 @@ test('a tick the hub refuses leaves the box as the task says and writes nothing'
   expect(readFileSync(file, 'utf8')).toBe(before);
 });
 
+test('the statistics show what the engine counted as finished in the last 30 days, and the number opens that period', async ({ page }) => {
+  const asked: string[] = [];
+  await page.route('**/api/tasks/finished*', async (route) => {
+    const url = new URL(route.request().url());
+    if (url.searchParams.get('limit') !== '1') return route.fallback();
+    asked.push(url.searchParams.get('since') ?? '');
+    const body = JSON.stringify({
+      kind: 'tasks.finished', total: 5, offset: 0, limit: 1, items: [], undated: 0, incomplete: [],
+      stats: { effort_days: 0, without_effort: 0, by_area: [{ area: 'lib.nvim', count: 3, effort_days: 0 }, { area: 'elsewhere', count: 2, effort_days: 0 }], by_kind: [], by_prio: [] },
+    });
+    return route.fulfill({ status: 200, contentType: 'application/json', body });
+  });
+  await pair(page);
+  await showList(page);
+  await page.keyboard.press('g');
+  await page.keyboard.press('s');
+  const figure = page.locator('button.figure[data-figure="finished"]');
+  await expect(figure.locator('.n')).toHaveText('5');
+  const day = new Date(Date.now() - 29 * 86_400_000).toISOString().slice(0, 10);
+  const next = new Date(Date.now() - 28 * 86_400_000).toISOString().slice(0, 10);
+  expect([day, next]).toContain(asked[0]);
+  const table = page.getByRole('table', { name: 'The numbers per area' });
+  await expect(table.locator('thead th[data-col="finished"]')).toHaveText('Finished (30 days)');
+  await expect(table.getByRole('row', { name: /lib\.nvim/ }).locator('td[data-col="finished"]')).toHaveText('3');
+  await expect(table.locator('tfoot td[data-col="finished"]')).toHaveText('5');
+  await expectAccessible(page, 'statistics with the finished figure');
+  await figure.click();
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Finished');
+  expect(consoleProblems.get(page)).toEqual([]);
+});
+
 test('an entry of the legend narrows the statistics and the view stays; a second click and the reset take it away', async ({ page }) => {
   await pair(page);
   await showList(page);

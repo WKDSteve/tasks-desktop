@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { TaskEntry } from './contract';
 import { task } from './fixtures';
 import { applyFilter, freshFilter, NONE } from './filter';
-import { bucketOf, chosenBuckets, DAYS, effortSource, ESTIMATE_MAX, figureFilter, figuresOf, filterFor, parseStatsPrefs, STAT_DIMS, statsOf, toggledBucket, withoutDim } from './stats';
+import { bucketOf, chosenBuckets, DAYS, effortSource, ESTIMATE_MAX, figureFilter, figuresOf, filterFor, finishedPerArea, parseStatsPrefs, STAT_DIMS, statsOf, toggledBucket, withoutDim } from './stats';
 
 const state = (s: string) => ({ state: s, rank: 1, leverage: 0, open_blockers: [] }) as unknown as TaskEntry['readiness'];
 
@@ -164,6 +164,19 @@ describe('a click on the legend', () => {
     const f = toggledBucket(base, 'prio', '2', tasks);
     expect(statsOf(applyFilter(tasks, withoutDim(f, 'prio')), 'prio').buckets).toEqual(['1', '2', '4', NONE]);
     expect(withoutDim(toggledBucket(base, 'status', 'open', tasks), 'status').statuses).toEqual([]);
+  });
+});
+
+describe('the finished tasks per area', () => {
+  const byArea = [
+    { area: 'a', count: 3 },
+    { area: 'b', count: 2 },
+  ];
+  it('takes what the engine counted, all areas when none is chosen', () => {
+    expect(finishedPerArea(byArea, [])).toEqual({ total: 5, counts: { a: 3, b: 2 } });
+  });
+  it('keeps only the areas the filter means', () => {
+    expect(finishedPerArea(byArea, ['b', 'c'])).toEqual({ total: 2, counts: { b: 2 } });
   });
 });
 

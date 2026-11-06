@@ -227,6 +227,24 @@ export function figureFilter(base: Filter, figure: Figure, figures: StatFigures)
   }
 }
 
+/**
+ * What the engine answered for the finished tasks of a period, cut to the areas the filter means (none chosen: all of
+ * them). The engine counts per area; the page only adds up the areas it was asked to keep (WEB-13).
+ */
+export function finishedPerArea(
+  byArea: readonly { area: string; count: number }[],
+  areas: readonly string[],
+): { total: number; counts: Record<string, number> } {
+  const counts: Record<string, number> = {};
+  let total = 0;
+  for (const { area, count } of byArea) {
+    if (areas.length > 0 && !areas.includes(area)) continue;
+    counts[area] = count;
+    total += count;
+  }
+  return { total, counts };
+}
+
 /** The most ids the engine's estimate takes in one question (the hub's `ESTIMATE_MAX`). */
 export const ESTIMATE_MAX = 1000;
 
