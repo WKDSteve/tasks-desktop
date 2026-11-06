@@ -4408,6 +4408,41 @@ test('the detail sets scope, category and severity, and a severity only fits a b
   expect(await violations(page)).toEqual([]);
 });
 
+test('a step is added to the plan of a task, and a step or a note becomes a task of its own', async ({ page }) => {
+  const slug = `steps-e2e-${Date.now().toString(36)}`;
+  const file = join(state().vault, 'lib.nvim', 'ROADMAP', 'tasks', `${slug}.md`);
+  writeFileSync(file, `---\ntitle: Steps here\nstatus: open\n---\n\nbody\n`);
+  await watchViolations(page);
+  await pair(page);
+  await showList(page);
+  await open(page, `lib.nvim/${slug}`);
+  const detail = page.locator('aside.detail');
+  const box = detail.getByRole('textbox', { name: /Add a step/ });
+  const add = detail.getByRole('button', { name: 'Add step' });
+  await expect(add).toBeDisabled();
+  await box.fill('the first step');
+  await write(page, () => add.click());
+  await expect(box).toHaveValue('');
+  expect(readFileSync(file, 'utf8')).toMatch(/\[ \] 1\. the first step/);
+  await expect(detail.getByRole('checkbox', { name: /the first step/ })).toBeVisible();
+  await box.fill('the second step');
+  await write(page, () => box.press('Enter'));
+  expect(readFileSync(file, 'utf8')).toMatch(/\[ \] 2\. the second step/);
+
+  // The line goes into New task as its title; the task it came from stays.
+  await detail.getByRole('button', { name: /Make a task of the step: .*the second step/ }).click();
+  const capture = page.getByRole('dialog', { name: 'New task' });
+  await expect(capture.getByLabel('Title')).toHaveValue('the second step');
+  await capture.getByRole('button', { name: /Cancel|Close/ }).first().click();
+  await expect(capture).toHaveCount(0);
+  await detail.getByRole('textbox', { name: /Add a note/ }).fill('a note that is a task');
+  await detail.getByRole('button', { name: 'Make a task of it' }).click();
+  await expect(capture.getByLabel('Title')).toHaveValue('a note that is a task');
+  await page.keyboard.press('Escape');
+  expect(readFileSync(file, 'utf8')).toMatch(/\[ \] 2\. the second step/);
+  expect(await violations(page)).toEqual([]);
+});
+
 test('a category that comes from a tag is locked, and ticking another does not write it into the file', async ({ page }) => {
   const slug = `derived-cat-e2e-${Date.now().toString(36)}`;
   const file = join(state().vault, 'lib.nvim', 'ROADMAP', 'tasks', `${slug}.md`);

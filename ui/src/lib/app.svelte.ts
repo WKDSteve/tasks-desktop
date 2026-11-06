@@ -374,6 +374,8 @@ export class App {
   toast = $state.raw<Toast | null>(null);
   /** The capture dialog is open. */
   capturing = $state(false);
+  /** The title the capture dialog opens with: a line of a task that becomes a task of its own. */
+  captureTitle = $state('');
   /** A card dropped among cards of another priority, waiting for the person's answer. */
   repriority = $state.raw<{ id: string; from: string; prio: number; ops: Op[] } | null>(null);
   /**
@@ -965,10 +967,11 @@ export class App {
     this.toast = null;
   }
 
-  openCapture(): void {
+  openCapture(title = ''): void {
     if (this.phase !== 'ready') return;
     // Nothing could be created: said at once, not after the form was filled in.
     if (this.refusedReadOnly()) return;
+    this.captureTitle = title;
     this.capturing = true;
   }
 
@@ -1401,6 +1404,12 @@ export class App {
       [{ op: 'append_note', id, text, ...(etag ? { if_match: etag } : {}) }],
       { undoable: false },
     );
+    return result?.ok === true;
+  }
+
+  /** Open steps at the end of the task's plan (the engine writes them, one line each). Says whether it wrote them. */
+  async addSteps(id: string, steps: string[], etag?: string): Promise<boolean> {
+    const result = await this.write([{ op: 'add_steps', id, steps, ...(etag ? { if_match: etag } : {}) }]);
     return result?.ok === true;
   }
 

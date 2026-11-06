@@ -36,6 +36,7 @@ export type Op =
   /** Tick option `option` of a question (by its key), or take the answer back with `clear`. */
   | { op: 'answer'; id: string; question: string; option?: number; clear?: boolean; if_match?: string }
   | { op: 'append_note'; id: string; text: string; if_match?: string }
+  | { op: 'add_steps'; id: string; steps: string[]; if_match?: string }
   | { op: 'set_body'; id: string; body: string; if_match?: string }
   | { op: 'move_area'; id: string; to_area: string; if_match?: string }
   /** A saved view: `area` alone makes a new one, `id` replaces that one (on the version read). */

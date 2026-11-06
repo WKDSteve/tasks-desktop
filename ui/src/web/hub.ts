@@ -664,6 +664,7 @@ export const OPS_ALLOWED = [
   'plan_new',
   'tick_step',
   'answer',
+  'add_steps',
   'append_note',
   'reopen',
   'set_body',

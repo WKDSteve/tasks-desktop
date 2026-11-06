@@ -72,6 +72,8 @@
 
   // The line for the notes: kept while the task stays selected, emptied only when the engine wrote it.
   let note = $state('');
+  // The line for a new step: as the note, emptied only when the engine wrote it.
+  let newStep = $state('');
   // The reason for dropping the task: kept like the note, emptied only when the engine wrote it.
   let reason = $state('');
 
@@ -95,6 +97,7 @@
   $effect(() => {
     void taskId;
     note = '';
+    newStep = '';
     reason = '';
     moveTo = '';
     movePreview = null;
@@ -137,6 +140,11 @@
     if (!task || detail.state !== 'ok' || reason.trim() === '') return;
     if (await app.discard(task.id, reason, detail.doc.task.etag)) reason = '';
   }
+  async function addStep(): Promise<void> {
+    if (!task || detail.state !== 'ok' || newStep.trim() === '') return;
+    if (await app.addSteps(task.id, [newStep.trim()], detail.doc.task.etag)) newStep = '';
+  }
+
   async function addNote(): Promise<void> {
     if (!task || detail.state !== 'ok' || note.trim() === '') return;
     if (await app.addNote(task.id, note, detail.doc.task.etag)) note = '';
@@ -704,10 +712,41 @@
                   />
                   {markHidden(step.text)}
                 </label>
+                <button
+                  type="button"
+                  class="to-task"
+                  disabled={app.locked}
+                  aria-label={t('detail.step_to_task', { text: step.text })}
+                  data-hint={t('hint.ui.detail.to_task')}
+                  onclick={() => app.openCapture(step.text)}>{t('detail.to_task')}</button
+                >
               {/if}
             </li>
           {/each}
         </ul>
+      {/if}
+      {#if app.can('add_steps')}
+        <div class="note" role="group" aria-label={t('detail.step_label')}>
+          <label>
+            <span>{t('detail.step_label')} <small>({t('detail.step_hint')})</small></span>
+            <input
+              type="text"
+              bind:value={newStep}
+              data-field="new-step"
+              maxlength="1000"
+              readonly={app.locked}
+              onkeydown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  if (!app.saving) void addStep();
+                }
+              }}
+            />
+          </label>
+          <button type="button" disabled={app.locked || newStep.trim() === ''} onclick={() => void addStep()}
+            >{t('detail.step_button')}</button
+          >
+        </div>
       {/if}
       {#if questions.length > 0}
         <h3>{t('detail.questions')}</h3>
@@ -814,6 +853,12 @@
           </label>
           <button type="button" disabled={app.locked || note.trim() === ''} onclick={() => void addNote()}
             >{t('detail.note_button')}</button
+          >
+          <button
+            type="button"
+            disabled={app.locked || note.trim() === ''}
+            data-hint={t('hint.ui.detail.to_task')}
+            onclick={() => app.openCapture(note.trim())}>{t('detail.note_to_task')}</button
           >
         </div>
       {/if}
@@ -1126,6 +1171,22 @@
   }
   .plain li {
     padding: 0.1rem 0;
+  }
+  .plain li:has(.to-task) {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.6rem;
+    align-items: baseline;
+  }
+  .to-task {
+    flex: none;
+    background: var(--surface-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 0 0.4rem;
+    font-size: 0.8rem;
+    cursor: pointer;
   }
   .step {
     display: flex;

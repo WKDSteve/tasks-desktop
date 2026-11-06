@@ -3448,6 +3448,10 @@ describe('writing', () => {
 
     it('adds a note once, with no way back, and says whether it was written', async () => {
       const { app, hub } = await ready([task('pub/a', { etag: 'e1' })]);
+      hub.next_ops = answer(entry('add_steps'));
+      expect(await app.addSteps('pub/a', ['first step'], 'e1')).toBe(true);
+      expect(hub.sent[0]?.ops).toEqual([{ op: 'add_steps', id: 'pub/a', steps: ['first step'], if_match: 'e1' }]);
+      hub.sent.length = 0;
       hub.next_ops = answer(entry('append_note'));
       expect(await app.addNote('pub/a', 'a line', 'e1')).toBe(true);
       expect(hub.sent[0]?.ops).toEqual([{ op: 'append_note', id: 'pub/a', text: 'a line', if_match: 'e1' }]);
