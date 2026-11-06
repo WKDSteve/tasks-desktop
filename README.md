@@ -196,12 +196,12 @@ The hub binds loopback only and takes no other `Host`, so nothing about it opens
 device, tunnel to it with the **same port on both ends**: the `Host` and the `Origin` have to name that port.
 
 ```
-ssh -N -L PORT:127.0.0.1:PORT user@machine
 ssh user@machine tasks-hub open
+ssh -N -L PORT:127.0.0.1:PORT user@machine
 ```
 
-The second command prints a pairing link for the running hub; open it on the device. `PORT` is the one in `tasks-hub
-status`. The code in the link is for one use, like on the machine itself, and the session is that browser's. A tunnel adds
+The first command prints a pairing link for the running hub, with its `PORT`; with the tunnel up, open that link on the
+device. The code in the link is for one use, like on the machine itself, and the session is that browser's. A tunnel adds
 no rights of its own: whoever can use this local port on the device can reach the pairing page, so do not forward it with
 `-g`. A port the device already uses cannot be forwarded: then free it, or set another `port` in the hub's settings.
 
