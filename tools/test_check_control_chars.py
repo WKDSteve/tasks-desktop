@@ -56,6 +56,12 @@ class ControlCharacters(unittest.TestCase):
         for name in ("check-control-chars.py", "test_check_control_chars.py"):
             self.assertEqual(check.problems(name, (here / name).read_bytes()), [], name)
 
+    def test_the_licence_of_neovim_is_allowed_for_its_tabs_and_nothing_else(self):
+        self.assertIn("tools/neovim-LICENSE.txt", check.ALLOWED)
+        licence = (pathlib.Path(__file__).parent / "neovim-LICENSE.txt").read_bytes()
+        codes = {code for _, code in check.problems("neovim-LICENSE.txt", licence)}
+        self.assertEqual(codes, {0x09})
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -53,7 +53,10 @@ BAD = re.compile(
 )
 
 # Files that carry such characters on purpose.
-ALLOWED: dict[str, str] = {}
+ALLOWED: dict[str, str] = {
+    "tools/neovim-LICENSE.txt": "LICENSE.txt of Neovim's tag, word for word: its tabs stay; "
+    "tools/test_check_control_chars.py holds it to nothing but tabs",
+}
 
 # A TAB belongs to the format of these files (rule NREL-14); everywhere else it is refused, since
 # a tab in a text is nearly always a lost backslash-t (rule APP-02).
