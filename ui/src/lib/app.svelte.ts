@@ -61,7 +61,7 @@ import { parseConflictMode, type ConflictMode } from 'appkit-ui/conflicts';
 import type { CountKey, CountView } from './counts';
 import { parseStatsPrefs, type StatDim, type StatSort } from './stats';
 import { conflictsOf, conflictsOfRequest, retryOp, type Conflict } from './conflicts';
-import { Preferences, StreamSession } from 'appkit-ui/session';
+import { browserStreamShare, Preferences, StreamSession } from 'appkit-ui/session';
 import type { SseMessage } from 'appkit-ui/sse';
 import { labelOf, LANGS, translate, type Key, type Lang } from './i18n';
 import { csvSeparatorFor, EXPORT_FILES, exportFileName, rowsText, sheetOf, type ExportFormat, type ExportRow, type PrintSheet } from './export';
@@ -3707,6 +3707,8 @@ export class App {
       onOpen: () => void this.refresh(),
       onMessage: (m) => this.onMessage(m),
       onLost: () => this.lostSession(),
+      // The windows a task was detached into share the session of the tab, and with it this one stream.
+      share: () => browserStreamShare(this.env.hub.bearer),
     });
   }
 

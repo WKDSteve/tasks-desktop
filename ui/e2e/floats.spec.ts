@@ -239,8 +239,38 @@ test('a view of the menu is a link: a new tab at its address takes the session o
   expect(problems).toEqual([]);
 });
 
-test('the fifth window of one tab gets no live connection from the hub, and its bar says so', async ({ page, context }) => {
+test('eight windows of one tab are all live on one stream, and the next one takes over when its window closes', async ({ page, context }) => {
+  test.setTimeout(120_000);
+  const streams: string[] = [];
+  context.on('request', (request) => {
+    if (request.url().includes('/api/tasks/events')) streams.push(request.url());
+  });
+  const problems = await pair(page);
+  await showList(page);
+  const conn = (p: Page): Locator => p.locator('header .conn');
+  await expect(conn(page)).toHaveText('live', { timeout: WRITE_BUDGET });
+  const windows: Page[] = [];
+  const ids = ['lib.nvim/alpha', 'lib.nvim/beta', 'lib.nvim/gamma', 'lib.nvim/delta'];
+  for (let i = 0; i < 7; i++) {
+    const f = await openTask(page, ids[i % ids.length] as string);
+    const [win] = await Promise.all([context.waitForEvent('page'), f.getByRole('button', { name: 'Open in a window of its own' }).click()]);
+    windows.push(win);
+  }
+  for (const win of windows) await expect(conn(win)).toHaveText('live', { timeout: WRITE_BUDGET });
+  expect(streams).toHaveLength(1);
+
+  // The tab that holds the stream closes: one of the others holds it now, and all of them stay live.
+  await page.close();
+  await expect.poll(() => streams.length, { timeout: WRITE_BUDGET }).toBe(2);
+  for (const win of windows) await expect(conn(win)).toHaveText('live', { timeout: WRITE_BUDGET });
+  expect(problems).toEqual([]);
+});
+
+test('a browser that cannot share the stream: the fifth window of one tab gets no live connection from the hub, and its bar says so', async ({ page, context }) => {
   test.setTimeout(90_000);
+  await context.addInitScript(() => {
+    Object.defineProperty(navigator, 'locks', { value: undefined, configurable: true });
+  });
   const problems = await pair(page);
   await showList(page);
   const conn = (p: Page): Locator => p.locator('header .conn');

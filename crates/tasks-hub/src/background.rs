@@ -118,6 +118,7 @@ mod tests {
         let link = appkit_hub::background::app_link(
             crate::IDENTITY.app,
             std::path::Path::new(r"C:\x\tasks-hub.exe"),
+            appkit_hub::background::LinkStart::OpenPage,
         );
         assert_eq!(link.target, r"C:\x\tasks-hub.exe");
         assert_eq!(link.arguments, "start --open");
