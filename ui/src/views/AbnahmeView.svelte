@@ -58,6 +58,14 @@
     }
   });
 
+  // Without a hub the snapshots lie in a folder only the person can give: said once, not once per snapshot.
+  const noCheckouts = $derived(Object.values(snaps).some((s) => s.state === 'failed' && s.code === 'no_checkouts'));
+
+  async function chooseCheckouts(): Promise<void> {
+    if (!(await app.chooseCheckouts())) return;
+    for (const name of Object.keys(snaps)) void readSnap(name);
+  }
+
   async function readSnap(name: string): Promise<void> {
     snaps = { ...snaps, [name]: { state: 'loading' } };
     try {
@@ -89,6 +97,12 @@
 
 <section class="abnahme" aria-label={t('nav.abnahme')}>
   <header class="intro">
+    {#if noCheckouts && app.canChooseCheckouts}
+      <p class="checkouts">
+        {t('abnahme.no_checkouts')}
+        <button type="button" onclick={() => void chooseCheckouts()}>{t('abnahme.choose_checkouts')}</button>
+      </p>
+    {/if}
     <div class="head">
       <h2>{t('nav.abnahme')}</h2>
       <Info hint={t('hint.abnahme')} label={t('hint.about', { what: t('nav.abnahme') })} />
@@ -124,6 +138,8 @@
                     <figcaption>{name.slice(name.lastIndexOf('/') + 1)}</figcaption>
                     {#if !snap || snap.state === 'loading'}
                       <p class="note">{t('abnahme.loading')}</p>
+                    {:else if snap.state === 'failed' && snap.code === 'no_checkouts'}
+                      <p class="note">{t('abnahme.snap_waiting')}</p>
                     {:else if snap.state === 'failed'}
                       <p class="note" role="alert">{t('abnahme.snap_failed', { code: snap.code })}</p>
                     {:else}

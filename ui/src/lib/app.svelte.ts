@@ -145,6 +145,11 @@ export interface Env {
    * list of vaults). Left out where the hub manages the vaults.
    */
   chooseFolder?(): void;
+  /**
+   * The snapshots of the test sheets where there is no hub: the person gives the folder of the plugin checkouts.
+   * Left out where the hub reads them.
+   */
+  snapshots?: { read(name: string): Promise<string>; choose(): Promise<boolean> };
   /** `web`: the page is the web variant (`main.web.ts`), with no hub and nothing of the machine. The hub's page leaves it out. */
   mode?: 'web';
   /**
@@ -2497,7 +2502,17 @@ export class App {
 
   /** The text of a snapshot a test-sheet block names; the hub reads it from the plugin checkouts. */
   readSheetSnapshot(name: string): Promise<string> {
-    return this.env.hub.sheetSnapshot(name);
+    return this.env.snapshots ? this.env.snapshots.read(name) : this.env.hub.sheetSnapshot(name);
+  }
+
+  /** Whether this page asks the person for the folder of the plugin checkouts. */
+  get canChooseCheckouts(): boolean {
+    return this.env.snapshots !== undefined;
+  }
+
+  /** Ask for that folder; whether there is one now. */
+  chooseCheckouts(): Promise<boolean> {
+    return this.env.snapshots?.choose() ?? Promise.resolve(false);
   }
 
   /** Show the file of a task in Neovim. The hub starts the window; the answer says when it could not. */
