@@ -190,6 +190,21 @@ class; a vault the file does not name has everything unclassified. `tasks-hub ar
 the vault is not `main` or the file is already schema 2, and keeps what the other vaults decided. See
 [docs/SECURITY.md](docs/SECURITY.md).
 
+## From another device, over an SSH tunnel
+
+The hub binds loopback only and takes no other `Host`, so nothing about it opens to the network. To use it from another
+device, tunnel to it with the **same port on both ends**: the `Host` and the `Origin` have to name that port.
+
+```
+ssh -N -L PORT:127.0.0.1:PORT user@machine
+ssh user@machine tasks-hub open
+```
+
+The second command prints a pairing link for the running hub; open it on the device. `PORT` is the one in `tasks-hub
+status`. The code in the link is for one use, like on the machine itself, and the session is that browser's. A tunnel adds
+no rights of its own: whoever can use this local port on the device can reach the pairing page, so do not forward it with
+`-g`. A port the device already uses cannot be forwarded: then free it, or set another `port` in the hub's settings.
+
 ## The rolling build (the newest `main`, one click)
 
 After every green CI run on `main`, the workflow `rolling` builds the program of that commit for Windows
