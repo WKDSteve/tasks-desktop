@@ -4890,6 +4890,26 @@ test('a new vault is made from an empty folder and added, and the folder of the 
   await expect(dialog.getByText('twice')).toHaveCount(0);
   expect(existsSync(join(fresh, 'other.nvim'))).toBe(false);
 
+  // A name that is taken is refused after the folder was made; the same folder under another name goes through.
+  const again = join(state().vault, '..', `make-vault-again-${Date.now().toString(36)}`);
+  await dialog.getByLabel(/^Name/).fill('brand-new');
+  await dialog.getByLabel(/^Folder/).fill(again);
+  await dialog.getByRole('checkbox', { name: /Make this folder a new vault/ }).check();
+  await dialog.getByLabel(/^First area/).fill('retry.nvim');
+  await dialog.getByRole('button', { name: 'Make and add' }).click();
+  await expect(page.getByRole('alert').first()).toBeVisible();
+  await expect(dialog.getByText('Forget: brand-new-2')).toHaveCount(0);
+  await dialog.getByLabel(/^Name/).fill('brand-new-2');
+  await dialog.getByLabel(/^Folder/).fill(again);
+  await dialog.getByRole('checkbox', { name: /Make this folder a new vault/ }).check();
+  await dialog.getByLabel(/^First area/).fill('retry.nvim');
+  await dialog.getByRole('button', { name: 'Make and add' }).click();
+  await expect(dialog.getByRole('button', { name: 'Forget: brand-new-2' })).toBeVisible();
+  expect(existsSync(join(again, 'retry.nvim', 'ROADMAP', 'tasks'))).toBe(true);
+  await dialog.getByRole('button', { name: 'Forget: brand-new-2' }).click();
+  await expect(dialog.getByRole('button', { name: 'Forget: brand-new-2' })).toHaveCount(0);
+  removeFile(again);
+
   await dialog.getByRole('button', { name: 'Forget: brand-new' }).click();
   await expect(dialog.getByText('brand-new')).toHaveCount(0);
   await dialog.getByRole('button', { name: 'Close' }).click();

@@ -647,6 +647,61 @@ fn areas_propose_check_and_the_active_file() {
     }
 }
 
+/// `areas` as a program for a vault that is not `main`: the proposal is of schema 2, keyed by the vault that is read,
+/// and what the file says about the other vaults stays.
+#[test]
+fn areas_propose_and_check_for_another_active_vault() {
+    let config = temp_dir("areas-second");
+    let vault = fixture_vault();
+    let settings = serde_json::json!({
+        "vaults": [{ "name": "second", "path": vault }],
+        "active": "second",
+    });
+    std::fs::write(config.join("config.json"), settings.to_string()).unwrap();
+    std::fs::write(
+        config.join("areas.json"),
+        r#"{"schema":1,"areas":{"from-main":{"class":"private"}}}"#,
+    )
+    .unwrap();
+
+    let out = command(&config)
+        .args(["areas", "propose", "--private=lib.nvim", "--write"])
+        .output()
+        .unwrap();
+    if !out.status.success()
+        && String::from_utf8_lossy(&out.stderr).contains("not ready")
+        && std::env::var_os("TASKS_DESKTOP_REQUIRE_ENGINE").is_none()
+    {
+        eprintln!("skipped: no engine on this machine");
+        return;
+    }
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let doc: Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(doc["schema"], 2, "{doc}");
+    assert_eq!(doc["areas"]["second:lib.nvim"]["class"], "private", "{doc}");
+    assert_eq!(doc["areas"]["main:from-main"]["class"], "private", "{doc}");
+    assert!(doc["areas"].get("lib.nvim").is_none(), "{doc}");
+    assert!(config.join("areas.proposed.json").is_file());
+
+    // The file of schema 1 knows only `main`: for this vault nothing has a class yet.
+    let check = command(&config).args(["areas", "check"]).output().unwrap();
+    assert!(!check.status.success(), "{check:?}");
+    assert!(String::from_utf8_lossy(&check.stderr).contains("no data class"));
+
+    // Taken over, the vault that is read has its classes, and the check passes.
+    std::fs::rename(
+        config.join("areas.proposed.json"),
+        config.join("areas.json"),
+    )
+    .unwrap();
+    let check = command(&config).args(["areas", "check"]).output().unwrap();
+    assert!(check.status.success(), "{check:?}");
+}
+
 #[test]
 fn a_broken_areas_file_stops_the_hub_instead_of_classifying_nothing() {
     let config = temp_dir("badareas");
