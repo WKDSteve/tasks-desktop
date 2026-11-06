@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
-import { expect, test, type Page } from '@playwright/test';
+import type { Page } from '@playwright/test';
+import { expect, test } from './fixtures';
 import { STATE } from './global';
 
 // The plan view of a large vault: the first tasks are drawn at once and the rest in the frames after, so the first

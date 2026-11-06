@@ -3,7 +3,8 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import AxeBuilder from '@axe-core/playwright';
-import { expect, test, type Locator, type Page, type Route } from '@playwright/test';
+import type { Locator, Page, Route } from '@playwright/test';
+import { expect, test } from './fixtures';
 import { expectAccessible, violations, watchViolations } from './a11y';
 import { STATE } from './global';
 import { ABNAHME_SLUG, origin, pairingLink, pickedFolder, removeFile } from './hub';
