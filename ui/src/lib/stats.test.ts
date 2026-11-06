@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { TaskEntry } from './contract';
 import { task } from './fixtures';
 import { applyFilter, freshFilter, NONE } from './filter';
-import { bucketOf, DAYS, effortSource, ESTIMATE_MAX, figureFilter, figuresOf, filterFor, parseStatsPrefs, STAT_DIMS, statsOf } from './stats';
+import { bucketOf, chosenBuckets, DAYS, effortSource, ESTIMATE_MAX, figureFilter, figuresOf, filterFor, parseStatsPrefs, STAT_DIMS, statsOf, toggledBucket, withoutDim } from './stats';
 
 const state = (s: string) => ({ state: s, rank: 1, leverage: 0, open_blockers: [] }) as unknown as TaskEntry['readiness'];
 
@@ -134,6 +134,36 @@ describe('a click on a stack', () => {
 
   it('on an area alone sets only the area', () => {
     expect(filterFor(freshFilter(), 'status', null, 'b', tasks)).toEqual({ ...freshFilter(), areas: ['b'] });
+  });
+});
+
+describe('a click on the legend', () => {
+  const base = freshFilter();
+  it('adds a value, adds a second one, and a second click takes it away', () => {
+    const one = toggledBucket(base, 'prio', '2', tasks);
+    expect(one.fields.prio).toEqual(['2']);
+    const two = toggledBucket(one, 'prio', '4', tasks);
+    expect([...chosenBuckets(two, 'prio')]).toEqual(['2', '4']);
+    expect(applyFilter(tasks, two).map((t) => t.id)).toEqual(['b/three', 'b/four', 'c/six']);
+    const back = toggledBucket(toggledBucket(two, 'prio', '2', tasks), 'prio', '4', tasks);
+    expect(back.fields.prio).toBeUndefined();
+    expect(chosenBuckets(back, 'prio').size).toBe(0);
+  });
+  it('chooses a status, and the stack without a status is the empty status', () => {
+    const f = toggledBucket(toggledBucket(base, 'status', 'open', tasks), 'status', NONE, tasks);
+    expect(f.statuses).toEqual(['open', '']);
+    expect([...chosenBuckets(f, 'status')]).toEqual(['open', NONE]);
+  });
+  it('takes all day values for the stack in days, and takes them away together', () => {
+    const f = toggledBucket(toggledBucket(base, 'effort', 'S', tasks), 'effort', DAYS, tasks);
+    expect([...(f.fields.effort ?? [])].sort()).toEqual(['0.5d', '3d', 'S']);
+    expect([...chosenBuckets(f, 'effort')].sort()).toEqual(['S', DAYS].sort());
+    expect(toggledBucket(f, 'effort', DAYS, tasks).fields.effort).toEqual(['S']);
+  });
+  it('counts as if the field had no choice: the other values stay in the legend', () => {
+    const f = toggledBucket(base, 'prio', '2', tasks);
+    expect(statsOf(applyFilter(tasks, withoutDim(f, 'prio')), 'prio').buckets).toEqual(['1', '2', '4', NONE]);
+    expect(withoutDim(toggledBucket(base, 'status', 'open', tasks), 'status').statuses).toEqual([]);
   });
 });
 

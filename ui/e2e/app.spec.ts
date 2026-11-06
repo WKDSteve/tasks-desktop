@@ -6858,6 +6858,47 @@ test('a tick the hub refuses leaves the box as the task says and writes nothing'
   expect(readFileSync(file, 'utf8')).toBe(before);
 });
 
+test('an entry of the legend narrows the statistics and the view stays; a second click and the reset take it away', async ({ page }) => {
+  await pair(page);
+  await showList(page);
+  await page.keyboard.press('g');
+  await page.keyboard.press('s');
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Statistics');
+  await page.getByRole('group', { name: 'Cut up by' }).getByRole('button', { name: 'Priority' }).click();
+  const open = page.locator('button.figure[data-figure="open"] .n');
+  await expect(open).toHaveText(/^\d+$/);
+  const all = Number(await open.textContent());
+  const entries = page.locator('ul.legend button.entry');
+  await expect(entries.nth(1)).toBeVisible();
+  const first = entries.nth(0);
+  const second = entries.nth(1);
+  const n = async (entry: Locator) => Number(await entry.locator('.muted').textContent());
+  const [one, two] = [await n(first), await n(second)];
+
+  // By the keyboard: the entry is in the tab order, its name says what it does. The view stays, only its tasks count.
+  await first.focus();
+  await page.keyboard.press('Enter');
+  await expect(first).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Statistics');
+  await expect(open).toHaveText(String(one));
+  expect(await first.getAttribute('aria-label')).toMatch(/count only these/);
+  // The others stay in the legend, to be added.
+  await expect(second).toHaveAttribute('aria-pressed', 'false');
+  await second.click();
+  await expect(open).toHaveText(String(one + two));
+  await expectAccessible(page, 'statistics narrowed by the legend');
+
+  // A second click takes it away, and the reset takes the rest away.
+  await second.click();
+  await expect(second).toHaveAttribute('aria-pressed', 'false');
+  await expect(open).toHaveText(String(one));
+  await page.getByRole('button', { name: 'Clear all filters' }).click();
+  await expect(open).toHaveText(String(all));
+  await expect(first).toHaveAttribute('aria-pressed', 'false');
+  await page.evaluate(() => localStorage.removeItem('tasks-desktop.stats'));
+  expect(consoleProblems.get(page)).toEqual([]);
+});
+
 test('the statistics count the open tasks per area, cut up by a field, and a number opens its tasks in the list', async ({ page }) => {
   await pair(page);
   await showList(page);

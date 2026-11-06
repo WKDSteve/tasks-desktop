@@ -1,13 +1,14 @@
 <script lang="ts">
   // The statistics of the vault: the headline numbers, a bar per area cut up by one field, and the same numbers as a
   // table. Only the tasks the filter keeps are counted; every number and every part of a bar opens its tasks in the
-  // list. The counting is `lib/stats.ts`; the bars are drawn for the eye and the table is what the keyboard and a
+  // list, an entry of the legend narrows the filter and stays here. The counting is `lib/stats.ts`; the bars are drawn for the eye and the table is what the keyboard and a
   // screen reader take (the bars repeat its buttons, out of the tab order).
   import type { App } from '../lib/app.svelte';
   import type { Estimate } from '../lib/contract';
   import { areaLabel, NONE } from '../lib/filter';
   import { formatNumber, translate, type Key } from '../lib/i18n';
   import {
+    chosenBuckets,
     DAYS,
     effortSource,
     figureFilter,
@@ -16,6 +17,8 @@
     STAT_DIMS,
     STAT_SORTS,
     statsOf,
+    toggledBucket,
+    withoutDim,
     type Figure,
     type StatDim,
   } from '../lib/stats';
@@ -29,6 +32,10 @@
   const tasks = $derived(app.shown);
   const stats = $derived(statsOf(tasks, app.statsDim, app.statsSort, (area) => nameOf(area)));
   const figures = $derived(figuresOf(tasks, app.quickWinSet));
+  // The legend counts as if the field it cuts by had no choice: the values not chosen stay there, to be added.
+  const legendTasks = $derived(app.tasksKeptBy(withoutDim(app.filter, app.statsDim)));
+  const legend = $derived(statsOf(legendTasks, app.statsDim, app.statsSort, (area) => nameOf(area)));
+  const chosen = $derived(chosenBuckets(app.filter, app.statsDim));
   const widest = $derived(Math.max(1, ...stats.rows.map((r) => r.total)));
 
   const FIGURE_KEYS: Record<Figure, Key> = {
@@ -174,15 +181,26 @@
     </div>
   </section>
 
-  {#if stats.rows.length === 0}
+  {#if legend.rows.length === 0}
     <p class="muted" role="status">{t('stats.empty')}</p>
   {:else}
     <section class="card" aria-labelledby="stats-chart">
       <h3 id="stats-chart" class="eyebrow">{t('stats.chart')}</h3>
-      <ul class="legend dim-{app.statsDim}">
-        {#each stats.buckets as bucket (bucket)}
-          <li><span class="swatch {bucketClass(bucket)}" aria-hidden="true"></span>{bucketLabel(app.statsDim, bucket)}
-            <span class="muted">{stats.totals[bucket]}</span></li>
+      <ul class="legend dim-{app.statsDim}" class:narrowed={chosen.size > 0}>
+        {#each legend.buckets as bucket (bucket)}
+          <li>
+            <button
+              type="button"
+              class="entry"
+              data-bucket={bucket === NONE ? 'none' : bucket}
+              aria-pressed={chosen.has(bucket)}
+              aria-label={t('stats.legend_entry', { bucket: bucketLabel(app.statsDim, bucket), n: legend.totals[bucket] ?? 0 })}
+              onclick={() => app.narrowStats(toggledBucket(app.filter, app.statsDim, bucket, legendTasks))}
+            >
+              <span class="swatch {bucketClass(bucket)}" aria-hidden="true"></span>{bucketLabel(app.statsDim, bucket)}
+              <span class="muted">{legend.totals[bucket]}</span>
+            </button>
+          </li>
         {/each}
       </ul>
       <!-- The bars repeat the table below for the eye; their buttons are for the pointer and out of the tab order. -->
@@ -397,10 +415,28 @@
     flex-wrap: wrap;
     gap: 0.4rem 1rem;
   }
-  .legend li {
+  .entry {
     display: flex;
     align-items: center;
     gap: 0.3rem;
+    padding: 0.1rem 0.4rem;
+    border: 1px solid transparent;
+    border-radius: var(--radius);
+    background: none;
+    color: var(--text);
+    font: inherit;
+    cursor: pointer;
+  }
+  .entry:hover {
+    border-color: var(--line);
+  }
+  .entry[aria-pressed='true'] {
+    border-color: var(--accent);
+    font-weight: 600;
+  }
+  /* Only the colour is dimmed: the name and the number keep their contrast. */
+  .narrowed .entry[aria-pressed='false'] .swatch {
+    opacity: 0.35;
   }
   .swatch {
     width: 0.7rem;

@@ -3,7 +3,7 @@
 // effort written in days stays a day value and is not turned into a size, the quick wins are the engine's.
 
 import type { TaskEntry } from './contract';
-import { NONE, type FieldKey, type Filter } from './filter';
+import { NONE, toggled, type FieldKey, type Filter } from './filter';
 
 export const STAT_DIMS = ['status', 'effort', 'kind', 'prio', 'state'] as const;
 export type StatDim = (typeof STAT_DIMS)[number];
@@ -158,6 +158,51 @@ export function filterFor(
     out.fields[key] = [bucket];
   }
   return out;
+}
+
+/** The filter that is on without the choice of `dim`: what the legend counts, so the other values stay there to be added. */
+export function withoutDim(base: Filter, dim: StatDim): Filter {
+  if (dim === 'status') return { ...base, statuses: [] };
+  const fields = { ...base.fields };
+  delete fields[dim];
+  return { ...base, fields };
+}
+
+const isDays = (effort: string): boolean => effort !== NONE && !BUCKETS.effort.includes(effort);
+
+/** The stacks of `dim` the filter that is on has chosen. */
+export function chosenBuckets(base: Filter, dim: StatDim): Set<string> {
+  if (dim === 'status') return new Set(base.statuses.map((s) => (s === '' ? NONE : s)));
+  const chosen = base.fields[dim] ?? [];
+  return new Set(dim === 'effort' ? chosen.map((v) => (isDays(v) ? DAYS : v)) : chosen);
+}
+
+/**
+ * A click on a stack of the legend: the filter with that stack added, or taken away when it was chosen; the other
+ * values of the field stay. The `DAYS` stack stands for the day values `tasks` have (the filter chooses written values).
+ */
+export function toggledBucket(base: Filter, dim: StatDim, bucket: string, tasks: readonly TaskEntry[]): Filter {
+  if (dim === 'status') {
+    const value = bucket === NONE ? '' : bucket;
+    return { ...base, statuses: toggled(base.statuses, value) };
+  }
+  const fields = { ...base.fields };
+  const chosen = fields[dim] ?? [];
+  let next: string[];
+  if (dim === 'effort' && bucket === DAYS) {
+    const sizes = chosen.filter((v) => !isDays(v));
+    if (sizes.length !== chosen.length) next = sizes;
+    else {
+      const days = new Set<string>();
+      for (const task of tasks) if (bucketOf('effort', task) === DAYS && task.effort) days.add(task.effort);
+      next = [...sizes, ...days];
+    }
+  } else {
+    next = toggled(chosen, bucket);
+  }
+  if (next.length === 0) delete fields[dim];
+  else fields[dim] = next;
+  return { ...base, fields };
 }
 
 /**

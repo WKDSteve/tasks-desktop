@@ -2626,6 +2626,16 @@ export class App {
     return this.env.hub.estimate({ ids }, signal);
   }
 
+  /** The open tasks `filter` keeps, found the way the list finds its filter. */
+  tasksKeptBy(filter: Filter): TaskEntry[] {
+    return applyFilter(this.tasks, this.matchFilter(filter), this.today, this.crossIndex, this.quickWinSet);
+  }
+
+  /** A click on the legend of the statistics: the filter changes, the view stays. */
+  narrowStats(filter: Filter): void {
+    this.filter = filter;
+  }
+
   /** What a number of the statistics counts, in the list: `filter` is the one that is on, narrowed by the click. */
   openStatsInList(filter: Filter): void {
     this.filter = filter;
