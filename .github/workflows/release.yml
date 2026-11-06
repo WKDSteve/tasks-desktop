@@ -103,7 +103,13 @@ jobs:
         run: |
           pnpm install --frozen-lockfile
           pnpm build
+      - name: Pack the engine
+        run: |
+          python tools/pack-engine.py --out target/engine-bundle/engine-bundle.bin
+          python tools/test-engine-bundle.py target/engine-bundle/engine-bundle.bin
       - name: Build the program
+        env:
+          TASKS_HUB_ENGINE_BUNDLE: target/engine-bundle/engine-bundle.bin
         run: cargo build --release --locked -p tasks-hub
       - name: Pack
         id: pack

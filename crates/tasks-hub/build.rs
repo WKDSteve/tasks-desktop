@@ -51,6 +51,22 @@ fn fnv(hash: &mut u64, bytes: &[u8]) {
 }
 
 fn main() {
+    // The engine the program may carry (`tools/pack-engine.py`, `src/bundle.rs`): only a build that names one has one.
+    println!("cargo:rustc-check-cfg=cfg(engine_bundle)");
+    println!("cargo:rerun-if-env-changed=TASKS_HUB_ENGINE_BUNDLE");
+    if let Some(file) = std::env::var_os("TASKS_HUB_ENGINE_BUNDLE") {
+        // A relative path is from the top of the workspace: cargo runs this in the folder of the crate.
+        let top = Path::new(env!("CARGO_MANIFEST_DIR")).join("..").join("..");
+        let file =
+            std::fs::canonicalize(top.join(&file)).expect("TASKS_HUB_ENGINE_BUNDLE names no file");
+        println!("cargo:rerun-if-changed={}", file.display());
+        println!("cargo:rustc-cfg=engine_bundle");
+        println!(
+            "cargo:rustc-env=TASKS_HUB_ENGINE_BUNDLE_FILE={}",
+            file.display()
+        );
+    }
+
     let manifest = PathBuf::from(std::env::var_os("CARGO_MANIFEST_DIR").expect("manifest dir"));
     let dist = manifest.join("..").join("..").join("ui").join("dist");
     let out = PathBuf::from(std::env::var_os("OUT_DIR").expect("out dir")).join("ui_embedded.rs");

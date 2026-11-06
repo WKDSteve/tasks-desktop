@@ -9,6 +9,7 @@ pub mod about;
 pub mod allvaults;
 pub mod app;
 pub mod background;
+pub mod bundle;
 pub mod classes;
 pub mod config;
 pub mod discovery;

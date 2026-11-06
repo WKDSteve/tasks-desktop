@@ -57,6 +57,9 @@ fn run_process(c: &SheetCommand, id: &str) -> Result<SheetRun, String> {
         .arg(&c.script)
         .args(["sheet-run", id])
         .arg(format!("--vault={}", c.vault.display()))
+        // Neovim finds its own runtime: one the person has set would be that of another version.
+        .env_remove("VIM")
+        .env_remove("VIMRUNTIME")
         .stdin(std::process::Stdio::null());
     #[cfg(windows)]
     {

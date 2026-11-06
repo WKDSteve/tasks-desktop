@@ -228,7 +228,7 @@ empty line skips it), whether to install the program to your user folder (no adm
 whether to start it at login and to put a link on the desktop), and, when another version is installed, whether
 to replace it. The hub then runs from the installed copy. What was answered or declined is noted in
 `setup.json` in the settings folder, so a second click asks nothing. Without a person at the console (a pipe,
-a script) nothing is asked; `TASKS_DESKTOP_NO_SETUP=1` switches the questions off. It needs Neovim 0.10+ and checkouts of `tasks.nvim` and `lib.nvim` (the engine), found through
+a script) nothing is asked; `TASKS_DESKTOP_NO_SETUP=1` switches the questions off. The program of a rolling build or a release carries its engine (Neovim 0.12, cut down, with tasks.nvim and lib.nvim, see `tools/nvim.lock`): what is set by hand goes first, then that, then what is found on the machine. A build of your own without `TASKS_HUB_ENGINE_BUNDLE` needs Neovim 0.12+ and checkouts of `tasks.nvim` and `lib.nvim` (the engine), found through
 `TASKS_ENGINE_DIR` and `LIB_NVIM_DIR`, `REPOS_DIR` or the settings file; the vault is `TASKS_VAULT`.
 `tasks-hub --version` names the commit of the build; `tasks-hub stop` ends the hub.
 

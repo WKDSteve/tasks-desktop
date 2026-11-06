@@ -639,7 +639,11 @@ pub async fn serve(opts: ServeOptions) -> Result<(), String> {
     // The port is part of the origin, so the wanted one is tried first. When
     // it is taken the server still starts, on another port, and says so:
     // the page then has another origin and its stored state does not carry over.
-    let nvim = state.nvim.clone();
+    // For a file the person reads: the Neovim of the bundle has no runtime to edit with.
+    let nvim = state
+        .nvim
+        .clone()
+        .and_then(|nvim| crate::bundle::editor_nvim(nvim, &env));
     let attach_dirs = file.app.attach_dirs.clone();
     let config_vaults = Arc::new(ConfigVaults::new(dir.clone(), env.clone(), file));
     let all_vaults = Arc::new(crate::allvaults::AllVaultsCheck::new(

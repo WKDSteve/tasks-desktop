@@ -19,6 +19,7 @@ name = "tasks-hub"
 path = "src/main.rs"
 
 [dependencies]
+flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
 appkit-core.workspace = true
 appkit-hub.workspace = true
 axum = { version = "0.8", default-features = false, features = ["http1", "tokio", "json"] }

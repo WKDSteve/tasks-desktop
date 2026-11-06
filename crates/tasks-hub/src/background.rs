@@ -87,11 +87,42 @@ pub async fn install(opts: InstallOptions) -> Result<String, String> {
 pub fn uninstall(
     opts: UninstallOptions,
 ) -> Pin<Box<dyn Future<Output = Result<String, String>> + Send>> {
-    appkit_hub::background::uninstall(&APP, opts)
+    Box::pin(async move {
+        let said = appkit_hub::background::uninstall(&APP, opts).await;
+        if said.is_ok() {
+            let env = crate::config::Env::from_process();
+            if let Ok(dir) = appkit_hub::instance::config_folder(&env, &crate::IDENTITY) {
+                remove_unpacked(&dir);
+            }
+        }
+        said
+    })
+}
+
+/// What the program put below its folder and can make again: the engine it unpacked, and files on their way to the
+/// engine. These are no settings of the person's, so they go with the program.
+fn remove_unpacked(dir: &std::path::Path) {
+    for name in ["engine", "uploads"] {
+        let _ = std::fs::remove_dir_all(dir.join(name));
+    }
 }
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn the_engine_it_unpacked_goes_with_the_program_and_nothing_else_does() {
+        let dir = std::env::temp_dir().join(format!("tasks-unpacked-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("engine").join("abc")).unwrap();
+        std::fs::create_dir_all(dir.join("uploads")).unwrap();
+        std::fs::write(dir.join("config.json"), "{}").unwrap();
+        super::remove_unpacked(&dir);
+        assert!(!dir.join("engine").exists());
+        assert!(!dir.join("uploads").exists());
+        assert!(dir.join("config.json").is_file());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     use super::*;
 
     /// `uninstall --purge-settings` removes these files and nothing else: a file of the app that

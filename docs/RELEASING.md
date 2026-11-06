@@ -85,3 +85,24 @@ fork too, must never run its own workflow on that machine.
 
 Code signing (Authenticode, notarisation) and the updater key are separate decisions
 (`TAU-10`); the scripts and the notes say that the program is unsigned.
+
+## The engine in the program
+
+A rolling build and a release carry their engine, so that a double click needs neither Neovim nor checkouts:
+`tools/pack-engine.py` packs Neovim, cut down to its program, `lua51.dll` and its Lua runtime (at most 10 MB unpacked), and
+tasks.nvim and lib.nvim at the commits of `engine.lock`; `TASKS_HUB_ENGINE_BUNDLE` embeds the file, and the hub unpacks it
+once below its configuration folder. What was set by hand (the settings, `TASKS_NVIM`, `TASKS_ENGINE_DIR`, `LIB_NVIM_DIR`)
+goes first, what is found on the machine comes last. To open a file in an editor the hub looks for a full Neovim on `PATH`.
+
+Neovim moves by hand, never by itself: read the release notes of the new version, change the version, the address and the
+SHA256 in `tools/nvim.lock` (the release lists the sum of each file), and run
+
+```bash
+python tools/pack-engine.py --out target/engine-bundle/engine-bundle.bin
+python tools/test-engine-bundle.py target/engine-bundle/engine-bundle.bin
+```
+
+The test compares `list`, `plan` and `next` of the cut-down Neovim with a full one. The hub asks for Neovim 0.12 or newer
+(`MIN_NVIM` of appkit), for a Neovim of your own as well; the 0.10 of tasks.nvim is what the plugin needs inside an editor.
+The licence of Neovim goes along as `NOTICE`, in the folder the engine is unpacked to.
+
