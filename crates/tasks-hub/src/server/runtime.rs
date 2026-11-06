@@ -13,6 +13,7 @@ pub(super) struct VaultRuntime {
     /// Shows a task file in an editor; none in a hub that cannot.
     pub(super) opener: Option<Arc<dyn FileOpener>>,
     pub(super) login: Option<Arc<dyn crate::loginentry::LoginEntry>>,
+    pub(super) all_vaults: Option<Arc<crate::allvaults::AllVaultsCheck>>,
     /// How often the interface is used (counts per day), if kept.
     pub(super) usage: Option<Arc<UsageLog>>,
     /// The event streams that are open, by session token.
@@ -67,6 +68,7 @@ pub(super) struct AppParts {
     pub(super) classes: Arc<AreaPolicy>,
     pub(super) opener: Option<Arc<dyn FileOpener>>,
     pub(super) login: Option<Arc<dyn crate::loginentry::LoginEntry>>,
+    pub(super) all_vaults: Option<Arc<crate::allvaults::AllVaultsCheck>>,
     pub(super) usage: Option<Arc<UsageLog>>,
     pub(super) streams: Arc<StreamCounter>,
     pub(super) attach_dirs: Arc<Vec<String>>,
@@ -140,6 +142,7 @@ pub(super) fn build_runtime(
         classes: Arc::clone(&app.classes),
         opener: app.opener.clone(),
         login: app.login.clone(),
+        all_vaults: app.all_vaults.clone(),
         usage: app.usage.clone(),
         streams: Arc::clone(&app.streams),
         attach_dirs: Arc::clone(&app.attach_dirs),

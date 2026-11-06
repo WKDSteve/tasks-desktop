@@ -5003,6 +5003,38 @@ test('a new vault is made from an empty folder and added, and the folder of the 
   expect((consoleProblems.get(page) ?? []).filter((m) => !m.includes('status of 400'))).toEqual([]);
 });
 
+test('all vaults are checked as one job in the dialog, and the vault that is read stays', async ({ page }) => {
+  await watchViolations(page);
+  await pair(page);
+  await showList(page);
+  const second = join(state().vault, '..', `check-all-${Date.now().toString(36)}`);
+  const tasks = join(second, 'solo.nvim', 'ROADMAP', 'tasks');
+  mkdirSync(tasks, { recursive: true });
+  writeFileSync(join(tasks, 'broken.md'), '---\nstatus: nonsense\n---\n\nbody\n');
+  await page.getByRole('menuitem', { name: 'Project', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Manage vaults ...' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Vaults' });
+  await dialog.getByLabel(/^Name/).fill('checkme');
+  await dialog.getByLabel(/^Folder/).fill(second);
+  await dialog.getByRole('button', { name: 'Add' }).click();
+  await expect(dialog.getByText('checkme')).toBeVisible();
+
+  await dialog.getByRole('button', { name: 'Check all vaults' }).click();
+  const line = dialog.locator('li[data-vault="checkme"]');
+  await expect(line).toContainText(/[1-9]\d* errors/, { timeout: 30_000 });
+  await expect(dialog.locator('li[data-vault="main"]')).toContainText(/errors, \d+ warnings in \d+ tasks/, { timeout: 30_000 });
+  await expectAccessible(page, 'the check over all vaults');
+  await expect(dialog.locator('.tag', { hasText: 'read now' }).or(dialog.locator('.tag').first())).toBeVisible();
+  // The list behind it is still that of the vault that is read.
+  await dialog.getByRole('button', { name: 'Forget: checkme' }).click();
+  await expect(dialog.getByText('checkme')).toHaveCount(0);
+  await dialog.getByRole('button', { name: 'Close' }).click();
+  await expect(page.locator('button.row').first()).toBeVisible();
+  await expect(page.locator('button.row', { hasText: 'solo.nvim' })).toHaveCount(0);
+  removeFile(second);
+  expect(await violations(page)).toEqual([]);
+});
+
 test('another vault is chosen: the page loads again and shows its tasks, and the first one can be chosen back', async ({ page }) => {
   await watchViolations(page);
   await pair(page);

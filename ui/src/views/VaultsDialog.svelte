@@ -6,6 +6,7 @@
   // says what it means before the button, and the request says it was confirmed.
   import type { App } from '../lib/app.svelte';
   import { translate, type Key } from '../lib/i18n';
+  import { markHidden } from '../lib/text';
   import Info from 'appkit-ui/Info.svelte';
 
   let { app }: { app: App } = $props();
@@ -83,6 +84,40 @@
         </li>
       {/each}
     </ul>
+  {/if}
+
+  {#if list && list.vaults.length > 1}
+    <div class="check-all">
+      <button type="button" disabled={app.checkAll?.state === 'running'} onclick={() => void app.runCheckAll()}
+        >{t('vaults.check_all')}</button
+      >
+      {#if app.checkAll && app.checkAll.vaults.length > 0}
+        <ul class="plain" aria-label={t('vaults.check_all')}>
+          {#each app.checkAll.vaults as vault (vault.name)}
+            <li data-vault={vault.name}>
+              <strong>{vault.name}</strong>:
+              {#if vault.state === 'done'}
+                {t('vaults.check_counts', { errors: vault.errors ?? 0, warnings: vault.warnings ?? 0, tasks: vault.tasks ?? 0 })}
+                {#if vault.findings && vault.findings.length > 0}
+                  <ul>
+                    {#each vault.findings as finding, i (i)}
+                      <li>{markHidden(finding.message ?? '')}{#if finding.id} <code>{markHidden(finding.id)}</code>{/if}</li>
+                    {/each}
+                  </ul>
+                  {#if (vault.total ?? 0) > vault.findings.length}
+                    <small class="muted">{t('vaults.check_more', { n: (vault.total ?? 0) - vault.findings.length })}</small>
+                  {/if}
+                {/if}
+              {:else if vault.state === 'failed'}
+                <span role="alert">{markHidden(vault.message ?? '')}</span>
+              {:else}
+                <span class="muted">{t(vault.state === 'running' ? 'vaults.check_running' : 'vaults.check_waiting')}</span>
+              {/if}
+            </li>
+          {/each}
+        </ul>
+      {/if}
+    </div>
   {/if}
 
   <h3>{t('vaults.add_title')}</h3>

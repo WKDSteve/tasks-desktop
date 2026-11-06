@@ -150,6 +150,8 @@ pub struct Extras {
     pub vaults: Option<Arc<dyn VaultAdmin<VaultTarget>>>,
     /// How a task file is shown in Neovim.
     pub opener: Option<Arc<dyn FileOpener>>,
+    /// The check over all vaults; none: the route says this hub has none.
+    pub all_vaults: Option<Arc<crate::allvaults::AllVaultsCheck>>,
     /// The entry that starts the hub at login; none: the page offers no switch.
     pub login: Option<Arc<dyn crate::loginentry::LoginEntry>>,
     /// The folders `attach` takes the newest screenshot from (the settings' `attach_dirs`); none: only the clipboard.
@@ -172,6 +174,7 @@ pub async fn start_with(cfg: ServerConfig, extras: Extras) -> std::io::Result<Ru
     let Extras {
         vaults,
         opener,
+        all_vaults,
         login,
         attach_dirs,
         snapshot_root,
@@ -183,6 +186,7 @@ pub async fn start_with(cfg: ServerConfig, extras: Extras) -> std::io::Result<Ru
     let parts = AppParts {
         classes: cfg.policy,
         opener,
+        all_vaults,
         login,
         usage: cfg.usage,
         streams: Arc::new(StreamCounter::default()),
@@ -278,6 +282,12 @@ fn app_routes(core: &Arc<Shared>) -> Router<Arc<Shared>> {
         .route(
             &r("vault_reveal"),
             post(vault_reveal).layer(DefaultBodyLimit::max(small)),
+        )
+        .route(
+            &r("check_all"),
+            get(check_all_state)
+                .post(check_all_start)
+                .layer(DefaultBodyLimit::max(small)),
         )
         .route(
             &r("autostart"),
@@ -405,6 +415,7 @@ mod tests {
             &AppParts {
                 classes: Arc::new(AreaPolicy::default()),
                 opener: None,
+                all_vaults: None,
                 login: None,
                 usage: None,
                 streams: Arc::new(StreamCounter::default()),

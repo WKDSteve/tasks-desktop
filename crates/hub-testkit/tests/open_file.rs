@@ -149,6 +149,7 @@ row two
             vaults: None,
             opener,
             login: login_entry,
+            all_vaults: None,
         },
     )
     .await

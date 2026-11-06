@@ -17,7 +17,7 @@ import {
 } from './bulk';
 import { planOp, type PlanForm, type PlanPreview } from './planwizard';
 import { COLUMNS, columnsOf, isColumn, neighbourColumn, placeNear, stepInGroup, type Column, type Move } from './board';
-import { ApiError, type Hub, type HubArea, type HubAreas, type SearchResult, type VaultList } from './api';
+import { ApiError, type CheckAll, type Hub, type HubArea, type HubAreas, type SearchResult, type VaultList } from './api';
 import { cacheableClass, cacheableList, type CachedList, type ListStore } from './cache';
 import type {
   DonePreview,
@@ -556,6 +556,8 @@ export class App {
   palette = $state(false);
   /** What the palette's choices were, to put them first next time. */
   frecency = $state.raw<Frecency>({});
+  /** The check over all vaults, as the hub last told it. */
+  checkAll = $state.raw<CheckAll | null>(null);
   /** Whether the hub starts at login; null: nothing to switch here. */
   autostart = $state<boolean | null>(null);
   /** The plan wizard is open. */
@@ -2661,6 +2663,19 @@ export class App {
   /** The engine's estimate of some open tasks (the statistics ask it for the tasks the filter keeps). */
   estimateOf(ids: string[], signal: AbortSignal): Promise<Estimate> {
     return this.env.hub.estimate({ ids }, signal);
+  }
+
+  /** Start the check over all vaults and follow it while it runs: a look each second. */
+  async runCheckAll(): Promise<void> {
+    try {
+      this.checkAll = await this.env.hub.startCheckAll();
+      while (this.checkAll.state === 'running') {
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        this.checkAll = await this.env.hub.checkAll();
+      }
+    } catch {
+      this.say('error', 'vaults.check_failed');
+    }
   }
 
   private async readAutostart(): Promise<void> {

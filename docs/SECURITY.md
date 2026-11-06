@@ -381,6 +381,12 @@ A change is made with the `etag` the page has (`if_match`): a task that
 changed meanwhile is a `conflict`, nothing is overwritten, and the page reads
 again. The undo of the page is the `inverse` operation the engine returns.
 
+## The check over all vaults (`GET` and `POST /api/tasks/check_all`)
+
+A session starts one job: each vault of the settings in turn gets an engine of its own for its `check`, and the vault
+that is read does not change. The page names no vault and no path. It gets the numbers and at most 50 findings of each
+vault, in the engine's words; a vault that cannot be read is told in a sentence, its reason goes to the console of the hub.
+
 ## The start at login (`GET` and `POST /api/tasks/autostart`)
 
 A session reads whether the hub starts at login and switches it (`{ "on": bool }`, nothing else). The page names no

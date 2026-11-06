@@ -116,6 +116,22 @@ export interface SearchResult {
 
 export type SnapshotResult = KitSnapshotResult<Snapshot>;
 
+/** The check over all vaults: one line for each vault. */
+export interface CheckAll {
+  state: 'idle' | 'running' | 'done';
+  vaults: {
+    name: string;
+    state: 'waiting' | 'running' | 'done' | 'failed';
+    ok?: boolean;
+    errors?: number;
+    warnings?: number;
+    tasks?: number;
+    total?: number;
+    message?: string;
+    findings?: { severity?: string; id?: string; file?: string; message?: string }[];
+  }[];
+}
+
 export class Hub extends HubClient<Snapshot> {
   constructor(fetchFn: typeof fetch, base: string = '') {
     super(fetchFn, '/api/tasks', base);
@@ -207,6 +223,15 @@ export class Hub extends HubClient<Snapshot> {
   /** Show the folder of the vault the hub reads in the file manager (the page names no folder). */
   revealVault(): Promise<void> {
     return this.vaultPost('/api/tasks/vault_reveal', {});
+  }
+
+  /** Start the check over all vaults, unless it runs; where it stands. */
+  startCheckAll(): Promise<CheckAll> {
+    return this.postJson<CheckAll>('/api/tasks/check_all', {});
+  }
+
+  checkAll(): Promise<CheckAll> {
+    return this.json<CheckAll>('/api/tasks/check_all');
   }
 
   /** Whether the hub starts at login; null where there is no such thing to switch (this system, the web variant). */

@@ -868,6 +868,33 @@ pub(super) async fn vault_reveal(State(st): State<Arc<Shared>>, body: Bytes) -> 
     }
 }
 
+/// `GET /api/tasks/check_all`: where the check over all vaults stands.
+pub(super) async fn check_all_state(State(st): State<Arc<Shared>>) -> Response {
+    match st.rt().all_vaults.clone() {
+        Some(job) => axum::Json(job.state()).into_response(),
+        None => error_body(
+            StatusCode::NOT_FOUND,
+            "check_all_unavailable",
+            "this hub has no list of vaults",
+        ),
+    }
+}
+
+/// `POST /api/tasks/check_all` `{}`: start it, unless it runs. The page names no vault.
+pub(super) async fn check_all_start(State(st): State<Arc<Shared>>, body: Bytes) -> Response {
+    if let Err(r) = vault_request(&body, &[]) {
+        return r;
+    }
+    match st.rt().all_vaults.clone() {
+        Some(job) => axum::Json(job.start()).into_response(),
+        None => error_body(
+            StatusCode::NOT_FOUND,
+            "check_all_unavailable",
+            "this hub has no list of vaults",
+        ),
+    }
+}
+
 /// `GET /api/tasks/autostart`: whether the hub starts at login (`{ "on": true | false }`); `{ "on": null }` where this
 /// system cannot tell or this hub has no such entry: the page then offers no switch.
 pub(super) async fn autostart_get(State(st): State<Arc<Shared>>) -> Response {

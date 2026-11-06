@@ -304,6 +304,33 @@ fn refusal(o: Overlap) -> String {
     .to_owned()
 }
 
+impl crate::allvaults::VaultEngines for ConfigVaults {
+    fn names(&self) -> Vec<String> {
+        self.list().vaults.into_iter().map(|v| v.name).collect()
+    }
+
+    fn engine<'a>(
+        &'a self,
+        name: &'a str,
+    ) -> BoxFuture<'a, Result<Arc<dyn crate::engine::Engine>, String>> {
+        Box::pin(async move {
+            let mut next = self.fresh()?;
+            next.active = (name != config::MAIN_VAULT).then(|| name.to_owned());
+            // Only for this question: nothing is written, the vault that is read stays.
+            let state = engine_state(&next.effective(), &self.env).await;
+            state.engine.ok_or_else(|| {
+                if let Some(note) = &state.note {
+                    eprintln!("note: vault {name:?} cannot be read: {note}");
+                }
+                format!(
+                    "this vault cannot be read ({})",
+                    state.status.problem.unwrap_or("engine_unavailable")
+                )
+            })
+        })
+    }
+}
+
 impl VaultAdmin<VaultTarget> for ConfigVaults {
     fn list(&self) -> VaultList {
         let file = self.current();
@@ -587,8 +614,11 @@ pub async fn serve(opts: ServeOptions) -> Result<(), String> {
     // the page then has another origin and its stored state does not carry over.
     let nvim = state.nvim.clone();
     let attach_dirs = file.app.attach_dirs.clone();
-    let vaults: Arc<dyn VaultAdmin<VaultTarget>> =
-        Arc::new(ConfigVaults::new(dir.clone(), env.clone(), file));
+    let config_vaults = Arc::new(ConfigVaults::new(dir.clone(), env.clone(), file));
+    let all_vaults = Arc::new(crate::allvaults::AllVaultsCheck::new(
+        Arc::clone(&config_vaults) as Arc<dyn crate::allvaults::VaultEngines>,
+    ));
+    let vaults: Arc<dyn VaultAdmin<VaultTarget>> = config_vaults;
     let snapshot_root = env.path("REPOS_DIR");
     let extras = || Extras {
         attach_dirs: attach_dirs.clone(),
@@ -598,6 +628,7 @@ pub async fn serve(opts: ServeOptions) -> Result<(), String> {
             Arc::new(TerminalOpener::new(n, env.clone())) as Arc<dyn crate::editor::FileOpener>
         }),
         login: Some(Arc::new(crate::loginentry::SystemLoginEntry)),
+        all_vaults: Some(Arc::clone(&all_vaults)),
     };
     let running = match server::start_with(make_cfg(want), extras()).await {
         Ok(r) => r,
