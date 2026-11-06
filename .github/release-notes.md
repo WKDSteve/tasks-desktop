@@ -13,11 +13,11 @@ powershell -ExecutionPolicy Bypass -c "irm https://github.com/WKDSteve/tasks-des
 Or save `install.ps1` from this page and run `powershell -ExecutionPolicy Bypass -File .\install.ps1` (a plain
 `.\install.ps1` is blocked: by the execution policy, or by the mark a browser puts on a downloaded file).
 
-To register the hub with your login and add a link, pass the arguments; a pipe into `iex` takes none, so run the
+To add a link, pass the argument (the Options menu of the page registers the hub with your login, if you want that); a pipe into `iex` takes none, so run the
 script as a script block in a PowerShell session:
 
 ```
-& ([scriptblock]::Create((irm https://github.com/WKDSteve/tasks-desktop/releases/download/{tag}/install.ps1))) -InstallArgs '--autostart','--shortcut'
+& ([scriptblock]::Create((irm https://github.com/WKDSteve/tasks-desktop/releases/download/{tag}/install.ps1))) -InstallArgs '--shortcut'
 ```
 
 The program downloaded by the script is not stopped by SmartScreen; what is checked instead is that it is the file

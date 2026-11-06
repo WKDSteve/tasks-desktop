@@ -130,8 +130,8 @@ second one beside it: the script of `latest` run again updates to the newest rol
 script of a release run again repairs that release (to update, take the script of the newer
 release, or pass `-Version`/`-Rolling`). A pipe into `iex` takes no arguments; to pass them, run the
 downloaded text as a script block in a PowerShell session:
-`& ([scriptblock]::Create((irm https://github.com/WKDSteve/tasks-desktop/releases/download/latest/install.ps1))) -InstallArgs '--autostart','--shortcut'`
-registers the hub with your login and adds a link. The other options are `-Version vX.Y.Z` / `-Rolling` for
+`& ([scriptblock]::Create((irm https://github.com/WKDSteve/tasks-desktop/releases/download/latest/install.ps1))) -InstallArgs '--shortcut'`
+adds a link (the Options menu of the page registers the hub with your login, if you want that). The other options are `-Version vX.Y.Z` / `-Rolling` for
 another channel and `-File FILE` for a file you already have, with `-Sums FILE` or `-Sha256 HEX`. Through
 `powershell -File` an array arrives as one string, so a saved `install.ps1` takes one `-InstallArgs`
 value there; in a PowerShell session a list is fine. The install scripts are the ones of appkit's

@@ -3457,6 +3457,14 @@ describe('writing', () => {
     it('adds a note once, with no way back, and says whether it was written', async () => {
       const { app, hub } = await ready([task('pub/a', { etag: 'e1' })]);
       expect(app.canPng).toBe(false);
+      app.autostart = false;
+      await app.toggleAutostart();
+      expect(app.autostart).toBe(true);
+      expect(app.toast?.kind).toBe('ok');
+      hub.setAutostart = async () => null;
+      await app.toggleAutostart();
+      expect(app.autostart).toBeNull();
+      expect(app.toast?.kind).toBe('error');
       hub.next_ops = answer(entry('add_steps'));
       expect(await app.addSteps('pub/a', ['first step'], 'e1')).toBe(true);
       expect(hub.sent[0]?.ops).toEqual([{ op: 'add_steps', id: 'pub/a', steps: ['first step'], if_match: 'e1' }]);

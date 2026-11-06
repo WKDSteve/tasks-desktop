@@ -2676,8 +2676,10 @@ export class App {
     if (this.autostart === null) return;
     const wanted = !this.autostart;
     try {
-      this.autostart = await this.env.hub.setAutostart(wanted);
-      this.say('ok', wanted ? 'autostart.on' : 'autostart.off');
+      const now = await this.env.hub.setAutostart(wanted);
+      this.autostart = now;
+      if (now === wanted) this.say('ok', wanted ? 'autostart.on' : 'autostart.off');
+      else this.say('error', 'autostart.failed');
     } catch {
       this.say('error', 'autostart.failed');
     }
