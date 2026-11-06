@@ -69,6 +69,20 @@ fn percent_decoded(text: &str) -> String {
 /// What the engine takes as an asset name: the last part of a path, letters and digits of any language and `_ . -`, no
 /// `..`, starting with a letter, a digit or `_`, not ending in a dot. Nothing left of it: `upload`.
 fn clean_name(name: &str) -> String {
+    let cleaned = clean_chars(name);
+    // `nul` and its like are devices on Windows, whatever comes after the first dot: the engine refuses them.
+    let device = cleaned.split('.').next().unwrap_or("").to_ascii_lowercase();
+    let numbered = device
+        .strip_prefix("com")
+        .or_else(|| device.strip_prefix("lpt"))
+        .is_some_and(|n| n.len() == 1 && n.as_bytes()[0].is_ascii_digit());
+    if numbered || matches!(device.as_str(), "con" | "prn" | "aux" | "nul") {
+        return format!("_{cleaned}");
+    }
+    cleaned
+}
+
+fn clean_chars(name: &str) -> String {
     let last = name.rsplit(['/', '\\']).next().unwrap_or(name);
     let mut out = String::new();
     for c in last.trim().chars() {
@@ -246,10 +260,36 @@ pub(super) async fn upload(
     if !st.post_limit.allow() {
         return too_many();
     }
+    // Asked before the transfer: a task that is gone or read-only should not cost the whole file first. Nothing is read
+    // in a dry run, so the file need not be there yet.
+    let look = json!({
+        "dry_run": true,
+        "ops": [{ "op": "attach", "id": id, "from": "upload", "upload": "pending", "name": name }],
+        "upload_dir": dir.to_string_lossy(),
+    });
+    let refused = match ask(&st, Calls::Ops, Some(&look)).await {
+        Ok(reply) => {
+            let doc = serde_json::from_str::<serde_json::Value>(&reply.text).ok();
+            let good = doc.is_some_and(|d| d["results"][0]["ok"] == serde_json::Value::Bool(true));
+            (!good).then_some(reply.text)
+        }
+        Err(response) => return response,
+    };
+    if let Some(text) = refused {
+        return json_response(StatusCode::OK, text, None);
+    }
     let (incoming, written) = match receive(dir.clone(), size, body).await {
         Ok(done) => done,
         Err(response) => return response,
     };
+    // The file was meant for the vault that was read when it was sent.
+    if st.rt().vault != rt.vault {
+        return error_body(
+            StatusCode::CONFLICT,
+            "vault_changed",
+            "another vault was chosen while the file was on its way: nothing was attached",
+        );
+    }
     let Some(file_name) = incoming.path.file_name().and_then(|n| n.to_str()) else {
         return error_body(
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -261,7 +301,26 @@ pub(super) async fn upload(
         "ops": [{ "op": "attach", "id": id, "from": "upload", "upload": file_name, "name": name }],
         "upload_dir": dir.to_string_lossy(),
     });
-    let reply = match ask(&st, Calls::Ops, Some(&request)).await {
+    // A large file takes its time to copy, longer than the engine of the page may take for a question, and the page must
+    // not wait for it: it goes to an engine process of its own.
+    let answered = match &rt.upload_engine {
+        Some(engine) => match engine().await {
+            Ok(engine) => engine
+                .call(Calls::Ops, Some(&request))
+                .await
+                .map_err(engine_failure),
+            Err(why) => {
+                eprintln!("upload: {why}");
+                Err(error_body(
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    "engine_unavailable",
+                    "the engine is not ready",
+                ))
+            }
+        },
+        None => ask(&st, Calls::Ops, Some(&request)).await,
+    };
+    let reply = match answered {
         Ok(reply) => reply,
         Err(response) => {
             st.rt().store.request_rescan();
@@ -304,6 +363,11 @@ mod tests {
         assert_eq!(clean_name("trailing."), "trailing");
         assert_eq!(clean_name("Übersicht.md"), "Übersicht.md");
         assert_eq!(clean_name("a\u{85}b"), "a-b");
+        for device in ["aux.h", "NUL", "con", "COM1.txt", "lpt9"] {
+            assert_eq!(clean_name(device), format!("_{device}"));
+        }
+        assert_eq!(clean_name("console.log"), "console.log");
+        assert_eq!(clean_name("com10.txt"), "com10.txt");
         for nothing in ["", "...", "---", "/", " "] {
             assert_eq!(clean_name(nothing), "upload", "{nothing:?}");
         }

@@ -557,7 +557,11 @@
                         data-matrix-item={task.id}
                         class:selected={task.id === app.selectedId}
                         aria-current={task.id === app.selectedId ? 'true' : undefined}
-                        onclick={() => app.peek(task.id)}
+                        onclick={(e) => {
+                          // A tap on the grip is the start of a drag that did not happen: it selects, and opens nothing.
+                          if (e.target instanceof Element && e.target.closest('.grip')) app.select(task.id);
+                          else app.peek(task.id);
+                        }}
                         onkeydown={(e) => onCellItemKey(e, task.id, cell)}
                       >
                         <span class="title">{markHidden(task.title)}</span>

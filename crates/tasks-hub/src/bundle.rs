@@ -145,7 +145,11 @@ fn unpack(bytes: &[u8], folder: &Path) -> io::Result<Bundled> {
     let _ = fs::remove_dir_all(&making);
     let result = extract(bytes, &making)
         .and_then(|()| fs::write(making.join(COMPLETE), b""))
-        .and_then(|()| fs::rename(&making, &target));
+        .and_then(|()| {
+            // What an unpacking or a removal that was cut off left under this name is not it.
+            let _ = fs::remove_dir_all(&target);
+            fs::rename(&making, &target)
+        });
     if let Err(e) = result {
         let _ = fs::remove_dir_all(&making);
         // Another hub that started at the same moment was first.
@@ -154,15 +158,32 @@ fn unpack(bytes: &[u8], folder: &Path) -> io::Result<Bundled> {
         }
         return Err(e);
     }
-    // The ones of earlier programs; one that is running keeps its files open and simply stays until next time.
-    if let Ok(entries) = fs::read_dir(folder) {
-        for entry in entries.flatten() {
-            if entry.file_name() != name.as_str() {
-                let _ = fs::remove_dir_all(entry.path());
-            }
+    Ok(Bundled::at(target))
+}
+
+/// Remove the engines of earlier programs. Only the one hub of this folder calls this, once it knows no other runs: any
+/// other command of a program of another version must not take the engine from under a running hub.
+pub fn sweep_earlier(env: &Env) {
+    let Some(current) = current(env) else {
+        return;
+    };
+    let Some(folder) = current.root.parent() else {
+        return;
+    };
+    sweep_beside(folder, &current.root);
+}
+
+fn sweep_beside(folder: &Path, keep: &Path) {
+    let Ok(entries) = fs::read_dir(folder) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        if entry.path() != keep {
+            // The mark first: what stays of a removal that stopped halfway is not taken for an engine.
+            let _ = fs::remove_file(entry.path().join(COMPLETE));
+            let _ = fs::remove_dir_all(entry.path());
         }
     }
-    Ok(Bundled::at(target))
 }
 
 /// A full Neovim for the person to read a file in: the one of the bundle has no runtime to edit with. Only when `nvim`
@@ -212,6 +233,19 @@ mod tests {
     }
 
     #[test]
+    fn what_a_removal_left_under_the_name_of_a_bundle_is_replaced() {
+        let folder = scratch("leftover");
+        let bytes = packed(&[("a.txt", b"whole")]);
+        let target = folder.join(name_of(&bytes));
+        fs::create_dir_all(target.join("nvim")).unwrap();
+        fs::write(target.join("nvim").join("left.txt"), b"x").unwrap();
+        let done = unpack(&bytes, &folder).unwrap();
+        assert_eq!(fs::read(done.root.join("a.txt")).unwrap(), b"whole");
+        assert!(!done.root.join("nvim").join("left.txt").exists());
+        let _ = fs::remove_dir_all(&folder);
+    }
+
+    #[test]
     fn a_bundle_is_unpacked_once_and_an_earlier_one_goes() {
         let folder = scratch("once");
         let first = packed(&[("tasks.nvim/scripts/tasks.lua", b"one")]);
@@ -226,7 +260,15 @@ mod tests {
         let second = packed(&[("tasks.nvim/scripts/tasks.lua", b"two")]);
         let next = unpack(&second, &folder).unwrap();
         assert_ne!(next.root, done.root);
-        assert!(!done.root.exists(), "the earlier one goes");
+        assert!(
+            done.root.exists(),
+            "a running hub of another version may still use it"
+        );
+        sweep_beside(&folder, &next.root);
+        assert!(
+            !done.root.exists(),
+            "the earlier one goes when the hub says so"
+        );
         assert_eq!(fs::read_dir(&folder).unwrap().count(), 1);
         let _ = fs::remove_dir_all(&folder);
     }

@@ -89,6 +89,9 @@ struct EngineState {
     nvim: Option<PathBuf>,
     /// The engine's command line, for a run of test sheets.
     script: Option<PathBuf>,
+    /// What the engine process is told besides, for a run of test sheets.
+    lib_dir: Option<PathBuf>,
+    extra_areas: Vec<String>,
 }
 
 /// Find the engine and ask it `hello`.
@@ -104,6 +107,8 @@ async fn engine_state(file: &FileConfig, env: &Env) -> EngineState {
         vault: None,
         nvim: None,
         script: None,
+        lib_dir: None,
+        extra_areas: Vec::new(),
     };
     let setup = match discover(file, env).await {
         Ok(setup) => setup,
@@ -141,6 +146,8 @@ async fn engine_state(file: &FileConfig, env: &Env) -> EngineState {
             vault: Some(setup.vault.value.clone()),
             nvim: Some(setup.nvim.value.clone()),
             script: Some(crate::discovery::engine_script(&setup.engine_dir.value)),
+            lib_dir: setup.lib_dir.as_ref().map(|l| l.value.clone()),
+            extra_areas: setup.extra_areas.clone(),
             note: setup
                 .lib_problem
                 .as_ref()
@@ -153,6 +160,9 @@ async fn engine_state(file: &FileConfig, env: &Env) -> EngineState {
 /// The vaults of the settings file, as the routes under `/api/vaults` use
 /// them: the file is the only place the list lives, and every change of it is
 /// one atomic write.
+/// What the copy of one upload into the vault may take: a large file onto a slow disk.
+const UPLOAD_COPY_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(60 * 60);
+
 struct ConfigVaults {
     dir: PathBuf,
     env: Env,
@@ -309,14 +319,30 @@ fn refusal(o: Overlap) -> String {
 }
 
 impl ConfigVaults {
+    /// An engine process for one upload, in the vault that is read now: a copy may take long, which the engine that
+    /// answers the page must not.
+    async fn upload_engine(&self) -> Result<Arc<dyn Engine>, String> {
+        let file = self.fresh()?.effective();
+        let setup = discover(&file, &self.env)
+            .await
+            .map_err(|e| e.to_string())?;
+        let mut cfg = cli_config_from_setup(&setup, self.env.clone());
+        cfg.timeout = UPLOAD_COPY_TIMEOUT;
+        Ok(Arc::new(CliEngine::new(cfg)))
+    }
+
     /// The command line for a run of test sheets, in the vault that is read now.
     async fn sheet_command(&self) -> Result<crate::sheetrun::SheetCommand, String> {
         let state = engine_state(&self.fresh()?.effective(), &self.env).await;
         match (state.nvim, state.script, state.vault) {
             (Some(nvim), Some(script), Some(vault)) => Ok(crate::sheetrun::SheetCommand {
-                nvim,
+                // A sheet is real editing (file types, syntax, plugins): the Neovim of the bundle cannot do that.
+                nvim: crate::bundle::editor_nvim(nvim, &self.env)
+                    .ok_or_else(|| "a run of test sheets needs a full Neovim on PATH".to_owned())?,
                 script,
                 vault,
+                lib_dir: state.lib_dir,
+                extra_areas: state.extra_areas,
             }),
             _ => {
                 if let Some(note) = &state.note {
@@ -570,6 +596,9 @@ pub async fn serve(opts: ServeOptions) -> Result<(), String> {
     // into "everything unclassified" without anyone seeing it.
     let policy = start_policy(&dir, &file)?;
 
+    // No other hub runs here: what earlier programs unpacked can go.
+    crate::bundle::sweep_earlier(&env);
+
     let state = engine_state(&file.effective(), &env).await;
     if let Some(note) = &state.note {
         eprintln!("{note}");
@@ -658,12 +687,18 @@ pub async fn serve(opts: ServeOptions) -> Result<(), String> {
             }),
         },
     )));
+    let for_uploads = Arc::clone(&config_vaults);
+    let upload_engine: server::UploadEngine = Arc::new(move || {
+        let vaults = Arc::clone(&for_uploads);
+        Box::pin(async move { vaults.upload_engine().await })
+    });
     let vaults: Arc<dyn VaultAdmin<VaultTarget>> = config_vaults;
     let snapshot_root = env.path("REPOS_DIR");
     let upload_dir = dir.join("uploads");
     let extras = || Extras {
         attach_dirs: attach_dirs.clone(),
         upload_dir: Some(upload_dir.clone()),
+        upload_engine: Some(Arc::clone(&upload_engine)),
         snapshot_root: snapshot_root.clone(),
         vaults: Some(Arc::clone(&vaults)),
         opener: nvim.clone().map(|n| {

@@ -49,12 +49,13 @@ fn with_bundled(file: &FileConfig, env: &Env, bundled: Option<&Bundled>) -> File
     if out.nvim.is_none() && env.get(SPEC.nvim_var).is_none() {
         out.nvim = Some(bundled.nvim.clone());
     }
+    // The lib goes with its engine: a checkout of the engine set by hand looks for the lib beside it, as it always did.
     if out.engine_dir.is_none() && env.get(SPEC.engine_dir_var).is_none() {
         out.engine_dir = Some(bundled.engine_dir.clone());
-    }
-    let lib_set = env.get("LIB_NVIM_DIR").is_some() || env.get("LIB_NVIM_PATH").is_some();
-    if out.app.lib_dir.is_none() && !lib_set {
-        out.app.lib_dir = Some(bundled.lib_dir.clone());
+        let lib_set = env.get("LIB_NVIM_DIR").is_some() || env.get("LIB_NVIM_PATH").is_some();
+        if out.app.lib_dir.is_none() && !lib_set {
+            out.app.lib_dir = Some(bundled.lib_dir.clone());
+        }
     }
     out
 }
@@ -98,6 +99,12 @@ mod tests {
             (got.nvim, got.engine_dir, got.app.lib_dir),
             (None, None, None)
         );
+
+        // An engine set by hand keeps the lib it finds itself.
+        let set = Env::from_pairs([("TASKS_ENGINE_DIR", "e")]);
+        let got = with_bundled(&empty, &set, Some(&bundled));
+        assert_eq!(got.nvim, Some(bundled.nvim.clone()));
+        assert_eq!((got.engine_dir, got.app.lib_dir), (None, None));
 
         // The settings.
         let file = FileConfig {

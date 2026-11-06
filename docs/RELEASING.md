@@ -104,5 +104,5 @@ python tools/test-engine-bundle.py target/engine-bundle/engine-bundle.bin
 
 The test compares `list`, `plan` and `next` of the cut-down Neovim with a full one. The hub asks for Neovim 0.12 or newer
 (`MIN_NVIM` of appkit), for a Neovim of your own as well; the 0.10 of tasks.nvim is what the plugin needs inside an editor.
-The licence of Neovim goes along as `NOTICE`, in the folder the engine is unpacked to.
+The licence of Neovim (`tools/neovim-LICENSE.txt`, from its tag) goes along as `NOTICE`, in the folder the engine is unpacked to. A run of test sheets takes a full Neovim from `PATH`: the cut-down one has no file types, syntax or plugins.
 

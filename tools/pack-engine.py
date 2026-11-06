@@ -124,7 +124,9 @@ def pack(files):
 def collect(cache):
     nvim_pins = read_pins(ROOT / "tools" / "nvim.lock")
     engine_pins = read_pins(ROOT / "engine.lock")
-    files, licence = nvim_files(nvim_zip(nvim_pins, cache))
+    files, _ = nvim_files(nvim_zip(nvim_pins, cache))
+    # The zip of the release holds no licence of Neovim itself: this is LICENSE.txt of its tag.
+    licence = (ROOT / "tools" / "neovim-LICENSE.txt").read_text(encoding="utf-8")
     size = sum(len(v) for v in files.values())
     lua = sum(len(v) for k, v in files.items() if "/runtime/lua/" in k)
     if size > NVIM_BUDGET:

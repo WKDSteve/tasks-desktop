@@ -1,6 +1,6 @@
 # The Neovim that goes into the program (tools/pack-engine.py). The file is the official Windows build of the release,
 # checked by its SHA256 before anything of it is used. To move it: read the release notes, change the three lines, run
-# tools/test-engine-bundle.py. Nothing moves it by itself. See docs/RELEASING.md.
+# tools/test-engine-bundle.py, and take tools/neovim-LICENSE.txt from the new tag. Nothing moves it by itself. See docs/RELEASING.md.
 version = v0.12.6
 url     = https://github.com/neovim/neovim/releases/download/v0.12.6/nvim-win64.zip
 sha256  = 4e12b7103b601ffc8f25954b4da100f339faa73dccb69a5b135e897fa3d893ed

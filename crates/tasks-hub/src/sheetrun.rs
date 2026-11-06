@@ -31,6 +31,9 @@ pub struct SheetCommand {
     pub nvim: PathBuf,
     pub script: PathBuf,
     pub vault: PathBuf,
+    /// As the engine process gets them: the settings are not in the environment of the hub.
+    pub lib_dir: Option<PathBuf>,
+    pub extra_areas: Vec<String>,
 }
 
 /// Runs the engine's command line. The vault is asked for at each run: it may have changed since the hub started.
@@ -61,6 +64,12 @@ fn run_process(c: &SheetCommand, id: &str) -> Result<SheetRun, String> {
         .env_remove("VIM")
         .env_remove("VIMRUNTIME")
         .stdin(std::process::Stdio::null());
+    if let Some(lib) = &c.lib_dir {
+        command.env("LIB_NVIM_DIR", lib);
+    }
+    if !c.extra_areas.is_empty() {
+        command.env("TASKS_EXTRA_AREAS", c.extra_areas.join(","));
+    }
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
