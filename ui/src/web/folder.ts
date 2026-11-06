@@ -45,6 +45,11 @@ export function pickFolder(win: PickerWindow): Promise<PickResult> {
   return kitPickFolder(win, { id: PICKER_ID, mode: MODE });
 }
 
+/** Ask for a folder that is only read: the snapshots in the plugin checkouts. */
+export function pickReadOnlyFolder(win: PickerWindow): Promise<PickResult> {
+  return kitPickFolder(win, { id: 'tasks-checkouts', mode: 'read' });
+}
+
 /** The permission a stored handle has now; `gone` when the folder does not exist any more. */
 export function permissionOf(handle: DirHandle): Promise<PermissionState | 'gone'> {
   return kitPermissionOf(handle, MODE);

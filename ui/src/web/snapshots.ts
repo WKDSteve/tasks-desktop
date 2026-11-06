@@ -10,7 +10,7 @@ export const MAX_SNAPSHOT_BYTES = 256 * 1024;
 /** What a folder of the browser has to offer here. */
 export interface SnapshotDir {
   getDirectoryHandle(name: string): Promise<SnapshotDir>;
-  getFileHandle(name: string): Promise<{ getFile(): Promise<Blob> }>;
+  getFileHandle(name: string): Promise<{ getFile(): Promise<{ size: number; arrayBuffer(): Promise<ArrayBuffer> }> }>;
 }
 
 /** The parts of a snapshot name, or null when it is none. */
@@ -31,9 +31,9 @@ export async function readSnapshot(root: SnapshotDir, name: string): Promise<str
   try {
     let dir = root;
     for (const part of parts.slice(0, -1)) dir = await dir.getDirectoryHandle(part);
-    const blob = await (await dir.getFileHandle(file)).getFile();
-    if (blob.size > MAX_SNAPSHOT_BYTES) throw new ApiError(413, 'too_large', 'the snapshot is too large');
-    return await blob.text();
+    const found = await (await dir.getFileHandle(file)).getFile();
+    if (found.size > MAX_SNAPSHOT_BYTES) throw new ApiError(413, 'too_large', 'the snapshot is too large');
+    return new TextDecoder().decode(await found.arrayBuffer());
   } catch (error) {
     if (error instanceof ApiError) throw error;
     throw new ApiError(404, 'not_found', 'the snapshot is not there');

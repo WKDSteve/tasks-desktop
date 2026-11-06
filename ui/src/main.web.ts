@@ -4,7 +4,7 @@
 // Order of events: the way in (WebEntry) is drawn at once while the engine starts in the background; the folder is read
 // into the engine when it is chosen; then the app takes the place of the way in.
 
-import { pickFolder as pickCheckouts } from './web/folder';
+import { pickReadOnlyFolder } from './web/folder';
 import { CheckoutFolder, type SnapshotDir } from './web/snapshots';
 import { mount, unmount } from 'svelte';
 import './app.css';
@@ -200,7 +200,7 @@ async function begin(folder: string | null, readOnly: boolean): Promise<void> {
     // Known here, not asked of the hub: nothing that needs the machine is shown, not even until an answer comes.
     mode: 'web',
     snapshots: new CheckoutFolder(async () => {
-      const picked = await pickCheckouts(window);
+      const picked = await pickReadOnlyFolder(window);
       return picked.kind === 'picked' ? (picked.handle as unknown as SnapshotDir) : null;
     }),
     readOnly,
