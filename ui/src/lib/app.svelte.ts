@@ -563,6 +563,8 @@ export class App {
   frecency = $state.raw<Frecency>({});
   /** The check over all vaults, as the hub last told it. */
   checkAll = $state.raw<CheckAll | null>(null);
+  /** The version of this program, for the hint of its mark. */
+  appVersion = $state('');
   /** Whether the hub starts at login; null: nothing to switch here. */
   autostart = $state<boolean | null>(null);
   /** The plan wizard is open. */
@@ -2972,6 +2974,7 @@ export class App {
     for (;;) {
       try {
         const hello = await this.env.hub.hello();
+        this.appVersion = hello.build ? `${hello.version} (${hello.build})` : hello.version;
         if (!hello.engine.ready) {
           this.problem = hello.engine.problem ?? 'unknown';
           // A tab that was paired keeps its session here too: the Info dialog and its report (the hub answers

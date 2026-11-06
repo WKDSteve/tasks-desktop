@@ -1768,7 +1768,10 @@ test('the German page has no violations either', async ({ page }) => {
   await expect(page.getByRole('menuitem', { name: 'Ansicht' })).toBeVisible();
   // The name of the app is a name: it stays "Tasks" in German. The menus: the appearance is in the view,
   // the vaults in the project, and the language is in the options.
-  await expect(page.locator('.kit-brand')).toHaveText('Tasks');
+  // The mark alone, its name for a screen reader, the name and the version in the hint (a build has a version, and a word was never there twice).
+  await expect(page.locator('.kit-brand')).toHaveText('');
+  await expect(page.locator('.kit-brand')).toHaveAttribute('aria-label', 'Tasks');
+  await expect(page.locator('.kit-brand')).toHaveAttribute('data-hint', /^Tasks \d+\.\d+\.\d+/);
   // Its icon is really drawn: the policy of the page lets it through.
   await expect.poll(() => page.locator('.kit-brand img').evaluate((i: HTMLImageElement) => i.naturalWidth)).toBeGreaterThan(0);
   const bar = page.getByRole('menubar').getByRole('menuitem');
@@ -2217,7 +2220,7 @@ test('the menus are Tasks, Project, View, Options and Help, with sections and th
   const bar = page.getByRole('menubar').getByRole('menuitem');
   await expect(bar).toHaveText(['Work', 'Project', 'View', 'Options', 'Help']);
   // The name of the app is no name of a menu too: one word must not stand twice in the bar.
-  const brandName = (await page.locator('.kit-brand').innerText()).trim();
+  const brandName = (await page.locator('.kit-brand').getAttribute('aria-label')) ?? '';
   expect(await bar.allTextContents()).not.toContain(brandName);
 
   // Work: sections, shortcuts as the keys have them, and the actions work.

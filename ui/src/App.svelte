@@ -674,8 +674,9 @@
 
 <div class="shell">
   <header class="bar">
-    <Brand label={t('app.title')} hint={t('hint.ui.brand')} onclick={() => app.setView('today')}>
-      <span class="brand-mark"><img src={logo} alt="" width="20" height="20" />{t('app.title')}</span>
+    <!-- The mark alone: beside the menu Tasks the word stood twice. The name and the version are in the hint. -->
+    <Brand label={t('app.title')} hint={t('hint.ui.brand', { name: t('app.title'), version: app.appVersion })} onclick={() => app.setView('today')}>
+      <span class="brand-mark"><img src={logo} alt="" width="24" height="24" /></span>
     </Brand>
     <MenuBar {menus} label={t('menu.label')} />
     <span class="spacer"></span>
