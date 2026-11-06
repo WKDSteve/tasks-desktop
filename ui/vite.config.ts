@@ -1,6 +1,20 @@
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { svelte } from '@sveltejs/vite-plugin-svelte';
 import { defineConfig } from 'vitest/config';
+import { entriesOf } from './src/lib/docTitles';
+
+// The names of the project's documents for the Help menu, without their text (that is loaded when a document is opened).
+const read = (path: string): [string, string] => [path, readFileSync(path, 'utf8')];
+const docIndex = JSON.stringify(
+  entriesOf(
+    Object.fromEntries([
+      read('../README.md'),
+      ...readdirSync('../docs')
+        .filter((name) => name.endsWith('.md'))
+        .map((name) => read(`../docs/${name}`)),
+    ]),
+  ).map(({ id, title }) => ({ id, title })),
+);
 
 const test = {
   environment: 'node' as const,
@@ -14,6 +28,7 @@ const web = defineConfig({
   plugins: [svelte()],
   base: './',
   define: {
+    __DOC_INDEX__: docIndex,
     __WEB_VERSION__: JSON.stringify((JSON.parse(readFileSync('package.json', 'utf8')) as { version: string }).version),
     __WEB_BUILD__: JSON.stringify(process.env['WEB_BUILD'] ?? null),
   },
@@ -38,6 +53,7 @@ const web = defineConfig({
 const hub = defineConfig({
   plugins: [svelte()],
   base: './',
+  define: { __DOC_INDEX__: docIndex },
   build: {
     outDir: 'dist',
     target: 'es2022',

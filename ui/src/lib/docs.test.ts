@@ -1,5 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { DOCS, entriesOf, titleOf } from './docs';
+import { DOCS } from './docTexts';
+import { DOC_LIST, entriesOf, loadDocs, titleOf } from './docs';
+
+describe('the list of the Help menu', () => {
+  it('names what the loaded documents are, in their order, without their text', async () => {
+    const loaded = await loadDocs();
+    expect(DOC_LIST.map((d) => [d.id, d.title])).toEqual(loaded.map((d) => [d.id, d.title]));
+    expect(DOC_LIST.every((d) => d.text === '')).toBe(true);
+    expect(loaded.every((d) => d.text.length > 0)).toBe(true);
+  });
+});
 
 describe('titleOf', () => {
   it('takes the first level-one heading, else the fallback', () => {

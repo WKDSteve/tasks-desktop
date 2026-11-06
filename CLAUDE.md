@@ -16,6 +16,7 @@ cargo test --workspace --locked
 cd ui && pnpm e2e                        # echtes Binary, echte Engine, axe
 python tools/check-control-chars.py
 python tools/check-color-literals.py --root ui/src --tokens ui/src/palette.css   # no colour outside tokens and palette (CI job hygiene)
+python tools/check-bundle-size.py   # after pnpm build: the main chunk stays within its budget
 ```
 
 - Umgebung für Browser- und Engine-Tests: `TASKS_ENGINE_DIR=E:/repos/tasks.nvim`,

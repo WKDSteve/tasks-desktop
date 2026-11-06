@@ -192,6 +192,7 @@ jobs:
       # The same temp dir of its own and the same count as for the browser tests above (tools/run-with-temp.mjs).
       - run: node ../tools/run-with-temp.mjs -- pnpm test
       - run: pnpm build
+      - run: python ../tools/check-bundle-size.py --dist dist
       - run: pnpm audit --audit-level high
 
   # A control or invisible character in a tracked text file (a backspace in a

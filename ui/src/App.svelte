@@ -9,13 +9,7 @@
   import ListView from './views/ListView.svelte';
   import BoardView from './views/BoardView.svelte';
   import InboxView from './views/InboxView.svelte';
-  import AbnahmeView from './views/AbnahmeView.svelte';
-  import CrossView from './views/CrossView.svelte';
-  import CalendarView from './views/CalendarView.svelte';
-  import StatsView from './views/StatsView.svelte';
-  import FinishedView from './views/FinishedView.svelte';
   import ViewsView from './views/ViewsView.svelte';
-  import Matrix from './views/Matrix.svelte';
   import TaskDialog from './views/TaskDialog.svelte';
   import ConflictsButton from './views/ConflictsButton.svelte';
   import FinishedDialog from './views/FinishedDialog.svelte';
@@ -25,17 +19,15 @@
   import { copyText } from './lib/exportDom';
   import Brand from 'appkit-ui/Brand.svelte';
   import DocsDialog from 'appkit-ui/DocsDialog.svelte';
-  import { helpItems } from 'appkit-ui/docs';
+  import { helpItems, type DocEntry } from 'appkit-ui/docs';
   import MenuBar, { type Menu } from 'appkit-ui/MenuBar.svelte';
-  import PlanView from './views/PlanView.svelte';
   import Capture from './views/Capture.svelte';
-  import PlanWizard from './views/PlanWizard.svelte';
   import DoneDialog from './views/DoneDialog.svelte';
   import PrioDialog from './views/PrioDialog.svelte';
   import BlockDialog from './views/BlockDialog.svelte';
   import DropMoveDialog from './views/DropMoveDialog.svelte';
   import Palette from './views/Palette.svelte';
-  import { DOCS, LICENSE, REPO_URL } from './lib/docs';
+  import { DOC_LIST, LICENSE, loadDocs, REPO_URL } from './lib/docs';
   import ContextMenu from 'appkit-ui/ContextMenu.svelte';
   import { contextTarget } from 'appkit-ui/contextmenu';
   import { routeHref } from 'appkit-ui/route';
@@ -48,6 +40,7 @@
   import ShortcutDialog from './views/ShortcutDialog.svelte';
   import UpdateDialog from './views/UpdateDialog.svelte';
   import Toast from './views/Toast.svelte';
+  import Lazy from './views/Lazy.svelte';
 
   let { app, code }: { app: App; code: string | null } = $props();
 
@@ -621,9 +614,9 @@
           },
           ...helpItems({
             text: (key, params) => t(key, params),
-            docs: DOCS,
-            opendoc: (id) => openDocs(id),
-            opensearch: () => openDocs(null),
+            docs: DOC_LIST,
+            opendoc: (id) => void openDocs(id),
+            opensearch: () => void openDocs(null),
             repo: { url: REPO_URL },
             license: LICENSE,
           }),
@@ -642,7 +635,9 @@
   // The documentation window: opened at a document from the Help menu, or at its search box.
   let docsOpen = $state(false);
   let docsAt = $state<string | null>(null);
-  function openDocs(id: string | null): void {
+  let docTexts = $state.raw<readonly DocEntry[]>([]);
+  async function openDocs(id: string | null): Promise<void> {
+    docTexts = await loadDocs();
     docsAt = id;
     docsOpen = true;
   }
@@ -745,22 +740,22 @@
         {:else if app.view === 'today'}
           <Today {app} />
         {:else if app.view === 'plan'}
-          <PlanView {app} />
+          <Lazy {app} load={() => import('./views/PlanView.svelte')} />
         {:else if app.view === 'board'}
           <!-- The board is the built-in view of the views; an engine that keeps no views shows it alone. -->
           {#if app.can('views')}<ViewsView {app} board />{:else}<BoardView {app} />{/if}
         {:else if app.view === 'inbox'}
           <InboxView {app} />
         {:else if app.view === 'abnahme'}
-          <AbnahmeView {app} />
+          <Lazy {app} load={() => import('./views/AbnahmeView.svelte')} />
         {:else if app.view === 'cross'}
-          <CrossView {app} />
+          <Lazy {app} load={() => import('./views/CrossView.svelte')} />
         {:else if app.view === 'calendar'}
-          <CalendarView {app} />
+          <Lazy {app} load={() => import('./views/CalendarView.svelte')} />
         {:else if app.view === 'stats'}
-          <StatsView {app} />
+          <Lazy {app} load={() => import('./views/StatsView.svelte')} />
         {:else if app.view === 'done'}
-          <FinishedView {app} />
+          <Lazy {app} load={() => import('./views/FinishedView.svelte')} />
         {:else if app.view === 'views'}
           <ViewsView {app} />
         {:else}
@@ -788,10 +783,10 @@
   </main>
   {#if app.phase === 'ready'}
     <Capture {app} />
-    <PlanWizard {app} />
+    <Lazy {app} when={app.planning} load={() => import('./views/PlanWizard.svelte')} />
     <DoneDialog {app} />
     <PrioDialog {app} />
-    <Matrix {app} />
+    <Lazy {app} when={app.matrix !== null} load={() => import('./views/Matrix.svelte')} />
     <TaskDialog {app} />
     <FinishedDialog {app} />
     <CheckDialog {app} />
@@ -800,7 +795,7 @@
     <Palette {app} />
     <DocsDialog
       open={docsOpen}
-      docs={DOCS}
+      docs={docTexts}
       docId={docsAt}
       onclose={() => (docsOpen = false)}
       labels={{
