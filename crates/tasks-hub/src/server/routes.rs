@@ -673,7 +673,7 @@ pub(super) async fn finished(State(st): State<Arc<Shared>>, RawQuery(query): Raw
 
 /// The orders of `tasks list --sort` that the engine takes in the contract (`default` is the plan's order). A word
 /// outside this list never reaches the engine.
-const SORTS: [&str; 5] = ["default", "prio-effort", "severity", "frecency", "roi"];
+const SORTS: [&str; 6] = ["default", "prio-effort", "severity", "frecency", "roi", "due"];
 
 /// `GET /api/tasks/groupings`: the fields the open tasks can be grouped by, with the values of each and how it is written
 /// (`set`, `tags`, `move_area`, or not at all). A read without parameters; which fields there are and what they allow is the

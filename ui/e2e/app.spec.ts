@@ -4297,6 +4297,8 @@ test('the command palette: Ctrl+K, an action by a few letters, a task by its wor
 test('the conflict center keeps a refused change, shows wanted and now, and tries it again on the version that is there', async ({
   page,
 }) => {
+  // About 20 s alone, and it holds writes back on purpose: in a full run on a busy machine it hit the 30 s of a test.
+  test.slow();
   await watchViolations(page);
   await pair(page);
   await showList(page);
@@ -4480,6 +4482,33 @@ test('a category that comes from a tag is locked, and ticking another does not w
   expect(readFileSync(file, 'utf8')).toMatch(/^category: \[?security\]?$/m);
   await expect(docs).toBeChecked();
   expect(await violations(page)).toEqual([]);
+});
+
+test('the list sorts by the due date, in the order the engine gives', async ({ page }) => {
+  const stamp = Date.now().toString(36);
+  const dir = join(state().vault, 'lib.nvim', 'ROADMAP', 'tasks');
+  for (const [name, due] of [['later', '2030-02-01'], ['sooner', '2030-01-01']]) {
+    writeFileSync(join(dir, `duesort-${name}-${stamp}.md`), `---
+title: Duesort ${stamp} ${name}
+status: open
+due: ${due}
+---
+
+body
+`);
+  }
+  await pair(page);
+  await showList(page);
+  const box = page.getByRole('searchbox').first();
+  await box.fill(`Duesort ${stamp}`);
+  const rows = page.locator('button.row .title');
+  await expect(rows).toHaveCount(2);
+  await page.locator('select[data-sort]').selectOption('due');
+  await expect(page.locator('select[data-sort]')).toHaveValue('due');
+  await expect(rows.first()).toContainText('sooner');
+  await page.locator('select[data-sort]').selectOption('default');
+  await box.fill('');
+  expect(consoleProblems.get(page)).toEqual([]);
 });
 
 test('the calendar shows a task on its due day; dragging sets the date, dragging to the list takes it away', async ({ page }) => {

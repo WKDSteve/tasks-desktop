@@ -48,7 +48,7 @@ export type DataClass = 'public' | 'internal' | 'private' | 'unclassified';
 const NS = '/api/tasks/';
 /** The one session of a page in the web variant: a word, not a secret. */
 export const SESSION = 'web-session';
-const SORTS = ['default', 'prio-effort', 'severity', 'frecency', 'roi'];
+const SORTS = ['default', 'prio-effort', 'severity', 'frecency', 'roi', 'due'];
 const MAX_AREA_NAME = 128;
 const ESTIMATE_MAX = 1000;
 const JSON_TYPE = { 'Content-Type': 'application/json' };
