@@ -232,14 +232,51 @@
     at.addEventListener('keydown', saveKey);
     return () => at.removeEventListener('keydown', saveKey);
   });
+
+  let filePicker: HTMLInputElement | undefined = $state();
+  /** A file is held over the card. */
+  let dropping = $state(false);
+
+  /** Only a file from outside: a card of the board that is dragged is none of this card's business. */
+  function holdsFile(event: DragEvent): boolean {
+    return app.canAttach && !app.locked && task !== null && (event.dataTransfer?.types.includes('Files') ?? false);
+  }
+
+  function onFileOver(event: DragEvent): void {
+    if (!holdsFile(event)) return;
+    event.preventDefault();
+    dropping = true;
+  }
+
+  function onFileLeave(event: DragEvent): void {
+    // Over a child of the card it is still over the card.
+    if (!(event.relatedTarget instanceof Node && root?.contains(event.relatedTarget))) dropping = false;
+  }
+
+  function onFileDrop(event: DragEvent): void {
+    dropping = false;
+    if (!holdsFile(event) || !task) return;
+    event.preventDefault();
+    const files = event.dataTransfer?.files;
+    if (files?.length !== 1) {
+      app.tell('error', 'attach.one_file');
+      return;
+    }
+    const file = files[0];
+    if (file) void app.attachFile(task.id, file);
+  }
 </script>
 
 <aside
   class="detail"
+  class:dropping
   aria-label={t('detail.label')}
   bind:this={root}
   onfocusin={focusIn}
   onfocusout={focusOut}
+  ondragover={onFileOver}
+  ondragleave={onFileLeave}
+  ondrop={onFileDrop}
 >
   <!-- Only this part scrolls: the footer below it stays where it is in every host of the card. -->
   <div class="detail-body">
@@ -963,6 +1000,27 @@
           disabled={app.locked}
           onclick={() => void app.attachScreenshot(task.id)}>{t('attach.button')}</button
         >
+        <button
+          type="button"
+          class="open-editor"
+          data-hint={t('hint.ui.detail.attach_file')}
+          disabled={app.locked || app.uploading !== null}
+          onclick={() => filePicker?.click()}
+          >{app.uploading === task.id ? t('attach.uploading') : t('attach.file')}</button
+        >
+        <input
+          type="file"
+          class="file-picker"
+          data-file-picker
+          tabindex="-1"
+          aria-hidden="true"
+          bind:this={filePicker}
+          onchange={(e) => {
+            const file = e.currentTarget.files?.[0];
+            e.currentTarget.value = '';
+            if (file) void app.attachFile(task.id, file);
+          }}
+        />
       {/if}
     </p>
     {#if app.attached && app.attached.id === task.id}
@@ -1074,6 +1132,13 @@
     display: grid;
     gap: 0.2rem;
     flex: 1 1 14rem;
+  }
+  .file-picker {
+    display: none;
+  }
+  .detail.dropping {
+    outline: 2px dashed var(--accent);
+    outline-offset: -2px;
   }
   .open-editor {
     background: var(--surface-2);

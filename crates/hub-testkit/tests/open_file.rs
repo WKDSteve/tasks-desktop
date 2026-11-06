@@ -174,6 +174,7 @@ row two
     let server = start_with(
         cfg,
         Extras {
+            upload_dir: None,
             attach_dirs: Vec::new(),
             snapshot_root: Some(base.join("repos")),
             vaults: None,

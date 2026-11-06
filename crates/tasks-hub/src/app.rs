@@ -656,8 +656,10 @@ pub async fn serve(opts: ServeOptions) -> Result<(), String> {
     )));
     let vaults: Arc<dyn VaultAdmin<VaultTarget>> = config_vaults;
     let snapshot_root = env.path("REPOS_DIR");
+    let upload_dir = dir.join("uploads");
     let extras = || Extras {
         attach_dirs: attach_dirs.clone(),
+        upload_dir: Some(upload_dir.clone()),
         snapshot_root: snapshot_root.clone(),
         vaults: Some(Arc::clone(&vaults)),
         opener: nvim.clone().map(|n| {

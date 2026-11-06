@@ -62,6 +62,7 @@ mod events;
 mod routes;
 mod runtime;
 mod settings;
+mod upload;
 mod vaults;
 
 pub use self::settings::{ServerConfig, WatchConfig};
@@ -158,6 +159,9 @@ pub struct Extras {
     pub login: Option<Arc<dyn crate::loginentry::LoginEntry>>,
     /// The folders `attach` takes the newest screenshot from (the settings' `attach_dirs`); none: only the clipboard.
     pub attach_dirs: Vec<std::path::PathBuf>,
+    /// The folder of the hub's own a file from the page lies in until the engine has taken it; none: this hub takes no
+    /// files.
+    pub upload_dir: Option<std::path::PathBuf>,
     /// The folder of the plugin checkouts (`REPOS_DIR`) the text snapshots of the test sheets are read from; none: the
     /// route answers 404.
     pub snapshot_root: Option<std::path::PathBuf>,
@@ -180,8 +184,12 @@ pub async fn start_with(cfg: ServerConfig, extras: Extras) -> std::io::Result<Ru
         all_vaults,
         login,
         attach_dirs,
+        upload_dir,
         snapshot_root,
     } = extras;
+    if let Some(dir) = &upload_dir {
+        self::upload::sweep_leftovers(dir);
+    }
     let (vault, refresh) = match cfg.watch {
         Some(w) => (Some(w.vault), w.refresh),
         None => (None, RefreshOptions::default()),
@@ -195,6 +203,7 @@ pub async fn start_with(cfg: ServerConfig, extras: Extras) -> std::io::Result<Ru
         usage: cfg.usage,
         streams: Arc::new(StreamCounter::default()),
         snapshot_root: snapshot_root.map(Arc::new),
+        upload_dir: upload_dir.map(Arc::new),
         attach_dirs: Arc::new(
             attach_dirs
                 .iter()
@@ -286,6 +295,10 @@ fn app_routes(core: &Arc<Shared>) -> Router<Arc<Shared>> {
         .route(
             &r("vault_reveal"),
             post(vault_reveal).layer(DefaultBodyLimit::max(small)),
+        )
+        .route(
+            &r("upload"),
+            post(self::upload::upload).layer(DefaultBodyLimit::disable()),
         )
         .route(
             &r("sheet_run"),
@@ -432,6 +445,7 @@ mod tests {
                 streams: Arc::new(StreamCounter::default()),
                 snapshot_root: None,
                 attach_dirs: Arc::default(),
+                upload_dir: None,
             },
         ))
     }

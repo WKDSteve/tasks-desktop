@@ -461,6 +461,48 @@ pub(super) async fn estimate(State(st): State<Arc<Shared>>, body: Bytes) -> Resp
     }
 }
 
+/// What follows a write: a scan when it changed something or met a file the snapshot does not hold yet, so that the next
+/// read is the new state and the open streams hear of it.
+pub(super) async fn settle_write(st: &Shared, reply: &str) {
+    let wrote = serde_json::from_str::<serde_json::Value>(reply)
+        .ok()
+        .and_then(|d| {
+            d.get("results")
+                .and_then(serde_json::Value::as_array)
+                .map(|a| {
+                    a.iter().any(|e| {
+                        e.get("changed_ids")
+                            .and_then(serde_json::Value::as_array)
+                            .is_some_and(|ids| !ids.is_empty())
+                    })
+                })
+        })
+        // A document this hub cannot read for it: scan anyway.
+        .unwrap_or(true);
+    // A refusal as a conflict says the engine read a file the snapshot does not hold yet (changed outside, the
+    // watcher has not scanned): the page reads the list again after it and must get that version, or its next
+    // write is refused the same way.
+    let conflict = serde_json::from_str::<serde_json::Value>(reply)
+        .ok()
+        .and_then(|d| {
+            d.get("results")
+                .and_then(serde_json::Value::as_array)
+                .map(|a| {
+                    a.iter().any(|e| {
+                        e.pointer("/error/code").and_then(serde_json::Value::as_str)
+                            == Some("conflict")
+                    })
+                })
+        })
+        .unwrap_or(false);
+    if wrote || conflict {
+        let _ = st.rt().store.refresh("ops").await;
+    }
+    if let Some(usage) = &st.rt().usage {
+        usage.touched();
+    }
+}
+
 /// `POST /api/tasks/ops`: changes, through the one door of the engine. The
 /// answer is the engine's `tasks.result`, with a part that failed told per
 /// operation (not all-or-nothing). A write that changed something is
@@ -504,43 +546,7 @@ pub(super) async fn ops(State(st): State<Arc<Shared>>, body: Bytes) -> Response 
         }
     };
     if !dry_run {
-        let wrote = serde_json::from_str::<serde_json::Value>(&reply.text)
-            .ok()
-            .and_then(|d| {
-                d.get("results")
-                    .and_then(serde_json::Value::as_array)
-                    .map(|a| {
-                        a.iter().any(|e| {
-                            e.get("changed_ids")
-                                .and_then(serde_json::Value::as_array)
-                                .is_some_and(|ids| !ids.is_empty())
-                        })
-                    })
-            })
-            // A document this hub cannot read for it: scan anyway.
-            .unwrap_or(true);
-        // A refusal as a conflict says the engine read a file the snapshot does not hold yet (changed outside, the
-        // watcher has not scanned): the page reads the list again after it and must get that version, or its next
-        // write is refused the same way.
-        let conflict = serde_json::from_str::<serde_json::Value>(&reply.text)
-            .ok()
-            .and_then(|d| {
-                d.get("results")
-                    .and_then(serde_json::Value::as_array)
-                    .map(|a| {
-                        a.iter().any(|e| {
-                            e.pointer("/error/code").and_then(serde_json::Value::as_str)
-                                == Some("conflict")
-                        })
-                    })
-            })
-            .unwrap_or(false);
-        if wrote || conflict {
-            let _ = st.rt().store.refresh("ops").await;
-        }
-        if let Some(usage) = &st.rt().usage {
-            usage.touched();
-        }
+        settle_write(&st, &reply.text).await;
     }
     json_response(StatusCode::OK, reply.text, None)
 }
@@ -673,13 +679,19 @@ pub(super) async fn finished(State(st): State<Arc<Shared>>, RawQuery(query): Raw
 
 /// The orders of `tasks list --sort` that the engine takes in the contract (`default` is the plan's order). A word
 /// outside this list never reaches the engine.
-const SORTS: [&str; 6] = [
+const SORTS: [&str; 12] = [
     "default",
     "prio-effort",
     "severity",
     "frecency",
     "roi",
     "due",
+    "created-desc",
+    "created-asc",
+    "updated-desc",
+    "updated-asc",
+    "remind",
+    "title",
 ];
 
 /// `GET /api/tasks/groupings`: the fields the open tasks can be grouped by, with the values of each and how it is written
@@ -1084,6 +1096,7 @@ pub(super) fn guard_rules() -> GuardRules {
             crate::IDENTITY.route("estimate"),
         ],
     )
+    .with_upload_path(crate::IDENTITY.route("upload"))
 }
 
 #[cfg(test)]

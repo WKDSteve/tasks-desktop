@@ -298,6 +298,21 @@ export class Hub extends HubClient<Snapshot> {
   }
 
   /** Changes, through the one door of the engine. The answer says per operation what happened. */
+  /** A file from this page becomes an asset of the task: the body is the file, the hub streams it to its disk. */
+  async upload(id: string, file: File): Promise<Result & { large_for_git?: boolean }> {
+    const path = `/api/tasks/upload?id=${encodeURIComponent(id).replace(/%2F/gi, '/')}`;
+    const response = await this.request(path, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/octet-stream',
+        'X-Upload-Name': encodeURIComponent(file.name),
+      },
+      body: file,
+    });
+    if (!response.ok) throw await failure(response);
+    return (await response.json()) as Result & { large_for_git?: boolean };
+  }
+
   async ops(request: OpsRequest, signal?: AbortSignal): Promise<Result> {
     const response = await this.request('/api/tasks/ops', {
       method: 'POST',

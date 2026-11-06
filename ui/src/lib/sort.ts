@@ -3,7 +3,20 @@
 
 import type { TaskEntry } from './contract';
 
-export const SORTS = ['default', 'prio-effort', 'severity', 'frecency', 'roi', 'due'] as const;
+export const SORTS = [
+  'default',
+  'prio-effort',
+  'severity',
+  'frecency',
+  'roi',
+  'due',
+  'created-desc',
+  'created-asc',
+  'updated-desc',
+  'updated-asc',
+  'remind',
+  'title',
+] as const;
 export type SortWord = (typeof SORTS)[number];
 
 /** A remembered word, or the plan's order when it is none of ours. */

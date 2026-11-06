@@ -21,6 +21,8 @@ pub(super) struct VaultRuntime {
     pub(super) streams: Arc<StreamCounter>,
     /// The folders `attach` may take the newest screenshot from (the hub's settings, never the page).
     pub(super) attach_dirs: Arc<Vec<String>>,
+    /// The folder a file from the page lies in until the engine has taken it; none: this hub takes no files.
+    pub(super) upload_dir: Option<Arc<PathBuf>>,
     /// The folder of the plugin checkouts the snapshots of the test sheets are read from.
     pub(super) snapshot_root: Option<Arc<PathBuf>>,
     pub(super) engine: Option<Arc<dyn Engine>>,
@@ -74,6 +76,7 @@ pub(super) struct AppParts {
     pub(super) usage: Option<Arc<UsageLog>>,
     pub(super) streams: Arc<StreamCounter>,
     pub(super) attach_dirs: Arc<Vec<String>>,
+    pub(super) upload_dir: Option<Arc<PathBuf>>,
     pub(super) snapshot_root: Option<Arc<PathBuf>>,
 }
 
@@ -149,6 +152,7 @@ pub(super) fn build_runtime(
         usage: app.usage.clone(),
         streams: Arc::clone(&app.streams),
         attach_dirs: Arc::clone(&app.attach_dirs),
+        upload_dir: app.upload_dir.clone(),
         snapshot_root: app.snapshot_root.clone(),
         engine,
         store,

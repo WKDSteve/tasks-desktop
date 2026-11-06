@@ -2463,6 +2463,40 @@ export class App {
     return false;
   }
 
+  /** The task a file is on its way to, while one is. */
+  uploading = $state<string | null>(null);
+
+  /**
+   * Attach a file from this computer to `id`: it goes through the hub, and the engine makes it an asset of the task (a
+   * plain task becomes a folder task). One file at a time. There is nothing to take back (the engine gives no inverse).
+   * True when it was attached.
+   */
+  async attachFile(id: string, file: File): Promise<boolean> {
+    if (this.refusedReadOnly() || this.uploading !== null) return false;
+    this.uploading = id;
+    try {
+      const result = await this.env.hub.upload(id, file);
+      const entry = result.results[0];
+      if (!entry?.ok) {
+        this.say('error', 'write.failed', { code: entry?.error?.code ?? 'failed' });
+        return false;
+      }
+      this.attached = entry.link ? { id: entry.id ?? id, link: entry.link } : null;
+      this.say(
+        'ok',
+        result.large_for_git ? 'attach.file_done_large' : 'attach.file_done',
+        { asset: entry.asset ?? '' },
+      );
+      return true;
+    } catch (error) {
+      if (error instanceof ApiError && error.code === 'disk_full') this.say('error', 'attach.disk_full');
+      else this.say('error', 'write.failed', { code: error instanceof ApiError ? error.code : 'offline' });
+      return false;
+    } finally {
+      this.uploading = null;
+    }
+  }
+
   async startFinish(id: string): Promise<void> {
     if (this.refusedReadOnly() || this.saving || this.phase !== 'ready') return;
     try {

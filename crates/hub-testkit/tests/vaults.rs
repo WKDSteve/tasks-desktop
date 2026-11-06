@@ -230,6 +230,7 @@ async fn rig(name: &str, with_admin: bool) -> Rig {
                 login: None,
                 all_vaults: None,
                 sheet_run: None,
+                upload_dir: None,
                 attach_dirs: Vec::new(),
                 snapshot_root: None,
                 vaults: Some(admin),

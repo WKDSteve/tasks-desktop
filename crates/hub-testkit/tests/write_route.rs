@@ -86,6 +86,7 @@ async fn rig_full(name: &str, limits: Limits, attach_dirs: Vec<PathBuf>) -> Rig 
         Extras {
             login: None,
             attach_dirs,
+            upload_dir: Some(vault.join(".uploads")),
             snapshot_root: None,
             ..Extras::default()
         },
@@ -667,4 +668,84 @@ async fn a_check_that_runs_does_not_hold_up_the_other_questions_of_the_engine() 
     );
     let over = check_until_over(&r).await;
     assert_eq!(over["job"]["state"], "done", "{over}");
+}
+
+async fn upload(r: &Rig, id: &str, name: &str, body: &str) -> (u16, Value) {
+    let auth = format!("Bearer {}", r.token);
+    let origin = format!("http://127.0.0.1:{}", r.server.addr().port());
+    let reply = client::request(
+        r.server.addr().port(),
+        "POST",
+        &format!("/api/tasks/upload?id={id}"),
+        &[
+            ("Content-Type", "application/pdf"),
+            ("Origin", &origin),
+            ("Authorization", &auth),
+            ("X-Upload-Name", name),
+        ],
+        body,
+    )
+    .await
+    .unwrap();
+    (
+        reply.status,
+        serde_json::from_str(&reply.body).unwrap_or(Value::Null),
+    )
+}
+
+fn leftovers(r: &Rig) -> usize {
+    std::fs::read_dir(r.vault.join(".uploads")).map_or(0, Iterator::count)
+}
+
+#[tokio::test]
+async fn a_file_of_any_size_and_type_reaches_the_engine_and_is_gone_afterwards() {
+    let r = rig("upload").await;
+    // Over the limit of one request of the guard, and not JSON.
+    let body = "x".repeat(2 * 1024 * 1024);
+    let (status, doc) = upload(&r, "alpha.nvim/t1", "My%20Report.pdf", &body).await;
+    assert_eq!(status, 200, "{doc}");
+    assert_eq!(doc["kind"], "tasks.result", "{doc}");
+    assert_eq!(
+        std::fs::read_to_string(r.vault.join(".fake-upload")).unwrap(),
+        format!("My-Report.pdf {}", body.len())
+    );
+    assert_eq!(leftovers(&r), 0, "the hub takes the file away");
+    assert!(
+        doc.get("large_for_git").is_none(),
+        "only from 100 MB on: {doc}"
+    );
+}
+
+#[tokio::test]
+async fn an_upload_needs_a_session_and_is_refused_at_the_door_when_it_is_no_request() {
+    let r = rig("upload-door").await;
+    let origin = format!("http://127.0.0.1:{}", r.server.addr().port());
+    let reply = client::request(
+        r.server.addr().port(),
+        "POST",
+        "/api/tasks/upload?id=alpha.nvim/t1",
+        &[
+            ("Content-Type", "application/pdf"),
+            ("Origin", &origin),
+            ("X-Upload-Name", "a.pdf"),
+        ],
+        "x",
+    )
+    .await
+    .unwrap();
+    assert_eq!(reply.status, 401, "{}", reply.body);
+    assert!(!r.vault.join(".fake-upload").exists());
+
+    let (status, doc) = upload(&r, "not-an-id", "a.pdf", "x").await;
+    assert_eq!(status, 400, "{doc}");
+    assert_eq!(leftovers(&r), 0);
+}
+
+#[tokio::test]
+async fn a_page_does_not_name_the_folder_of_an_upload_at_the_door_of_the_writes() {
+    let r = rig("upload-ops").await;
+    let request = r#"{"upload_dir":"C:/x","ops":[{"op":"attach","id":"alpha.nvim/t1","from":"upload","upload":"f","name":"a"}]}"#;
+    let (status, doc) = post(&r, "/api/tasks/ops", request, JSON, true).await;
+    assert_eq!(status, 400, "{doc}");
+    assert!(!r.vault.join(".fake-upload").exists());
 }

@@ -304,6 +304,21 @@ only for an area that is `public` or `internal`, as the cache: the id names its
 area. A view to try (opened from a context menu) lives in the page only and is
 written nowhere until it is saved.
 
+A file from the page goes through `POST /api/tasks/upload?id=<area>/<slug>` (a
+button and a drop on the detail): the body is the file as it is, of any size and
+type. It is one of the routes an app names to the guard (`with_upload_path`), so
+the limit of a request, `application/json` and the time limit of a request do not
+hold for it; a session and the origin are asked as everywhere. The hub streams
+the body to a file under a name of its own, in `uploads` below its configuration
+folder, asks the disk for the room up front when the size is known, and ends a
+transfer that sends nothing for 60 seconds. The engine takes that file
+(`from: upload`, with `upload_dir`, a field the door of `ops` refuses from a
+page), copies it below the folder of the task, and the hub removes its copy,
+whatever the engine said; what a killed hub left there goes after a day at the
+next start. The name the page sends is cleaned to letters, digits and `_ . -`,
+and it names no folder. The hub serves no asset, so a file with an active type
+(HTML, SVG) is never shown in the origin of the page.
+
 A screenshot is attached with `attach` through `POST /api/tasks/ops` (a button
 in the detail, a box in the new-task form): the engine takes the image on the
 clipboard of the machine the hub runs on, else the newest image younger than

@@ -3,7 +3,7 @@
 // whether a server or this answers.
 //
 // What the Rust hub checks before it asks the engine is checked here the same way (the query is plain, an id is
-// `<area>/<slug>`, an area is a name, a sort is one of five words), and an engine refusal keeps its code and message
+// `<area>/<slug>`, an area is a name, a sort is one of the engine's words), and an engine refusal keeps its code and message
 // and gets the same HTTP status. Left out on purpose: the session (there is no server and no token), the event stream
 // (the page reads again on focus), and everything that opens something on the machine. A write (`ops`) is checked the
 // way the Rust hub checks it and then handed to `deps.ops`, which asks the engine and writes the folder; a hub without
@@ -48,7 +48,20 @@ export type DataClass = 'public' | 'internal' | 'private' | 'unclassified';
 const NS = '/api/tasks/';
 /** The one session of a page in the web variant: a word, not a secret. */
 export const SESSION = 'web-session';
-const SORTS = ['default', 'prio-effort', 'severity', 'frecency', 'roi', 'due'];
+const SORTS = [
+  'default',
+  'prio-effort',
+  'severity',
+  'frecency',
+  'roi',
+  'due',
+  'created-desc',
+  'created-asc',
+  'updated-desc',
+  'updated-asc',
+  'remind',
+  'title',
+];
 const MAX_AREA_NAME = 128;
 const ESTIMATE_MAX = 1000;
 const JSON_TYPE = { 'Content-Type': 'application/json' };

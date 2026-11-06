@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import AxeBuilder from '@axe-core/playwright';
@@ -7118,6 +7118,41 @@ test('without a login entry the Options menu has no such switch', async ({ page 
   await expect(page.getByRole('menuitemcheckbox', { name: 'Save with a button' }).or(page.getByRole('menuitemcheckbox').first())).toBeVisible();
   await expect(page.getByRole('menuitemcheckbox', { name: 'Start the hub at login' })).toHaveCount(0);
   await page.keyboard.press('Escape');
+});
+
+test('a file from this computer is attached to a task: a plain task becomes a folder, and the link is offered', async ({ page }) => {
+  const slug = `upload-e2e-${Date.now().toString(36)}`;
+  const file = join(state().vault, 'lib.nvim', 'ROADMAP', 'tasks', `${slug}.md`);
+  writeFileSync(file, `---\ntitle: Upload e2e\nstatus: open\nkind: task\n---\n\nA file comes to this one.\n`);
+  await pair(page);
+  await showList(page);
+  await page.getByRole('searchbox', { name: /search/i }).first().fill('Upload e2e');
+  await page.locator('button.row', { hasText: 'Upload e2e' }).click();
+  const float = taskFloat(page);
+  await expect(float).toBeVisible();
+
+  // Over the limit of an ordinary request, with a name that needs cleaning.
+  const body = Buffer.alloc(2 * 1024 * 1024, 'x');
+  await float.locator('[data-file-picker]').setInputFiles({ name: 'My Report (1).pdf', mimeType: 'application/pdf', buffer: body });
+  await expect(float.locator('.attached input')).toHaveValue(/assets\/My-Report--1-\.pdf/, { timeout: WRITE_BUDGET });
+  const asset = join(state().vault, 'lib.nvim', 'ROADMAP', 'tasks', slug, 'assets', 'My-Report--1-.pdf');
+  expect(statSync(asset).size).toBe(body.length);
+  expect(existsSync(file)).toBe(false);
+
+  // Dropped on the card, with the same name: what is there stays, and the new one gets a counter.
+  const transfer = await page.evaluateHandle(() => {
+    const data = new DataTransfer();
+    data.items.add(new File(['second'], 'My Report (1).pdf', { type: 'application/pdf' }));
+    return data;
+  });
+  await float.locator('aside.detail').dispatchEvent('dragover', { dataTransfer: transfer });
+  await expect(float.locator('aside.detail')).toHaveClass(/dropping/);
+  await float.locator('aside.detail').dispatchEvent('drop', { dataTransfer: transfer });
+  await expect(float.locator('.attached input')).toHaveValue(/My-Report--1--2\.pdf/, { timeout: WRITE_BUDGET });
+  await expect(float.locator('aside.detail')).not.toHaveClass(/dropping/);
+  expect(statSync(asset).size).toBe(body.length);
+  await expectAccessible(page, 'the detail with an attached file');
+  expect(consoleProblems.get(page)).toEqual([]);
 });
 
 test('the test sheet of a task runs from the acceptance view, and says how it ended', async ({ page }) => {
