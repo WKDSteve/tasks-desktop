@@ -1,6 +1,7 @@
 <script lang="ts">
   // The conflict center: every change the engine refused because the file had moved on. The dialog is the kit's (all
   // at once, or one at a time as the person chooses); this file words each conflict and names what can be done.
+  import { floating } from '../lib/floating';
   import KitConflictCenter from 'appkit-ui/ConflictCenter.svelte';
   import type { ConflictItem } from 'appkit-ui/conflicts';
   import type { App } from '../lib/app.svelte';
@@ -64,6 +65,8 @@
 </script>
 
 <KitConflictCenter
+  float={floating}
+  floatParams={{ kind: 'conflicts', moveLabel: t('float.move'), moveHint: t('hint.float.move') }}
   open={app.conflictsOpen}
   {items}
   mode={app.conflictMode}

@@ -4,6 +4,7 @@
   import KitPalette from 'appkit-ui/Palette.svelte';
   import { paletteItems, type PaletteItem } from 'appkit-ui/palette';
   import type { App } from '../lib/app.svelte';
+  import { floating } from '../lib/floating';
   import { translate, type Key } from '../lib/i18n';
   import { paletteActions } from '../lib/paletteActions';
 
@@ -29,6 +30,8 @@
 </script>
 
 <KitPalette
+  float={floating}
+  floatParams={{ kind: 'palette', moveLabel: t('float.move'), moveHint: t('hint.float.move') }}
   open={app.palette}
   {items}
   onchoose={choose}

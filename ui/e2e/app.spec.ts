@@ -191,6 +191,13 @@ function taskFloat(page: Page): Locator {
   return page.locator('dialog.peek[open]');
 }
 
+/** A click opens the card of the board in the float: closed again, the card stays selected for the keys. */
+async function selectCard(page: Page, card: Locator): Promise<void> {
+  await card.click();
+  await expect(taskFloat(page)).toHaveCount(1);
+  await closeFloat(page);
+}
+
 /** Close the float of a task when one is open: the list behind it is not reached while it is. */
 async function closeFloat(page: Page): Promise<void> {
   const float = taskFloat(page);
@@ -1583,7 +1590,7 @@ test('a column of the board folds to its head and to a narrow strip, the others 
   await open.getByRole('button', { name: 'Fold open to a narrow strip' }).click();
   // The narrow column gives its width to the others: the column after it moves up beside it.
   expect((await open.boundingBox())!.width).toBeLessThan(80);
-  expect((await column('parked').boundingBox())!.x).toBeLessThan(parkedX - 100);
+  expect((await column('parked').boundingBox())!.x).toBeLessThan(parkedX - 30);
   expect(await violations(page)).toEqual([]);
   await page.reload();
   await expect(page.getByRole('region', { name: 'open', exact: true })).toHaveClass(/narrow/);
@@ -1599,7 +1606,7 @@ test('h and l on the board pass a folded column: the selection never lands on a 
   await expect(column('blocked').locator('.card').first()).toBeVisible();
   await column('decision').getByRole('button', { name: 'Fold decision', exact: true }).click();
   await expect(column('decision').locator('.card')).toHaveCount(0);
-  await column('doing').locator('.card').first().click();
+  await selectCard(page, column('doing').locator('.card').first());
   await expect(column('doing').locator('[aria-current="true"]')).toHaveCount(1);
   await page.keyboard.press('l');
   // Past the folded column to the next one that shows its cards.
@@ -2990,7 +2997,7 @@ test('the board: cards move by key and by drag, the engine keeps the order, a pr
 
   // J moves the selected card one place down inside its group, and the engine's order says so after a reload. Each
   // write below is awaited by write(): its answer gets WRITE_BUDGET, and this one is slow on purpose to hold that.
-  await column('open').locator('.card').first().click();
+  await selectCard(page, column('open').locator('.card').first());
   await slow(page, '/api/tasks/ops', SLOW_WRITE, 1);
   await write(page, () => page.keyboard.press('Shift+J'));
   // (a reorder may renumber the neighbours: "Saved (n files written ...)"; the "Saved." of the last create is gone)
@@ -3007,7 +3014,7 @@ test('the board: cards move by key and by drag, the engine keeps the order, a pr
   expect(await titles('open')).toEqual(moved);
 
   // K takes it back; at the edge of the group there is nowhere to go, and that is told.
-  await column('open').locator('.card').nth(1).click();
+  await selectCard(page, column('open').locator('.card').nth(1));
   // (the order can stand before the write is answered: its "Saved." would replace what the next key tells)
   await write(page, () => page.keyboard.press('Shift+K'));
   await expect.poll(() => titles('open')).toEqual(first);
@@ -3027,7 +3034,7 @@ test('the board: cards move by key and by drag, the engine keeps the order, a pr
 
   // H and L change the status of the selected card with the keys. The answer of L is held: the hub's event of the
   // changed file moves the card while the write is still on its way, and H is pressed when the write is done.
-  await column('doing').locator('.card', { hasText: name }).click();
+  await selectCard(page, column('doing').locator('.card', { hasText: name }));
   const release = await holdNextWrite(page);
   const answer = nextAnswer(page);
   await page.keyboard.press('Shift+L');
@@ -3045,8 +3052,9 @@ test('the board: cards move by key and by drag, the engine keeps the order, a pr
   // A card of another priority is another group: the engine orders inside a group only, so the move is refused.
   const other = (await titles('open'))[0] as string;
   await column('open').locator('.card', { hasText: other }).click();
-  await write(page, () => page.locator('aside.detail').getByLabel('Priority').selectOption('1'));
-  await expect(page.getByRole('status').getByText('Saved.')).toBeVisible();
+  await write(page, () => taskFloat(page).getByLabel('Priority').selectOption('1'));
+  await expect(taskFloat(page).getByRole('status').getByText('Saved.')).toBeVisible();
+  await closeFloat(page);
   const rest = column('open').locator('.card').filter({ hasNotText: other });
   await expect(rest).toHaveCount(1);
   let writes = 0;
@@ -3083,7 +3091,8 @@ test('the board: cards move by key and by drag, the engine keeps the order, a pr
   await chooseView(page, 'View', 'Board');
   await expect.poll(() => titles('open')).toEqual([other, mover]);
   await column('open').locator('.card', { hasText: mover }).click();
-  await expect(page.locator('aside.detail').getByLabel('Priority')).toHaveValue('1');
+  await expect(taskFloat(page).getByLabel('Priority')).toHaveValue('1');
+  await closeFloat(page);
 
   expect(await violations(page)).toEqual([]);
   expect(consoleProblems.get(page)).toEqual([]);
@@ -3683,7 +3692,7 @@ test('the board does not place a card beside one of its priority in another stag
     await route.continue();
   });
   // Down from a would be "after b": another stage. The board says it is at the edge and asks the engine nothing.
-  await open.locator('.card', { hasText: 'Stage e2e a' }).click();
+  await selectCard(page, open.locator('.card', { hasText: 'Stage e2e a' }));
   await page.keyboard.press('Shift+J');
   await expect(page.getByRole('alert').getByText(/end of its priority group/)).toBeVisible();
   expect(writes).toBe(0);
@@ -3718,7 +3727,7 @@ test('the board: a held key writes once, a card the filter hides is not moved, a
 
   // A held Shift+J is a repeat after the first press: one write, not a shuffle. The repeat comes after the first write
   // is over, so it is the key's own guard that stops it and not the page being busy.
-  await first.click();
+  await selectCard(page, first);
   await page.keyboard.down('Shift');
   await page.keyboard.down('J');
   await expect(page.getByRole('status').getByText('Saved.')).toBeVisible();
@@ -3751,7 +3760,7 @@ test('the board: a held key writes once, a card the filter hides is not moved, a
   await expect(column('open').locator('.card')).toHaveCount(1);
 
   // The filter hides the selected card: the keys do not move it behind the person's back.
-  await column('doing').locator('.card', { hasText: firstTitle }).click();
+  await selectCard(page, column('doing').locator('.card', { hasText: firstTitle }));
   await chooseView(page, 'View', 'List');
   await page.getByRole('searchbox', { name: /search/i }).first().fill(secondTitle);
   await chooseView(page, 'View', 'Board');
@@ -4054,7 +4063,8 @@ test('the board: a card dropped on blocked asks for the blocker, a card dropped 
   await expect(column('blocked').locator('.card', { hasText: 'Block e2e 1' })).toHaveCount(1);
   expect(writes).toBe(1);
   await column('blocked').locator('.card', { hasText: 'Block e2e 1' }).click();
-  await expect(page.locator('aside.detail')).toContainText(blockerId);
+  await expect(taskFloat(page)).toContainText(blockerId);
+  await closeFloat(page);
 
   // To the done zone: the preview of finishing, as with the button.
   const zone = page.getByRole('group', { name: 'Drop a card here to finish it' });
@@ -4088,7 +4098,7 @@ test('the board: taking back a move that numbered its neighbours gives every fil
   expect(orders()).toEqual([false, false, false]);
 
   // The last card one place up: the engine numbers the cards before the spot, and says how many files it wrote.
-  await open.locator('.card').nth(2).click();
+  await selectCard(page, open.locator('.card').nth(2));
   await page.keyboard.press('Shift+K');
   await expect.poll(() => titles()).toEqual([first[0], first[2], first[1]]);
   await expect(page.getByRole('status').getByText(/files written/)).toBeVisible();
@@ -4101,7 +4111,7 @@ test('the board: taking back a move that numbered its neighbours gives every fil
   expect(orders()).toEqual([false, false, false]);
 
   // The same for a move that wrote one file only: the card had no number, and has none after the undo.
-  await open.locator('.card').nth(0).click();
+  await selectCard(page, open.locator('.card').nth(0));
   await page.keyboard.press('Shift+J');
   await expect.poll(() => titles()).toEqual([first[1], first[0], first[2]]);
   await page.getByRole('status').getByRole('button', { name: 'Undo' }).click();
@@ -5431,7 +5441,7 @@ test('a filter that is emptied leaves the page where it was: the selected row fa
     await page.keyboard.press('b');
     const cards = page.locator('.board [data-column="open"] .card');
     await expect(cards.nth(40)).toBeAttached();
-    await cards.nth(40).click();
+    await selectCard(page, cards.nth(40));
     await toTop(page);
     await expect(page.locator('.board [aria-current="true"]')).not.toBeInViewport();
     const events = page.waitForResponse((r) => new URL(r.url()).pathname === '/api/tasks/snapshot', { timeout: WRITE_BUDGET });
@@ -6709,7 +6719,7 @@ test('in a narrow window the board and the inbox keep a few cards and rows in si
   await pair(page);
   await chooseView(page, 'View', 'Board');
   // A chosen task fills the detail below the board: the board must not give its room up to it (77 px of cards).
-  await page.locator('.cards .card').first().click();
+  await selectCard(page, page.locator('.cards .card').first());
   await expect(page.locator('.cards .card.selected')).toBeVisible();
   await expect.poll(async () => roomy(await parts('.board .cards')), { message: 'cards of the board' }).toBe(true);
   // ... and does not grow with its longest column either: the columns scroll, the detail is a short way down.

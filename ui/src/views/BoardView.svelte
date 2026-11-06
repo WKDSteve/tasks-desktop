@@ -12,7 +12,6 @@
   import { marksLegend } from '../lib/legend';
   import { markHidden } from '../lib/text';
   import { isOverdue } from '../lib/remind';
-  import Detail from './Detail.svelte';
   import FilterNote from './FilterNote.svelte';
   import FoldButton from './FoldButton.svelte';
   import ExportMenu from './ExportMenu.svelte';
@@ -277,7 +276,11 @@
                 ondragend={onDragEnd}
                 ondragover={(e) => onCardOver(e, card.id, column)}
                 ondrop={(e) => void onCardDrop(e, card.id, column)}
-                onclick={() => app.select(card.id)}
+                onclick={(e) => {
+                  // A tap on the grip is the start of a drag that did not happen: it selects, and opens nothing.
+                  if (e.target instanceof Element && e.target.closest('.grip')) app.select(card.id);
+                  else app.peek(card.id);
+                }}
               >
                 <span class="title">{markHidden(card.title)}</span>
                 <span class="meta">
@@ -329,7 +332,6 @@
       {/each}
     </div>
     </div>
-    <Detail {app} />
   </div>
 </div>
 
@@ -358,12 +360,12 @@
   }
   .layout {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(16rem, 22rem);
+    grid-template-columns: minmax(0, 1fr);
     gap: 1rem;
     flex: 1;
     min-height: 0;
   }
-  /* Narrow: the detail stands below the board. Both take the height they need and the main area scrolls; the board
+  /* Narrow: the board takes the height it needs and the main area scrolls; the board
      keeps a few cards in sight (16rem) instead of sharing the window's height with the detail. At least as high as the
      main area when it stands in it alone; below the bar of ViewsView it takes the rest of that frame (flex). */
   @media (max-width: 52rem) {
@@ -373,7 +375,6 @@
       flex: 1 0 auto;
     }
     .layout {
-      grid-template-columns: 1fr;
       flex: 1 0 auto;
     }
   }

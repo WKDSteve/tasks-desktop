@@ -16,7 +16,6 @@
   import { selectOfGroup } from '../lib/viewMenu';
   import { DRAFT_ID } from '../lib/state/views.svelte';
   import { createGrip, farEnough, placeAt, type PointerDragEvent } from '../lib/pointerDrag';
-  import Detail from './Detail.svelte';
   import Groups from './Groups.svelte';
   import GroupMatrix from './GroupMatrix.svelte';
   import BoardView from './BoardView.svelte';
@@ -558,7 +557,7 @@
                         data-matrix-item={task.id}
                         class:selected={task.id === app.selectedId}
                         aria-current={task.id === app.selectedId ? 'true' : undefined}
-                        onclick={() => app.select(task.id)}
+                        onclick={() => app.peek(task.id)}
                         onkeydown={(e) => onCellItemKey(e, task.id, cell)}
                       >
                         <span class="title">{markHidden(task.title)}</span>
@@ -594,7 +593,7 @@
                   data-view-item={task.id}
                   class:selected={task.id === app.selectedId}
                   aria-current={task.id === app.selectedId ? 'true' : undefined}
-                  onclick={() => app.select(task.id)}
+                  onclick={() => app.peek(task.id)}
                   onkeydown={(e) => onItemKey(e, task.id, group.value)}
                   use:contextTarget={groupTarget(open, group.value)}
                 >
@@ -607,7 +606,6 @@
             <p class="note">{t('views.unknown_field', { field: grouping ? (open.group_by2 ?? '') : open.group_by })}</p>
           {/if}
         </div>
-        <Detail {app} />
       </div>
     </section>
   {/if}
@@ -710,7 +708,7 @@
   }
   .layout {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(16rem, 22rem);
+    grid-template-columns: minmax(0, 1fr);
     gap: 1rem;
     flex: 1;
     min-height: 0;

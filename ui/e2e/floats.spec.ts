@@ -442,6 +442,60 @@ test('the float is moved and sized by the keyboard on its handle, and Home puts 
   await expect(f).toHaveCount(0);
 });
 
+test('board and views open a task in the float, the inbox keeps its panel for its keys', async ({ page }) => {
+  await pair(page);
+  await showList(page);
+  await page.getByRole('menuitem', { name: 'View', exact: true }).click();
+  await page.getByRole('menuitemradio', { name: 'Board', exact: true }).click();
+  await expect(page.locator('.board')).toBeVisible();
+  await expect(page.locator('main aside.detail')).toHaveCount(0);
+  const card = page.locator('.card').first();
+  await card.click();
+  await expect(float(page)).toBeVisible();
+  await expectAccessible(page, 'the float over the board');
+  await page.keyboard.press('Escape');
+  await expect(float(page)).toHaveCount(0);
+  await expect(page.locator('.card[aria-current="true"]')).toHaveCount(1);
+  // The selected card opens by its key too.
+  await page.locator('main').focus();
+  await page.keyboard.press('o');
+  await expect(float(page)).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(float(page)).toHaveCount(0);
+
+  await page.getByRole('menuitem', { name: 'View', exact: true }).click();
+  await page.getByRole('menuitemradio', { name: 'Inbox', exact: true }).click();
+  await expect(page.locator('main aside.detail')).toHaveCount(1);
+});
+
+test('the palette and the docs are floats too', async ({ page }) => {
+  await pair(page);
+  await showList(page);
+  await page.keyboard.press('Control+k');
+  const palette = page.getByRole('dialog', { name: 'Command palette' });
+  await expect(palette).toBeVisible();
+  const handle = palette.getByRole('button', { name: 'Move or resize the window' });
+  await expect(handle).toBeVisible();
+  // The box of the palette keeps the focus: the handle only comes first in the order.
+  await expect(palette.getByRole('combobox').or(palette.getByRole('textbox')).first()).toBeFocused();
+  await expectAccessible(page, 'the palette with its handle');
+  await handle.focus();
+  const before = await box(palette);
+  await page.keyboard.press('ArrowRight');
+  await expect.poll(async () => (await box(palette)).x).toBeGreaterThan(before.x);
+  expect((await kept(page))['palette']).toBeDefined();
+  await page.keyboard.press('Home');
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('Escape');
+  await expect(palette).toHaveCount(0);
+
+  await page.getByRole('menuitem', { name: 'Help', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Releasing', exact: true }).click();
+  const docs = page.getByRole('dialog', { name: 'Documentation' });
+  await expect(docs).toBeVisible();
+  await expect(docs.getByRole('button', { name: 'Move or resize the window' })).toBeVisible();
+});
+
 test('the other floats move too, each keeps its own place, and they have no violation', async ({ page }) => {
   await pair(page);
   await showList(page);

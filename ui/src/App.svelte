@@ -11,6 +11,7 @@
   import InboxView from './views/InboxView.svelte';
   import ViewsView from './views/ViewsView.svelte';
   import TaskDialog from './views/TaskDialog.svelte';
+  import { floating } from './lib/floating';
   import ConflictsButton from './views/ConflictsButton.svelte';
   import FinishedDialog from './views/FinishedDialog.svelte';
   import Detail from './views/Detail.svelte';
@@ -217,8 +218,9 @@
         if (view === 'board') app.moveSelectionAcross(1);
         break;
       case 'o':
-        // The list has no detail beside it: the selected task opens in the float.
-        if (view === 'list' && app.selectedId !== null && !event.repeat) {
+        // These views have no detail beside them: the selected task opens in the float. (The inbox keeps its own, for
+        // its keys: each press sorts the task and shows the next one.)
+        if ((view === 'list' || view === 'board' || view === 'views') && app.selectedId !== null && !event.repeat) {
           event.preventDefault();
           app.peek(app.selectedId);
         }
@@ -814,6 +816,8 @@
     <DropMoveDialog {app} />
     <Palette {app} />
     <DocsDialog
+      float={floating}
+      floatParams={{ kind: 'docs', moveLabel: t('float.move'), moveHint: t('hint.float.move') }}
       open={docsOpen}
       docs={docTexts}
       docId={docsAt}
