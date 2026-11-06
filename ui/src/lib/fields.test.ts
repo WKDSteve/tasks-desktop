@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_RANGES, badLink, badTag, bodyFromSections, categoriesToWrite, categoryDerived, isWebLink, listEditable, oneLine, parseTags, rangesOf, scaffoldOf, scaffoldRows, severityApplies, splitOther, tagsChanged, tagsText } from './fields';
+import { DEFAULT_RANGES, badLink, badTag, bodyFromSections, categoriesToWrite, categoryDerived, isWebLink, stepTitle, listEditable, oneLine, parseTags, rangesOf, scaffoldOf, scaffoldRows, severityApplies, splitOther, tagsChanged, tagsText } from './fields';
 
 describe('a category that comes from the kind or a tag', () => {
   it('is bug for a bug and every tag spelled like the category', () => {
@@ -10,6 +10,14 @@ describe('a category that comes from the kind or a tag', () => {
   });
   it('is not written to the task: only what the box itself holds is', () => {
     expect(categoriesToWrite(['bug', 'docs', 'tests'], ['bug', 'docs', 'tests'], 'bug', ['docs'])).toEqual(['tests']);
+  });
+});
+
+describe('the title of a task made from a step', () => {
+  it('drops the number of the plan, not a number of the text', () => {
+    expect(stepTitle('2. tidy up')).toBe('tidy up');
+    expect(stepTitle('tidy up 2. rooms')).toBe('tidy up 2. rooms');
+    expect(stepTitle('3 rooms')).toBe('3 rooms');
   });
 });
 

@@ -22,6 +22,7 @@
     tagsText,
     categoriesToWrite,
     categoryDerived,
+    stepTitle,
   } from '../lib/fields';
   import Blocks from 'appkit-ui/Blocks.svelte';
 
@@ -718,7 +719,7 @@
                   disabled={app.locked}
                   aria-label={t('detail.step_to_task', { text: step.text })}
                   data-hint={t('hint.ui.detail.to_task')}
-                  onclick={() => app.openCapture(step.text)}>{t('detail.to_task')}</button
+                  onclick={() => app.openCapture(stepTitle(step.text))}>{t('detail.to_task')}</button
                 >
               {/if}
             </li>

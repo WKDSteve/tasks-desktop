@@ -166,6 +166,11 @@ export function categoriesToWrite(
   return order.filter((c) => ticked.includes(c) && !categoryDerived(c, kind, tags));
 }
 
+/** The title of a task made from a step: the text without the number the plan gives it (`2. tidy up`). */
+export function stepTitle(text: string): string {
+  return text.replace(/^\d+\.\s+/, '').trim();
+}
+
 /** Whether a severity fits: a bug, or a bug / security category (the engine's `model.severity_applies`). */
 export function severityApplies(kind: string, categories: readonly string[]): boolean {
   return kind === 'bug' || categories.includes('bug') || categories.includes('security');
