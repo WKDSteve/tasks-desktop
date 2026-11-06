@@ -373,6 +373,11 @@ test('the float is moved and sized by the keyboard on its handle, and Home puts 
   await showList(page);
   const f = await openTask(page, 'lib.nvim/alpha');
   const handle = f.getByRole('button', { name: 'Move or resize the window' });
+  // The pointer goes to the corner of the window first: the click that opened the float left it where the float now
+  // moves, and when the float moves under a resting pointer the browser sends a mouseover, on which the kit's popup
+  // goes away although the focus is still on the handle (about every third run; the kit's task is
+  // appkit/tooltip-bleibt-solange-der-fokus-da-ist).
+  await page.mouse.move(0, 0);
   await handle.focus();
   const before = await box(f);
   await page.keyboard.press('ArrowLeft');
