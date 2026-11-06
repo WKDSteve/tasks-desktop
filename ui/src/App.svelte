@@ -575,6 +575,17 @@
             checked: app.saveMode === 'manual',
             onselect: () => app.setSaveMode(app.saveMode === 'manual' ? 'auto' : 'manual'),
           },
+          ...(app.autostart === null
+            ? []
+            : [
+                {
+                  kind: 'check' as const,
+                  label: t('menu.autostart'),
+                  hint: t('hint.item.menu.autostart'),
+                  checked: app.autostart,
+                  onselect: () => void app.toggleAutostart(),
+                },
+              ]),
           { kind: 'section', label: t('menu.sec.export') },
           { kind: 'info', label: t('menu.export_where') },
           ...(fromDisk

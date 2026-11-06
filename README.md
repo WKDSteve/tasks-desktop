@@ -37,7 +37,7 @@ tasks-hub serve [--port 1024-65535]   run the hub until Ctrl-C
 tasks-hub start [--open]               run the hub in the background (no window; log: hub.log
                                       in the config folder); --open also opens the browser
 tasks-hub stop                        stop the hub that runs in the background
-tasks-hub autostart on|off|status     start the hub with your login (Windows: Run key;
+tasks-hub autostart on|off|status     start the hub with your login, also in the Options menu of the page (Windows: Run key;
                                       Linux: autostart entry; macOS: launch agent)
 tasks-hub install [--autostart] [--shortcut]
                                       copy the program to a fixed place (Windows:
@@ -144,7 +144,7 @@ the same steps as the rolling build, then `tasks-hub install` of the program bui
 of the lock files, and a file built on the machine carries no mark for SmartScreen to stop.
 
 ```
-.\scripts\build-install.ps1 [-BuildOnly] [-InstallArgs '--autostart','--shortcut']
+.\scripts\build-install.ps1 [-BuildOnly] [-InstallArgs '--shortcut']
 ```
 
 ```

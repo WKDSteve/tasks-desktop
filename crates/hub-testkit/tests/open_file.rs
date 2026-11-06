@@ -3,7 +3,7 @@
 //! would have opened is written to a log.
 
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use appkit_core::authn::{ManualClock, Secret, CODE_BYTES, TOKEN_BYTES};
@@ -14,6 +14,7 @@ use tasks_hub::client;
 use tasks_hub::config::Env;
 use tasks_hub::editor::TerminalOpener;
 use tasks_hub::engine::{CliEngine, CliEngineConfig, Engine};
+use tasks_hub::loginentry::LoginEntry;
 use tasks_hub::server::{
     start_with, Extras, HubStatus, Limits, RunningServer, ServerConfig, WatchConfig,
 };
@@ -34,6 +35,35 @@ async fn rig(name: &str, with_opener: bool) -> Rig {
 
 /// `pick`: the folder the folder dialog "returns" (`None`: the dialog is closed without a choice).
 async fn rig_with(name: &str, with_opener: bool, pick: Option<&str>) -> Rig {
+    rig_full(name, with_opener, pick, None).await
+}
+
+/// A login entry that holds its value (no test touches the registry of the machine).
+struct FakeLogin {
+    on: Mutex<Option<bool>>,
+    refuse: bool,
+}
+
+impl LoginEntry for FakeLogin {
+    fn is_on(&self) -> Option<bool> {
+        *self.on.lock().unwrap()
+    }
+
+    fn set(&self, on: bool) -> Result<(), String> {
+        if self.refuse {
+            return Err("the system said no".to_owned());
+        }
+        *self.on.lock().unwrap() = Some(on);
+        Ok(())
+    }
+}
+
+async fn rig_full(
+    name: &str,
+    with_opener: bool,
+    pick: Option<&str>,
+    login_entry: Option<Arc<dyn LoginEntry>>,
+) -> Rig {
     let base = Scratch::new(&format!("open-{name}"));
     let vault = base.join("vault");
     let tasks = vault.join("alpha.nvim").join("ROADMAP").join("tasks");
@@ -118,6 +148,7 @@ row two
             snapshot_root: Some(base.join("repos")),
             vaults: None,
             opener,
+            login: login_entry,
         },
     )
     .await
@@ -283,6 +314,55 @@ async fn the_folder_of_the_vault_is_shown_and_the_page_names_nothing() {
         (status, doc["error"]["code"].as_str()),
         (404, Some("open_unavailable"))
     );
+}
+
+#[tokio::test]
+async fn the_login_entry_is_read_set_and_taken_away_and_only_with_a_session() {
+    let login = Arc::new(FakeLogin {
+        on: Mutex::new(Some(false)),
+        refuse: false,
+    });
+    let r = rig_full("autostart", false, None, Some(login.clone())).await;
+    let route = "/api/tasks/autostart";
+    assert_eq!(get(&r, route).await.1["on"], false);
+    let (status, doc) = post(&r, route, r#"{"on":true}"#, true).await;
+    assert_eq!((status, doc["on"].as_bool()), (200, Some(true)), "{doc}");
+    assert_eq!(*login.on.lock().unwrap(), Some(true));
+    assert_eq!(get(&r, route).await.1["on"], true);
+    let (status, doc) = post(&r, route, r#"{"on":false}"#, true).await;
+    assert_eq!((status, doc["on"].as_bool()), (200, Some(false)), "{doc}");
+    // Anything else is refused, and the credential comes first.
+    for bad in [
+        r#"{}"#,
+        r#"{"on":"yes"}"#,
+        r#"{"on":true,"exe":"x"}"#,
+        "nonsense",
+    ] {
+        assert_eq!(post(&r, route, bad, true).await.0, 400, "{bad}");
+    }
+    assert_eq!(post(&r, route, r#"{"on":true}"#, false).await.0, 401);
+    assert_eq!(
+        *login.on.lock().unwrap(),
+        Some(false),
+        "a refused request changed nothing"
+    );
+
+    // The system refuses: the page is told, the state stays.
+    let refusing = Arc::new(FakeLogin {
+        on: Mutex::new(Some(false)),
+        refuse: true,
+    });
+    let r2 = rig_full("autostart-refused", false, None, Some(refusing)).await;
+    let (status, doc) = post(&r2, route, r#"{"on":true}"#, true).await;
+    assert_eq!(
+        (status, doc["error"]["code"].as_str()),
+        (502, Some("autostart_failed"))
+    );
+
+    // A hub without an entry offers no switch.
+    let none = rig("autostart-none", false).await;
+    assert!(get(&none, route).await.1["on"].is_null());
+    assert_eq!(post(&none, route, r#"{"on":true}"#, true).await.0, 404);
 }
 
 #[tokio::test]

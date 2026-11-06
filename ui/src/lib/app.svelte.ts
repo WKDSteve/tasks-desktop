@@ -556,6 +556,8 @@ export class App {
   palette = $state(false);
   /** What the palette's choices were, to put them first next time. */
   frecency = $state.raw<Frecency>({});
+  /** Whether the hub starts at login; null: nothing to switch here. */
+  autostart = $state<boolean | null>(null);
   /** The plan wizard is open. */
   planning = $state(false);
   /** The task that is being finished, with what the engine says that does. */
@@ -864,6 +866,7 @@ export class App {
     if (this.#enumsAsked) return;
     this.#enumsAsked = true;
     try {
+      void this.readAutostart();
       this.ranges = rangesOf((await this.env.hub.enums()).enums);
     } catch (error) {
       // A session that is gone asks again after the next pairing; any other failure keeps the defaults.
@@ -2658,6 +2661,26 @@ export class App {
   /** The engine's estimate of some open tasks (the statistics ask it for the tasks the filter keeps). */
   estimateOf(ids: string[], signal: AbortSignal): Promise<Estimate> {
     return this.env.hub.estimate({ ids }, signal);
+  }
+
+  private async readAutostart(): Promise<void> {
+    try {
+      this.autostart = await this.env.hub.autostart();
+    } catch {
+      this.autostart = null;
+    }
+  }
+
+  /** The switch of the Options menu: says what came of it, and shows what the system says afterwards. */
+  async toggleAutostart(): Promise<void> {
+    if (this.autostart === null) return;
+    const wanted = !this.autostart;
+    try {
+      this.autostart = await this.env.hub.setAutostart(wanted);
+      this.say('ok', wanted ? 'autostart.on' : 'autostart.off');
+    } catch {
+      this.say('error', 'autostart.failed');
+    }
   }
 
   /** The one area the finished tasks open with, from a number of the statistics: taken once by the view. */

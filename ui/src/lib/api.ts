@@ -209,6 +209,22 @@ export class Hub extends HubClient<Snapshot> {
     return this.vaultPost('/api/tasks/vault_reveal', {});
   }
 
+  /** Whether the hub starts at login; null where there is no such thing to switch (this system, the web variant). */
+  async autostart(): Promise<boolean | null> {
+    try {
+      const doc = await this.json<{ on: boolean | null }>('/api/tasks/autostart');
+      return typeof doc.on === 'boolean' ? doc.on : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /** Register the hub at login or take it away; what is true afterwards. */
+  async setAutostart(on: boolean): Promise<boolean | null> {
+    const doc = await this.postJson<{ on: boolean | null }>('/api/tasks/autostart', { on });
+    return typeof doc.on === 'boolean' ? doc.on : null;
+  }
+
   /**
    * Ask the person for a folder with the dialog of the system on the machine of the hub (a page cannot show one with a
    * path). The folder they chose, or `null` when the dialog was closed; the page names nothing.

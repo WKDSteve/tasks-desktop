@@ -597,6 +597,7 @@ pub async fn serve(opts: ServeOptions) -> Result<(), String> {
         opener: nvim.clone().map(|n| {
             Arc::new(TerminalOpener::new(n, env.clone())) as Arc<dyn crate::editor::FileOpener>
         }),
+        login: Some(Arc::new(crate::loginentry::SystemLoginEntry)),
     };
     let running = match server::start_with(make_cfg(want), extras()).await {
         Ok(r) => r,

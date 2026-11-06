@@ -150,6 +150,8 @@ pub struct Extras {
     pub vaults: Option<Arc<dyn VaultAdmin<VaultTarget>>>,
     /// How a task file is shown in Neovim.
     pub opener: Option<Arc<dyn FileOpener>>,
+    /// The entry that starts the hub at login; none: the page offers no switch.
+    pub login: Option<Arc<dyn crate::loginentry::LoginEntry>>,
     /// The folders `attach` takes the newest screenshot from (the settings' `attach_dirs`); none: only the clipboard.
     pub attach_dirs: Vec<std::path::PathBuf>,
     /// The folder of the plugin checkouts (`REPOS_DIR`) the text snapshots of the test sheets are read from; none: the
@@ -170,6 +172,7 @@ pub async fn start_with(cfg: ServerConfig, extras: Extras) -> std::io::Result<Ru
     let Extras {
         vaults,
         opener,
+        login,
         attach_dirs,
         snapshot_root,
     } = extras;
@@ -180,6 +183,7 @@ pub async fn start_with(cfg: ServerConfig, extras: Extras) -> std::io::Result<Ru
     let parts = AppParts {
         classes: cfg.policy,
         opener,
+        login,
         usage: cfg.usage,
         streams: Arc::new(StreamCounter::default()),
         snapshot_root: snapshot_root.map(Arc::new),
@@ -274,6 +278,12 @@ fn app_routes(core: &Arc<Shared>) -> Router<Arc<Shared>> {
         .route(
             &r("vault_reveal"),
             post(vault_reveal).layer(DefaultBodyLimit::max(small)),
+        )
+        .route(
+            &r("autostart"),
+            get(autostart_get)
+                .post(autostart_set)
+                .layer(DefaultBodyLimit::max(small)),
         )
         .route(
             &r("vault_pick"),
@@ -395,6 +405,7 @@ mod tests {
             &AppParts {
                 classes: Arc::new(AreaPolicy::default()),
                 opener: None,
+                login: None,
                 usage: None,
                 streams: Arc::new(StreamCounter::default()),
                 snapshot_root: None,

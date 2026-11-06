@@ -7040,6 +7040,41 @@ test('the number of the finished tasks opens them for the area of the filter', a
   await page.evaluate(() => localStorage.removeItem('tasks-desktop.filter'));
 });
 
+test('the Options menu switches the start at login, and no test touches the registry', async ({ page }) => {
+  let on = false;
+  const posted: unknown[] = [];
+  await page.route('**/api/tasks/autostart', async (route) => {
+    if (route.request().method() === 'POST') {
+      const body = route.request().postDataJSON() as { on: boolean };
+      posted.push(body);
+      on = body.on;
+    }
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ on }) });
+  });
+  await pair(page);
+  await showList(page);
+  await page.getByRole('menuitem', { name: 'Options', exact: true }).click();
+  const entry = page.getByRole('menuitemcheckbox', { name: 'Start the hub at login' });
+  await expect(entry).toHaveAttribute('aria-checked', 'false');
+  await entry.click();
+  await expect(page.getByRole('status').getByText('The hub now starts at login.')).toBeVisible();
+  expect(posted).toEqual([{ on: true }]);
+  await page.getByRole('menuitem', { name: 'Options', exact: true }).click();
+  await expect(page.getByRole('menuitemcheckbox', { name: 'Start the hub at login' })).toHaveAttribute('aria-checked', 'true');
+  await page.keyboard.press('Escape');
+  expect(consoleProblems.get(page)).toEqual([]);
+});
+
+test('without a login entry the Options menu has no such switch', async ({ page }) => {
+  await page.route('**/api/tasks/autostart', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: '{"on":null}' }));
+  await pair(page);
+  await showList(page);
+  await page.getByRole('menuitem', { name: 'Options', exact: true }).click();
+  await expect(page.getByRole('menuitemcheckbox', { name: 'Save with a button' }).or(page.getByRole('menuitemcheckbox').first())).toBeVisible();
+  await expect(page.getByRole('menuitemcheckbox', { name: 'Start the hub at login' })).toHaveCount(0);
+  await page.keyboard.press('Escape');
+});
+
 test('an entry of the legend narrows the statistics and the view stays; a second click and the reset take it away', async ({ page }) => {
   await pair(page);
   await showList(page);

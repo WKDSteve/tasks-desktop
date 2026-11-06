@@ -381,6 +381,12 @@ A change is made with the `etag` the page has (`if_match`): a task that
 changed meanwhile is a `conflict`, nothing is overwritten, and the page reads
 again. The undo of the page is the `inverse` operation the engine returns.
 
+## The start at login (`GET` and `POST /api/tasks/autostart`)
+
+A session reads whether the hub starts at login and switches it (`{ "on": bool }`, nothing else). The page names no
+program or path: the entry is the one of `tasks-hub autostart`, for the installed copy. Nothing registers it by itself:
+not `install` without `--autostart`, not an update; one that is there stays until the person takes it away.
+
 ## Vaults (`/api/vaults`)
 
 The hub reads one vault at a time. `config.json` may hold more (`vaults`: a name and an absolute folder each, at most 16)

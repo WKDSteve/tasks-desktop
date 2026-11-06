@@ -227,6 +227,7 @@ async fn rig(name: &str, with_admin: bool) -> Rig {
         start_with(
             cfg,
             Extras {
+                login: None,
                 attach_dirs: Vec::new(),
                 snapshot_root: None,
                 vaults: Some(admin),

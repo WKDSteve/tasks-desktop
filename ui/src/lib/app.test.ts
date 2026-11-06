@@ -29,6 +29,14 @@ function snapshot(tasks: TaskEntry[], rev = 'rev:1'): Snapshot {
 }
 
 class FakeHub {
+  autostartOn: boolean | null = false;
+  autostart = async (): Promise<boolean | null> => this.autostartOn;
+  setAutostart = async (on: boolean): Promise<boolean | null> => {
+    if (this.autostartRefused) throw new Error('no');
+    this.autostartOn = on;
+    return on;
+  };
+  autostartRefused = false;
   token: string | null = null;
   onUnauthorized: () => void = () => {};
   doc: Snapshot = snapshot([task('pub/a', { etag: 'e1' })]);
