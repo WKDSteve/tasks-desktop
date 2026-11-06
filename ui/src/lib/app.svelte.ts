@@ -168,7 +168,7 @@ export interface Env {
     copy(text: string): Promise<boolean>;
     print(sheet: PrintSheet): boolean;
     /** The sheet as a picture; only where the policy of the page allows it to be drawn (the web variant). */
-    png?: (sheet: PrintSheet, name: string) => Promise<boolean>;
+    png?: (sheet: PrintSheet, name: string) => Promise<'saved' | 'too_long' | 'failed'>;
   };
 }
 
@@ -1757,9 +1757,9 @@ export class App {
   async pngView(): Promise<void> {
     const made = this.viewSheet();
     if (!made || !this.env.out.png) return;
-    const ok = await this.env.out.png(made.sheet, exportFileName(this.view, this.localDay(), 'markdown').replace(/\.[a-z]+$/, '.png'));
-    if (ok) this.say('ok', 'export.png_saved', { n: made.count });
-    else this.say('error', 'export.png_failed');
+    const result = await this.env.out.png(made.sheet, exportFileName(this.view, this.localDay(), 'markdown').replace(/\.[a-z]+$/, '.png'));
+    if (result === 'saved') this.say('ok', 'export.png_saved', { n: made.count });
+    else this.say('error', result === 'too_long' ? 'export.png_too_long' : 'export.png_failed', { n: made.count });
   }
 
   /** What the view shows for the way out of the page, as a sheet; null when that is nothing (it says so). */
