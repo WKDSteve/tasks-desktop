@@ -150,6 +150,8 @@ pub struct Extras {
     pub vaults: Option<Arc<dyn VaultAdmin<VaultTarget>>>,
     /// How a task file is shown in Neovim.
     pub opener: Option<Arc<dyn FileOpener>>,
+    /// The run of the test sheets of a task; none: the route says this hub has none.
+    pub sheet_run: Option<Arc<crate::sheetrun::SheetRunJob>>,
     /// The check over all vaults; none: the route says this hub has none.
     pub all_vaults: Option<Arc<crate::allvaults::AllVaultsCheck>>,
     /// The entry that starts the hub at login; none: the page offers no switch.
@@ -174,6 +176,7 @@ pub async fn start_with(cfg: ServerConfig, extras: Extras) -> std::io::Result<Ru
     let Extras {
         vaults,
         opener,
+        sheet_run,
         all_vaults,
         login,
         attach_dirs,
@@ -186,6 +189,7 @@ pub async fn start_with(cfg: ServerConfig, extras: Extras) -> std::io::Result<Ru
     let parts = AppParts {
         classes: cfg.policy,
         opener,
+        sheet_run,
         all_vaults,
         login,
         usage: cfg.usage,
@@ -282,6 +286,12 @@ fn app_routes(core: &Arc<Shared>) -> Router<Arc<Shared>> {
         .route(
             &r("vault_reveal"),
             post(vault_reveal).layer(DefaultBodyLimit::max(small)),
+        )
+        .route(
+            &r("sheet_run"),
+            get(sheet_run_state)
+                .post(sheet_run_start)
+                .layer(DefaultBodyLimit::max(small)),
         )
         .route(
             &r("check_all"),
@@ -415,6 +425,7 @@ mod tests {
             &AppParts {
                 classes: Arc::new(AreaPolicy::default()),
                 opener: None,
+                sheet_run: None,
                 all_vaults: None,
                 login: None,
                 usage: None,

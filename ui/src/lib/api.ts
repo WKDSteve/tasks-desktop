@@ -116,6 +116,15 @@ export interface SearchResult {
 
 export type SnapshotResult = KitSnapshotResult<Snapshot>;
 
+/** The run of the test sheets of a task. Exit codes of `testing sheets run`: 0 green, 1 red, 2 refused, 3 not reached. */
+export interface SheetRunState {
+  state: 'idle' | 'running' | 'done' | 'failed';
+  id?: string;
+  code?: number | null;
+  lines?: string[];
+  message?: string;
+}
+
 /** The check over all vaults: one line for each vault. */
 export interface CheckAll {
   state: 'idle' | 'running' | 'done';
@@ -223,6 +232,15 @@ export class Hub extends HubClient<Snapshot> {
   /** Show the folder of the vault the hub reads in the file manager (the page names no folder). */
   revealVault(): Promise<void> {
     return this.vaultPost('/api/tasks/vault_reveal', {});
+  }
+
+  /** Run the test sheets of a task, unless a run is under way; where the job stands. */
+  startSheetRun(id: string): Promise<SheetRunState> {
+    return this.postJson<SheetRunState>('/api/tasks/sheet_run', { id });
+  }
+
+  sheetRun(): Promise<SheetRunState> {
+    return this.json<SheetRunState>('/api/tasks/sheet_run');
   }
 
   /** Start the check over all vaults, unless it runs; where it stands. */

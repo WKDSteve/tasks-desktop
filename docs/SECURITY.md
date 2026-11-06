@@ -381,6 +381,12 @@ A change is made with the `etag` the page has (`if_match`): a task that
 changed meanwhile is a `conflict`, nothing is overwritten, and the page reads
 again. The undo of the page is the `inverse` operation the engine returns.
 
+## The run of test sheets (`GET` and `POST /api/tasks/sheet_run`)
+
+A session names one task (`{ "id" }`, a plain id and nothing else). The hub starts the engine's `sheet-run <id>` for the
+vault that is read, one run at a time. Which sheets run, where they lie and whether they may run is decided behind that
+command (testing.nvim: its trust gate and the workstation). The page gets the exit code and the last 40 lines of the output.
+
 ## The check over all vaults (`GET` and `POST /api/tasks/check_all`)
 
 A session starts one job: each vault of the settings in turn gets an engine of its own for its `check`, and the vault

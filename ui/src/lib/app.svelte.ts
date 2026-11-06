@@ -17,7 +17,7 @@ import {
 } from './bulk';
 import { planOp, type PlanForm, type PlanPreview } from './planwizard';
 import { COLUMNS, columnsOf, isColumn, neighbourColumn, placeNear, stepInGroup, type Column, type Move } from './board';
-import { ApiError, type CheckAll, type Hub, type HubArea, type HubAreas, type SearchResult, type VaultList } from './api';
+import { ApiError, type CheckAll, type SheetRunState, type Hub, type HubArea, type HubAreas, type SearchResult, type VaultList } from './api';
 import { cacheableClass, cacheableList, type CachedList, type ListStore } from './cache';
 import type {
   DonePreview,
@@ -561,6 +561,8 @@ export class App {
   palette = $state(false);
   /** What the palette's choices were, to put them first next time. */
   frecency = $state.raw<Frecency>({});
+  /** The run of test sheets, as the hub last told it. */
+  sheetRun = $state.raw<SheetRunState | null>(null);
   /** The check over all vaults, as the hub last told it. */
   checkAll = $state.raw<CheckAll | null>(null);
   /** The version of this program, for the hint of its mark. */
@@ -2680,6 +2682,20 @@ export class App {
   /** The engine's estimate of some open tasks (the statistics ask it for the tasks the filter keeps). */
   estimateOf(ids: string[], signal: AbortSignal): Promise<Estimate> {
     return this.env.hub.estimate({ ids }, signal);
+  }
+
+  /** Run the test sheets of `id` and follow the run: a sheet takes minutes. The watcher brings the new block of the task. */
+  async runSheets(id: string): Promise<void> {
+    try {
+      this.sheetRun = await this.env.hub.startSheetRun(id);
+      while (this.sheetRun.state === 'running') {
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        this.sheetRun = await this.env.hub.sheetRun();
+      }
+      if (this.sheetRun.id === id) this.focused();
+    } catch {
+      this.say('error', 'abnahme.run_failed');
+    }
   }
 
   /** Start the check over all vaults and follow it while it runs: a look each second. */

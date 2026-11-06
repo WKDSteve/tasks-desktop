@@ -18,6 +18,7 @@ use tasks_hub::loginentry::LoginEntry;
 use tasks_hub::server::{
     start_with, Extras, HubStatus, Limits, RunningServer, ServerConfig, WatchConfig,
 };
+use tasks_hub::sheetrun::{SheetRun, SheetRunJob, SheetRunner};
 use tasks_hub::store::RefreshOptions;
 
 struct Rig {
@@ -35,7 +36,35 @@ async fn rig(name: &str, with_opener: bool) -> Rig {
 
 /// `pick`: the folder the folder dialog "returns" (`None`: the dialog is closed without a choice).
 async fn rig_with(name: &str, with_opener: bool, pick: Option<&str>) -> Rig {
-    rig_full(name, with_opener, pick, None).await
+    rig_full(name, with_opener, pick, None, None).await
+}
+
+/// A run of test sheets that answers at once, and says which task it was asked for.
+struct FakeSheets;
+
+impl SheetRunner for FakeSheets {
+    fn run<'a>(&'a self, id: &'a str) -> appkit_hub::BoxFuture<'a, Result<SheetRun, String>> {
+        Box::pin(async move {
+            if id == "alpha.nvim/refused" {
+                return Err("the run could not be started".to_owned());
+            }
+            Ok(SheetRun {
+                code: Some(1),
+                lines: vec![format!("sheet of {id}: fail at step 2")],
+            })
+        })
+    }
+}
+
+async fn job_over(r: &Rig) -> Value {
+    for _ in 0..200 {
+        let (_, doc) = get(r, "/api/tasks/sheet_run").await;
+        if doc["state"] != "running" {
+            return doc;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    panic!("the run did not end");
 }
 
 /// A login entry that holds its value (no test touches the registry of the machine).
@@ -63,6 +92,7 @@ async fn rig_full(
     with_opener: bool,
     pick: Option<&str>,
     login_entry: Option<Arc<dyn LoginEntry>>,
+    runs: Option<Arc<SheetRunJob>>,
 ) -> Rig {
     let base = Scratch::new(&format!("open-{name}"));
     let vault = base.join("vault");
@@ -150,6 +180,7 @@ row two
             opener,
             login: login_entry,
             all_vaults: None,
+            sheet_run: runs,
         },
     )
     .await
@@ -323,7 +354,7 @@ async fn the_login_entry_is_read_set_and_taken_away_and_only_with_a_session() {
         on: Mutex::new(Some(false)),
         refuse: false,
     });
-    let r = rig_full("autostart", false, None, Some(login.clone())).await;
+    let r = rig_full("autostart", false, None, Some(login.clone()), None).await;
     let route = "/api/tasks/autostart";
     assert_eq!(get(&r, route).await.1["on"], false);
     let (status, doc) = post(&r, route, r#"{"on":true}"#, true).await;
@@ -353,7 +384,7 @@ async fn the_login_entry_is_read_set_and_taken_away_and_only_with_a_session() {
         on: Mutex::new(Some(false)),
         refuse: true,
     });
-    let r2 = rig_full("autostart-refused", false, None, Some(refusing)).await;
+    let r2 = rig_full("autostart-refused", false, None, Some(refusing), None).await;
     let (status, doc) = post(&r2, route, r#"{"on":true}"#, true).await;
     assert_eq!(
         (status, doc["error"]["code"].as_str()),
@@ -364,6 +395,47 @@ async fn the_login_entry_is_read_set_and_taken_away_and_only_with_a_session() {
     let none = rig("autostart-none", false).await;
     assert!(get(&none, route).await.1["on"].is_null());
     assert_eq!(post(&none, route, r#"{"on":true}"#, true).await.0, 404);
+}
+
+#[tokio::test]
+async fn the_test_sheets_of_a_task_run_as_one_job_and_only_with_a_session() {
+    let job = Arc::new(SheetRunJob::new(Arc::new(FakeSheets)));
+    let r = rig_full("sheets", false, None, None, Some(job)).await;
+    let route = "/api/tasks/sheet_run";
+    assert_eq!(get(&r, route).await.1["state"], "idle");
+    let (status, doc) = post(&r, route, r#"{"id":"alpha.nvim/t1"}"#, true).await;
+    assert_eq!(status, 200, "{doc}");
+    let over = job_over(&r).await;
+    assert_eq!(over["state"], "done", "{over}");
+    assert_eq!(over["code"], 1);
+    assert_eq!(over["lines"][0], "sheet of alpha.nvim/t1: fail at step 2");
+
+    // A name is all the page gives: not a path, not more fields, not without a session.
+    for bad in [
+        r#"{"id":"../x"}"#,
+        r#"{"id":"a"}"#,
+        "{}",
+        r#"{"id":"a/b","sheet":"x"}"#,
+    ] {
+        assert_eq!(post(&r, route, bad, true).await.0, 400, "{bad}");
+    }
+    assert_eq!(
+        post(&r, route, r#"{"id":"alpha.nvim/t1"}"#, false).await.0,
+        401
+    );
+
+    // What could not start is told, and the next run may start.
+    post(&r, route, r#"{"id":"alpha.nvim/refused"}"#, true).await;
+    assert_eq!(job_over(&r).await["state"], "failed");
+
+    // A hub without it says so.
+    let none = rig("sheets-none", false).await;
+    assert_eq!(
+        post(&none, route, r#"{"id":"alpha.nvim/t1"}"#, true)
+            .await
+            .0,
+        404
+    );
 }
 
 #[tokio::test]

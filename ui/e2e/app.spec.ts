@@ -7110,6 +7110,38 @@ test('without a login entry the Options menu has no such switch', async ({ page 
   await page.keyboard.press('Escape');
 });
 
+test('the test sheet of a task runs from the acceptance view, and says how it ended', async ({ page }) => {
+  // No real run: a sheet of a fixture must not start testing.nvim on this machine.
+  const posted: unknown[] = [];
+  let looks = 0;
+  await page.route('**/api/tasks/sheet_run', async (route) => {
+    const json = (doc: unknown) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(doc) });
+    if (route.request().method() === 'POST') {
+      posted.push(route.request().postDataJSON());
+      return json({ state: 'running', id: (posted[0] as { id: string }).id });
+    }
+    looks += 1;
+    const id = (posted[0] as { id: string }).id;
+    return json(looks < 2 ? { state: 'running', id } : { state: 'done', id, code: 1, lines: ['sheet abnahme.sheet: fail at step 2'] });
+  });
+  await pair(page);
+  await showList(page);
+  await page.keyboard.press('g');
+  await page.keyboard.press('a');
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Acceptance');
+  const task = page.locator('article.task').first();
+  const button = task.getByRole('button', { name: 'Run the test sheet' });
+  await button.click();
+  await expect(task.locator('.run')).toContainText('The test sheet is running');
+  await expect(button).toBeDisabled();
+  await expect(task.locator('.run')).toContainText('The test sheet ran red.', { timeout: 10_000 });
+  await expect(task.locator('.run pre')).toContainText('fail at step 2');
+  await expect(button).toBeEnabled();
+  expect(posted).toEqual([{ id: await task.getAttribute('data-task') }]);
+  await expectAccessible(page, 'a test sheet that ran');
+  expect(consoleProblems.get(page)).toEqual([]);
+});
+
 test('an entry of the legend narrows the statistics and the view stays; a second click and the reset take it away', async ({ page }) => {
   await pair(page);
   await showList(page);

@@ -868,6 +868,46 @@ pub(super) async fn vault_reveal(State(st): State<Arc<Shared>>, body: Bytes) -> 
     }
 }
 
+/// `GET /api/tasks/sheet_run`: where the run of test sheets stands.
+pub(super) async fn sheet_run_state(State(st): State<Arc<Shared>>) -> Response {
+    match st.rt().sheet_run.clone() {
+        Some(job) => axum::Json(job.state()).into_response(),
+        None => error_body(
+            StatusCode::NOT_FOUND,
+            "sheet_run_unavailable",
+            "this hub cannot run test sheets",
+        ),
+    }
+}
+
+/// `POST /api/tasks/sheet_run` `{ "id": "<area>/<slug>" }`: run the test sheets of that task, unless a run is under way. The
+/// page names a task and nothing else: which sheets, where they lie and whether they may run is decided behind the engine.
+pub(super) async fn sheet_run_start(State(st): State<Arc<Shared>>, body: Bytes) -> Response {
+    let map = match vault_request(&body, &["id"]) {
+        Ok(m) => m,
+        Err(r) => return r,
+    };
+    let Some(id) = map
+        .get("id")
+        .and_then(serde_json::Value::as_str)
+        .filter(|id| valid_task_id(id))
+    else {
+        return error_body(
+            StatusCode::BAD_REQUEST,
+            "bad_id",
+            "id must be the id of a task",
+        );
+    };
+    match st.rt().sheet_run.clone() {
+        Some(job) => axum::Json(job.start(id)).into_response(),
+        None => error_body(
+            StatusCode::NOT_FOUND,
+            "sheet_run_unavailable",
+            "this hub cannot run test sheets",
+        ),
+    }
+}
+
 /// `GET /api/tasks/check_all`: where the check over all vaults stands.
 pub(super) async fn check_all_state(State(st): State<Arc<Shared>>) -> Response {
     match st.rt().all_vaults.clone() {

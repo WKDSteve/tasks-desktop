@@ -87,6 +87,8 @@ struct EngineState {
     vault: Option<PathBuf>,
     /// The Neovim that was found, for opening a file in it.
     nvim: Option<PathBuf>,
+    /// The engine's command line, for a run of test sheets.
+    script: Option<PathBuf>,
 }
 
 /// Find the engine and ask it `hello`.
@@ -101,6 +103,7 @@ async fn engine_state(file: &FileConfig, env: &Env) -> EngineState {
         note: Some(note),
         vault: None,
         nvim: None,
+        script: None,
     };
     let setup = match discover(file, env).await {
         Ok(setup) => setup,
@@ -137,6 +140,7 @@ async fn engine_state(file: &FileConfig, env: &Env) -> EngineState {
             engine: Some(Arc::new(engine)),
             vault: Some(setup.vault.value.clone()),
             nvim: Some(setup.nvim.value.clone()),
+            script: Some(crate::discovery::engine_script(&setup.engine_dir.value)),
             note: setup
                 .lib_problem
                 .as_ref()
@@ -302,6 +306,29 @@ fn refusal(o: Overlap) -> String {
         Overlap::Nested => FOLDER_NESTED,
     }
     .to_owned()
+}
+
+impl ConfigVaults {
+    /// The command line for a run of test sheets, in the vault that is read now.
+    async fn sheet_command(&self) -> Result<crate::sheetrun::SheetCommand, String> {
+        let state = engine_state(&self.fresh()?.effective(), &self.env).await;
+        match (state.nvim, state.script, state.vault) {
+            (Some(nvim), Some(script), Some(vault)) => Ok(crate::sheetrun::SheetCommand {
+                nvim,
+                script,
+                vault,
+            }),
+            _ => {
+                if let Some(note) = &state.note {
+                    eprintln!("note: no run of test sheets: {note}");
+                }
+                Err(format!(
+                    "the engine is not ready ({})",
+                    state.status.problem.unwrap_or("engine_unavailable")
+                ))
+            }
+        }
+    }
 }
 
 impl crate::allvaults::VaultEngines for ConfigVaults {
@@ -618,6 +645,15 @@ pub async fn serve(opts: ServeOptions) -> Result<(), String> {
     let all_vaults = Arc::new(crate::allvaults::AllVaultsCheck::new(
         Arc::clone(&config_vaults) as Arc<dyn crate::allvaults::VaultEngines>,
     ));
+    let for_sheets = Arc::clone(&config_vaults);
+    let sheet_run = Arc::new(crate::sheetrun::SheetRunJob::new(Arc::new(
+        crate::sheetrun::SystemSheetRunner {
+            command: Arc::new(move || {
+                let vaults = Arc::clone(&for_sheets);
+                Box::pin(async move { vaults.sheet_command().await })
+            }),
+        },
+    )));
     let vaults: Arc<dyn VaultAdmin<VaultTarget>> = config_vaults;
     let snapshot_root = env.path("REPOS_DIR");
     let extras = || Extras {
@@ -629,6 +665,7 @@ pub async fn serve(opts: ServeOptions) -> Result<(), String> {
         }),
         login: Some(Arc::new(crate::loginentry::SystemLoginEntry)),
         all_vaults: Some(Arc::clone(&all_vaults)),
+        sheet_run: Some(Arc::clone(&sheet_run)),
     };
     let running = match server::start_with(make_cfg(want), extras()).await {
         Ok(r) => r,

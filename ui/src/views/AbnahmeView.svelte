@@ -114,8 +114,31 @@
       <header class="thead">
         <h3>{markHidden(task.title)}</h3>
         <span class="id">{task.id}</span>
+        {#if app.machineActions}
+          <button
+            type="button"
+            class="link"
+            data-action="run-sheets"
+            disabled={app.sheetRun?.state === 'running'}
+            onclick={() => void app.runSheets(task.id)}>{t('abnahme.run_sheets')}</button
+          >
+        {/if}
         <button type="button" class="link" onclick={() => app.reveal(task.id)}>{t('abnahme.open_task')}</button>
       </header>
+      {#if app.sheetRun?.id === task.id && app.sheetRun.state !== 'idle'}
+        <div class="run" data-run={app.sheetRun.state} role="status">
+          {#if app.sheetRun.state === 'running'}
+            {t('abnahme.run_running')}
+          {:else if app.sheetRun.state === 'failed'}
+            {markHidden(app.sheetRun.message ?? '')}
+          {:else}
+            <strong>{t(app.sheetRun.code === 0 ? 'abnahme.run_green' : app.sheetRun.code === 1 ? 'abnahme.run_red' : 'abnahme.run_not_run')}</strong>
+            {#if app.sheetRun.lines && app.sheetRun.lines.length > 0}
+              <pre class="grid">{markHidden(app.sheetRun.lines.join('\n'))}</pre>
+            {/if}
+          {/if}
+        </div>
+      {/if}
       {#if !entry || entry.state === 'loading'}
         <p class="note" role="status">{t('abnahme.loading')}</p>
       {:else if entry.state === 'failed'}
