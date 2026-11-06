@@ -202,6 +202,7 @@ async function begin(folder: string | null, readOnly: boolean): Promise<void> {
       save: (name, text, type) => saveText(document, name, text, type),
       copy: (text) => copyText(navigator.clipboard, text),
       print: (sheet) => printSheet(document, window, sheet),
+      png: async (sheet, name) => (await import('./lib/pngExport')).savePng(document, sheet, name),
     },
   };
   const state = new AppState(env);

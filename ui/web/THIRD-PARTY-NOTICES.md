@@ -16,6 +16,7 @@ below; each page also carries this text as a comment. The versions come from the
 | mdurl | 2.1.0 | MIT | tasks.html |
 | uc.micro | 3.0.0 | MIT | tasks.html |
 | punycode.js | 2.3.1 | MIT | tasks.html |
+| modern-screenshot | 4.7.0 | MIT | tasks.html |
 | entities | 8.1.0 | BSD-2-Clause | tasks.html |
 
 First-party code in the pages, all MIT, Copyright (c) 2026 Stefan Bartl: tasks-desktop (UI, worker, `vim` shim), appkit
@@ -35,6 +36,7 @@ Neovim `vim.fn.tolower` (data, not code). `probe.html` contains no third-party c
 - mdurl: Copyright (c) 2015 Vitaly Puzrin, Alex Kocharin; parts Copyright Joyent, Inc. and other Node contributors.
 - uc.micro: Copyright Mathias Bynens.
 - punycode.js: Copyright Mathias Bynens.
+- modern-screenshot: Copyright (c) 2021-present wxm.
 - entities: Copyright (c) Felix Boehm.
 
 ## MIT License (all components above except entities)

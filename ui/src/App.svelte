@@ -287,7 +287,8 @@
         disabled: !ready || !app.exportable,
         onselect: () => void app.exportView(format, how),
       }))
-      .concat({ kind: 'action' as const, label: t('menu.print_view'), hint: t('hint.item.menu.print_view'), disabled: !ready || !app.exportable, onselect: () => void app.printView() });
+      .concat({ kind: 'action' as const, label: t('menu.print_view'), hint: t('hint.item.menu.print_view'), disabled: !ready || !app.exportable, onselect: () => void app.printView() })
+      .concat(app.canPng ? [{ kind: 'action' as const, label: t('export.png'), hint: t('hint.item.menu.png'), disabled: !ready || !app.exportable, onselect: () => void app.pngView() }] : []);
 
   /** The task the engine names as the next one to take: the one the tile of that name shows. */
   const nextTaskId = $derived(app.next?.task?.id ?? null);

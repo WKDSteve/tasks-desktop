@@ -31,6 +31,7 @@ export const COMPONENTS = [
   { name: 'mdurl', pkg: 'mdurl', license: 'MIT', in: PAGE, copyright: 'Copyright (c) 2015 Vitaly Puzrin, Alex Kocharin; parts Copyright Joyent, Inc. and other Node contributors.' },
   { name: 'uc.micro', pkg: 'uc.micro', license: 'MIT', in: PAGE, copyright: 'Copyright Mathias Bynens.' },
   { name: 'punycode.js', pkg: 'punycode.js', license: 'MIT', in: PAGE, copyright: 'Copyright Mathias Bynens.' },
+  { name: 'modern-screenshot', pkg: 'modern-screenshot', license: 'MIT', in: PAGE, copyright: 'Copyright (c) 2021-present wxm.' },
   { name: 'entities', pkg: 'entities', license: 'BSD-2-Clause', in: PAGE, copyright: 'Copyright (c) Felix Boehm.' },
 ];
 

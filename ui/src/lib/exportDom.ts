@@ -26,6 +26,40 @@ export function clearPrintPages(doc: Document): void {
   }
 }
 
+/** The sheet as elements. Text only, set with `textContent`: a title is never read as markup. */
+export function sheetElement(doc: Document, sheet: PrintSheet, id: string): HTMLDivElement {
+  const page = doc.createElement('div');
+  page.id = id;
+  const text = <K extends keyof HTMLElementTagNameMap>(tag: K, value: string): HTMLElementTagNameMap[K] => {
+    const el = doc.createElement(tag);
+    el.textContent = value;
+    return el;
+  };
+  page.append(text('h1', sheet.title));
+  for (const fact of sheet.facts) page.append(text('p', fact));
+  for (const section of sheet.sections) {
+    if (section.heading !== undefined) page.append(text('h2', section.heading));
+    const table = doc.createElement('table');
+    const head = doc.createElement('thead');
+    const headRow = doc.createElement('tr');
+    for (const h of sheet.headers) {
+      const th = text('th', h);
+      th.scope = 'col';
+      headRow.append(th);
+    }
+    head.append(headRow);
+    const body = doc.createElement('tbody');
+    for (const row of section.rows) {
+      const tr = doc.createElement('tr');
+      for (const cell of row) tr.append(text('td', cell));
+      body.append(tr);
+    }
+    table.append(head, body);
+    page.append(table);
+  }
+  return page;
+}
+
 /**
  * Put the sheet into the document as a page of its own and open the print dialog; the page goes when the dialog is
  * done (`afterprint`). Text only, set with `textContent`: a title is never read as markup.
@@ -33,35 +67,7 @@ export function clearPrintPages(doc: Document): void {
 export function printSheet(doc: Document, win: Pick<Window, 'print' | 'addEventListener'>, sheet: PrintSheet): boolean {
   try {
     clearPrintPages(doc);
-    const page = doc.createElement('div');
-    page.id = VIEW_PRINT_ID;
-    const text = <K extends keyof HTMLElementTagNameMap>(tag: K, value: string): HTMLElementTagNameMap[K] => {
-      const el = doc.createElement(tag);
-      el.textContent = value;
-      return el;
-    };
-    page.append(text('h1', sheet.title));
-    for (const fact of sheet.facts) page.append(text('p', fact));
-    for (const section of sheet.sections) {
-      if (section.heading !== undefined) page.append(text('h2', section.heading));
-      const table = doc.createElement('table');
-      const head = doc.createElement('thead');
-      const headRow = doc.createElement('tr');
-      for (const h of sheet.headers) {
-        const th = text('th', h);
-        th.scope = 'col';
-        headRow.append(th);
-      }
-      head.append(headRow);
-      const body = doc.createElement('tbody');
-      for (const row of section.rows) {
-        const tr = doc.createElement('tr');
-        for (const cell of row) tr.append(text('td', cell));
-        body.append(tr);
-      }
-      table.append(head, body);
-      page.append(table);
-    }
+    const page = sheetElement(doc, sheet, VIEW_PRINT_ID);
     doc.body.append(page);
     doc.documentElement.classList.add(VIEW_PRINT_CLASS);
     win.addEventListener(

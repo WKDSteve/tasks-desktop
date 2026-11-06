@@ -87,6 +87,11 @@
    * The page for the printer: the popup closes first and is drawn closed (the dialog blocks the page until it is done,
    * and would stand over the open popup otherwise).
    */
+  function png(): void {
+    open = false;
+    void app.pngView();
+  }
+
   function print(): void {
     flushSync(() => (open = false));
     summary?.focus();
@@ -136,6 +141,9 @@
       >
     {/each}
     <button type="button" disabled={app.phase !== 'ready'} onkeydown={closeOnEscape} onclick={print}>{t('export.print')}</button>
+    {#if app.canPng}
+      <button type="button" disabled={app.phase !== 'ready'} onkeydown={closeOnEscape} onclick={png}>{t('export.png')}</button>
+    {/if}
   </div>
 </details>
 

@@ -167,6 +167,8 @@ export interface Env {
     save(name: string, text: string, type: string): boolean;
     copy(text: string): Promise<boolean>;
     print(sheet: PrintSheet): boolean;
+    /** The sheet as a picture; only where the policy of the page allows it to be drawn (the web variant). */
+    png?: (sheet: PrintSheet, name: string) => Promise<boolean>;
   };
 }
 
@@ -1742,11 +1744,31 @@ export class App {
    * own selection), and a chip that names an area which may not leave is not.
    */
   printView(): void {
+    const sheet = this.viewSheet();
+    if (sheet && !this.env.out.print(sheet.sheet)) this.say('error', 'print.failed');
+  }
+
+  /** Whether this page can make a picture of a view. */
+  get canPng(): boolean {
+    return this.env.out.png !== undefined;
+  }
+
+  /** The sheet of `printView` as one long picture. */
+  async pngView(): Promise<void> {
+    const made = this.viewSheet();
+    if (!made || !this.env.out.png) return;
+    const ok = await this.env.out.png(made.sheet, exportFileName(this.view, this.localDay(), 'markdown').replace(/\.[a-z]+$/, '.png'));
+    if (ok) this.say('ok', 'export.png_saved', { n: made.count });
+    else this.say('error', 'export.png_failed');
+  }
+
+  /** What the view shows for the way out of the page, as a sheet; null when that is nothing (it says so). */
+  private viewSheet(): { sheet: PrintSheet; count: number } | null {
     const { printRows: rows, kept } = this.exportRows();
     const count = taskCount(rows);
     if (count === 0) {
       this.sayNothingExported(kept);
-      return;
+      return null;
     }
     const t = (key: Key, params: Record<string, string | number> = {}) => translate(this.lang, key, params);
     const open = this.viewsState.open;
@@ -1779,7 +1801,7 @@ export class App {
       task.effort ?? '',
       task.actor === undefined ? '' : labelOf(this.lang, 'actor', task.actor),
     ];
-    if (!this.env.out.print(sheetOf(rows, t('app.title'), facts, headers, cells))) this.say('error', 'print.failed');
+    return { sheet: sheetOf(rows, t('app.title'), facts, headers, cells), count };
   }
 
   /** Whether `words` are found in the id or the title of a task of an area that may not leave (or name such an area). */

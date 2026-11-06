@@ -75,6 +75,7 @@ export function paletteActions(app: App): PaletteAction[] {
     add(`export.copy.${format}`, t('palette.export', { what: t('export.copy', { format: name }) }), () => app.exportView(format, 'copy'));
   }
   if (app.exportable) add('export.print', t('palette.export', { what: t('export.print') }), () => app.printView());
+  if (app.exportable && app.canPng) add('export.png', t('palette.export', { what: t('export.png') }), () => app.pngView());
 
   if (app.conflicts.length > 0) add('conflicts.show', t('palette.conflicts', { n: app.conflicts.length }), () => app.openConflicts());
   add('rescan', t('menu.rescan'), () => app.focused());

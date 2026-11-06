@@ -14,6 +14,9 @@ importers:
       appkit-web:
         specifier: github:WKDSteve/appkit#v0.36.0&path:web-kit
         version: https://codeload.github.com/WKDSteve/appkit/tar.gz/f496be7386046a8c698fea55fd680be8f2f60c1f#path:web-kit
+      modern-screenshot:
+        specifier: 4.7.0
+        version: 4.7.0
       wasmoon:
         specifier: 1.16.0
         version: 1.16.0
@@ -407,6 +410,9 @@ packages:
 
   mdurl@2.1.0:
     resolution: {integrity: sha512-1+HBaOx0zi/dQWht8rNv9MYf9qqpqL/kxI0hXImU6Y547zM6Sni8BQibt7ifgMcYtQg41ao3Ivd6cnSM86inpg==}
+
+  modern-screenshot@4.7.0:
+    resolution: {integrity: sha512-9YxN+ddPSMMlhylOv25VHzXrl9u67QRxoh7+SEewGtgUw7t6hHTrjptSDJUSne9oG4Xk/h2cwG15nIt4Hc9ujg==}
 
   mri@1.2.0:
     resolution: {integrity: sha512-tzzskb3bG8LvYGFF/mDTpq3jpI6Q9wc3LEmBaghu+DdCssd1FakN7Bc0hVNmEyGq1bq3RgfkCb3cmQLpNPOroA==}
@@ -851,6 +857,8 @@ snapshots:
       uc.micro: 3.0.0
 
   mdurl@2.1.0: {}
+
+  modern-screenshot@4.7.0: {}
 
   mri@1.2.0: {}
 
