@@ -14,6 +14,7 @@
 // a missing part. What the compiled script does at run time is checked by the browser test (e2e-web/), which opens the
 // file and counts the requests.
 
+import { noticesText, readLock } from './notices.mjs';
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -38,7 +39,7 @@ export const PART_IDS = ['worker', 'wasm', 'bundle', 'shim'];
 
 /** The single file. `parts` maps each id of PART_IDS to its bytes. */
 export function assemble({ css, js, parts, build }) {
-  return assemblePage({ css, js, partIds: PART_IDS, parts, csp: CSP, title: 'tasks', comment: `tasks-desktop web variant, build ${build}` });
+  return assemblePage({ css, js, partIds: PART_IDS, parts, csp: CSP, title: 'tasks', comment: `tasks-desktop web variant, build ${build}\n\n${noticesText(readLock())}\n` });
 }
 
 /** What the page without the contents of its scripts and styles may not hold; empty when it is fine. */

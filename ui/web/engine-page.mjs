@@ -9,6 +9,7 @@
 // the browser (DecompressionStream), so the page also measures what the real page will weigh. The build refuses a page
 // that loads a file or names a URL outside the embedded parts (`verify` of probe/build.mjs).
 
+import { noticesText, readLock } from './notices.mjs';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
@@ -70,6 +71,7 @@ function main() {
   const { commit: engineCommit, lib_commit: libCommit } = engineBundle.engine;
   let html = readFileSync(join(here, 'engine-page.src.html'), 'utf8')
     .replaceAll('__BUILD__', commit())
+    .replace('__NOTICES__', () => noticesText(readLock()))
     .replace('__ENGINE__', `tasks.nvim ${engineCommit.slice(0, 7)}, lib.nvim ${libCommit.slice(0, 7)}`)
     .replace('__SIZES__', () => JSON.stringify(sizes))
     .replace('__EMBEDDED_JS__', () => classic(src('embedded.ts')));

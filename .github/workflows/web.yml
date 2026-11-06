@@ -97,9 +97,10 @@ jobs:
           rm -rf "$publish"
           git clone --quiet https://github.com/WKDSteve/tasks-web "$publish"
           cp ui/dist-web/tasks.html "$publish/tasks.html"
+          cp ui/web/THIRD-PARTY-NOTICES.md "$publish/THIRD-PARTY-NOTICES.md"
           cd "$publish"
           sha256sum *.html > SHA256SUMS
-          git add tasks.html SHA256SUMS
+          git add tasks.html SHA256SUMS THIRD-PARTY-NOTICES.md
           if git diff --cached --quiet; then
             echo "tasks.html is the same as the published one"
           else
