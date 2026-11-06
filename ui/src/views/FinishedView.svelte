@@ -22,7 +22,7 @@
     app.setFinishedPrefs({ ...app.finishedPrefs, ...change });
   /** A month or a week clicked in the table: it replaces the period until it is taken off. */
   let drill = $state<{ range: Range; label: string } | null>(null);
-  let area = $state<string | undefined>(undefined);
+  let area = $state<string | undefined>(untrack(() => app.takeFinishedStartArea()));
 
   let doc = $state<Finished | null>(null);
   let items = $state<Finished['items']>([]);

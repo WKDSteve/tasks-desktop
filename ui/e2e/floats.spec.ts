@@ -144,6 +144,10 @@ test('a task is detached from its float into a window of its own, which shows th
   await body.evaluate((el) => (el.scrollTop = 100_000));
   expect(await box(done)).toEqual(before);
   await expect(done).toBeInViewport();
+  await body.evaluate((el) => (el.scrollTop = 0));
+  await win.locator('body').evaluate((el) => (el as HTMLElement).focus());
+  await win.keyboard.press('PageDown');
+  await expect.poll(() => body.evaluate((el) => el.scrollTop)).toBeGreaterThan(0);
   const cardBox = await box(card);
   expect(cardBox.y + cardBox.height - (before.y + before.height)).toBeLessThan(40);
   expect(await win.evaluate(() => location.hash)).toBe('#task=lib.nvim%2Fbeta');
@@ -544,6 +548,14 @@ test('the detail: the title on a line of its own, a summary of several lines, Do
       await expect(done).toBeInViewport();
       expect((await box(scroller)).y + (await box(scroller)).height).toBeLessThanOrEqual(d.y);
     }
+    // With the focus on a button of the head the keys still scroll the task, and on paper nothing is cut off.
+    await scroller.evaluate((el) => (el.scrollTop = 0));
+    await f.locator('button[data-close]').focus();
+    await page.keyboard.press('PageDown');
+    await expect.poll(() => scroller.evaluate((el) => el.scrollTop)).toBeGreaterThan(0);
+    await page.emulateMedia({ media: 'print' });
+    expect(await scroller.evaluate((el) => getComputedStyle(el).overflowY)).toBe('visible');
+    await page.emulateMedia({ media: 'screen' });
     for (const theme of ['dark', 'light'] as const) {
       await page.emulateMedia({ colorScheme: theme });
       await expectAccessible(page, `the detail with Done in its corner (${theme})`);

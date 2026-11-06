@@ -4433,6 +4433,7 @@ test('a step is added to the plan of a task, and a step or a note becomes a task
   await detail.getByRole('button', { name: /Make a task of the step: .*the second step/ }).click();
   const capture = page.getByRole('dialog', { name: 'New task' });
   await expect(capture.getByLabel('Title')).toHaveValue('the second step');
+  await expect(capture.getByLabel('Area')).toHaveValue('lib.nvim');
   await capture.getByRole('button', { name: /Cancel|Close/ }).first().click();
   await expect(capture).toHaveCount(0);
   await detail.getByRole('textbox', { name: /Add a note/ }).fill('a note that is a task');
@@ -4440,6 +4441,26 @@ test('a step is added to the plan of a task, and a step or a note becomes a task
   await expect(capture.getByLabel('Title')).toHaveValue('a note that is a task');
   await page.keyboard.press('Escape');
   expect(readFileSync(file, 'utf8')).toMatch(/\[ \] 2\. the second step/);
+  expect(await violations(page)).toEqual([]);
+});
+
+test('with the save button a category stays what it is: taken away with no crash, and one from a tag stays ticked', async ({ page }) => {
+  const slug = `draft-cat-e2e-${Date.now().toString(36)}`;
+  const file = join(state().vault, 'lib.nvim', 'ROADMAP', 'tasks', `${slug}.md`);
+  writeFileSync(file, `---\ntitle: Draft category\nstatus: open\nkind: bug\ntags: [docs]\n---\n\nbody\n`);
+  await page.addInitScript(() => localStorage.setItem('tasks-desktop.save-mode', 'manual'));
+  await watchViolations(page);
+  await pair(page);
+  await showList(page);
+  await open(page, `lib.nvim/${slug}`);
+  const category = page.locator('aside.detail fieldset[data-field="category"]');
+  const security = category.getByRole('checkbox', { name: 'security' });
+  await security.check();
+  await expect(category.getByRole('checkbox', { name: 'docs' })).toBeChecked();
+  await security.uncheck();
+  await expect(security).not.toBeChecked();
+  await expect(category.getByRole('checkbox', { name: 'docs' })).toBeChecked();
+  await expect(category.getByRole('checkbox', { name: 'bug' })).toBeChecked();
   expect(await violations(page)).toEqual([]);
 });
 
@@ -6960,6 +6981,34 @@ test('the statistics show what the engine counted as finished in the last 30 day
   await figure.click();
   await expect(page.getByRole('heading', { level: 1 })).toHaveText('Finished');
   expect(consoleProblems.get(page)).toEqual([]);
+});
+
+test('a part of the page that cannot be loaded says so and offers to load the page again', async ({ page }) => {
+  await page.route(/assets\/StatsView-.*\.js$/, (route) => route.abort());
+  await page.route(/assets\/docTexts-.*\.js$/, (route) => route.abort());
+  await pair(page);
+  await showList(page);
+  await page.keyboard.press('g');
+  await page.keyboard.press('s');
+  const alert = page.locator('main').getByRole('alert').filter({ hasText: 'could not be loaded' });
+  await expect(alert).toBeVisible();
+  await expect(alert.getByRole('button', { name: 'Load again' })).toBeVisible();
+  await expectAccessible(page, 'a part that could not be loaded');
+});
+
+test('the number of the finished tasks opens them for the area of the filter', async ({ page }) => {
+  await pair(page);
+  await showList(page);
+  await page.keyboard.press('g');
+  await page.keyboard.press('s');
+  await page.getByRole('button', { name: /^lib\.nvim: \d+ open tasks - show in the list$/ }).click();
+  await page.keyboard.press('g');
+  await page.keyboard.press('s');
+  const asked = page.waitForRequest((r) => r.url().includes('/api/tasks/finished') && r.url().includes('area=lib.nvim'));
+  await page.locator('button.figure[data-figure="finished"]').click();
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Finished');
+  await asked;
+  await page.evaluate(() => localStorage.removeItem('tasks-desktop.filter'));
 });
 
 test('an entry of the legend narrows the statistics and the view stays; a second click and the reset take it away', async ({ page }) => {

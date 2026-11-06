@@ -166,6 +166,19 @@ export function categoriesToWrite(
   return order.filter((c) => ticked.includes(c) && !categoryDerived(c, kind, tags));
 }
 
+/**
+ * The categories the detail shows while a draft may hold them: the task's own (absent when the draft took them all
+ * away), and what the kind and the tags give anyway, whatever the draft says.
+ */
+export function categoriesShown(
+  order: readonly string[],
+  own: readonly string[] | undefined,
+  kind: string,
+  tags: readonly string[],
+): string[] {
+  return order.filter((c) => own?.includes(c) || categoryDerived(c, kind, tags));
+}
+
 /** The title of a task made from a step: the text without the number the plan gives it (`2. tidy up`). */
 export function stepTitle(text: string): string {
   return text.replace(/^\d+\.\s+/, '').trim();

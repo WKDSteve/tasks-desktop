@@ -66,7 +66,7 @@
     if (app.capturing && !dialog.open) {
       // The area of the filter, when exactly one is chosen, is the one most
       // likely meant (an area group with one member counts; a group is never a place to write to).
-      area = app.writeArea ?? areas[0]?.name ?? '';
+      area = app.captureArea ?? app.writeArea ?? areas[0]?.name ?? '';
       title = app.captureTitle;
       prio = '';
       kind = '';

@@ -123,6 +123,7 @@
   const finished = $derived(finishedDoc ? finishedPerArea(finishedDoc, app.matchAreas) : null);
   function openFinished(): void {
     app.setFinishedPrefs({ ...app.finishedPrefs, preset: '30' });
+    app.finishedStartArea = app.finishedArea;
     app.setView('done');
   }
   const days = (n: number) => formatNumber(app.lang, Math.round(n * 10) / 10);

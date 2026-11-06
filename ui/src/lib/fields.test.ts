@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_RANGES, badLink, badTag, bodyFromSections, categoriesToWrite, categoryDerived, isWebLink, stepTitle, listEditable, oneLine, parseTags, rangesOf, scaffoldOf, scaffoldRows, severityApplies, splitOther, tagsChanged, tagsText } from './fields';
+import { DEFAULT_RANGES, badLink, badTag, bodyFromSections, categoriesShown, categoriesToWrite, categoryDerived, isWebLink, stepTitle, listEditable, oneLine, parseTags, rangesOf, scaffoldOf, scaffoldRows, severityApplies, splitOther, tagsChanged, tagsText } from './fields';
 
 describe('a category that comes from the kind or a tag', () => {
   it('is bug for a bug and every tag spelled like the category', () => {
@@ -7,6 +7,11 @@ describe('a category that comes from the kind or a tag', () => {
     expect(categoryDerived('bug', 'task', [])).toBe(false);
     expect(categoryDerived('docs', 'task', ['docs'])).toBe(true);
     expect(categoryDerived('docs', 'task', ['ui'])).toBe(false);
+  });
+  it('stays in what the detail shows when a draft holds other categories or none', () => {
+    expect(categoriesShown(['bug', 'docs', 'tests'], ['tests'], 'task', ['docs'])).toEqual(['docs', 'tests']);
+    expect(categoriesShown(['bug', 'docs'], undefined, 'bug', [])).toEqual(['bug']);
+    expect(categoriesShown(['bug', 'docs'], undefined, 'task', [])).toEqual([]);
   });
   it('is not written to the task: only what the box itself holds is', () => {
     expect(categoriesToWrite(['bug', 'docs', 'tests'], ['bug', 'docs', 'tests'], 'bug', ['docs'])).toEqual(['tests']);

@@ -9,6 +9,7 @@
   // goes back to where it was (the dialog does that).
   import type { App } from '../lib/app.svelte';
   import { floating } from '../lib/floating';
+  import { scrollByKey } from '../lib/scrollKeys';
   import { translate, type Key } from '../lib/i18n';
   import Detail from './Detail.svelte';
   import Toast from './Toast.svelte';
@@ -33,6 +34,7 @@
 <dialog
   bind:this={dialog}
   use:closeOnBackdrop
+  onkeydown={(e) => scrollByKey(e, dialog?.querySelector('.detail-body'))}
   use:floating={{ kind: 'task', moveLabel: t('float.move'), moveHint: t('hint.float.move'), handle: false }}
   class="peek"
   aria-label={t('peek.label')}

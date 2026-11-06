@@ -376,6 +376,8 @@ export class App {
   capturing = $state(false);
   /** The title the capture dialog opens with: a line of a task that becomes a task of its own. */
   captureTitle = $state('');
+  /** The area the capture dialog opens with, for such a line: that of its task. */
+  captureArea = $state<string | undefined>(undefined);
   /** A card dropped among cards of another priority, waiting for the person's answer. */
   repriority = $state.raw<{ id: string; from: string; prio: number; ops: Op[] } | null>(null);
   /**
@@ -967,11 +969,12 @@ export class App {
     this.toast = null;
   }
 
-  openCapture(title = ''): void {
+  openCapture(title = '', area?: string): void {
     if (this.phase !== 'ready') return;
     // Nothing could be created: said at once, not after the form was filled in.
     if (this.refusedReadOnly()) return;
     this.captureTitle = title;
+    this.captureArea = area;
     this.capturing = true;
   }
 
@@ -2633,6 +2636,14 @@ export class App {
   /** The engine's estimate of some open tasks (the statistics ask it for the tasks the filter keeps). */
   estimateOf(ids: string[], signal: AbortSignal): Promise<Estimate> {
     return this.env.hub.estimate({ ids }, signal);
+  }
+
+  /** The one area the finished tasks open with, from a number of the statistics: taken once by the view. */
+  finishedStartArea: string | undefined = undefined;
+  takeFinishedStartArea(): string | undefined {
+    const area = this.finishedStartArea;
+    this.finishedStartArea = undefined;
+    return area;
   }
 
   /** The open tasks `filter` keeps, found the way the list finds its filter. */

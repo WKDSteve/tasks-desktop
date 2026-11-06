@@ -20,6 +20,7 @@
     severityApplies,
     tagsChanged,
     tagsText,
+    categoriesShown,
     categoriesToWrite,
     categoryDerived,
     stepTitle,
@@ -262,6 +263,7 @@
     {#if task.summary}<p>{markHidden(task.summary)}</p>{/if}
 
     {@const shown = shownTask(task, app.draftOf(task.id))}
+    {@const cats = categoriesShown(app.ranges.categories, shown.category as string[] | undefined, shown.kind ?? '', shown.tags ?? [])}
     {@const pending = Object.keys(app.draftOf(task.id)).length}
     {#if app.saveMode === 'manual'}
       <!-- The fields are held until saved: what is held, and the two ways out of it. -->
@@ -477,12 +479,12 @@
         {/each}
         <label>
           <span data-hint={hintOf(app.lang, 'hint.field', 'severity')}>
-            {t('field.severity')}{#if !severityApplies(shown.kind ?? '', shown.category as string[]) && !shown.severity} <small>({t('field.severity_only')})</small>{/if}
+            {t('field.severity')}{#if !severityApplies(shown.kind ?? '', cats) && !shown.severity} <small>({t('field.severity_only')})</small>{/if}
           </span>
           <select
             value={shown.severity ?? ''}
             data-field="severity"
-            disabled={app.locked || (!severityApplies(shown.kind ?? '', shown.category as string[]) && !shown.severity)}
+            disabled={app.locked || (!severityApplies(shown.kind ?? '', cats) && !shown.severity)}
             onchange={(e) => void app.editField(shown.id, 'severity', e.currentTarget.value === '' ? null : e.currentTarget.value)}
           >
             <option value="">{t('field.none')}</option>
@@ -503,10 +505,10 @@
             <label class="check" data-hint={derived ? t('hint.ui.detail.category_derived') : undefined}>
               <input
                 type="checkbox"
-                checked={(shown.category as string[]).includes(c)}
+                checked={cats.includes(c)}
                 disabled={app.locked || derived}
                 onchange={(e) => {
-                  const ticked = app.ranges.categories.filter((x) => (x === c ? e.currentTarget.checked : (shown.category as string[]).includes(x)));
+                  const ticked = app.ranges.categories.filter((x) => (x === c ? e.currentTarget.checked : cats.includes(x)));
                   const next = categoriesToWrite(app.ranges.categories, ticked, shown.kind ?? '', shown.tags ?? []);
                   void app.editField(shown.id, 'category', next.length === 0 ? null : next);
                 }}
@@ -719,7 +721,7 @@
                   disabled={app.locked}
                   aria-label={t('detail.step_to_task', { text: step.text })}
                   data-hint={t('hint.ui.detail.to_task')}
-                  onclick={() => app.openCapture(stepTitle(step.text))}>{t('detail.to_task')}</button
+                  onclick={() => app.openCapture(stepTitle(step.text), task.area)}>{t('detail.to_task')}</button
                 >
               {/if}
             </li>
@@ -859,7 +861,7 @@
             type="button"
             disabled={app.locked || note.trim() === ''}
             data-hint={t('hint.ui.detail.to_task')}
-            onclick={() => app.openCapture(note.trim())}>{t('detail.note_to_task')}</button
+            onclick={() => app.openCapture(note.trim(), task.area)}>{t('detail.note_to_task')}</button
           >
         </div>
       {/if}
@@ -1145,6 +1147,16 @@
     min-height: 0;
     overflow: auto;
     padding: 1rem;
+  }
+  /* On paper there is nothing to scroll: the whole task is printed. */
+  @media print {
+    .detail {
+      max-height: none;
+      overflow: visible;
+    }
+    .detail-body {
+      overflow: visible;
+    }
   }
   .task-title {
     font-size: 1.25rem;

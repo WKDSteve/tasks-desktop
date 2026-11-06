@@ -28,6 +28,7 @@
   import DropMoveDialog from './views/DropMoveDialog.svelte';
   import Palette from './views/Palette.svelte';
   import { DOC_LIST, LICENSE, loadDocs, REPO_URL } from './lib/docs';
+  import { scrollByKey } from './lib/scrollKeys';
   import ContextMenu from 'appkit-ui/ContextMenu.svelte';
   import { contextTarget } from 'appkit-ui/contextmenu';
   import { routeHref } from 'appkit-ui/route';
@@ -126,6 +127,7 @@
   }
 
   function onKey(event: KeyboardEvent): void {
+    if (alone) scrollByKey(event, document.querySelector('.solo .detail-body'));
     // The palette is not a single-key shortcut: it opens with Ctrl or Cmd and K, also in a field and with the keys off.
     if (app.phase === 'ready' && matches(keymap.palette, pressOf(event))) {
       event.preventDefault();
@@ -637,7 +639,12 @@
   let docsAt = $state<string | null>(null);
   let docTexts = $state.raw<readonly DocEntry[]>([]);
   async function openDocs(id: string | null): Promise<void> {
-    docTexts = await loadDocs();
+    try {
+      docTexts = await loadDocs();
+    } catch {
+      app.toast = { kind: 'error', text: t('lazy.failed') };
+      return;
+    }
     docsAt = id;
     docsOpen = true;
   }
