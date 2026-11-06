@@ -145,6 +145,27 @@ export function scaffoldRows(
   return out;
 }
 
+/**
+ * Whether a category of a task comes from its kind or a tag (the engine's `model.categories`): the box cannot take it
+ * away, only changing the kind or the tag can.
+ */
+export function categoryDerived(category: string, kind: string, tags: readonly string[]): boolean {
+  return (category === 'bug' && kind === 'bug') || tags.includes(category);
+}
+
+/**
+ * What a tick in the boxes writes to the task's own `category`: what is ticked, without what the kind and the tags give
+ * anyway (written down too, it would stay when the tag goes).
+ */
+export function categoriesToWrite(
+  order: readonly string[],
+  ticked: readonly string[],
+  kind: string,
+  tags: readonly string[],
+): string[] {
+  return order.filter((c) => ticked.includes(c) && !categoryDerived(c, kind, tags));
+}
+
 /** Whether a severity fits: a bug, or a bug / security category (the engine's `model.severity_applies`). */
 export function severityApplies(kind: string, categories: readonly string[]): boolean {
   return kind === 'bug' || categories.includes('bug') || categories.includes('security');

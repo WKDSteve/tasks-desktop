@@ -20,6 +20,8 @@
     severityApplies,
     tagsChanged,
     tagsText,
+    categoriesToWrite,
+    categoryDerived,
   } from '../lib/fields';
   import Blocks from 'appkit-ui/Blocks.svelte';
 
@@ -482,18 +484,21 @@
         </label>
       </div>
       <!-- The categories and the scopes: several each. The categories of the entry are the effective ones (a bug is
-           always in `bug`), so that one cannot be taken away here; the engine's answer is what the boxes show next. -->
+           always in `bug`, a tag spelled like a category counts for it), so those cannot be taken away here; the
+           engine's answer is what the boxes show next. -->
       <fieldset class="cats" data-field="category">
         <legend>{t('field.category')}</legend>
         <div class="checks">
           {#each app.ranges.categories as c (c)}
-            <label class="check">
+            {@const derived = categoryDerived(c, shown.kind ?? '', shown.tags ?? [])}
+            <label class="check" data-hint={derived ? t('hint.ui.detail.category_derived') : undefined}>
               <input
                 type="checkbox"
                 checked={(shown.category as string[]).includes(c)}
-                disabled={app.locked || (c === 'bug' && shown.kind === 'bug')}
+                disabled={app.locked || derived}
                 onchange={(e) => {
-                  const next = app.ranges.categories.filter((x) => (x === c ? e.currentTarget.checked : (shown.category as string[]).includes(x)));
+                  const ticked = app.ranges.categories.filter((x) => (x === c ? e.currentTarget.checked : (shown.category as string[]).includes(x)));
+                  const next = categoriesToWrite(app.ranges.categories, ticked, shown.kind ?? '', shown.tags ?? []);
                   void app.editField(shown.id, 'category', next.length === 0 ? null : next);
                 }}
               />

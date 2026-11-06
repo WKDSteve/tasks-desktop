@@ -4408,6 +4408,24 @@ test('the detail sets scope, category and severity, and a severity only fits a b
   expect(await violations(page)).toEqual([]);
 });
 
+test('a category that comes from a tag is locked, and ticking another does not write it into the file', async ({ page }) => {
+  const slug = `derived-cat-e2e-${Date.now().toString(36)}`;
+  const file = join(state().vault, 'lib.nvim', 'ROADMAP', 'tasks', `${slug}.md`);
+  writeFileSync(file, `---\ntitle: Derived category\nstatus: open\ntags: [docs]\n---\n\nbody\n`);
+  await watchViolations(page);
+  await pair(page);
+  await showList(page);
+  await open(page, `lib.nvim/${slug}`);
+  const category = page.locator('aside.detail fieldset[data-field="category"]');
+  const docs = category.getByRole('checkbox', { name: 'docs' });
+  await expect(docs).toBeChecked();
+  await expect(docs).toBeDisabled();
+  await write(page, () => category.getByRole('checkbox', { name: 'security' }).check());
+  expect(readFileSync(file, 'utf8')).toMatch(/^category: \[?security\]?$/m);
+  await expect(docs).toBeChecked();
+  expect(await violations(page)).toEqual([]);
+});
+
 test('the calendar shows a task on its due day; dragging sets the date, dragging to the list takes it away', async ({ page }) => {
   await watchViolations(page);
   await pair(page);
