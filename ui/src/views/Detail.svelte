@@ -229,6 +229,8 @@
   onfocusin={focusIn}
   onfocusout={focusOut}
 >
+  <!-- Only this part scrolls: the footer below it stays where it is in every host of the card. -->
+  <div class="detail-body">
   {#if !task}
     <p class="muted">{t('detail.none')}</p>
   {:else}
@@ -920,8 +922,11 @@
         <button type="button" class="open-editor" onclick={() => void copyLink(link)}>{t('attach.copy')}</button>
       </p>
     {/if}
-    <!-- The step that ends the task: larger than the other buttons, in the lower right corner of the card (it stays
-         there while the card scrolls), last in the order of the keyboard. -->
+  {/if}
+  </div>
+  {#if task}
+    <!-- The step that ends the task: larger than the other buttons, in a footer of its own at the lower edge of the
+         card (the text scrolls above it, not under it), last in the order of the keyboard. -->
     <div class="finish-row">
       <button type="button" class="finish" data-hint={t('hint.ui.detail.finish')} disabled={app.locked} onclick={() => void app.startFinish(task.id)}
         ><span class="finish-icon" aria-hidden="true">✓</span> {t('done.button')}</button
@@ -1032,18 +1037,14 @@
     font-size: 0.85em;
     overflow-wrap: anywhere;
   }
-  /* The row is as wide as the card but lets the pointer through beside the button: it stands over the text it sticks
-     to. */
+  /* The footer of the card: outside the part that scrolls, so nothing runs under the button. */
   .finish-row {
-    position: sticky;
-    bottom: 0;
+    flex: none;
     display: flex;
     justify-content: flex-end;
-    margin-top: 1rem;
-    pointer-events: none;
+    padding: 0.5rem 1rem 1rem;
   }
   .finish {
-    pointer-events: auto;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -1080,12 +1081,19 @@
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: var(--radius);
-    padding: 1rem;
-    overflow: auto;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
     min-height: 0;
     /* A tall form must not stretch the row of the page it stands in (the board's columns would grow with it). */
     align-self: start;
     max-height: calc(100vh - 5rem);
+  }
+  .detail-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: auto;
+    padding: 1rem;
   }
   .task-title {
     font-size: 1.25rem;

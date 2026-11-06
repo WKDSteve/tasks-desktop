@@ -101,13 +101,15 @@ for (const scheme of ['light', 'dark'] as const) {
     await expect(f.locator('aside.detail .id')).toHaveText(next);
     // A float scrolled down opens the next time at the top of its task.
     await expect(f.locator('aside.detail .prose, aside.detail pre.body')).toBeVisible();
-    await f.evaluate((el) => (el.scrollTop = 300));
-    expect(await f.evaluate((el) => el.scrollTop)).toBeGreaterThan(0);
+    const body = f.locator('.detail-body');
+    await page.setViewportSize({ width: 1000, height: 320 });
+    await body.evaluate((el) => (el.scrollTop = 300));
+    expect(await body.evaluate((el) => el.scrollTop)).toBeGreaterThan(0);
     await page.keyboard.press('Escape');
     await expect(f).toHaveCount(0);
     await page.keyboard.press('o');
     await expect(f).toBeVisible();
-    expect(await f.evaluate((el) => el.scrollTop)).toBe(0);
+    expect(await body.evaluate((el) => el.scrollTop)).toBe(0);
     await page.keyboard.press('Escape');
     expect(await violations(page)).toEqual([]);
     expect(problems).toEqual([]);
@@ -131,6 +133,18 @@ test('a task is detached from its float into a window of its own, which shows th
   await expect(win.locator('main aside.detail .id')).toHaveText('lib.nvim/beta');
   await expect(win.locator('section.list')).toHaveCount(0);
   await expect(win.getByRole('dialog', { name: 'Task' })).toHaveCount(0);
+  // Done stands at the lower edge of the card here too, whatever the card has scrolled to.
+  await win.setViewportSize({ width: 900, height: 360 });
+  const card = win.locator('main aside.detail');
+  const body = card.locator('.detail-body');
+  const done = card.getByRole('button', { name: 'Done', exact: true });
+  await expect.poll(() => body.evaluate((el) => el.scrollHeight > el.clientHeight)).toBe(true);
+  const before = await box(done);
+  await body.evaluate((el) => (el.scrollTop = 100_000));
+  expect(await box(done)).toEqual(before);
+  await expect(done).toBeInViewport();
+  const cardBox = await box(card);
+  expect(cardBox.y + cardBox.height - (before.y + before.height)).toBeLessThan(40);
   expect(await win.evaluate(() => location.hash)).toBe('#task=lib.nvim%2Fbeta');
   await win.reload();
   await expect(win.locator('main aside.detail .id')).toHaveText('lib.nvim/beta');
@@ -514,15 +528,19 @@ test('the detail: the title on a line of its own, a summary of several lines, Do
     const fb = await box(f);
     expect(fb.x + fb.width - (d.x + d.width)).toBeLessThan(40);
     expect(fb.y + fb.height - (d.y + d.height)).toBeLessThan(40);
-    // It stays there while the float scrolls: the text is longer than the float, and at its top as at its end Done is in
-    // the corner, in view.
-    expect(await f.evaluate((el) => el.scrollHeight > el.clientHeight + 200)).toBe(true);
+    // It does not move while the task scrolls: the text is longer than the float, and at its top as at its end Done is
+    // at the same place, and nothing of the text runs under it (it is outside the part that scrolls).
+    const scroller = f.locator('.detail-body');
+    expect(await scroller.evaluate((el) => el.scrollHeight > el.clientHeight + 200)).toBe(true);
     for (const scroll of [0, 100_000]) {
-      await f.evaluate((el, to) => (el.scrollTop = to), scroll);
-      const at = await box(done);
-      expect(fb.y + fb.height - (at.y + at.height)).toBeLessThan(40);
-      expect(fb.y + fb.height - (at.y + at.height)).toBeGreaterThanOrEqual(0);
+      await scroller.evaluate((el, to) => (el.scrollTop = to), scroll);
+      expect(await box(done)).toEqual(d);
       await expect(done).toBeInViewport();
+      expect((await box(scroller)).y + (await box(scroller)).height).toBeLessThanOrEqual(d.y);
+    }
+    for (const theme of ['dark', 'light'] as const) {
+      await page.emulateMedia({ colorScheme: theme });
+      await expectAccessible(page, `the detail with Done in its corner (${theme})`);
     }
     await expectAccessible(page, 'the detail with Done in its corner');
     await done.click();

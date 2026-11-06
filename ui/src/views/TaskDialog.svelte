@@ -23,7 +23,7 @@
     if (app.peeking && app.selectedId !== null && !dialog.open) {
       dialog.showModal();
       // A task opens at its top, with the focus on Close: the handle before it would open its long hint over the task.
-      dialog.scrollTop = 0;
+      dialog.querySelector('.detail-body')?.scrollTo(0, 0);
       dialog.querySelector<HTMLButtonElement>('button[data-close]')?.focus();
     }
     if ((!app.peeking || app.selectedId === null) && dialog.open) dialog.close();
@@ -100,23 +100,25 @@
     color: var(--text);
     border: 1px solid var(--border);
     border-radius: var(--radius);
-    padding: 0 1rem 1rem;
+    padding: 0;
     width: min(52rem, calc(100vw - 2rem));
     max-height: calc(100vh - 3rem);
-    overflow: auto;
+    overflow: hidden;
+  }
+  /* Only while open: a closed dialog stays hidden. Head above, card below; the card's body is what scrolls. */
+  dialog[open] {
+    display: flex;
+    flex-direction: column;
   }
   dialog::backdrop {
     background: var(--backdrop);
   }
-  /* The head of the float: it is what a drag takes, and it stays at the top while the task scrolls under it. */
+  /* The head of the float: it is what a drag takes, and it stays at the top while the task scrolls below it. */
   .bar {
-    position: sticky;
-    top: 0;
-    z-index: 1;
+    flex: none;
     display: flex;
     align-items: center;
     gap: 0.5rem;
-    margin: 0 -1rem 0.5rem;
     padding: 0.5rem 1rem;
     background: var(--surface);
     border-bottom: 1px solid var(--border);
@@ -148,13 +150,13 @@
     padding: 0.3rem 0.55rem;
   }
   /* The card is the one of the other views; here it is not a column beside a list but the content of the float. */
-  /* It does not scroll by itself either: the float does, and the button that finishes the task sticks to the float's
-     lower edge. */
+  /* It takes the height the float leaves: its body scrolls, its footer with the button stands at the float's lower edge. */
   dialog :global(aside.detail) {
-    overflow: visible;
+    flex: 1 1 auto;
+    align-self: stretch;
     max-height: none;
     border: 0;
-    padding: 0;
+    border-radius: 0;
     background: transparent;
   }
 </style>

@@ -877,11 +877,6 @@
     max-width: 60rem;
     margin: 0 auto;
   }
-  /* The page scrolls, not the card: the button that finishes the task sticks to the lower edge of the window. */
-  .solo :global(aside.detail) {
-    max-height: none;
-    overflow: visible;
-  }
   .card {
     background: var(--surface);
     border: 1px solid var(--border);
