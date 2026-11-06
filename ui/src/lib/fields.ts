@@ -200,8 +200,10 @@ export function splitOther(
   const tags: string[] = [];
   for (const word of text.split(/[,\s]+/)) {
     if (word === '') continue;
-    if (scopes.includes(word)) {
-      if (!scope.includes(word)) scope.push(word);
+    // Scopes are lower case: `UI` typed here means the scope, not a new tag. The same rule as form.validate of the engine.
+    const lower = word.toLowerCase();
+    if (scopes.includes(lower)) {
+      if (!scope.includes(lower)) scope.push(lower);
     } else if (!tags.includes(word)) {
       tags.push(word);
     }

@@ -6,6 +6,9 @@ describe('splitOther (the Other line under the scope list)', () => {
   it('puts scope words with the ticks and the rest into the tags', () => {
     expect(splitOther('api, shiny new-thing', scopes, ['ui'])).toEqual({ scope: ['ui', 'api'], tags: ['shiny', 'new-thing'] });
   });
+  it('recognises a scope word in any case and keeps a tag as typed', () => {
+    expect(splitOther('UI, Api, Shiny', scopes, ['ui'])).toEqual({ scope: ['ui', 'api'], tags: ['Shiny'] });
+  });
   it('counts a word ticked and typed once, and an empty line as nothing', () => {
     expect(splitOther('ui ui', scopes, ['ui'])).toEqual({ scope: ['ui'], tags: [] });
     expect(splitOther('  ', scopes, [])).toEqual({ scope: [], tags: [] });
