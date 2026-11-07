@@ -643,29 +643,22 @@ async fn the_check_start_refuses_what_is_not_a_question_and_the_state_takes_no_q
 #[tokio::test]
 async fn a_check_that_runs_does_not_hold_up_the_other_questions_of_the_engine() {
     let r = rig("check-aside").await;
-    std::fs::write(r.vault.join(".fake-check-ms"), "1500").unwrap();
+    // The fake leaves its note when the check ends, so an answer before the note did not wait for it, however slow the
+    // machine is (a limit on the time of the answer failed in CI). Long enough for a loaded machine to answer twice.
+    let ended = r.vault.join(".fake-check-done");
+    std::fs::write(r.vault.join(".fake-check-ms"), "5000").unwrap();
     let (status, started) = post(&r, "/api/tasks/check", "{}", JSON, true).await;
     assert_eq!(status, 200, "{started}");
     assert_eq!(started["job"]["state"], "running");
-    // A question to the engine (the task is not held in the hub yet) is answered long before the check ends.
-    let before = std::time::Instant::now();
+    // A question to the engine (the task is not held in the hub yet) is answered before the check ends.
     let (status, doc) = get(&r, "/api/tasks/task?id=alpha.nvim/t1").await;
     assert_eq!(status, 200, "{doc}");
-    assert!(
-        before.elapsed() < Duration::from_millis(1000),
-        "the question waited for the check: {:?}",
-        before.elapsed()
-    );
-    // And so does a write.
+    assert!(!ended.exists(), "the question waited for the check");
+    // And so is a write.
     let body = r#"{"ops":[{"op":"set","id":"alpha.nvim/t1","patch":{"prio":1}}]}"#;
-    let before = std::time::Instant::now();
     let (status, doc) = post(&r, "/api/tasks/ops", body, JSON, true).await;
     assert_eq!(status, 200, "{doc}");
-    assert!(
-        before.elapsed() < Duration::from_millis(1000),
-        "{:?}",
-        before.elapsed()
-    );
+    assert!(!ended.exists(), "the write waited for the check");
     let over = check_until_over(&r).await;
     assert_eq!(over["job"]["state"], "done", "{over}");
 }
