@@ -962,6 +962,16 @@ function uv.os_homedir()
   return web.home()
 end
 
+-- There is no user account and no host name of the machine: nothing is said (libuv can fail to tell either too). The
+-- engine names a claim's owner from them and falls back to `user@host` when they are nil.
+function uv.os_get_passwd()
+  return nil
+end
+
+function uv.os_gethostname()
+  return nil
+end
+
 function uv.os_getenv(name)
   return web.env(name)
 end

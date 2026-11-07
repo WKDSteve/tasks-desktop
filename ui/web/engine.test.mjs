@@ -268,6 +268,18 @@ function nvimCaller(t, label, vault) {
   };
 }
 
+// Without nvim too: every read method answers its document, never `tasks.error` (a function the shim lacks makes the
+// engine fail one method only, which the page then shows as a tile that stays at "Loading").
+test('every read method answers a document of the engine, not an error', async () => {
+  const e = await engine();
+  const id = JSON.parse(e.call('list', null, { root: ROOT }).text).items[0].id;
+  const cases = [...READ_METHODS.map((m) => [m]), ...BY_ID.map((m) => [m, JSON.stringify({ id })])];
+  for (const [method, params] of cases) {
+    const doc = JSON.parse(e.call(method, params ? `{"params":${params}}` : null, { root: ROOT }).text);
+    assert.notEqual(doc.kind, 'tasks.error', `${method}: ${doc.message}`);
+  }
+});
+
 test('every read method answers as nvim does on the same commit', { skip: NEEDS_NVIM }, async (t) => {
   const nvim = nvimCaller(t, 'compare', () => fixture);
   const e = await engine();
