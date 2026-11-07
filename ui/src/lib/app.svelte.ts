@@ -1780,6 +1780,7 @@ export class App {
       this.today,
       this.crossIndex,
       this.quickWinSet,
+      this.projectOf,
     );
   }
 

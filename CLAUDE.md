@@ -19,6 +19,17 @@ python tools/check-color-literals.py --root ui/src --tokens ui/src/palette.css  
 python tools/check-bundle-size.py   # after pnpm build: the main chunk stays within its budget
 ```
 
+Die Web-Variante (eigene CI `web.yml`), bei jedem Sprung von `engine.lock` und jeder Änderung an `ui/src/web`:
+
+```
+cd ui && TASKS_WEB_COMPARE=1 node ../tools/run-with-temp.mjs -- pnpm web:test   # web engine against nvim, byte for byte
+pnpm web:build && PLAYWRIGHT_BROWSERS_PATH="$PWD/node_modules/.cache/ms-playwright" node ../tools/run-with-temp.mjs -- pnpm web:e2e
+```
+
+- Ohne `TASKS_WEB_COMPARE=1` werden die Vergleiche mit nvim still übersprungen: eine Funktion, die der Shim
+  (`ui/src/web/vim-shim.lua`) nicht kennt, fällt dann erst in `web:e2e` oder in der CI auf (so geschehen mit
+  `uv.os_get_passwd` der Claims, `4a3220d`).
+
 - Umgebung für Browser- und Engine-Tests: `TASKS_ENGINE_DIR=E:/repos/tasks.nvim`,
   `LIB_NVIM_DIR=E:/repos/lib.nvim`, `TASKS_DESKTOP_REQUIRE_ENGINE=1` (ohne das werden
   Tests mit Engine still übersprungen).
