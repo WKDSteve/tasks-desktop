@@ -43,6 +43,8 @@ test('another failure is the page\'s own: it is not loaded again', async ({ page
 
 test('page.goto of the fixture goes through it, and answers as before', async ({ page }) => {
   const asked = await pageWithStylesheet(page, 0, 'connectionfailed');
+  // The `goto` of this page and not the one all pages share: the fixture took it over.
+  expect(Object.hasOwn(page, 'goto')).toBe(true);
   const response = await page.goto(`${ORIGIN}/`);
   expect(response?.ok()).toBe(true);
   expect(asked()).toBe(1);

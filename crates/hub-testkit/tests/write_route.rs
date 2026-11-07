@@ -661,6 +661,8 @@ async fn a_check_that_runs_does_not_hold_up_the_other_questions_of_the_engine() 
     assert!(!ended.exists(), "the write waited for the check");
     let over = check_until_over(&r).await;
     assert_eq!(over["job"]["state"], "done", "{over}");
+    // The note does come: without it the two checks above would say nothing.
+    assert!(ended.exists());
 }
 
 async fn upload(r: &Rig, id: &str, name: &str, body: &str) -> (u16, Value) {
