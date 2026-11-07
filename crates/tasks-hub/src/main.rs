@@ -17,6 +17,8 @@ const USAGE: &str = "usage:
   tasks-hub install [--autostart] [--shortcut]
                                           copy this program to a fixed place (a build
                                           then does not fight the running hub for the file)
+                                          The Start menu gets a link; --shortcut adds one on
+                                          the desktop
   tasks-hub uninstall [--purge-settings]
                                           stop the hub, take away the login entry and the link;
                                           --purge-settings also removes the settings (never the
