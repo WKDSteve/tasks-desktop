@@ -412,7 +412,26 @@ shows what the plan warns about (cycles, tasks that name the same file); the
 engine did all the reckoning and the page only groups it. A plan can be chosen: the
 stages, the phase counts and the warnings narrow to it (the choice is kept when the view
 is left), while the state counts, the estimate and the critical path stay those of the
-whole vault. The interface can create a task (`c`, or the Project menu), change status,
+whole vault.
+
+**Projects** (an engine with the capability `projects`; without it the Plan view stays as described above). A project
+is the level above plans: project, plan, task, and the steps of a task (its `## Plan` section) are its subtasks, shown
+as `3/5` on its row, its card, in its detail and on the project page. The choice *Project* of the Plan view opens a
+project's page: its goal (the target task), the engine's rollup (plans finished out of all, tasks finished out of all,
+the days of effort still open, the parked plans), the tasks of the project itself, and its plans as cards grouped by
+the project's stages (`phase_order`), each with its status, a bar of its finished tasks (asked of the engine per plan),
+its open tasks and the next one (the first the engine counts as ready). Over a plan of a project the trail
+"Project › Plan" leads back to its page. On the page a plan moves to another stage, leaves the project or joins it
+(`plan_set`), and the project's status changes (`project_set`); the engine judges each change (a project or stage it
+does not know is refused in its words), and the message offers to take it back (the engine's `inverse`, on the version
+the change left). The plan wizard makes a project too (`project_new`), and a plan can be made in a project and one of
+its stages. The filter of the list has the field *Project*: the tasks of the project's plans and its own (the page
+reads which plan belongs to which project from the snapshot, since the engine has no grouping by project yet); a saved
+view cannot hold it and says so. A finish that closes a project offers no undo (reopening the task would leave the
+project closed). Not yet: grouping a saved view by project (the engine's `tasks.groupings` has no such field) and the
+project bar in a timeline (the timeline view is not built).
+
+The interface can create a task (`c`, or the Project menu), change status,
 priority, who, kind, effort, value and tags in the detail, tick a step of the plan section and add a dated line to the notes (the box of a step shows what the file says; a click asks the engine first), attach a screenshot to a task (*Attach screenshot* in the detail, or the box in the new-task form: the image on the clipboard of the machine the hub runs on, else its newest screenshot; the detail then shows the link to put into the text),
 change several marked
 tasks at once (also effort, reminder and tags: added or taken off for each task) (`x` or the box marks, the choice in the bar is applied with a button,

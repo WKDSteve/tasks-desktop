@@ -5548,7 +5548,9 @@ async function checkFindingsStay(page: Page): Promise<void> {
     await expect(flag('lib.nvim/broken')).toBeVisible();
     await page.getByRole('button', { name: 'Check ...' }).click();
     await expect(dialog.getByRole('status')).toContainText('1 task(s) changed since this check');
-    await expect(dialog.locator('ul.findings li.stale', { hasText: 'lib.nvim/beta' })).toBeVisible();
+    // beta has more than one finding (doing-while-blocked, and doing-unclaimed of an engine with claims): all of them are stale.
+    await expect(dialog.locator('ul.findings li.stale', { hasText: 'lib.nvim/beta' }).first()).toBeVisible();
+    await expect(dialog.locator('ul.findings li:not(.stale)', { hasText: 'lib.nvim/beta' })).toHaveCount(0);
     await expect(dialog.locator('ul.findings li:not(.stale)', { hasText: 'lib.nvim/broken' }).first()).toBeVisible();
     await expect(dialog.locator('ul.findings li', { hasText: 'index-stale' }).first()).toBeVisible();
     await expectAccessible(page, 'check after a change');
@@ -7272,4 +7274,72 @@ test('the statistics count the open tasks per area, cut up by a field, and a num
   expect(cell.fields.kind).toHaveLength(1);
   await page.evaluate(() => localStorage.removeItem('tasks-desktop.stats'));
   expect(consoleProblems.get(page)).toEqual([]);
+});
+
+test('a project: its page with goal, rollup, own tasks and the plans by stage, the trail of a plan, and a plan moved to another stage and back', async ({
+  page,
+}) => {
+  const { vault } = state();
+  // A project of its own (unique names: the tests share the vault), two plans in it and a task of the project itself.
+  const files = [
+    [join(vault, 'ALL', 'ROADMAP', 'projects', 'e2e-projekt-p001.md'), `---\ntitle: Projekt p001\nstatus: doing\nareas: [ALL]\nphase_order: [basis, gruppe-a]\ncreated: 2026-11-07\nupdated: 2026-11-07\n---\n\nA project of the browser test.\n`],
+    [join(vault, 'lib.nvim', 'ROADMAP', 'plans', 'e2e-projplan-a001.md'), `---\ntitle: Projplan a001\nstatus: doing\nareas: [lib.nvim]\nproject: ALL/e2e-projekt-p001\nphase: basis\nphase_order: []\ncreated: 2026-11-07\nupdated: 2026-11-07\n---\n\nFirst plan.\n`],
+    [join(vault, 'lib.nvim', 'ROADMAP', 'plans', 'e2e-projplan-b001.md'), `---\ntitle: Projplan b001\nstatus: planning\nareas: [lib.nvim]\nproject: ALL/e2e-projekt-p001\nphase: gruppe-a\nphase_order: []\ncreated: 2026-11-07\nupdated: 2026-11-07\n---\n\nSecond plan.\n`],
+    [join(vault, 'lib.nvim', 'ROADMAP', 'tasks', 'e2e-projtask-t001.md'), `---\ntitle: Projtask t001\nstatus: open\nkind: task\nplan: lib.nvim/e2e-projplan-a001\ncreated: 2026-11-07\nupdated: 2026-11-07\n---\n\nIn the first plan.\n\n## Plan\n\n- [x] 1. one\n- [ ] 2. two\n`],
+    [join(vault, 'ALL', 'ROADMAP', 'tasks', 'e2e-projown-o001.md'), `---\ntitle: Projown o001\nstatus: open\nkind: decision\nproject: ALL/e2e-projekt-p001\ncreated: 2026-11-07\nupdated: 2026-11-07\n---\n\nThe project's own.\n\n## Plan\n\n- [x] 1. one\n- [x] 2. two\n- [x] 3. three\n- [ ] 4. four\n- [ ] 5. five\n`],
+  ] as const;
+  try {
+    for (const [path, text] of files) {
+      mkdirSync(join(path, '..'), { recursive: true });
+      writeFileSync(path, text);
+    }
+    await pair(page);
+    await chooseView(page, 'View', 'Plan');
+    await page.getByRole('combobox', { name: 'Project', exact: true }).selectOption('ALL/e2e-projekt-p001');
+
+    const head = page.getByRole('region', { name: 'Project', exact: true });
+    await expect(head.getByRole('heading', { name: 'Projekt p001' })).toBeVisible();
+    // The engine's rollup: two plans, none finished; three tasks are open (the plan's, the own one).
+    await expect(head).toContainText('Plans 0/2');
+    const own = page.getByRole('region', { name: 'Tasks of the project itself' });
+    await expect(own).toContainText('Projown o001');
+    await expect(own).toContainText('3/5');
+    // The plans as cards, by the stages of the project in its order.
+    const plans = page.getByRole('region', { name: 'Plans', exact: true });
+    await expect(plans.locator('.stage')).toHaveCount(2);
+    await expect(plans.locator('.stage').nth(0)).toContainText('Stage basis');
+    await expect(plans.locator('.stage').nth(0)).toContainText('Projplan a001');
+    await expect(plans.locator('.stage').nth(1)).toContainText('Projplan b001');
+    const card = plans.locator('[data-plan="lib.nvim/e2e-projplan-a001"]');
+    await expect(card).toContainText('Projtask t001');
+    await expect(card).toContainText('1/2');
+    await expect(card.getByRole('meter')).toHaveAttribute('aria-valuenow', '0');
+    expect(await violations(page)).toEqual([]);
+
+    // Into the plan: the trail leads back to the project.
+    await card.getByRole('button', { name: 'Projplan a001' }).click();
+    const trail = page.getByRole('navigation', { name: 'Where the plan stands' });
+    await expect(trail).toContainText('Projekt p001');
+    await expect(trail).toContainText('Projplan a001');
+    await trail.getByRole('button', { name: 'Projekt p001' }).click();
+    await expect(head.getByRole('heading', { name: 'Projekt p001' })).toBeVisible();
+
+    // The second plan to the first stage (plan_set); the toast takes it back (its inverse).
+    const second = plans.locator('[data-plan="lib.nvim/e2e-projplan-b001"]');
+    let answer = nextAnswer(page);
+    await second.getByRole('combobox', { name: 'Stage in the project' }).selectOption('basis');
+    await answer;
+    await expect(plans.locator('.stage')).toHaveCount(1);
+    await expect(plans.locator('.stage').nth(0)).toContainText('Projplan b001');
+    expect(readFileSync(files[2][0], 'utf8')).toMatch(/^phase: basis$/m);
+    answer = nextAnswer(page);
+    await page.getByRole('button', { name: 'Undo' }).click();
+    await answer;
+    await expect(plans.locator('.stage')).toHaveCount(2);
+    expect(readFileSync(files[2][0], 'utf8')).toMatch(/^phase: gruppe-a$/m);
+
+    expect(consoleProblems.get(page) ?? []).toEqual([]);
+  } finally {
+    for (const [path] of files) rmSync(path, { force: true });
+  }
 });

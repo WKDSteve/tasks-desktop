@@ -56,7 +56,25 @@ export type Op =
       status?: string;
       summary?: string;
       slug?: string;
-    };
+      /** The project the plan belongs to, and its stage there (capability `projects`). */
+      project?: string;
+      phase?: string;
+    }
+  /** A project file under `ROADMAP/projects/` (capability `project_new`). */
+  | {
+      op: 'project_new';
+      area: string;
+      title: string;
+      areas?: string[];
+      target?: string;
+      phases?: string[];
+      gate?: string;
+      status?: string;
+      summary?: string;
+      slug?: string;
+    }
+  /** The frontmatter of an open plan or project file; `null` removes a key (capabilities `plan_set`, `project_set`). */
+  | { op: 'plan_set' | 'project_set'; id: string; patch: Record<string, unknown>; if_match?: string };
 
 /** The vaults the hub can read, and the one it reads. A folder is shown by its last part only. */
 export interface VaultList {

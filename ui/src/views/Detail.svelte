@@ -727,7 +727,8 @@
       <p class="bad" role="alert">{t('detail.failed')}</p>
     {:else if detail.state === 'ok'}
       {#if steps.length > 0}
-        <h3>{t('detail.steps')}</h3>
+        <!-- The steps of the task are its subtasks (concept of the project level, D4): "3/5" as on its row. -->
+        <h3>{t('detail.steps')} <span class="muted">{steps.filter((x) => x.ticked && !x.dropped).length}/{steps.filter((x) => !x.dropped).length}</span></h3>
         <ul class="plain">
           {#each steps as step, i (i)}
             <li class:dropped={step.dropped}>

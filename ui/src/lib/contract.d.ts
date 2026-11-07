@@ -20,6 +20,9 @@ export type TasksExport =
   | Links
   | Groupings
   | Views
+  | Waits
+  | Find
+  | Intent
   | DonePreview
   | Result
   | Error;
@@ -36,6 +39,31 @@ export type Hello = Head & {
    * What it can answer; show only what is listed.
    */
   capabilities: string[];
+  /**
+   * The intents tasks takes (`wkd-intent/1`, appkit/schemas/wkd-intent/1): a sender offers only these actions and modes. Additive; capability `intent`.
+   */
+  intents?: {
+    schema: "wkd-intent/1";
+    actions: string[];
+    modes: string[];
+  };
+  /**
+   * The marker file of the vault (schemas/tasks-vault/1). Additive; capability `vault_marker`.
+   */
+  marker?: {
+    /**
+     * The vault has a marker file `tasks-vault.json` (valid or refused).
+     */
+    present: boolean;
+    /**
+     * Version of the folder layout the file names; absent when there is no valid file.
+     */
+    layout_version?: number;
+    /**
+     * Why the file is refused (every other call then fails with `invalid_argument` and this message); no path.
+     */
+    problem?: string;
+  };
   limits: {
     title: number;
     summary: number;
@@ -161,7 +189,41 @@ export type Snapshot = Head & {
     target?: string;
     phase_order: string[];
     gate?: "hard";
+    /**
+     * The project the plan belongs to (capability `projects`).
+     */
+    project?: string;
+    /**
+     * The stage of that project the plan belongs to.
+     */
+    phase?: string;
     valid: boolean;
+  }[];
+  /**
+   * The open project files (capability `projects`): a project groups plans and may hold tasks of its own.
+   */
+  projects: {
+    id: string;
+    title: string;
+    status?: "planning" | "doing" | "parked" | "done";
+    areas: string[];
+    target?: string;
+    phase_order: string[];
+    gate?: "hard";
+    valid: boolean;
+    /**
+     * The ids of the open plans of the project, sorted.
+     */
+    plans: string[];
+    rollup: {
+      plans_total: number;
+      plans_done: number;
+      plans_parked: number;
+      tasks_open: number;
+      tasks_done: number;
+      own_open: number;
+      days_open: number;
+    };
   }[];
   /**
    * In plan order.
@@ -203,7 +265,17 @@ export type Effort = string;
 export type Actor = "cdx" | "me" | "pair";
 export type Severity = "low" | "medium" | "high" | "critical";
 export type Category =
-  "bug" | "security" | "performance" | "docs" | "ruleset" | "ux" | "bindings" | "refactor" | "tests" | "ci";
+  | "bug"
+  | "security"
+  | "performance"
+  | "docs"
+  | "ruleset"
+  | "ux"
+  | "bindings"
+  | "refactor"
+  | "tests"
+  | "ci"
+  | "learning";
 export type Scope =
   "usercmd" | "keymap" | "config" | "ui" | "api" | "docs" | "tests" | "health" | "migration" | "multi-repo";
 /**
@@ -467,6 +539,14 @@ export type Next = Head & {
     vault: number;
   };
   /**
+   * Ready tasks left out because their `start` day has not come yet; absent when none.
+   */
+  later?: number;
+  /**
+   * Ready tasks left out because somebody else has claimed them (capability `claims`); absent when none.
+   */
+  claimed?: number;
+  /**
    * Present when there is no task to start: which kind of nothing it is. `all_done` is only said when nothing is open at all.
    */
   empty?: {
@@ -475,6 +555,12 @@ export type Next = Head & {
     for_me: number;
     blocked_status: number;
     parked: number;
+    /**
+     * Of the parked tasks: how many wait for each `waits_for` key. Left out when none of them names one.
+     */
+    waits_for?: {
+      [k: string]: number;
+    };
     unlisted: number;
     unreadable: number;
   };
@@ -586,6 +672,51 @@ export type Views = Head & {
 export type GroupField =
   "status" | "prio" | "actor" | "kind" | "effort" | "value" | "tags" | "plan" | "phase" | "area" | "state" | "cross";
 /**
+ * tasks.waits: what the parked tasks wait for, of the vault or of one area (or area group). `keys` are the `waits_for` keys in use, the one with the most tasks first (then by name), each with its number of parked tasks and their areas. `parked` counts every parked task: the ones of `keys`, `without_reason` (parked by choice, no `waits_for`) and `invalid` (a `waits_for` that is no key, the `invalid-waits-for` finding). Same `rev` as the snapshot of the same state.
+ */
+export type Waits = Head & {
+  kind: "tasks.waits";
+  rev: Rev;
+  digest: Digest;
+  parked: number;
+  without_reason: number;
+  invalid: number;
+  keys: {
+    key: WaitsKey;
+    count: number;
+    areas: string[];
+  }[];
+  /**
+   * Folders that could not be read: the answer may be incomplete.
+   */
+  incomplete: string[];
+};
+/**
+ * What a parked task waits for from outside (`waits_for`): one word of the vault's own, lower-case letters, digits and `-`. `none` is no key (it is what a filter calls a parked task without one).
+ */
+export type WaitsKey = string;
+/**
+ * tasks.find: the tasks, open and finished, whose `refs` name one of the refs asked for (capability `find`). Open tasks first, then by id.
+ */
+export type Find = Head & {
+  kind: "tasks.find";
+  matches: FindMatch[];
+};
+/**
+ * tasks.intent: what tasks did with an intent `wkd-intent/1` (capability `intent`): `would_create` (a dry run), `created` (with `yes`), `exists` (a task holds the ref `testing-finding:<fp>` already: `matches`), `shown` or `not_found` (`tasks.show`). A refused intent is an error (`invalid_argument`, every problem in the message), nothing written.
+ */
+export type Intent = Head & {
+  kind: "tasks.intent";
+  action: "tasks.new" | "tasks.show";
+  outcome: "would_create" | "created" | "exists" | "shown" | "not_found";
+  id?: string;
+  area?: string;
+  title?: string;
+  status?: string;
+  location?: "open" | "done";
+  matches?: FindMatch[];
+};
+/**
  * tasks.donepreview: what finishing a task would do, with nothing written, and the `confirm` token that `done` needs for exactly this version of the file.
  */
 export type DonePreview = Head & {
@@ -611,6 +742,16 @@ export type DonePreview = Head & {
    * The plan this finish closes: the task is its last open member.
    */
   closes_plan?: string;
+  /**
+   * The project this finish closes after that: no other plan (a parked one does not count) and no task of its own is open (capability `projects`).
+   */
+  closes_project?: string;
+  /**
+   * Present when the task is a routine (`repeat`): the due date of the round the finish starts.
+   */
+  next_round?: {
+    due: Date;
+  };
   /**
    * Open tasks that wait on nothing but this one.
    */
@@ -734,6 +875,10 @@ export interface TaskEntry {
    */
   actor_written?: boolean;
   severity?: Severity;
+  /**
+   * What the task waits for from outside, as its file says; meant for a `parked` task (the engine drops it when the status leaves `parked`). Absent for a task that names none, and for a value that is no key (the `invalid-waits-for` problem).
+   */
+  waits_for?: string;
   created?: Date;
   updated?: Date;
   /**
@@ -748,7 +893,28 @@ export interface TaskEntry {
    * A calendar day, YYYY-MM-DD.
    */
   start?: string;
+  /**
+   * Somebody works on the task (optional; capability `claims`): who, since when, until when (UTC). `expired` is the engine's judgement when the document was made; a reader that keeps it compares `until` with its own clock. An expired claim counts as free.
+   */
+  claim?: {
+    by: string;
+    since: string;
+    until: string;
+    expired: boolean;
+  };
+  /**
+   * A routine (optional): every N days, weeks, months or years (`8w`). Finishing the task starts the next round. Capability `repeat`.
+   */
+  repeat?: string;
+  /**
+   * Where the next round counts from: the day the round was finished (`done`, the default) or the due date of the finished round (`due`, a fixed rhythm).
+   */
+  repeat_from?: "done" | "due";
   plan?: string;
+  /**
+   * The project the task belongs to directly, instead of a plan (capability `projects`).
+   */
+  project?: string;
   phase?: string;
   done_in?: string;
   commits?: string[];
@@ -861,6 +1027,7 @@ export interface NamedList {
     kind?: string;
     category?: string;
     severity?: string;
+    waits_for?: string;
     value?: string;
     actor?: string;
     tag?: string;
@@ -869,6 +1036,7 @@ export interface NamedList {
     phase?: string;
     blocked?: true;
     reminders?: true;
+    overdue?: true;
     unestimated?: true;
     stale_refs?: true;
     quick_win?: true;
@@ -995,6 +1163,16 @@ export interface ViewSelect {
   query?: string;
 }
 /**
+ * A task that names a ref: the ref, the task (id, area, status) and where it is, `open` (ROADMAP) or `done` (Backlog). Never a path.
+ */
+export interface FindMatch {
+  ref: string;
+  id: string;
+  area: string;
+  status: string;
+  location: "open" | "done";
+}
+/**
  * What happened to one operation of a request, in the order they were sent. A failed operation does not stop the others.
  */
 export interface ResultEntry {
@@ -1006,6 +1184,11 @@ export interface ResultEntry {
     | "done"
     | "move_area"
     | "plan_new"
+    | "plan_set"
+    | "plan_close"
+    | "project_new"
+    | "project_set"
+    | "project_close"
     | "tick_step"
     | "add_steps"
     | "answer"
@@ -1014,7 +1197,9 @@ export interface ResultEntry {
     | "set_body"
     | "view_save"
     | "view_delete"
-    | "attach";
+    | "attach"
+    | "claim"
+    | "release";
   id?: string;
   ok: boolean;
   /**
@@ -1032,6 +1217,8 @@ export interface ResultEntry {
     | "moved"
     | "deleted"
     | "would_delete"
+    | "closed"
+    | "would_close"
     | "blocked"
     | "failed";
   etag_before?: Etag;
@@ -1076,6 +1263,10 @@ export interface ResultEntry {
   to?: string;
   steps_ticked?: number;
   plans_closed?: string[];
+  /**
+   * The projects this finish closed after the plan (capability `projects`).
+   */
+  projects_closed?: string[];
   notes?: string[];
   move?: MovePlan;
   /**
@@ -1094,7 +1285,17 @@ export interface ResultEntry {
  * The operation that undoes a change: send it as a new operation (its `if_match` is the version the change left). A key the change added is `null` in the patch of a `set`.
  */
 export interface Inverse {
-  op: "set" | "reorder" | "tick_step" | "answer" | "set_body" | "move_area" | "view_save" | "view_delete";
+  op:
+    | "set"
+    | "reorder"
+    | "tick_step"
+    | "answer"
+    | "set_body"
+    | "move_area"
+    | "view_save"
+    | "view_delete"
+    | "plan_set"
+    | "project_set";
   id: string;
   /**
    * `tick_step`: the number of the step.

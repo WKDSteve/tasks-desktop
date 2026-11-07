@@ -17,6 +17,7 @@ export const FIELD_KEYS = [
   'state',
   'plan',
   'phase',
+  'project',
 ] as const;
 export type FieldKey = (typeof FIELD_KEYS)[number];
 
@@ -113,8 +114,14 @@ export const NO_ACTOR = 'none';
  */
 export const NONE = '\u0000none';
 
+/**
+ * The project a task belongs to (its own, or that of its plan: `projects.ts`). Without one only the task's own
+ * `project` is read, so a task of a plan of a project is in no project.
+ */
+export type ProjectOf = (task: TaskEntry) => string | undefined;
+
 /** The values a task has for a field (`none` when it has no value). */
-export function fieldValues(task: TaskEntry, key: FieldKey): string[] {
+export function fieldValues(task: TaskEntry, key: FieldKey, projectOf?: ProjectOf): string[] {
   const one = (v: string | number | undefined): string[] => [v === undefined || v === '' ? NONE : String(v)];
   switch (key) {
     case 'kind':
@@ -133,6 +140,8 @@ export function fieldValues(task: TaskEntry, key: FieldKey): string[] {
       return one(task.plan);
     case 'phase':
       return one(task.phase);
+    case 'project':
+      return one(projectOf ? projectOf(task) : task.project);
     case 'tag':
       return task.tags.length > 0 ? task.tags : [NONE];
     case 'category':
@@ -154,10 +163,11 @@ const ORDER: Partial<Record<FieldKey, readonly string[]>> = {
 export function fieldOptions(
   tasks: readonly TaskEntry[],
   key: FieldKey,
+  projectOf?: ProjectOf,
 ): { value: string; count: number }[] {
   const counts = new Map<string, number>();
   for (const task of tasks) {
-    for (const value of new Set(fieldValues(task, key))) counts.set(value, (counts.get(value) ?? 0) + 1);
+    for (const value of new Set(fieldValues(task, key, projectOf))) counts.set(value, (counts.get(value) ?? 0) + 1);
   }
   const order = ORDER[key] ?? [];
   const rank = (v: string): number => (v === NONE ? 2 : order.includes(v) ? 0 : 1);
@@ -243,6 +253,7 @@ export function matches(
   today: string = localToday(),
   touched?: ReadonlyMap<string, ReadonlySet<string>>,
   quickWins?: ReadonlySet<string>,
+  projectOf?: ProjectOf,
 ): boolean {
   if (filter.areas.length > 0 && !filter.areas.includes(task.area)) return false;
   if (filter.statuses.length > 0 && !filter.statuses.includes(task.status ?? '')) return false;
@@ -250,7 +261,7 @@ export function matches(
   for (const key of FIELD_KEYS) {
     const chosen = filter.fields[key];
     if (chosen && chosen.length > 0) {
-      const has = fieldValues(task, key);
+      const has = fieldValues(task, key, projectOf);
       const hit = wantsAll(filter, key) ? chosen.every((v) => has.includes(v)) : has.some((v) => chosen.includes(v));
       if (!hit) return false;
     }
@@ -309,8 +320,9 @@ export function applyFilter(
   today: string = localToday(),
   touched?: ReadonlyMap<string, ReadonlySet<string>>,
   quickWins?: ReadonlySet<string>,
+  projectOf?: ProjectOf,
 ): TaskEntry[] {
-  return tasks.filter((t) => matches(t, filter, today, touched, quickWins));
+  return tasks.filter((t) => matches(t, filter, today, touched, quickWins, projectOf));
 }
 
 /**
@@ -326,13 +338,14 @@ export function areaCounts(
   today: string = localToday(),
   touched?: ReadonlyMap<string, ReadonlySet<string>>,
   quickWins?: ReadonlySet<string>,
+  projectOf?: ProjectOf,
 ): Map<string, number> {
   const counts = new Map(areas.map((area) => [area, 0]));
   if (filter.cross) {
-    for (const area of areas) counts.set(area, applyFilter(tasks, { ...filter, areas: [area] }, today, touched, quickWins).length);
+    for (const area of areas) counts.set(area, applyFilter(tasks, { ...filter, areas: [area] }, today, touched, quickWins, projectOf).length);
     return counts;
   }
-  for (const task of applyFilter(tasks, { ...filter, areas: [] }, today, touched, quickWins)) {
+  for (const task of applyFilter(tasks, { ...filter, areas: [] }, today, touched, quickWins, projectOf)) {
     const n = counts.get(task.area);
     if (n !== undefined) counts.set(task.area, n + 1);
   }

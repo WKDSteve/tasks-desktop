@@ -15,7 +15,7 @@ import {
   pruneMarks,
   toggleMark,
 } from './bulk';
-import { planOp, type PlanForm, type PlanPreview } from './planwizard';
+import { planOp, type PlanForm, type PlanKind, type PlanPreview } from './planwizard';
 import { COLUMNS, columnsOf, isColumn, neighbourColumn, placeNear, stepInGroup, type Column, type Move } from './board';
 import { ApiError, type CheckAll, type SheetRunState, type Hub, type HubArea, type HubAreas, type SearchResult, type VaultList } from './api';
 import { cacheableClass, cacheableList, type CachedList, type ListStore } from './cache';
@@ -36,6 +36,7 @@ import type {
 import { expandAreas, isAreaGroup, NO_AREA, type AreaGroupInfo } from './areaGroups';
 import type { Op } from './api';
 import { indexOfLinks, touchedAreas } from './cross';
+import { planProjects, projectOfTask, projectsOf, type Project } from './projects';
 import { parsePrefs, type Prefs as FinishedPrefs } from './finished';
 import { activeFilters, applyFilter, areaCounts, filterVaultOf, freshFilter, moveSelection, parseFilter, serializeFilter, type Filter } from './filter';
 import { chipLabel } from './filter-chips';
@@ -577,6 +578,14 @@ export class App {
   selectedId = $state<string | null>(null);
   /** The plan the plan view is narrowed to ('': every task); kept when the view is left. */
   planChoice = $state('');
+  /**
+   * The project the plan view shows as its page (`ProjectPage`) while no plan is chosen; empty for none. Choosing a plan
+   * in the plan view's choice leaves it, the trail over a plan of a project comes back to it.
+   */
+  projectChoice = $state('');
+  /** What the plan wizard makes (a plan or a project) and the project a new plan goes to. */
+  planningKind = $state<PlanKind>('plan');
+  planningProject = $state('');
 
   tasks = $state.raw<TaskEntry[]>([]);
   snapshot = $state.raw<Snapshot | null>(null);
@@ -703,6 +712,15 @@ export class App {
     return ids === undefined ? undefined : new Set(ids);
   });
 
+  /** The projects of the vault (capability `projects`; none from an older engine). */
+  projects = $derived.by((): Project[] => projectsOf(this.snapshot));
+
+  /** For every plan of a project, the project's id. */
+  private planProjectIndex = $derived.by(() => planProjects(this.snapshot?.plans ?? []));
+
+  /** The project a task belongs to: its own or that of its plan (`projects.ts`). */
+  readonly projectOf = (task: TaskEntry): string | undefined => projectOfTask(task, this.planProjectIndex);
+
   /** The engine's area groups (`area_groups` of the snapshot): a name that stands for several areas in a filter. */
   areaGroups = $derived.by((): readonly AreaGroupInfo[] => this.snapshot?.area_groups ?? this.cachedGroups);
 
@@ -746,13 +764,13 @@ export class App {
   }
 
   get shown(): TaskEntry[] {
-    const filtered = applyFilter(this.tasks, this.matchFilter(this.filter), this.today, this.crossIndex, this.quickWinSet);
+    const filtered = applyFilter(this.tasks, this.matchFilter(this.filter), this.today, this.crossIndex, this.quickWinSet, this.projectOf);
     return this.sort === 'default' ? filtered : applyOrder(filtered, this.#order);
   }
 
   /** The open tasks a saved view shows: its selection found the way the list finds its filter. */
   tasksOfView(view: SavedView): TaskEntry[] {
-    return applyFilter(this.tasks, this.matchFilter(filterOfSelect(view.select)), this.today, this.crossIndex, this.quickWinSet);
+    return applyFilter(this.tasks, this.matchFilter(filterOfSelect(view.select)), this.today, this.crossIndex, this.quickWinSet, this.projectOf);
   }
 
   /**
@@ -1090,9 +1108,36 @@ export class App {
     safe(() => this.env.prefs.setItem('tasks-desktop.frecency', JSON.stringify(this.frecency)));
   }
 
-  openPlanWizard(): void {
+  openPlanWizard(kind: PlanKind = 'plan', project = ''): void {
     if (this.refusedReadOnly()) return;
-    if (this.phase === 'ready' && this.can('plan_new')) this.planning = true;
+    if (this.phase !== 'ready' || !this.can(kind === 'project' ? 'project_new' : 'plan_new')) return;
+    this.planningKind = kind;
+    this.planningProject = kind === 'plan' ? project : '';
+    this.planning = true;
+  }
+
+  /** Show the page of project `id` in the plan view (`''`: the plan view as it was, no project). */
+  openProject(id: string): void {
+    this.projectChoice = id;
+    this.planChoice = '';
+    this.setView('plan');
+  }
+
+  /** Show plan `id` in the plan view; the project page gives way to it. */
+  openPlan(id: string): void {
+    this.planChoice = id;
+    this.setView('plan');
+  }
+
+  /**
+   * Change the frontmatter of an open plan (`plan_set`) or project (`project_set`): `null` removes a key. The engine
+   * judges the change (a project it does not know, a stage the project does not name) and refuses it with the reason;
+   * what went through can be taken back (its `inverse`, on the version the change left).
+   */
+  async setPlanFile(kind: 'plan' | 'project', id: string, patch: Record<string, unknown>): Promise<boolean> {
+    if (!this.can(kind === 'plan' ? 'plan_set' : 'project_set')) return false;
+    const result = await this.write([{ op: kind === 'plan' ? 'plan_set' : 'project_set', id, patch }]);
+    return result?.results.every((r) => r.ok) ?? false;
   }
 
   closePlanWizard(): void {
@@ -1129,8 +1174,8 @@ export class App {
     const id = result?.results.find((r) => r.ok && r.outcome === 'created')?.id;
     if (!id) return;
     this.planning = false;
-    this.planChoice = id;
-    this.setView('plan');
+    if (form.kind === 'project') this.openProject(id);
+    else this.openPlan(id);
   }
 
   /**
@@ -1265,7 +1310,13 @@ export class App {
       // Finishing is taken back by bringing the task back. What finishing set in motion beside the file (ticked steps,
       // closed plans) stays as it is, so with such effects no way back is offered rather than a half one.
       if (entry.op === 'done' && entry.id) {
-        if ((entry.steps_ticked ?? 0) > 0 || (entry.plans_closed?.length ?? 0) > 0) return undefined;
+        if (
+          (entry.steps_ticked ?? 0) > 0 ||
+          (entry.plans_closed?.length ?? 0) > 0 ||
+          (entry.projects_closed?.length ?? 0) > 0
+        ) {
+          return undefined;
+        }
         inverses.push({ op: 'reopen', id: entry.id });
         continue;
       }
@@ -1327,6 +1378,16 @@ export class App {
           op: 'view_save',
           id: inv.id,
           view: inv.view as ViewForm,
+          ...(inv.if_match ? { if_match: inv.if_match } : {}),
+        });
+        continue;
+      }
+      // A plan or project file changed: its old values back, on the version the change left.
+      if (inv.op === 'plan_set' || inv.op === 'project_set') {
+        inverses.push({
+          op: inv.op,
+          id: inv.id,
+          patch: (inv.patch ?? {}) as Record<string, unknown>,
           ...(inv.if_match ? { if_match: inv.if_match } : {}),
         });
         continue;
@@ -2696,12 +2757,12 @@ export class App {
 
   /** For each area how many tasks the filter would keep with that area as its only one (the choice of the areas). */
   get areaCounts(): Map<string, number> {
-    const counts = areaCounts(this.tasks, this.filter, this.areaNames, this.today, this.crossIndex, this.quickWinSet);
+    const counts = areaCounts(this.tasks, this.filter, this.areaNames, this.today, this.crossIndex, this.quickWinSet, this.projectOf);
     // a group counts what it would keep as the only choice: its members' tasks
     for (const group of this.areaGroups) {
       if (counts.has(group.name)) continue;
       const only = this.matchFilter({ ...this.filter, areas: [group.name] });
-      counts.set(group.name, applyFilter(this.tasks, only, this.today, this.crossIndex, this.quickWinSet).length);
+      counts.set(group.name, applyFilter(this.tasks, only, this.today, this.crossIndex, this.quickWinSet, this.projectOf).length);
     }
     return counts;
   }
@@ -2777,7 +2838,7 @@ export class App {
 
   /** The open tasks `filter` keeps, found the way the list finds its filter. */
   tasksKeptBy(filter: Filter): TaskEntry[] {
-    return applyFilter(this.tasks, this.matchFilter(filter), this.today, this.crossIndex, this.quickWinSet);
+    return applyFilter(this.tasks, this.matchFilter(filter), this.today, this.crossIndex, this.quickWinSet, this.projectOf);
   }
 
   /** A click on the legend of the statistics: the filter changes, the view stays. */

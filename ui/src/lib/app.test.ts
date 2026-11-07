@@ -354,14 +354,14 @@ class FakeHub {
         id:
           op.op === 'new'
             ? 'pub/created'
-            : op.op === 'plan_new'
-              ? `${op.area}/made-plan`
+            : op.op === 'plan_new' || op.op === 'project_new'
+              ? `${op.area}/made-${op.op === 'plan_new' ? 'plan' : 'project'}`
               : op.op === 'view_save'
                 ? (op.id ?? `${op.area}/made-view`)
                 : op.id,
         ok: true,
         outcome:
-          op.op === 'new' || op.op === 'plan_new' || (op.op === 'view_save' && op.id === undefined)
+          op.op === 'new' || op.op === 'plan_new' || op.op === 'project_new' || (op.op === 'view_save' && op.id === undefined)
             ? request.dry_run
               ? 'would_create'
               : 'created'
@@ -3002,6 +3002,74 @@ describe('writing', () => {
       expect(app.toast?.undo).toBeUndefined();
     });
 
+    it('makes a project and shows its page in the plan view', async () => {
+      const { app, hub } = await ready([], { capabilities: ['plan_new', 'project_new'] });
+      app.openPlanWizard('project');
+      expect(app.planning).toBe(true);
+      expect(app.planningKind).toBe('project');
+      await app.createPlan({ ...emptyForm('pub', 'project'), title: 'Mobile' });
+      expect(hub.sent[0]?.ops[0]).toMatchObject({ op: 'project_new', title: 'Mobile' });
+      expect(app.view).toBe('plan');
+      expect(app.projectChoice).toBe('pub/made-project');
+      expect(app.planChoice).toBe('');
+    });
+
+    it('opens no project wizard without the capability, and a plan wizard keeps the project it is opened for', async () => {
+      const { app } = await ready();
+      app.openPlanWizard('project');
+      expect(app.planning).toBe(false);
+      app.openPlanWizard('plan', 'ALL/mobile');
+      expect(app.planning).toBe(true);
+      expect(app.planningProject).toBe('ALL/mobile');
+    });
+
+    it('changes a plan file through plan_set and takes it back with its inverse, on the version it left', async () => {
+      const { app, hub } = await ready([], { capabilities: ['plan_set', 'project_set'] });
+      hub.next_ops = {
+        kind: 'tasks.result',
+        ok: true,
+        dry_run: false,
+        results: [
+          {
+            n: 1,
+            op: 'plan_set',
+            id: 'pub/app',
+            ok: true,
+            outcome: 'changed',
+            changed_ids: ['pub/app'],
+            etag_before: 'sha256:a',
+            etag_after: 'sha256:b',
+            inverse: { op: 'plan_set', id: 'pub/app', patch: { project: null, phase: null }, if_match: 'sha256:b' },
+          },
+        ],
+      } as unknown as Result;
+      expect(await app.setPlanFile('plan', 'pub/app', { project: 'ALL/mobile', phase: 'basis' })).toBe(true);
+      expect(hub.sent[0]?.ops).toEqual([{ op: 'plan_set', id: 'pub/app', patch: { project: 'ALL/mobile', phase: 'basis' } }]);
+      expect(app.toast?.undo).toEqual([
+        { op: 'plan_set', id: 'pub/app', patch: { project: null, phase: null }, if_match: 'sha256:b' },
+      ]);
+      await app.undo();
+      expect(hub.sent[1]?.ops).toEqual([
+        { op: 'plan_set', id: 'pub/app', patch: { project: null, phase: null }, if_match: 'sha256:b' },
+      ]);
+    });
+
+    it('sends no plan_set or project_set without the capability', async () => {
+      const { app, hub } = await ready();
+      expect(await app.setPlanFile('plan', 'pub/app', { phase: 'x' })).toBe(false);
+      expect(await app.setPlanFile('project', 'ALL/mobile', { status: 'doing' })).toBe(false);
+      expect(hub.sent).toHaveLength(0);
+    });
+
+    it('opens a project and a plan: the plan gives the page way, a project leaves the plan', async () => {
+      const { app } = await ready();
+      app.openPlan('pub/app');
+      app.openProject('ALL/mobile');
+      expect([app.view, app.planChoice, app.projectChoice]).toEqual(['plan', '', 'ALL/mobile']);
+      app.openPlan('pub/app');
+      expect([app.planChoice, app.projectChoice]).toEqual(['pub/app', 'ALL/mobile']);
+    });
+
     it('keeps the wizard open when the engine refuses the plan', async () => {
       const { app, hub } = await ready();
       app.openPlanWizard();
@@ -3867,6 +3935,11 @@ describe('writing', () => {
       expect(app.toast?.undo).toBeUndefined();
       await app.startFinish('pub/a');
       hub.next_ops = doneEntry({ plans_closed: ['pub/plan'] });
+      await app.confirmFinish();
+      expect(app.toast?.undo).toBeUndefined();
+      // A task of the project itself closes the project without a plan: reopen would leave the project closed.
+      await app.startFinish('pub/a');
+      hub.next_ops = doneEntry({ projects_closed: ['ALL/mobile'] });
       await app.confirmFinish();
       expect(app.toast?.undo).toBeUndefined();
     });

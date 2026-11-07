@@ -103,7 +103,7 @@
   const baseChoices = $derived(
     FIELD_KEYS.map((key) => ({
       key,
-      options: fieldOptions(app.tasks, key).map((o) => ({
+      options: fieldOptions(app.tasks, key, app.projectOf).map((o) => ({
         value: o.value,
         label: valueLabel(key, o.value),
         suffix: String(o.count),

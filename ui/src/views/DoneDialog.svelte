@@ -52,6 +52,9 @@
       {#if finishing.preview.closes_plan}
         <li>{t('done.closes_plan', { plan: finishing.preview.closes_plan })}</li>
       {/if}
+      {#if finishing.preview.closes_project}
+        <li>{t('done.closes_project', { project: finishing.preview.closes_project })}</li>
+      {/if}
       {#if (finishing.preview.freed?.length ?? 0) > 0}
         <li>
           {t('done.freed', { n: finishing.preview.freed?.length ?? 0 })}:

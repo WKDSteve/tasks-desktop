@@ -340,6 +340,10 @@ async fn a_plan_may_be_asked_for_and_an_unknown_operation_is_not() {
         r#"{"dry_run":true,"ops":[{"op":"view_save","area":"alpha.nvim","view":{"title":"A view","display":"list","group_by":"status"}}]}"#,
         r#"{"dry_run":true,"ops":[{"op":"view_delete","id":"alpha.nvim/a-view"}]}"#,
         r#"{"dry_run":true,"ops":[{"op":"attach","id":"alpha.nvim/t1","from":"clipboard"}]}"#,
+        // The project level: a project file, and the frontmatter of a plan or project file.
+        r#"{"dry_run":true,"ops":[{"op":"project_new","area":"alpha.nvim","title":"A project"}]}"#,
+        r#"{"dry_run":true,"ops":[{"op":"plan_set","id":"alpha.nvim/p","patch":{"phase":null}}]}"#,
+        r#"{"dry_run":true,"ops":[{"op":"project_set","id":"alpha.nvim/p","patch":{"status":"doing"}}]}"#,
     ] {
         let (status, doc) = post(&r, "/api/tasks/ops", body, JSON, true).await;
         assert_eq!(status, 200, "the door refused {body}: {doc}");

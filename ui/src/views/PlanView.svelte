@@ -18,6 +18,8 @@
   import FoldButton from './FoldButton.svelte';
   import ExportMenu from './ExportMenu.svelte';
   import PlanGraph from './PlanGraph.svelte';
+  import ProjectPage from './ProjectPage.svelte';
+  import { projectOfPlan } from '../lib/projects';
   import { allButtonFold, foldOf, withAll, withFold } from '../lib/fold';
 
   let { app }: { app: App } = $props();
@@ -33,6 +35,11 @@
   const plans = $derived(snapshot?.plans ?? []);
   // A plan that is gone (a change of the vault) is not kept chosen.
   const planId = $derived(chosenPlan(plans, app.planChoice));
+  // The project page stands where the stages are while a project and no plan is chosen; a project that is gone is none.
+  const projects = $derived(app.projects);
+  const projectId = $derived(planId === '' && projects.some((p) => p.id === app.projectChoice) ? app.projectChoice : '');
+  // Over a plan of a project: the trail "project › plan".
+  const planProject = $derived(projectOfPlan(projects, plans.find((p) => p.id === planId)));
   const stages = $derived(stagesOf(app.shown, planId === '' ? null : planId));
   // The first tasks are drawn at once and the rest in the frames after, like the list: a plan of two thousand tasks
   // is not one block of work between the click and the first stage (measured: 50 ms for 600, 150 ms for 2000).
@@ -74,6 +81,9 @@
   $effect(() => {
     if (app.planChoice !== '' && planId === '') app.planChoice = '';
   });
+  $effect(() => {
+    if (app.projectChoice !== '' && !projects.some((p) => p.id === app.projectChoice)) app.projectChoice = '';
+  });
 
   function open(id: string): void {
     app.peek(id);
@@ -95,8 +105,17 @@
 
 <div class="plan">
   <FilterNote {app} plan />
+  {#if planProject}
+    <nav class="trail" aria-label={t('project.trail')}>
+      <button type="button" class="link" onclick={() => app.openProject(planProject.id)}>{markHidden(planProject.title)}</button>
+      <span aria-hidden="true">›</span>
+      <span aria-current="page">{markHidden(plans.find((p) => p.id === planId)?.title ?? planId)}</span>
+    </nav>
+  {/if}
   {#if !snapshot}
     <p class="muted">{t('state.loading')}</p>
+  {:else if projectId !== ''}
+    <ProjectPage {app} {projectId} />
   {:else}
     <section class="card head" aria-label={t('plan.summary')}>
       <div class="chips">
@@ -135,9 +154,26 @@
             use:contextTarget={planTarget()}
           >
             <span>{t('plan.which')}</span>
-            <select bind:value={app.planChoice}>
+            <select
+              value={app.planChoice}
+              onchange={(e) => {
+                app.planChoice = e.currentTarget.value;
+                app.projectChoice = '';
+              }}
+            >
               <option value="">{t('plan.all')}</option>
               {#each plans as p (p.id)}
+                <option value={p.id}>{markHidden(p.title)}</option>
+              {/each}
+            </select>
+          </label>
+        {/if}
+        {#if projects.length > 0}
+          <label class="project-select" data-hint={t('hint.ui.project.select')}>
+            <span>{t('project.which')}</span>
+            <select value="" onchange={(e) => app.openProject(e.currentTarget.value)}>
+              <option value="">{t('project.none')}</option>
+              {#each projects as p (p.id)}
                 <option value={p.id}>{markHidden(p.title)}</option>
               {/each}
             </select>
@@ -151,6 +187,9 @@
           {/each}
         </div>
         <button type="button" class="newplan" data-hint={t('hint.ui.plan.new')} disabled={!app.can('plan_new')} onclick={() => app.openPlanWizard()}>{t('plan.new.button')}</button>
+        {#if app.can('project_new')}
+          <button type="button" class="newplan" data-hint={t('hint.ui.project.new')} onclick={() => app.openPlanWizard('project')}>{t('project.new.button')}</button>
+        {/if}
         <ExportMenu {app} />
       </div>
       {#if phases.length > 0}
@@ -302,6 +341,16 @@
 </div>
 
 <style>
+  .trail {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.9rem;
+  }
+  .trail [aria-current] {
+    font-weight: 600;
+  }
   .plan {
     display: grid;
     gap: 1rem;
@@ -414,7 +463,8 @@
   .chip.soft {
     color: var(--muted);
   }
-  .plan-select {
+  .plan-select,
+  .project-select {
     display: flex;
     align-items: center;
     gap: 0.5rem;
@@ -423,7 +473,8 @@
     font-size: 0.85rem;
     color: var(--muted);
   }
-  .plan-select select {
+  .plan-select select,
+  .project-select select {
     min-width: 0;
     max-width: 100%;
     background: var(--surface-2);

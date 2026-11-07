@@ -283,14 +283,18 @@ pub(super) async fn search_route(
 /// replace and delete a saved view (a small file of the vault, not a task); the engine checks the view and its version.
 /// `attach` makes the image on the clipboard of this machine, or its newest screenshot, an asset of a task: the request
 /// names no path (the folders are the hub's settings, `attach_dirs`, added by `with_attach_dirs`), and the answer holds
-/// the path below the task and its link, never the image.
-pub(super) const OPS_ALLOWED: [&str; 15] = [
+/// the path below the task and its link, never the image. `project_new`, `plan_set` and `project_set` make a project file
+/// and change the frontmatter of an open plan or project file (the project level); the engine judges the relation.
+pub(super) const OPS_ALLOWED: [&str; 18] = [
     "set",
     "new",
     "reorder",
     "done",
     "move_area",
     "plan_new",
+    "project_new",
+    "plan_set",
+    "project_set",
     "tick_step",
     "answer",
     "add_steps",

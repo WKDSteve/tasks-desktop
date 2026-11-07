@@ -40,6 +40,38 @@ describe('planOp', () => {
   });
 });
 
+describe('planOp with projects', () => {
+  it('a plan names its project and its stage there', () => {
+    expect(planOp(form({ project: ' ALL/mobile ', phase: ' basis ' }))).toEqual({
+      op: 'plan_new',
+      area: 'lib.nvim',
+      title: 'A plan',
+      areas: ['lib.nvim'],
+      project: 'ALL/mobile',
+      phase: 'basis',
+    });
+  });
+
+  it('a stage without a project is not sent (the engine refuses plan-phase-without-project)', () => {
+    expect(planOp(form({ phase: 'basis' }))).toEqual({ op: 'plan_new', area: 'lib.nvim', title: 'A plan', areas: ['lib.nvim'] });
+  });
+
+  it('a project is project_new and is in no project', () => {
+    expect(planOp({ ...emptyForm('ALL', 'project', 'ALL/x'), title: 'Mobile', phases: 'basis, group-a', project: 'ALL/x', phase: 'p' })).toEqual({
+      op: 'project_new',
+      area: 'ALL',
+      title: 'Mobile',
+      areas: ['ALL'],
+      phases: ['basis', 'group-a'],
+    });
+  });
+
+  it('the empty form of a plan of a project starts in that project', () => {
+    expect(emptyForm('a', 'plan', 'ALL/mobile')).toMatchObject({ kind: 'plan', project: 'ALL/mobile', phase: '' });
+    expect(emptyForm('a', 'project', 'ALL/mobile')).toMatchObject({ kind: 'project', project: '' });
+  });
+});
+
 describe('parsePhases', () => {
   it('keeps the order and drops empties and repeats', () => {
     expect(parsePhases('b, a,,b')).toEqual(['b', 'a']);

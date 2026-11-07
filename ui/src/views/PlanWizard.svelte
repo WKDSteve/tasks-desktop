@@ -37,6 +37,9 @@
       .sort((a, b) => a.label.localeCompare(b.label)),
   );
   const phases = $derived(parsePhases(form.phases));
+  // A plan can go to a project (and one of its stages); a project is in none.
+  const projects = $derived(app.projects);
+  const stagesOfProject = $derived(projects.find((p) => p.id === form.project)?.phase_order ?? []);
   // The open tasks, offered as the target of the plan (typed text is allowed too).
   const targets = $derived(app.tasks.map((x) => x.id));
 
@@ -45,7 +48,7 @@
     if (app.planning && !dialog.open) {
       // one area chosen (an area group with one member counts); a group is never a place to write to
       const area = app.writeArea ?? areas[0]?.value ?? '';
-      form = emptyForm(area);
+      form = emptyForm(area, app.planningKind, app.planningProject);
       answer = null;
       areasTouched = false;
       dialog.showModal();
@@ -84,7 +87,30 @@
 
 <dialog bind:this={dialog} use:floating={{ kind: 'plan-wizard', moveLabel: t('float.move'), moveHint: t('hint.float.move') }} use:closeOnBackdrop={{ closeable: () => form.title.trim() === '' }} aria-labelledby="plan-title" onclose={() => app.closePlanWizard()}>
   <form onsubmit={submit}>
-    <h2 id="plan-title">{t('plan.new.title')}</h2>
+    <h2 id="plan-title">{t(form.kind === 'project' ? 'plan.new.project_title' : 'plan.new.title')}</h2>
+    {#if app.can('project_new')}
+      <div class="kind" role="radiogroup" aria-label={t('plan.new.kind')}>
+        {#each ['plan', 'project'] as const as kind (kind)}
+          <label class="check">
+            <input
+              type="radio"
+              name="plan-kind"
+              value={kind}
+              checked={form.kind === kind}
+              disabled={kind === 'plan' && !app.can('plan_new')}
+              onchange={() => {
+                form.kind = kind;
+                if (kind === 'project') {
+                  form.project = '';
+                  form.phase = '';
+                }
+              }}
+            />
+            <span>{t(`plan.new.kind.${kind}`)}</span>
+          </label>
+        {/each}
+      </div>
+    {/if}
     <label>
       <span>{t('capture.name')}</span>
       <!-- svelte-ignore a11y_autofocus -->
@@ -135,6 +161,24 @@
         {#each targets as id (id)}<option value={id}></option>{/each}
       </datalist>
     </label>
+    {#if form.kind === 'plan' && projects.length > 0}
+      <label>
+        <span>{t('plan.new.project')}</span>
+        <select bind:value={form.project} onchange={() => (form.phase = '')}>
+          <option value="">{t('project.none')}</option>
+          {#each projects as p (p.id)}<option value={p.id}>{p.title}</option>{/each}
+        </select>
+      </label>
+      {#if form.project !== '' && stagesOfProject.length > 0}
+        <label>
+          <span>{t('plan.new.phase')}</span>
+          <select bind:value={form.phase}>
+            <option value="">{t('project.no_stage')}</option>
+            {#each stagesOfProject as ph (ph)}<option value={ph}>{ph}</option>{/each}
+          </select>
+        </label>
+      {/if}
+    {/if}
     <label>
       <span>{t('plan.new.status')}</span>
       <select bind:value={form.status}>
@@ -155,7 +199,7 @@
         {#if preview.renamed}
           <span class="warn">{t('plan.new.taken', { id: preview.id })}</span>
         {:else}
-          {t('plan.new.will', { id: preview.id })}
+          {t(form.kind === 'project' ? 'plan.new.project_will' : 'plan.new.will', { id: preview.id })}
         {/if}
       {:else if preview?.kind === 'refused'}
         <span class="bad">{preview.message}</span>
@@ -196,6 +240,14 @@
     display: grid;
     gap: 0.2rem;
     margin-bottom: 0.7rem;
+  }
+  .kind {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 0.7rem;
+  }
+  .kind label.check {
+    margin-bottom: 0;
   }
   label.check {
     display: flex;
