@@ -678,6 +678,8 @@ export const OPS_ALLOWED = [
   'project_new',
   'plan_set',
   'project_set',
+  'plan_close',
+  'project_close',
   'tick_step',
   'answer',
   'add_steps',

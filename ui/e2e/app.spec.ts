@@ -7283,11 +7283,17 @@ test('a project: its page with goal, rollup, own tasks and the plans by stage, t
   // A project of its own (unique names: the tests share the vault), two plans in it and a task of the project itself.
   const files = [
     [join(vault, 'ALL', 'ROADMAP', 'projects', 'e2e-projekt-p001.md'), `---\ntitle: Projekt p001\nstatus: doing\nareas: [ALL]\nphase_order: [basis, gruppe-a]\ncreated: 2026-11-07\nupdated: 2026-11-07\n---\n\nA project of the browser test.\n`],
-    [join(vault, 'lib.nvim', 'ROADMAP', 'plans', 'e2e-projplan-a001.md'), `---\ntitle: Projplan a001\nstatus: doing\nareas: [lib.nvim]\nproject: ALL/e2e-projekt-p001\nphase: basis\nphase_order: []\ncreated: 2026-11-07\nupdated: 2026-11-07\n---\n\nFirst plan.\n`],
-    [join(vault, 'lib.nvim', 'ROADMAP', 'plans', 'e2e-projplan-b001.md'), `---\ntitle: Projplan b001\nstatus: planning\nareas: [lib.nvim]\nproject: ALL/e2e-projekt-p001\nphase: gruppe-a\nphase_order: []\ncreated: 2026-11-07\nupdated: 2026-11-07\n---\n\nSecond plan.\n`],
-    [join(vault, 'lib.nvim', 'ROADMAP', 'tasks', 'e2e-projtask-t001.md'), `---\ntitle: Projtask t001\nstatus: open\nkind: task\nplan: lib.nvim/e2e-projplan-a001\ncreated: 2026-11-07\nupdated: 2026-11-07\n---\n\nIn the first plan.\n\n## Plan\n\n- [x] 1. one\n- [ ] 2. two\n`],
+    [join(vault, 'nvim-config', 'ROADMAP', 'plans', 'e2e-projplan-a001.md'), `---\ntitle: Projplan a001\nstatus: doing\nareas: [nvim-config]\nproject: ALL/e2e-projekt-p001\nphase: basis\nphase_order: []\ncreated: 2026-11-07\nupdated: 2026-11-07\n---\n\nFirst plan.\n`],
+    [join(vault, 'nvim-config', 'ROADMAP', 'plans', 'e2e-projplan-b001.md'), `---\ntitle: Projplan b001\nstatus: planning\nareas: [nvim-config]\nproject: ALL/e2e-projekt-p001\nphase: gruppe-a\nphase_order: []\ncreated: 2026-11-07\nupdated: 2026-11-07\n---\n\nSecond plan.\n`],
+    [join(vault, 'nvim-config', 'ROADMAP', 'tasks', 'e2e-projtask-t001.md'), `---\ntitle: Projtask t001\nstatus: open\nkind: task\nplan: nvim-config/e2e-projplan-a001\ncreated: 2026-11-07\nupdated: 2026-11-07\n---\n\nIn the first plan.\n\n## Plan\n\n- [x] 1. one\n- [ ] 2. two\n`],
     [join(vault, 'ALL', 'ROADMAP', 'tasks', 'e2e-projown-o001.md'), `---\ntitle: Projown o001\nstatus: open\nkind: decision\nproject: ALL/e2e-projekt-p001\ncreated: 2026-11-07\nupdated: 2026-11-07\n---\n\nThe project's own.\n\n## Plan\n\n- [x] 1. one\n- [x] 2. two\n- [x] 3. three\n- [ ] 4. four\n- [ ] 5. five\n`],
   ] as const;
+  // Finishing a plan moves its file to the Backlog and writes a row into the Backlog's README (and the area's index):
+  // what was there before is put back, the finished file is removed.
+  const kept = [join(vault, 'nvim-config', 'Backlog', 'README.md'), join(vault, 'nvim-config', 'ROADMAP', 'TASKS.md')].map(
+    (path) => [path, existsSync(path) ? readFileSync(path, 'utf8') : null] as const,
+  );
+  const finishedDir = join(vault, 'nvim-config', 'Backlog', 'FEATURES');
   try {
     for (const [path, text] of files) {
       mkdirSync(join(path, '..'), { recursive: true });
@@ -7310,7 +7316,7 @@ test('a project: its page with goal, rollup, own tasks and the plans by stage, t
     await expect(plans.locator('.stage').nth(0)).toContainText('Stage basis');
     await expect(plans.locator('.stage').nth(0)).toContainText('Projplan a001');
     await expect(plans.locator('.stage').nth(1)).toContainText('Projplan b001');
-    const card = plans.locator('[data-plan="lib.nvim/e2e-projplan-a001"]');
+    const card = plans.locator('[data-plan="nvim-config/e2e-projplan-a001"]');
     await expect(card).toContainText('Projtask t001');
     await expect(card).toContainText('1/2');
     await expect(card.getByRole('meter')).toHaveAttribute('aria-valuenow', '0');
@@ -7325,7 +7331,7 @@ test('a project: its page with goal, rollup, own tasks and the plans by stage, t
     await expect(head.getByRole('heading', { name: 'Projekt p001' })).toBeVisible();
 
     // The second plan to the first stage (plan_set); the toast takes it back (its inverse).
-    const second = plans.locator('[data-plan="lib.nvim/e2e-projplan-b001"]');
+    const second = plans.locator('[data-plan="nvim-config/e2e-projplan-b001"]');
     let answer = nextAnswer(page);
     await second.getByRole('combobox', { name: 'Stage in the project' }).selectOption('basis');
     await answer;
@@ -7338,8 +7344,37 @@ test('a project: its page with goal, rollup, own tasks and the plans by stage, t
     await expect(plans.locator('.stage')).toHaveCount(2);
     expect(readFileSync(files[2][0], 'utf8')).toMatch(/^phase: gruppe-a$/m);
 
+    // The project cannot be finished by hand: the engine names what holds it open (its own task, the plan with a task).
+    await head.getByRole('button', { name: 'Finish the project …' }).click();
+    const projectPanel = head.getByRole('group', { name: 'Finish the project …' });
+    await expect(projectPanel).toContainText('Still open, so it cannot be finished:');
+    await expect(projectPanel).toContainText('Projown o001');
+    await expect(projectPanel.getByRole('button', { name: 'Finish', exact: true })).toHaveCount(0);
+    await projectPanel.getByRole('button', { name: 'Cancel' }).click();
+    await expect(projectPanel).toHaveCount(0);
+    // The plan without tasks does not finish by itself: by hand, after the engine said what happens.
+    const empty = plans.locator('[data-plan="nvim-config/e2e-projplan-b001"]');
+    await empty.getByRole('button', { name: 'Finish by hand …' }).click();
+    const planPanel = empty.getByRole('group', { name: 'Finish by hand …' });
+    await expect(planPanel).toContainText('The plan Projplan b001 will be finished');
+    answer = nextAnswer(page);
+    await planPanel.getByRole('button', { name: 'Finish', exact: true }).click();
+    await answer;
+    await expect(empty).toHaveCount(0);
+    expect(existsSync(files[2][0])).toBe(false);
+    expect(readdirSync(finishedDir).some((name) => name.endsWith('_e2e-projplan-b001.md'))).toBe(true);
+    expect(await violations(page)).toEqual([]);
     expect(consoleProblems.get(page) ?? []).toEqual([]);
   } finally {
     for (const [path] of files) rmSync(path, { force: true });
+    if (existsSync(finishedDir)) {
+      for (const name of readdirSync(finishedDir)) {
+        if (name.endsWith('_e2e-projplan-b001.md')) rmSync(join(finishedDir, name), { force: true });
+      }
+    }
+    for (const [path, text] of kept) {
+      if (text === null) rmSync(path, { force: true });
+      else writeFileSync(path, text);
+    }
   }
 });

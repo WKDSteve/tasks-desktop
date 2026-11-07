@@ -36,7 +36,7 @@ import type {
 import { expandAreas, isAreaGroup, NO_AREA, type AreaGroupInfo } from './areaGroups';
 import type { Op } from './api';
 import { indexOfLinks, touchedAreas } from './cross';
-import { planProjects, projectOfTask, projectsOf, type Project } from './projects';
+import { planProjects, projectOfTask, projectsOf, type ClosePreview, type Project } from './projects';
 import { parsePrefs, type Prefs as FinishedPrefs } from './finished';
 import { activeFilters, applyFilter, areaCounts, filterVaultOf, freshFilter, moveSelection, parseFilter, serializeFilter, type Filter } from './filter';
 import { chipLabel } from './filter-chips';
@@ -1114,6 +1114,48 @@ export class App {
     this.planningKind = kind;
     this.planningProject = kind === 'plan' ? project : '';
     this.planning = true;
+  }
+
+  /**
+   * What finishing a plan or a project by hand would do: a dry run of `plan_close` / `project_close`. `holding` names
+   * what keeps it open (the engine refuses then); nothing is written.
+   */
+  async previewClose(kind: 'plan' | 'project', id: string): Promise<ClosePreview> {
+    if (this.readOnly || !this.can(kind === 'plan' ? 'plan_close' : 'project_close')) return { kind: 'unknown' };
+    try {
+      const result = await this.env.hub.ops({
+        client_op_id: this.opId(),
+        dry_run: true,
+        ops: [{ op: kind === 'plan' ? 'plan_close' : 'project_close', id }],
+      });
+      const entry = result.results[0];
+      if (entry?.ok) return { kind: 'ok' };
+      const holding = (entry?.error?.details as { holding?: unknown } | undefined)?.holding;
+      if (Array.isArray(holding)) return { kind: 'holding', ids: holding.filter((x): x is string => typeof x === 'string') };
+      return { kind: 'refused', message: entry?.error?.message ?? '' };
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 400) return { kind: 'refused', message: error.message };
+      return { kind: 'unknown' };
+    }
+  }
+
+  /**
+   * Finish a plan or a project by hand. There is no way back to offer (the engine moves the file and has no inverse for
+   * it); a project that the last plan takes with it is said.
+   */
+  async closePlanFile(kind: 'plan' | 'project', id: string): Promise<boolean> {
+    if (!this.can(kind === 'plan' ? 'plan_close' : 'project_close')) return false;
+    const result = await this.write([{ op: kind === 'plan' ? 'plan_close' : 'project_close', id }], {
+      undoable: false,
+      onAnswer: (answer) => {
+        const entry = answer.results[0];
+        const project = kind === 'plan' ? entry?.projects_closed?.[0] : undefined;
+        if (!entry?.ok || project === undefined) return false;
+        this.say('ok', 'project.closed_with', { project });
+        return true;
+      },
+    });
+    return result?.results.every((r) => r.ok) ?? false;
   }
 
   /** Show the page of project `id` in the plan view (`''`: the plan view as it was, no project). */

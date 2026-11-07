@@ -3098,6 +3098,61 @@ describe('writing', () => {
       expect(app.toast?.text).toBe(translate(app.lang, 'write.conflict'));
     });
 
+    it('asks the engine before finishing by hand: what holds it open, or that it would close', async () => {
+      const { app, hub } = await ready([], { capabilities: ['plan_close', 'project_close'] });
+      hub.next_ops = {
+        kind: 'tasks.result',
+        ok: false,
+        dry_run: true,
+        results: [
+          {
+            n: 1,
+            op: 'project_close',
+            id: 'ALL/mobile',
+            ok: false,
+            outcome: 'failed',
+            changed_ids: [],
+            error: { code: 'invalid_argument', message: 'still open', retryable: false, details: { holding: ['ALL/decide', 'a/app'] } },
+          },
+        ],
+      } as unknown as Result;
+      expect(await app.previewClose('project', 'ALL/mobile')).toEqual({ kind: 'holding', ids: ['ALL/decide', 'a/app'] });
+      expect(hub.sent[0]).toMatchObject({ dry_run: true, ops: [{ op: 'project_close', id: 'ALL/mobile' }] });
+      hub.next_ops = {
+        kind: 'tasks.result',
+        ok: true,
+        dry_run: true,
+        results: [{ n: 1, op: 'plan_close', id: 'a/app', ok: true, outcome: 'would_close', changed_ids: [] }],
+      } as unknown as Result;
+      expect(await app.previewClose('plan', 'a/app')).toEqual({ kind: 'ok' });
+      // A dry run writes nothing and says nothing.
+      expect(app.toast).toBeNull();
+    });
+
+    it('finishes a plan by hand without a way back, and says the project it finished with it', async () => {
+      const { app, hub } = await ready([], { capabilities: ['plan_close'] });
+      hub.next_ops = {
+        kind: 'tasks.result',
+        ok: true,
+        dry_run: false,
+        results: [
+          { n: 1, op: 'plan_close', id: 'a/app', ok: true, outcome: 'closed', changed_ids: ['a/app'], plans_closed: ['a/app'], projects_closed: ['ALL/mobile'] },
+        ],
+      } as unknown as Result;
+      expect(await app.closePlanFile('plan', 'a/app')).toBe(true);
+      expect(hub.sent[0]?.dry_run).toBeUndefined();
+      expect(hub.sent[0]?.ops).toEqual([{ op: 'plan_close', id: 'a/app' }]);
+      expect(app.toast?.text).toBe(translate(app.lang, 'project.closed_with', { project: 'ALL/mobile' }));
+      expect(app.toast?.undo).toBeUndefined();
+    });
+
+    it('offers no finishing by hand without the capability', async () => {
+      const { app, hub } = await ready();
+      expect(await app.previewClose('plan', 'a/app')).toEqual({ kind: 'unknown' });
+      expect(await app.closePlanFile('project', 'ALL/mobile')).toBe(false);
+      expect(hub.sent).toHaveLength(0);
+    });
+
     it('sends no plan_set or project_set without the capability', async () => {
       const { app, hub } = await ready();
       expect(await app.setPlanFile('plan', 'pub/app', { phase: 'x' })).toBe(false);

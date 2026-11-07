@@ -422,9 +422,13 @@ the days of effort still open, the parked plans), the tasks of the project itsel
 the project's stages (`phase_order`), each with its status, a bar of its finished tasks (asked of the engine per plan),
 its open tasks and the next one (the first the engine counts as ready). Over a plan of a project the trail
 "Project › Plan" leads back to its page. On the page a plan moves to another stage, leaves the project or joins it
-(`plan_set`), and the project's status changes (`project_set`); the engine judges each change (a project or stage it
-does not know is refused in its words), and the message offers to take it back (the engine's `inverse`, on the version
-the change left). The plan wizard makes a project too (`project_new`), and a plan can be made in a project and one of
+(`plan_set`), and the project's status changes (`project_set`), each on the version of the file the snapshot shows
+(`if_match`: a file changed meanwhile in the editor is a conflict, never overwritten); the engine judges each change (a
+project or stage it does not know is refused in its words), and the message offers to take it back (the engine's
+`inverse`, on the version the change left). A plan or the project that does not finish by itself (a plan without
+tasks, a project with only parked plans) is finished by hand (`plan_close`, `project_close`): the engine is asked
+first and the page says what would happen, or which tasks and plans still hold it open; there is no way back, and a
+project the last plan takes with it is named. The head of the page switches to another project. The plan wizard makes a project too (`project_new`), and a plan can be made in a project and one of
 its stages. The filter of the list has the field *Project*: the tasks of the project's plans and its own (the page
 reads which plan belongs to which project from the snapshot, since the engine has no grouping by project yet); a saved
 view cannot hold it and says so. A finish that closes a project offers no undo (reopening the task would leave the

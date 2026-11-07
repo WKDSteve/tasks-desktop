@@ -7,7 +7,7 @@
   import { formatNumber, hintOf, labelOf, translate, type Key } from '../lib/i18n';
   import Info from 'appkit-ui/Info.svelte';
   import { markHidden } from '../lib/text';
-  import { projectPage, share, subtaskCount, type PlanCard } from '../lib/projects';
+  import { projectPage, share, subtaskCount, type ClosePreview, type PlanCard } from '../lib/projects';
   import { PLAN_STATUSES } from '../lib/planwizard';
 
   let { app, projectId }: { app: App; projectId: string } = $props();
@@ -59,12 +59,51 @@
     return { done, total, pct: Math.round(share(done, card.open.length) * 100) };
   }
 
+  // Finishing by hand: the engine is asked first (a dry run), the panel says what happens or what holds it open.
+  type Closing = { kind: 'plan' | 'project'; id: string; title: string; preview: ClosePreview | null };
+  let closing = $state<Closing | null>(null);
+  const names = $derived(new Map([...titles, ...plans.map((p) => [p.id, p.title] as const)]));
+  async function askClose(kind: 'plan' | 'project', id: string, title: string): Promise<void> {
+    closing = { kind, id, title, preview: null };
+    const preview = await app.previewClose(kind, id);
+    if (closing?.kind === kind && closing.id === id) closing = { ...closing, preview };
+  }
+  async function confirmClose(): Promise<void> {
+    if (!closing || closing.preview?.kind !== 'ok') return;
+    if (await app.closePlanFile(closing.kind, closing.id)) closing = null;
+  }
+
   let attachId = $state('');
   async function attach(): Promise<void> {
     if (attachId === '' || !project) return;
     if (await app.setPlanFile('plan', attachId, { project: project.id })) attachId = '';
   }
 </script>
+
+{#snippet closePanel(c: Closing)}
+  <div class="close-panel" role="group" aria-label={c.kind === 'plan' ? t('project.close') : t('project.close_project')}>
+    {#if c.preview === null}
+      <p class="muted">{t('state.loading')}</p>
+    {:else if c.preview.kind === 'ok'}
+      <p>{t(c.kind === 'plan' ? 'project.close.will_plan' : 'project.close.will_project', { title: markHidden(c.title) })}</p>
+    {:else if c.preview.kind === 'holding'}
+      <p>{t('project.close.holding')}</p>
+      <ul class="holding">
+        {#each c.preview.ids as id (id)}<li>{markHidden(names.get(id) ?? id)} <code>{id}</code></li>{/each}
+      </ul>
+    {:else if c.preview.kind === 'refused'}
+      <p class="bad">{c.preview.message}</p>
+    {:else}
+      <p class="bad">{t('project.close.unknown')}</p>
+    {/if}
+    <div class="actions">
+      {#if c.preview?.kind === 'ok'}
+        <button type="button" class="primary" disabled={app.saving} onclick={() => void confirmClose()}>{t('project.close.confirm')}</button>
+      {/if}
+      <button type="button" onclick={() => (closing = null)}>{t('dialog.cancel')}</button>
+    </div>
+  </div>
+{/snippet}
 
 {#if !project || !page}
   <p class="muted">{t('state.loading')}</p>
@@ -73,7 +112,17 @@
     <div class="title-row">
       <h2 class="title">{markHidden(project.title)}</h2>
       {#if project.status}<span class="tag">{t(`plan.status.${project.status}` as Key)}</span>{/if}
-      <button type="button" class="link leave" onclick={() => app.openProject('')}>{t('project.leave')}</button>
+      <span class="leave">
+        {#if app.projects.length > 1}
+          <label class="pick">
+            <span>{t('project.which')}</span>
+            <select value={project.id} onchange={(e) => app.openProject(e.currentTarget.value)}>
+              {#each app.projects as p (p.id)}<option value={p.id}>{markHidden(p.title)}</option>{/each}
+            </select>
+          </label>
+        {/if}
+        <button type="button" class="link" onclick={() => app.openProject('')}>{t('project.leave')}</button>
+      </span>
     </div>
     {#if project.target}
       <p class="goal">
@@ -109,6 +158,11 @@
       {#if app.can('plan_new') && !app.readOnly}
         <button type="button" onclick={() => app.openPlanWizard('plan', project.id)}>{t('project.new_plan')}</button>
       {/if}
+      {#if app.can('project_close') && !app.readOnly}
+        <button type="button" data-hint={t('hint.ui.project.close')} onclick={() => void askClose('project', project.id, project.title)}
+          >{t('project.close_project')}</button
+        >
+      {/if}
       {#if canPlanSet && free.length > 0}
         <label class="pick">
           <span>{t('project.attach')}</span>
@@ -120,6 +174,7 @@
         <button type="button" disabled={attachId === '' || app.saving} onclick={() => void attach()}>{t('project.attach')}</button>
       {/if}
     </div>
+    {#if closing?.kind === 'project' && closing.id === project.id}{@render closePanel(closing)}{/if}
   </section>
 
   <section class="card" aria-label={t('project.own')}>
@@ -206,8 +261,17 @@
                     onclick={() => void app.setPlanFile('plan', card.plan.id, { project: null, phase: null })}
                     >{t('project.detach')}</button
                   >
+                  {#if app.can('plan_close')}
+                    <button
+                      type="button"
+                      class="link small"
+                      data-hint={t('hint.ui.project.close')}
+                      onclick={() => void askClose('plan', card.plan.id, card.plan.title)}>{t('project.close')}</button
+                    >
+                  {/if}
                 </div>
               {/if}
+              {#if closing?.kind === 'plan' && closing.id === card.plan.id}{@render closePanel(closing)}{/if}
             </li>
           {/each}
         </ul>
@@ -241,6 +305,9 @@
   }
   .leave {
     margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
   }
   .goal,
   .rollup,
@@ -354,6 +421,22 @@
   .link:disabled {
     color: var(--muted);
     cursor: default;
+  }
+  .close-panel {
+    display: grid;
+    gap: 0.4rem;
+    border-top: 1px solid var(--border);
+    padding-top: 0.5rem;
+  }
+  .close-panel p {
+    margin: 0;
+  }
+  .holding {
+    margin: 0;
+    padding-left: 1.2rem;
+  }
+  .bad {
+    color: var(--bad);
   }
   .meta {
     display: flex;

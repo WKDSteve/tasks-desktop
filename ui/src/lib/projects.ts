@@ -91,6 +91,14 @@ export function share(done: number, open: number): number {
   return total === 0 ? 0 : done / total;
 }
 
+/** What finishing a plan or a project by hand would do (a dry run of `plan_close` / `project_close`). */
+export type ClosePreview =
+  | { kind: 'ok' }
+  /** The engine refuses: these ids (open tasks, plans other than parked ones) hold it open. */
+  | { kind: 'holding'; ids: string[] }
+  | { kind: 'refused'; message: string }
+  | { kind: 'unknown' };
+
 /** The steps of a task (its subtasks) as the counter shows them, `3/5`; undefined for a task without steps. */
 export function subtaskCount(task: Pick<TaskEntry, 'steps'>): string | undefined {
   const steps = task.steps;

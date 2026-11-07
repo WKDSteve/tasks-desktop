@@ -74,7 +74,9 @@ export type Op =
       slug?: string;
     }
   /** The frontmatter of an open plan or project file; `null` removes a key (capabilities `plan_set`, `project_set`). */
-  | { op: 'plan_set' | 'project_set'; id: string; patch: Record<string, unknown>; if_match?: string };
+  | { op: 'plan_set' | 'project_set'; id: string; patch: Record<string, unknown>; if_match?: string }
+  /** Finish a plan or a project by hand (capabilities `plan_close`, `project_close`); refused while something holds it open. */
+  | { op: 'plan_close' | 'project_close'; id: string };
 
 /** The vaults the hub can read, and the one it reads. A folder is shown by its last part only. */
 export interface VaultList {
