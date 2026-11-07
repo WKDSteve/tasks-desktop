@@ -1,7 +1,7 @@
 // `loadWhole` of `fixtures.ts`: a page that lost a file is loaded again, and only for a fault of the machine. The fault
 // the runner saw cannot be made on purpose (a route has no such error), so these tests name another one in its place.
-import type { Page } from '@playwright/test';
-import { expect, isMachineFault, loadWhole, MACHINE_FAULTS, test } from './fixtures';
+import type { Browser, Page } from '@playwright/test';
+import { expect, guardPages, isMachineFault, loadWhole, MACHINE_FAULTS, test } from './fixtures';
 
 const ORIGIN = 'http://load-whole.invalid';
 const FAULT = 'net::ERR_CONNECTION_FAILED';
@@ -48,6 +48,43 @@ test('page.goto of the fixture goes through it, and answers as before', async ({
   expect(asked()).toBe(1);
   // What the runner saw, and nothing wider: a policy that blocks a file is a finding.
   expect(MACHINE_FAULTS).toEqual(['net::ERR_NO_BUFFER_SPACE']);
+});
+
+test('a tab the test opens later is loaded again too', async ({ browser }) => {
+  const context = await browser.newContext();
+  const check = guardPages(context, [FAULT]);
+  const tab = await context.newPage();
+  const asked = await pageWithStylesheet(tab, 1, 'connectionfailed');
+  await tab.goto(`${ORIGIN}/`);
+  expect(asked()).toBe(2);
+  expect(await colourOfText(tab)).toBe('rgb(1, 2, 3)');
+  expect(check).not.toThrow();
+  await context.close();
+});
+
+/** A window that opens itself, as a click does, whose stylesheet fails in the way `how` says. What the guard says then. */
+async function checkAfterWindow(browser: Browser, how: 'connectionfailed' | 'blockedbyclient'): Promise<() => void> {
+  const context = await browser.newContext();
+  const check = guardPages(context, [FAULT]);
+  await context.route(`${ORIGIN}/`, (route) => route.fulfill({ contentType: 'text/html', body: '<!doctype html><p>opener</p>' }));
+  await context.route(`${ORIGIN}/window`, (route) =>
+    route.fulfill({ contentType: 'text/html', body: '<!doctype html><link rel="stylesheet" href="/a.css"><p>text</p>' }),
+  );
+  await context.route(`${ORIGIN}/a.css`, (route) => route.abort(how));
+  const opener = await context.newPage();
+  await opener.goto(`${ORIGIN}/`);
+  const [opened] = await Promise.all([context.waitForEvent('page'), opener.evaluate((url) => void window.open(url), `${ORIGIN}/window`)]);
+  await opened.waitForLoadState();
+  await context.close();
+  return check;
+}
+
+test('a window that lost its stylesheet fails the test and names the file: nothing could load it again', async ({ browser }) => {
+  expect(await checkAfterWindow(browser, 'connectionfailed')).toThrow(/lost a file outside a load.*a\.css/);
+});
+
+test('a window that lost its stylesheet for another reason is left to the test: that is no fault of the machine', async ({ browser }) => {
+  expect(await checkAfterWindow(browser, 'blockedbyclient')).not.toThrow();
 });
 
 test('the console line of that fault is no finding of a test, any other line stays one', () => {
