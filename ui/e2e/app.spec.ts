@@ -1725,6 +1725,9 @@ test('the list comes from the cache before the hub answers', async ({ page }) =>
 
 for (const scheme of ['light', 'dark'] as const) {
   test(`no accessibility violations in ${scheme}: today, list and detail`, async ({ page }) => {
+    // Eight runs of axe: about 8 s here, but with another repository's job on the same machine a single run took 5 to
+    // 8 s and the 30 s of a test ran out while the work went on (test.slow gives three times as much).
+    test.slow();
     await page.emulateMedia({ colorScheme: scheme });
     await pair(page);
     // Today waits for `next`.
