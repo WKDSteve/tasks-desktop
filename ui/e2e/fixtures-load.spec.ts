@@ -1,7 +1,7 @@
 // `loadWhole` of `fixtures.ts`: a page that lost a file is loaded again, and only for a fault of the machine. The fault
 // the runner saw cannot be made on purpose (a route has no such error), so these tests name another one in its place.
 import type { Page } from '@playwright/test';
-import { expect, loadWhole, MACHINE_FAULTS, test } from './fixtures';
+import { expect, isMachineFault, loadWhole, MACHINE_FAULTS, test } from './fixtures';
 
 const ORIGIN = 'http://load-whole.invalid';
 const FAULT = 'net::ERR_CONNECTION_FAILED';
@@ -48,4 +48,10 @@ test('page.goto of the fixture goes through it, and answers as before', async ({
   expect(asked()).toBe(1);
   // What the runner saw, and nothing wider: a policy that blocks a file is a finding.
   expect(MACHINE_FAULTS).toEqual(['net::ERR_NO_BUFFER_SPACE']);
+});
+
+test('the console line of that fault is no finding of a test, any other line stays one', () => {
+  expect(isMachineFault('Failed to load resource: net::ERR_NO_BUFFER_SPACE')).toBe(true);
+  expect(isMachineFault('Failed to load resource: net::ERR_BLOCKED_BY_CSP')).toBe(false);
+  expect(isMachineFault('Failed to load resource: the server responded with a status of 404')).toBe(false);
 });

@@ -31,6 +31,12 @@ export function vaultTasks(vault: string): Set<string> {
  */
 export const MACHINE_FAULTS = ['net::ERR_NO_BUFFER_SPACE'];
 
+/**
+ * Whether a line of the console only reports such a fault. A test that takes every line for a finding must not count it:
+ * the browser writes it for the load that `loadWhole` repeats, and a file that stays lost fails the test there anyway.
+ */
+export const isMachineFault = (line: string): boolean => MACHINE_FAULTS.some((fault) => line.includes(fault));
+
 /** How often a page is loaded before the machine is named as the reason the test cannot go on. */
 const LOAD_ATTEMPTS = 3;
 const LOAD_PAUSE_MS = 1_000;

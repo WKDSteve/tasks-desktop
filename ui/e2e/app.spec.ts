@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import AxeBuilder from '@axe-core/playwright';
 import type { Locator, Page, Route } from '@playwright/test';
-import { expect, test } from './fixtures';
+import { expect, isMachineFault, test } from './fixtures';
 import { expectAccessible, violations, watchViolations } from './a11y';
 import { STATE } from './global';
 import { ABNAHME_SLUG, origin, pairingLink, pickedFolder, removeFile } from './hub';
@@ -38,7 +38,7 @@ async function prepare(page: Page): Promise<void> {
   const problems: string[] = [];
   consoleProblems.set(page, problems);
   page.on('console', (m) => {
-    if (m.type() === 'error' || m.type() === 'warning') problems.push(`${m.type()}: ${m.text()}`);
+    if ((m.type() === 'error' || m.type() === 'warning') && !isMachineFault(m.text())) problems.push(`${m.type()}: ${m.text()}`);
   });
   page.on('pageerror', (e) => problems.push(`pageerror: ${e.message}`));
   await watchViolations(page);

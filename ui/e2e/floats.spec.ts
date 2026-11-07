@@ -5,7 +5,7 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Locator, Page } from '@playwright/test';
-import { expect, test } from './fixtures';
+import { expect, isMachineFault, test } from './fixtures';
 import { expectAccessible, violations, watchViolations } from './a11y';
 import { STATE } from './global';
 import { removeFile } from './hub';
@@ -20,7 +20,7 @@ const WRITE_BUDGET = 15_000;
 async function pair(page: Page, path = '/'): Promise<string[]> {
   const problems: string[] = [];
   page.on('console', (m) => {
-    if (m.type() === 'error' || m.type() === 'warning') problems.push(`${m.type()}: ${m.text()}`);
+    if ((m.type() === 'error' || m.type() === 'warning') && !isMachineFault(m.text())) problems.push(`${m.type()}: ${m.text()}`);
   });
   page.on('pageerror', (e) => problems.push(`pageerror: ${e.message}`));
   await watchViolations(page);
