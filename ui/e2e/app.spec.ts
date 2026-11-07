@@ -6726,12 +6726,12 @@ test('in a narrow window the board and the inbox keep a few cards and rows in si
   await expect(page.locator('.cards .card.selected')).toBeVisible();
   await expect.poll(async () => roomy(await parts('.board .cards')), { message: 'cards of the board' }).toBe(true);
   // ... and does not grow with its longest column either: the columns scroll, the detail is a short way down.
-  expect((await parts('.board'))[0].shown).toBeLessThan(700);
+  expect((await parts('.board'))[0]!.shown).toBeLessThan(700);
   // The frame of the saved views (its bar above the board) grows with the board: nothing spills out of it, else the
   // main area scrolls by the bar's height even when everything would fit.
   const frame = await parts('.wrap.with-board');
   expect(frame).toHaveLength(1);
-  expect(frame[0].holds).toBeLessThanOrEqual(frame[0].shown + 1);
+  expect(frame[0]!.holds).toBeLessThanOrEqual(frame[0]!.shown + 1);
   await chooseView(page, 'View', 'Inbox');
   await page.locator('.inbox .row').first().click();
   await expect.poll(async () => roomy(await parts('.inbox .rows')), { message: 'rows of the inbox' }).toBe(true);

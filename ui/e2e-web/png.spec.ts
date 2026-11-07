@@ -28,8 +28,8 @@ test('the view is saved as a PNG without the private areas, and the rules of the
     file = await download;
   }).toPass({ timeout: 30_000 });
 
-  expect(file.suggestedFilename()).toMatch(/^tasks-list-\d{4}-\d{2}-\d{2}\.png$/);
-  const bytes = readFileSync(await file.path());
+  expect(file!.suggestedFilename()).toMatch(/^tasks-list-\d{4}-\d{2}-\d{2}\.png$/);
+  const bytes = readFileSync(await file!.path());
   expect(bytes.subarray(0, 8).toString('latin1')).toBe('\x89PNG\r\n\x1a\n');
   expect(bytes.length).toBeGreaterThan(2000);
   // The header of a PNG: as wide as the sheet at twice the scale, and as long as its rows.
