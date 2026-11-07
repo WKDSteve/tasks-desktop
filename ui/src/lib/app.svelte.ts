@@ -1130,13 +1130,20 @@ export class App {
   }
 
   /**
-   * Change the frontmatter of an open plan (`plan_set`) or project (`project_set`): `null` removes a key. The engine
+   * Change the frontmatter of an open plan (`plan_set`) or project (`project_set`) on the version the snapshot shows
+   * (`if_match`: a file changed meanwhile is a conflict, never overwritten): `null` removes a key. The engine
    * judges the change (a project it does not know, a stage the project does not name) and refuses it with the reason;
    * what went through can be taken back (its `inverse`, on the version the change left).
    */
   async setPlanFile(kind: 'plan' | 'project', id: string, patch: Record<string, unknown>): Promise<boolean> {
     if (!this.can(kind === 'plan' ? 'plan_set' : 'project_set')) return false;
-    const result = await this.write([{ op: kind === 'plan' ? 'plan_set' : 'project_set', id, patch }]);
+    // On the version shown: the snapshot names it (an older engine does not, and the write goes unguarded as before).
+    const files: readonly { id: string; etag?: string }[] =
+      (kind === 'plan' ? this.snapshot?.plans : this.snapshot?.projects) ?? [];
+    const etag = files.find((f) => f.id === id)?.etag;
+    const result = await this.write([
+      { op: kind === 'plan' ? 'plan_set' : 'project_set', id, patch, ...(etag ? { if_match: etag } : {}) },
+    ]);
     return result?.results.every((r) => r.ok) ?? false;
   }
 

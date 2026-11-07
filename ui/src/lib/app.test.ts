@@ -3054,6 +3054,50 @@ describe('writing', () => {
       ]);
     });
 
+    it('sends plan_set and project_set on the version the snapshot shows, and says a conflict', async () => {
+      const { app, hub } = await ready([], { capabilities: ['plan_set', 'project_set'] });
+      app.snapshot = {
+        ...app.snapshot!,
+        plans: [{ id: 'pub/app', title: 'App', areas: [], phase_order: [], valid: true, etag: 'sha256:plan' }],
+        projects: [
+          {
+            id: 'ALL/mobile',
+            title: 'Mobile',
+            areas: [],
+            phase_order: [],
+            valid: true,
+            etag: 'sha256:proj',
+            plans: [],
+            rollup: { plans_total: 0, plans_done: 0, plans_parked: 0, tasks_open: 0, tasks_done: 0, own_open: 0, days_open: 0 },
+          },
+        ],
+      };
+      await app.setPlanFile('plan', 'pub/app', { phase: 'basis' });
+      expect(hub.sent[0]?.ops).toEqual([{ op: 'plan_set', id: 'pub/app', patch: { phase: 'basis' }, if_match: 'sha256:plan' }]);
+      hub.next_ops = {
+        kind: 'tasks.result',
+        ok: false,
+        dry_run: false,
+        results: [
+          {
+            n: 1,
+            op: 'project_set',
+            id: 'ALL/mobile',
+            ok: false,
+            outcome: 'failed',
+            changed_ids: [],
+            error: { code: 'conflict', message: 'changed meanwhile', retryable: false },
+          },
+        ],
+      } as unknown as Result;
+      expect(await app.setPlanFile('project', 'ALL/mobile', { status: 'doing' })).toBe(false);
+      expect(hub.sent[1]?.ops).toEqual([
+        { op: 'project_set', id: 'ALL/mobile', patch: { status: 'doing' }, if_match: 'sha256:proj' },
+      ]);
+      expect(app.toast?.kind).toBe('error');
+      expect(app.toast?.text).toBe(translate(app.lang, 'write.conflict'));
+    });
+
     it('sends no plan_set or project_set without the capability', async () => {
       const { app, hub } = await ready();
       expect(await app.setPlanFile('plan', 'pub/app', { phase: 'x' })).toBe(false);
