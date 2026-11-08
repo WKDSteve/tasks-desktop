@@ -22,6 +22,19 @@ impl Drop for VisitGuard {
     }
 }
 
+/// The body of an event stream: what the task of the connection sends.
+pub(super) struct EventStream {
+    pub(super) rx: mpsc::Receiver<Bytes>,
+}
+
+impl Stream for EventStream {
+    type Item = Result<Bytes, Infallible>;
+
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        self.rx.poll_recv(cx).map(|item| item.map(Ok))
+    }
+}
+
 /// `GET /api/tasks/events`: server-sent events (concept 3.4). A `hello`
 /// first (with where the stream stands), then one `tasks` event per change.
 /// An event is a hint: what changed, as ids; the client reads again. There
@@ -44,7 +57,11 @@ pub(super) async fn events(
         .streams
         .acquire(&token, st.limits.max_streams_per_session)
     else {
-        return appkit_hub::streams::too_many_streams();
+        return error_body(
+            StatusCode::TOO_MANY_REQUESTS,
+            "too_many_streams",
+            "this session has too many open event streams",
+        );
     };
     // Start from a known state: the snapshot is held before the stream is.
     if let Err(error) = rt.store.current().await {
@@ -95,5 +112,10 @@ pub(super) async fn events(
             }
         }
     });
-    appkit_hub::streams::sse_response(rx)
+    let mut response = Response::new(Body::from_stream(EventStream { rx }));
+    response.headers_mut().insert(
+        header::CONTENT_TYPE,
+        HeaderValue::from_static("text/event-stream; charset=utf-8"),
+    );
+    response
 }

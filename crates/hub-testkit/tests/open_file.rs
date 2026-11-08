@@ -12,7 +12,7 @@ use serde_json::Value;
 use tasks_hub::classes::AreaPolicy;
 use tasks_hub::client;
 use tasks_hub::config::Env;
-use tasks_hub::editor::terminal_opener;
+use tasks_hub::editor::TerminalOpener;
 use tasks_hub::engine::{CliEngine, CliEngineConfig, Engine};
 use tasks_hub::loginentry::LoginEntry;
 use tasks_hub::server::{
@@ -159,7 +159,7 @@ row two
         }),
     };
     let opener: Option<Arc<dyn tasks_hub::editor::FileOpener>> = with_opener.then(|| {
-        Arc::new(terminal_opener(
+        Arc::new(TerminalOpener::new(
             PathBuf::from("nvim"),
             Env::from_pairs(
                 [(

@@ -15,6 +15,7 @@ use crate::classes::{self, AreaPolicy, Classes};
 use crate::client;
 use crate::config::{self, Env, FileConfig};
 use crate::discovery::discover;
+use crate::editor::TerminalOpener;
 use crate::engine::{cli_config_from_setup, probe, Calls, CliEngine, Engine};
 use crate::server::{
     self, BoxFuture, Extras, HubStatus, Limits, ServerConfig, VaultAdmin, VaultInfo, VaultList,
@@ -701,8 +702,7 @@ pub async fn serve(opts: ServeOptions) -> Result<(), String> {
         snapshot_root: snapshot_root.clone(),
         vaults: Some(Arc::clone(&vaults)),
         opener: nvim.clone().map(|n| {
-            Arc::new(crate::editor::terminal_opener(n, env.clone()))
-                as Arc<dyn crate::editor::FileOpener>
+            Arc::new(TerminalOpener::new(n, env.clone())) as Arc<dyn crate::editor::FileOpener>
         }),
         login: Some(Arc::new(crate::loginentry::SystemLoginEntry)),
         all_vaults: Some(Arc::clone(&all_vaults)),
