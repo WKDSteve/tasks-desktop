@@ -18,6 +18,7 @@ cd ui && pnpm e2e                        # echtes Binary, echte Engine, axe
 python tools/check-control-chars.py
 python tools/check-color-literals.py --root ui/src --tokens ui/src/palette.css   # no colour outside tokens and palette (CI job hygiene)
 python tools/check-bundle-size.py   # after pnpm build: the main chunk stays within its budget
+python tools/check-lock-age.py --min-days 7   # after cargo update: no crate younger than 7 days (CI job rust)
 ```
 
 Die Web-Variante (eigene CI `web.yml`), bei jedem Sprung von `engine.lock` und jeder Änderung an `ui/src/web`:
