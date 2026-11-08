@@ -1765,14 +1765,21 @@ export class App {
         const rows = open.group_by2 === undefined ? undefined : fields.find((f) => f.field === open.group_by2);
         // As the view: a field it does not know, or a matrix without its second field, is a note and no tasks.
         if (!columns || (open.display === 'matrix' && !rows)) return { view, rows: [], ...plain };
-        // The group of no value is named; a group by plan does not name a plan kept in an area that may not leave.
-        const named = (field: string) => (value: string) =>
-          value === NONE ? t('views.none') : field === 'plan' && !this.mayRememberArea(areaOfId(value)) ? t('export.private_plan') : value;
+        // The group of no value is named; a group by plan or by project does not name one kept in an area that may not
+        // leave (its id names the area).
+        const named = (field: string) => (value: string) => {
+          if (value === NONE) return t('views.none');
+          if ((field === 'plan' || field === 'project') && !this.mayRememberArea(areaOfId(value))) {
+            return t(field === 'plan' ? 'export.private_plan' : 'export.private_project');
+          }
+          return value;
+        };
         // For the printer, the page's words as the view shows them (the status, the who, P1).
         const shown = (field: string) => (value: string) => {
           const name = named(field)(value);
           if (name !== value) return name;
           if (field === 'status' || field === 'actor' || field === 'state' || field === 'cross') return labelOf(this.lang, field, value);
+          if (field === 'project') return this.projects.find((p) => p.id === value)?.title ?? value;
           return field === 'prio' ? `P${value}` : value;
         };
         const second = rows?.field ?? columns.field;

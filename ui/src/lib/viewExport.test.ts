@@ -58,6 +58,12 @@ describe('the rows of a view, for the export', () => {
     expect(rows.map((r) => r.task.plan)).toEqual([undefined, 'open/p', undefined]);
     expect(Object.hasOwn(rows[0]!.task, 'plan')).toBe(false);
     expect(rows[0]!.task.id).toBe('a/1');
+    // The project a task names itself, kept in a private area, goes the same way.
+    const own = withoutPlansOf([{ task: task('a/4', { project: 'secret/x' }) }, { task: task('a/5', { project: 'open/x' }) }], (id) =>
+      id.startsWith('open/'),
+    );
+    expect(own.map((r) => r.task.project)).toEqual([undefined, 'open/x']);
+    expect(Object.hasOwn(own[0]!.task, 'project')).toBe(false);
   });
 
   it('only the marked ones when some are marked, all when none are', () => {

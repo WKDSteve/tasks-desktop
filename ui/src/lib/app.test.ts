@@ -5526,6 +5526,40 @@ describe('the saved views', () => {
     m.app.stop();
   });
 
+  it('name no project of a private area as a group, and print a project by its title', async () => {
+    const m = made();
+    m.hub.doc = {
+      ...snapshot([task('pub/a', { status: 'open', project: 'priv/secret-proj' }), task('pub/b', { status: 'doing', plan: 'pub/app' })]),
+      plans: [{ id: 'pub/app', title: 'App', areas: [], phase_order: [], valid: true, etag: 'sha256:plan', project: 'pub/open-proj' }],
+      projects: [
+        {
+          id: 'pub/open-proj',
+          title: 'Open project',
+          areas: [],
+          phase_order: [],
+          valid: true,
+          etag: 'sha256:proj',
+          plans: [],
+          rollup: { plans_total: 0, plans_done: 0, plans_parked: 0, tasks_open: 0, tasks_done: 0, own_open: 0, days_open: 0 },
+        },
+      ],
+    } as Snapshot;
+    m.hub.areaList = [
+      { name: 'pub', data_class: 'public' },
+      { name: 'priv', data_class: 'private' },
+    ];
+    const fields = [{ field: 'project', values: ['priv/secret-proj', 'pub/open-proj'], truncated: false, writable: false, value_type: 'string' }];
+    m.hub.groupings = async () => ({ kind: 'tasks.groupings', rev: m.hub.doc.rev, fields }) as unknown as Groupings;
+    m.hub.viewList = [view('pub/by-project', { group_by: 'project' })];
+    await opened(m, 'pub/by-project');
+    const { rows, printRows } = m.app.exportRows();
+    const privateProject = translate('de', 'export.private_project');
+    expect(rows.map((r) => `${r.group} ${r.task.id}`)).toEqual([`${privateProject} pub/a`, 'pub/open-proj pub/b']);
+    expect(printRows.map((r) => r.group)).toEqual([privateProject, 'Open project']);
+    for (const format of ['json', 'csv', 'markdown'] as const) expect(JSON.stringify(m.app.exportTasks(format))).not.toContain('secret');
+    m.app.stop();
+  });
+
   it('export their groups, as the view draws them, the group of no value named', async () => {
     const m = made();
     m.hub.viewList = [view('pub/mine', { group_by: 'tags' })];

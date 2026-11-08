@@ -52,14 +52,17 @@ export function onlyMarked(rows: readonly ExportRow[], marks: ReadonlySet<string
 }
 
 /**
- * The tasks without the id of a plan that may not leave: a task of a public area can stand in a plan kept in a
- * private one, whose id names that area. The field goes, the task stays.
+ * The tasks without the id of a plan or a project that may not leave: a task of a public area can stand in a plan or
+ * a project kept in a private one, whose id names that area. The field goes, the task stays.
  */
-export function withoutPlansOf(rows: readonly ExportRow[], allowed: (planId: string) => boolean): ExportRow[] {
+export function withoutPlansOf(rows: readonly ExportRow[], allowed: (id: string) => boolean): ExportRow[] {
   return rows.map((r) => {
-    if (r.task.plan === undefined || allowed(r.task.plan)) return r;
+    const planGoes = r.task.plan !== undefined && !allowed(r.task.plan);
+    const projectGoes = r.task.project !== undefined && !allowed(r.task.project);
+    if (!planGoes && !projectGoes) return r;
     const task = { ...r.task };
-    delete task.plan;
+    if (planGoes) delete task.plan;
+    if (projectGoes) delete task.project;
     return { ...r, task };
   });
 }
