@@ -140,6 +140,7 @@
           areasTouched = true;
           form.areas = next;
         }}
+        clearLabel={t('kit.select.clear', { label: t('plan.new.areas') })}
         resetLabel={t('multi.reset')}
         searchLabel={t('multi.search')}
       />

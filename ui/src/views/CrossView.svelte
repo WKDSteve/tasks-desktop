@@ -140,6 +140,7 @@
         options={areaOptions}
         selected={chosen}
         onchange={(areas) => (app.filter = { ...app.filter, areas })}
+        clearLabel={t('kit.select.clear', { label: t('nav.areas') })}
         resetLabel={t('multi.reset')}
         searchLabel={t('multi.search')}
       />

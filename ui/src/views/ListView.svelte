@@ -8,6 +8,7 @@
   import TaskRow from './TaskRow.svelte';
   import ExportMenu from './ExportMenu.svelte';
   import MultiSelect from 'appkit-ui/MultiSelect.svelte';
+  import ClearSelect from 'appkit-ui/ClearSelect.svelte';
   import Info from 'appkit-ui/Info.svelte';
   import { TIP_ID } from 'appkit-ui/tooltip';
   import { marksLegend } from '../lib/legend';
@@ -376,6 +377,7 @@
       options={areaOptions}
       selected={app.filter.areas}
       onchange={(areas) => (app.filter = { ...app.filter, areas })}
+      clearLabel={t('kit.select.clear', { label: t('nav.areas') })}
       resetLabel={t('multi.reset')}
       searchLabel={t('multi.search')}
     />
@@ -386,6 +388,7 @@
       options={statuses.map((s) => ({ value: s, label: labelOf(app.lang, 'status', s) }))}
       selected={app.filter.statuses}
       onchange={(statuses) => (app.filter = { ...app.filter, statuses })}
+      clearLabel={t('kit.select.clear', { label: t('list.filter.status') })}
       resetLabel={t('multi.reset')}
       searchLabel={t('multi.search')}
     />
@@ -400,6 +403,7 @@
       }))}
       selected={app.filter.actors}
       onchange={(actors) => (app.filter = { ...app.filter, actors })}
+      clearLabel={t('kit.select.clear', { label: t('list.filter.actor') })}
       resetLabel={t('multi.reset')}
       searchLabel={t('multi.search')}
     />
@@ -499,6 +503,7 @@
                 },
               }
             : undefined}
+          clearLabel={t('kit.select.clear', { label: fieldLabel(f.key) })}
           resetLabel={t('multi.reset')}
           searchLabel={t('multi.search')}
         />
@@ -531,38 +536,46 @@
       </label>
       <label class="pick">
         <span>{t('filter.updated')}</span>
-        <select
+        <ClearSelect
           value={app.filter.updated}
+          clearLabel={t('kit.select.clear', { label: t('filter.updated') })}
+          onclear={() => (app.filter = { ...app.filter, updated: '' })}
           onchange={(e) => (app.filter = { ...app.filter, updated: e.currentTarget.value as UpdatedWindow })}
         >
           <option value="">{t('filter.whatever')}</option>
           {#each UPDATED_WINDOWS as w (w)}<option value={w}>{t(`filter.updated.${w}` as Key)}</option>{/each}
-        </select>
+        </ClearSelect>
       </label>
       <label class="pick">
         <span>{t('filter.reminder')}</span>
-        <select
+        <ClearSelect
           value={app.filter.reminder}
+          clearLabel={t('kit.select.clear', { label: t('filter.reminder') })}
+          onclear={() => (app.filter = { ...app.filter, reminder: '' })}
           onchange={(e) => (app.filter = { ...app.filter, reminder: e.currentTarget.value as ReminderChoice })}
         >
           <option value="">{t('filter.whatever')}</option>
           {#each REMINDER_CHOICES as r (r)}<option value={r}>{t(`filter.reminder.${r}` as Key)}</option>{/each}
-        </select>
+        </ClearSelect>
       </label>
       {#each rangeChoices as r (r.key)}
         {#each ['min', 'max'] as const as end (end)}
           <label class="pick" data-hint={r.key === 'prio' ? t('filter.range.prio_hint') : r.key === 'effort' ? t('filter.range.effort_hint') : undefined}>
             <span>{t(`filter.range.${end}` as Key, { field: t(`filter.field.${r.key}` as Key) })}</span>
-            <select
+            <ClearSelect
               data-range={`${r.key}-${end}`}
               value={app.filter.ranges[r.key]?.[end]?.label ?? ''}
+              clearLabel={t('kit.select.clear', {
+                label: t(`filter.range.${end}` as Key, { field: t(`filter.field.${r.key}` as Key) }),
+              })}
+              onclear={() => setBound(r.key, end, r.options, '')}
               onchange={(e) => setBound(r.key, end, r.options, e.currentTarget.value)}
             >
               <option value="">{t('filter.whatever')}</option>
               {#each boundsWith(r.options, app.filter.ranges[r.key]?.[end]) as o (o.label)}
                 <option value={o.label}>{boundLabel(r.key, o.label)}</option>
               {/each}
-            </select>
+            </ClearSelect>
           </label>
         {/each}
       {/each}
@@ -834,7 +847,8 @@
     font-size: 0.85rem;
     color: var(--muted);
   }
-  .pick select {
+  .pick select,
+  .pick :global(.clear-select select) {
     background: var(--surface-2);
     color: var(--text);
     border: 1px solid var(--border);

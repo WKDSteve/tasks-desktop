@@ -3939,9 +3939,9 @@ test('the plan wizard does not make a plan from a name the engine has not confir
   await expect(create).toBeEnabled();
   // The areas the plan covers follow the file's area until they are chosen.
   await dialog.getByLabel('Area of the plan file').selectOption('cascade.nvim');
-  await expect(dialog.getByRole('button', { name: /Areas the plan covers/ })).toContainText('cascade.nvim');
+  await expect(dialog.getByRole('button', { name: /^Areas the plan covers/ })).toContainText('cascade.nvim');
   // Escape closes the popup of the areas and leaves the dialog and what was typed in it.
-  await dialog.getByRole('button', { name: /Areas the plan covers/ }).click();
+  await dialog.getByRole('button', { name: /^Areas the plan covers/ }).click();
   await expect(dialog.getByRole('group', { name: 'Areas the plan covers' })).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(dialog.getByRole('group', { name: 'Areas the plan covers' })).toHaveCount(0);
@@ -7606,4 +7606,49 @@ test('a reason parks a task, the overview counts it by reason, and Bring all bac
     // Left in the shared vault it would be one more open task of lib.nvim in the counts of other tests.
     rmSync(file, { force: true });
   }
+});
+
+test('an x in a choice of the filter takes that choice away in one click, and the filter stays cleared after a reload', async ({
+  page,
+}) => {
+  await watchViolations(page);
+  await pair(page);
+  await showList(page);
+  const status = page.getByRole('button', { name: /^Status(: .+)?$/ });
+  const clearStatus = page.getByRole('button', { name: 'Remove the selection Status', exact: true });
+  // Nothing chosen: no x.
+  await expect(clearStatus).toHaveCount(0);
+  await status.click();
+  await page.getByRole('group', { name: 'Status' }).getByRole('checkbox', { name: 'doing' }).check();
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('button', { name: 'Status: doing', exact: true })).toBeVisible();
+
+  // One click on the x empties the choice without opening its popup; the focus is on the button of the choice.
+  await clearStatus.click();
+  await expect(page.getByRole('button', { name: 'Status', exact: true })).toBeVisible();
+  await expect(page.getByRole('group', { name: 'Status' })).toHaveCount(0);
+  await expect(clearStatus).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Status', exact: true })).toBeFocused();
+
+  // A choice of one value: the bound of a range.
+  await page.getByText('More filters', { exact: false }).first().click();
+  const prioMin = page.locator('select[data-range="prio-min"]');
+  const values = await prioMin.locator('option').evaluateAll((os) => os.map((o) => (o as HTMLOptionElement).value).filter((v) => v !== ''));
+  expect(values.length).toBeGreaterThan(0);
+  await prioMin.selectOption(values[0]!);
+  const clearPrio = page.getByRole('button', { name: /^Remove the selection .+: at least$/ });
+  await expect(clearPrio).toHaveCount(1);
+  expect(await violations(page)).toEqual([]);
+  await clearPrio.click();
+  await expect(prioMin).toHaveValue('');
+  await expect(prioMin).toBeFocused();
+  await expect(clearPrio).toHaveCount(0);
+
+  // The filter that is kept is the cleared one.
+  await page.reload();
+  await showList(page);
+  await expect(page.getByRole('button', { name: 'Status', exact: true })).toBeVisible();
+  await page.getByText('More filters', { exact: false }).first().click();
+  await expect(page.locator('select[data-range="prio-min"]')).toHaveValue('');
+  expect(consoleProblems.get(page)).toEqual([]);
 });
