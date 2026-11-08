@@ -216,7 +216,16 @@ again. It shows and keeps only areas of the class `public` or `internal`. The pa
 `mobile.lock` pins (`python tools/build-mobile.py`) and embedded in the program; its policy is the desktop page's plus
 its manifest, its service worker and the one Trusted Types policy it registers the worker with (see appkit's
 SECURITY.md). How to use it on a phone: [docs/USAGE.md of tasks-mobile](https://github.com/WKDSteve/tasks-mobile/blob/main/docs/USAGE.md).
-The session ends when the app is closed; pair again then.
+A phone pairs **once**: it keeps a key of its own (made by the page, which cannot be read out of the phone) and signs
+in by itself on every start, also after the PC or the hub restarted. The hub keeps the paired phones in `devices.json`
+in its settings folder; on the PC:
+
+```
+tasks-hub devices                  the paired phones: id, name, when paired, when last used
+tasks-hub devices revoke <id>      revoke one: its sessions end, it has to pair again
+```
+
+A lost phone: revoke it here (and, with a tunnel over Tailscale, remove it from the tailnet).
 
 ## The rolling build (the newest `main`, one click)
 

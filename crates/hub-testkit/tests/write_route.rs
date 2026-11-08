@@ -56,6 +56,7 @@ async fn rig_full(name: &str, limits: Limits, attach_dirs: Vec<PathBuf>) -> Rig 
     let control = Secret::generate(TOKEN_BYTES).unwrap();
     let server = start_with(
         ServerConfig {
+            devices: None,
             addr: "127.0.0.1:0".parse().unwrap(),
             limits: Limits {
                 snapshot_max_age: None,

@@ -60,6 +60,7 @@ fn policy() -> Arc<AreaPolicy> {
 async fn hub(engine: Option<Arc<dyn Engine>>, status: HubStatus) -> Hub {
     let control = Secret::generate(TOKEN_BYTES).unwrap();
     let cfg = ServerConfig {
+        devices: None,
         addr: "127.0.0.1:0".parse().unwrap(),
         limits: Limits {
             snapshot_max_age: Some(Duration::ZERO),

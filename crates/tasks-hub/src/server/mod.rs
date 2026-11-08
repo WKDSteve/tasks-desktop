@@ -207,7 +207,10 @@ pub async fn start_with(cfg: ServerConfig, extras: Extras) -> std::io::Result<Ru
             app: APP_NAME,
             version: crate::VERSION,
             build_id: crate::BUILD,
-            guard_rules: guard_rules(),
+            guard_rules: match &cfg.devices {
+                Some(file) => guard_rules().with_devices(file.clone()),
+                None => guard_rules(),
+            },
             ui: Arc::new(cfg.ui),
             runtime,
             build,

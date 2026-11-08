@@ -39,6 +39,7 @@ async fn a_request_that_is_dropped_while_it_waits_never_reaches_the_engine() {
     }));
     let control = Secret::generate(TOKEN_BYTES).unwrap();
     let server = start(ServerConfig {
+        devices: None,
         addr: "127.0.0.1:0".parse().unwrap(),
         limits: Limits::default(),
         clock: Arc::new(ManualClock::new()),

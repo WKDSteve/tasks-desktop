@@ -26,6 +26,9 @@ pub struct ServerConfig {
     pub ui: UiFiles,
     /// How often the interface is used (counts per day), if kept.
     pub usage: Option<Arc<UsageLog>>,
+    /// Where the paired devices are kept (`devices.json` in the settings); `None`: no device keys, codes only
+    /// (the tests that need no phone).
+    pub devices: Option<PathBuf>,
 }
 
 /// What to watch and how patiently.

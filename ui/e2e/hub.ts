@@ -347,6 +347,11 @@ export async function sessionToken(config: string): Promise<string> {
   return ((await response.json()) as { token: string }).token;
 }
 
+/** `tasks-hub devices [revoke <id>]` of the running hub, as the person at the PC runs it. */
+export function devicesCommand(config: string, ...args: string[]): string {
+  return execFileSync(exe, ['devices', ...args], { env: env(config), encoding: 'utf8' });
+}
+
 /** A pairing link, as `tasks-hub open` prints it. */
 export function pairingLink(config: string): string {
   const out = execFileSync(exe, ['open'], { env: env(config), encoding: 'utf8' });

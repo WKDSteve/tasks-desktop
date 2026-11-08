@@ -37,6 +37,7 @@ async fn a_stream_is_a_visit_and_the_file_holds_counts_only() {
     }));
     let control = Secret::generate(TOKEN_BYTES).unwrap();
     let server = start(ServerConfig {
+        devices: None,
         addr: "127.0.0.1:0".parse().unwrap(),
         limits: Limits::default(),
         clock: Arc::new(ManualClock::new()),

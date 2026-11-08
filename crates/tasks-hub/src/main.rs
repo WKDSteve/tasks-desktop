@@ -24,6 +24,9 @@ const USAGE: &str = "usage:
                                           --purge-settings also removes the settings (never the
                                           vault); the program file is left for the script
   tasks-hub open [--launch]               print a one-time pairing link for the running hub
+                                          (a phone: the same link with /m/ in front of the #)
+  tasks-hub devices                       list the phones paired with a key of their own
+  tasks-hub devices revoke <id>           revoke one: its sessions end, it has to pair again
                                           (--launch also opens it in the default browser)
   tasks-hub usage [--days=14]             on how many of the last days the interface was
                                           opened (counts only, kept on this machine)
@@ -184,6 +187,14 @@ async fn run(args: Vec<String>) -> Result<(), String> {
             }
             Err(e) => Err(e),
         },
+        Some("devices") if args.len() == 1 => app::devices(app::DevicesCommand::List)
+            .await
+            .map(|text| println!("{text}")),
+        Some("devices") if args.len() == 3 && args[1] == "revoke" => {
+            app::devices(app::DevicesCommand::Revoke(args[2].clone()))
+                .await
+                .map(|text| println!("{text}"))
+        }
         Some("usage") => match parse_days(&args[1..]) {
             Ok(days) => app::usage(days).map(|text| print!("{text}")),
             Err(e) => Err(e),

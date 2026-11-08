@@ -24,6 +24,7 @@ fn build_dir(name: &str) -> Scratch {
 
 async fn hub(ui: UiFiles) -> RunningServer {
     start(ServerConfig {
+        devices: None,
         addr: "127.0.0.1:0".parse().unwrap(),
         limits: Limits::default(),
         clock: Arc::new(ManualClock::new()),

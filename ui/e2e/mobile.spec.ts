@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { devices } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { STATE } from './global';
-import { pairingLink } from './hub';
+import { devicesCommand, origin, pairingLink } from './hub';
 
 // The phone page (tasks-mobile, mobile.lock) as this hub serves it under /m/: the real binary, the real engine, the
 // vault of the tests, with the screen and touch of a phone. The page itself is tested in tasks-mobile on a synthetic
@@ -87,5 +87,40 @@ test('the desktop page keeps its policy, and /m without a slash is not the page'
     const icon = await page.request.get(new URL(src, 'http://x/m/').pathname);
     expect(icon.status(), src).toBe(200);
     expect(icon.headers()['content-type'], src).toBe(src.endsWith('.png') ? 'image/png' : 'image/svg+xml');
+  }
+});
+
+test('a paired phone signs in by itself on the next start, until the PC revokes it', async ({ page, browser }) => {
+  const { config } = state();
+  // A browser profile of its own: the phone, with its own storage.
+  const phone = await browser.newContext({ ...devices['Pixel 7'], locale: 'en-US', baseURL: origin() });
+  try {
+    const first = await phone.newPage();
+    const problems = watchConsole(first);
+    await first.goto(pairingLink(config).replace('/#pair=', '/m/#pair='));
+    await expect(first.getByTestId('connection')).toHaveAttribute('data-state', 'live');
+    await first.close();
+
+    // The app is opened again: a new page, no session in it, the device key in IndexedDB.
+    const again = await phone.newPage();
+    problems.push(...watchConsole(again));
+    await again.goto('/m/');
+    await expect(again.getByTestId('connection')).toHaveAttribute('data-state', 'live');
+    await expect(again.getByRole('heading', { name: 'Connect to the PC' })).toHaveCount(0);
+
+    // The PC lists the phone and revokes it: the next start asks for pairing and says why.
+    const list = devicesCommand(config);
+    expect(list).toContain('Phone');
+    // The newest device is this phone (the list is in the order the devices were paired; other tests pair too).
+    const id = list.trim().split(/\r?\n/).at(-1)?.split(/\s+/)[0] ?? '';
+    expect(id).toMatch(/^[0-9a-f]{32}$/);
+    expect(devicesCommand(config, 'revoke', id)).toContain('revoked');
+    await again.reload();
+    await expect(again.getByRole('heading', { name: 'Connect to the PC' })).toBeVisible();
+    await expect(again.getByTestId('notice')).toContainText('disconnected on the PC');
+    // Only the refused session of the revoked device may show in the console.
+    expect(problems.filter((p) => !p.includes('401'))).toEqual([]);
+  } finally {
+    await phone.close();
   }
 });

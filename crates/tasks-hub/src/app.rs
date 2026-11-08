@@ -663,6 +663,8 @@ pub async fn serve(opts: ServeOptions) -> Result<(), String> {
         }),
         ui: ui.clone(),
         usage: Some(Arc::clone(&usage)),
+        // The phones paired with a key of their own (tasks-mobile): kept beside the settings, outlives a restart.
+        devices: Some(dir.join("devices.json")),
     };
     // The port is part of the origin, so the wanted one is tried first. When
     // it is taken the server still starts, on another port, and says so:
@@ -767,8 +769,9 @@ pub async fn serve(opts: ServeOptions) -> Result<(), String> {
 ///
 /// # Errors
 ///
-/// A text for the person at the terminal.
-pub async fn open() -> Result<String, String> {
+/// A request of this program to the running hub with the control secret: only after the hub on the port of
+/// `hub.json` said it is this hub (same app, same instance id), so the secret goes nowhere else.
+async fn control_post(path: &str, body: &str) -> Result<(u16, Value), String> {
     let env = Env::from_process();
     let dir = app_dir(&env)?;
     let record = registry::read_record(&dir)
@@ -797,24 +800,129 @@ pub async fn open() -> Result<String, String> {
     let reply = client::request(
         record.port,
         "POST",
-        "/api/control/pair",
+        path,
         &[
             ("Content-Type", "application/json"),
             ("Authorization", &auth),
         ],
-        "{}",
+        body,
     )
     .await
     .map_err(|e| e.to_string())?;
-    if reply.status != 200 {
-        return Err(format!(
-            "the hub refused the request (HTTP {})",
-            reply.status
-        ));
+    let doc: Value = serde_json::from_str(&reply.body).unwrap_or(Value::Null);
+    Ok((reply.status, doc))
+}
+
+/// The port of the running hub, from `hub.json`.
+fn running_port() -> Result<u16, String> {
+    let env = Env::from_process();
+    let dir = app_dir(&env)?;
+    Ok(registry::read_record(&dir)
+        .map_err(|e| e.to_string())?
+        .ok_or("no hub is running (no hub.json)")?
+        .port)
+}
+
+/// A pairing link for the running hub.
+///
+/// # Errors
+///
+/// A text for the person at the terminal.
+pub async fn open() -> Result<String, String> {
+    let (status, doc) = control_post("/api/control/pair", "{}").await?;
+    if status != 200 {
+        return Err(format!("the hub refused the request (HTTP {status})"));
     }
-    let doc: Value = serde_json::from_str(&reply.body).map_err(|e| e.to_string())?;
     let code = doc["code"].as_str().ok_or("the hub sent no code")?;
-    Ok(format!("http://127.0.0.1:{}/#pair={code}", record.port))
+    Ok(format!("http://127.0.0.1:{}/#pair={code}", running_port()?))
+}
+
+/// What `tasks-hub devices ...` is asked to do.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DevicesCommand {
+    /// List the paired devices.
+    List,
+    /// Revoke one by its id.
+    Revoke(String),
+}
+
+/// The paired devices (phones) as lines for the terminal, or what revoking one did.
+///
+/// # Errors
+///
+/// A text for the person at the terminal.
+pub async fn devices(command: DevicesCommand) -> Result<String, String> {
+    match command {
+        DevicesCommand::List => {
+            let (status, doc) = control_post("/api/control/devices", "{}").await?;
+            if status != 200 {
+                return Err(format!("the hub refused the request (HTTP {status})"));
+            }
+            Ok(device_lines(&doc))
+        }
+        DevicesCommand::Revoke(id) => {
+            if id.len() != 32 || !id.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f')) {
+                return Err(format!(
+                    "not a device id: {id} (tasks-hub devices lists them)"
+                ));
+            }
+            let body = serde_json::json!({ "device": id }).to_string();
+            let (status, doc) = control_post("/api/control/devices/revoke", &body).await?;
+            match (status, doc["revoked"].as_bool()) {
+                (200, Some(true)) => Ok(format!(
+                    "revoked {id}: its sessions are closed; the device has to pair again"
+                )),
+                (200, _) => Err(format!("no device {id}")),
+                _ => Err(format!("the hub refused the request (HTTP {status})")),
+            }
+        }
+    }
+}
+
+/// One line per device: id, name, when it was paired and last used (UTC days).
+fn device_lines(doc: &Value) -> String {
+    let day = |v: &Value| {
+        v.as_u64().map_or_else(
+            || "never".to_owned(),
+            |secs| {
+                let days = secs / 86_400;
+                let (y, m, d) = civil_from_days(i64::try_from(days).unwrap_or(0));
+                format!("{y:04}-{m:02}-{d:02}")
+            },
+        )
+    };
+    let list = doc["devices"].as_array().cloned().unwrap_or_default();
+    if list.is_empty() {
+        return "no paired devices".to_owned();
+    }
+    list.iter()
+        .map(|d| {
+            format!(
+                "{}  {}  paired {}  last used {}",
+                d["id"].as_str().unwrap_or("?"),
+                d["name"].as_str().unwrap_or("?"),
+                day(&d["paired"]),
+                day(&d["last_used"]),
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(
+            "
+",
+        )
+}
+
+/// Year, month, day of a count of days since 1970-01-01 (Howard Hinnant's algorithm).
+fn civil_from_days(z: i64) -> (i64, u32, u32) {
+    let z = z + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z.rem_euclid(146_097);
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = u32::try_from(doy - (153 * mp + 2) / 5 + 1).unwrap_or(1);
+    let m = u32::try_from(if mp < 10 { mp + 3 } else { mp - 9 }).unwrap_or(1);
+    (yoe + era * 400 + i64::from(m <= 2), m, d)
 }
 
 /// What `tasks-hub areas ...` is asked to do.
@@ -1419,5 +1527,38 @@ mod vault_tests {
             config::load_file(&cfg).unwrap().vaults.is_empty(),
             "nothing was written"
         );
+    }
+}
+
+#[cfg(test)]
+mod device_tests {
+    use super::*;
+
+    #[test]
+    fn the_device_list_names_each_device_with_its_days_and_no_key() {
+        let doc = serde_json::json!({ "devices": [
+            { "id": "a".repeat(32), "name": "Fairphone", "paired": 1_794_096_000u64, "last_used": null },
+            { "id": "b".repeat(32), "name": "Tablet", "paired": 0, "last_used": 86_400 },
+        ]});
+        let text = device_lines(&doc);
+        assert_eq!(
+            text,
+            format!(
+                "{}  Fairphone  paired 2026-11-08  last used never\n{}  Tablet  paired 1970-01-01  last used 1970-01-02",
+                "a".repeat(32),
+                "b".repeat(32)
+            )
+        );
+        assert_eq!(
+            device_lines(&serde_json::json!({ "devices": [] })),
+            "no paired devices"
+        );
+    }
+
+    #[test]
+    fn civil_days_are_right_around_leap_years() {
+        assert_eq!(civil_from_days(0), (1970, 1, 1));
+        assert_eq!(civil_from_days(19_782), (2024, 2, 29));
+        assert_eq!(civil_from_days(19_783), (2024, 3, 1));
     }
 }

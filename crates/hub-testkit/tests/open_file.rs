@@ -131,6 +131,7 @@ row two
     }));
     let control = Secret::generate(TOKEN_BYTES).unwrap();
     let cfg = ServerConfig {
+        devices: None,
         addr: "127.0.0.1:0".parse().unwrap(),
         limits: Limits {
             snapshot_max_age: None,

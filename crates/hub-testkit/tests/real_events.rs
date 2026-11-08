@@ -177,6 +177,7 @@ async fn rig(name: &str, prepare: impl FnOnce(&Path)) -> Option<Rig> {
     let engine: Arc<dyn Engine> = Arc::new(engine);
     let control = Secret::generate(TOKEN_BYTES).unwrap();
     let server = start(ServerConfig {
+        devices: None,
         addr: "127.0.0.1:0".parse().unwrap(),
         limits: Limits {
             snapshot_max_age: None,

@@ -12,8 +12,26 @@ use appkit_testkit::subject::{StartConfig, Subject};
 /// `tasks-hub`, with no engine, no vault and no page.
 pub struct Tasks;
 
-/// `tasks-hub` with a desktop page and the phone page under `/m/` (as a build with `ui/dist-mobile` has).
-pub struct TasksWithPhonePage;
+/// `tasks-hub` with a desktop page and the phone page under `/m/` (as a build with `ui/dist-mobile` has), and paired
+/// devices kept in a scratch folder of its own (removed when the value is dropped).
+pub struct TasksWithPhonePage {
+    dir: crate::scratch::Scratch,
+}
+
+impl TasksWithPhonePage {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            dir: crate::scratch::Scratch::new("phone-devices"),
+        }
+    }
+}
+
+impl Default for TasksWithPhonePage {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 /// The prefix and the Trusted Types policy of the phone page.
 pub const PHONE_PREFIX: &str = "/m";
@@ -22,6 +40,7 @@ pub const PHONE_WORKER_POLICY: &str = "tasks-mobile-worker";
 fn start_with(
     cfg: StartConfig,
     ui: tasks_hub::ui::UiFiles,
+    devices: Option<std::path::PathBuf>,
 ) -> BoxFuture<'static, std::io::Result<RunningServer>> {
     Box::pin(async move {
         start(ServerConfig {
@@ -35,6 +54,7 @@ fn start_with(
             policy: Arc::new(AreaPolicy::default()),
             usage: None,
             ui,
+            devices,
             watch: None,
             status: cfg.status,
         })
@@ -76,6 +96,7 @@ impl Subject for TasksWithPhonePage {
                 ("m/sw.js", "text/javascript; charset=utf-8", b"//"),
                 ("m/manifest.webmanifest", "application/manifest+json", b"{}"),
             ]),
+            Some(self.dir.join("devices.json")),
         )
     }
 
@@ -92,6 +113,7 @@ impl Subject for Tasks {
     fn start(&self, cfg: StartConfig) -> BoxFuture<'_, std::io::Result<RunningServer>> {
         Box::pin(async move {
             start(ServerConfig {
+                devices: None,
                 addr: cfg.addr,
                 limits: cfg.limits,
                 clock: cfg.clock,
