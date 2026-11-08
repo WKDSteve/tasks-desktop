@@ -29,16 +29,19 @@ export function emptySelect(): ViewSelect {
 }
 
 /** The lists of a selection, in the order the form shows them; the text search is the last. */
-export type SelectKey = 'areas' | 'statuses' | 'actors' | 'kinds' | 'tags' | 'plans' | 'query';
+export type SelectKey = 'areas' | 'statuses' | 'actors' | 'kinds' | 'tags' | 'plans' | 'projects' | 'query';
 
 /**
  * What a selection holds, as the parts that narrow something: a list that is empty narrows nothing and is left out, a
  * text that is blank too. No part at all means every open task.
  */
 export function selectParts(select: ViewSelect): { key: SelectKey; values: string[] }[] {
-  const lists = ['areas', 'statuses', 'actors', 'kinds', 'tags', 'plans'] as const;
+  const lists = ['areas', 'statuses', 'actors', 'kinds', 'tags', 'plans', 'projects'] as const;
   const parts: { key: SelectKey; values: string[] }[] = [];
-  for (const key of lists) if (select[key].length > 0) parts.push({ key, values: [...select[key]] });
+  for (const key of lists) {
+    const values = select[key] ?? [];
+    if (values.length > 0) parts.push({ key, values: [...values] });
+  }
   const query = select.query?.trim();
   if (query) parts.push({ key: 'query', values: [query] });
   return parts;
@@ -65,13 +68,15 @@ export function formOf(view: View): ViewForm {
 
 /**
  * The selection of a view as a filter of the list, so the tasks it shows are found the way the list finds them (no second
- * rule): areas, statuses and actors as they are, kinds, tags and plans as the fields of the filter, the words of the query.
+ * rule): areas, statuses and actors as they are, kinds, tags, plans and projects as the fields of the filter, the words of
+ * the query.
  */
 export function filterOfSelect(select: ViewSelect): Filter {
   const fields: Filter['fields'] = {};
   if (select.kinds.length > 0) fields.kind = [...select.kinds];
   if (select.tags.length > 0) fields.tag = [...select.tags];
   if (select.plans.length > 0) fields.plan = [...select.plans];
+  if ((select.projects?.length ?? 0) > 0) fields.project = [...(select.projects ?? [])];
   return {
     ...emptyFilter,
     areas: [...select.areas],
@@ -84,9 +89,11 @@ export function filterOfSelect(select: ViewSelect): Filter {
 
 /**
  * The part of a filter a view can keep. "Not written" (`none`) has no word in a view and is left out, as is what a view
- * does not hold (ranges, dates, reminders, the other fields): `dropped` says whether anything was.
+ * does not hold (ranges, dates, reminders, the other fields): `dropped` says whether anything was. The projects only
+ * when `projects` says the engine selects by them (`select.projects`, the field `project` of `tasks.groupings`); the
+ * list is carried only when it narrows, so an engine without it never reads the word.
  */
-export function selectOfFilter(filter: Filter): { select: ViewSelect; dropped: boolean } {
+export function selectOfFilter(filter: Filter, { projects = false }: { projects?: boolean } = {}): { select: ViewSelect; dropped: boolean } {
   let dropped = false;
   const keep = (list: readonly string[] | undefined): string[] => {
     const out = (list ?? []).filter((v) => v !== 'none');
@@ -101,9 +108,13 @@ export function selectOfFilter(filter: Filter): { select: ViewSelect; dropped: b
     tags: keep(filter.fields.tag),
     plans: keep(filter.fields.plan),
   };
+  if (projects) {
+    const chosen = keep(filter.fields.project);
+    if (chosen.length > 0) select.projects = chosen;
+  }
   const query = filter.query.trim();
   if (query !== '') select.query = query;
-  const kept = new Set(['kind', 'tag', 'plan']);
+  const kept = new Set(projects ? ['kind', 'tag', 'plan', 'project'] : ['kind', 'tag', 'plan']);
   for (const [key, values] of Object.entries(filter.fields)) {
     if (!kept.has(key) && (values?.length ?? 0) > 0) dropped = true;
   }

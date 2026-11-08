@@ -41,6 +41,7 @@ describe('the context menu "open as a view"', () => {
     const base = { ...emptySelect(), areas: ['pub'] };
     expect(selectOfGroup(base, 'status', 'doing')).toEqual({ ...base, statuses: ['doing'] });
     expect(selectOfGroup(base, 'tags', 'ui')).toEqual({ ...base, tags: ['ui'] });
+    expect(selectOfGroup(base, 'project', 'ALL/mobile')).toEqual({ ...base, projects: ['ALL/mobile'] });
     expect(selectOfGroup(base, 'area', 'lib')).toEqual({ ...base, areas: ['lib'] });
     expect(selectOfGroup(base, 'actor', 'me')).toEqual({ ...base, actors: ['me'] });
     expect(selectOfGroup(base, 'prio', '1')).toBeNull();

@@ -60,7 +60,7 @@ export function paletteActions(app: App): PaletteAction[] {
           display: 'columns',
           group_by: field.field,
           collapsed: [],
-          select: selectOfFilter(app.filter).select,
+          select: selectOfFilter(app.filter, { projects: app.viewsState.selectsProjects }).select,
         }),
       );
     }

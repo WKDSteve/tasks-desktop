@@ -42,8 +42,12 @@
     if (value === NONE) return t('views.none');
     if (field === 'status' || field === 'actor' || field === 'state' || field === 'cross') return labelOf(app.lang, field, value);
     if (field === 'prio') return `P${value}`;
+    if (field === 'project') return projectTitle(value);
     return value;
   }
+
+  /** A project by its title (its id while the snapshot does not know it). */
+  const projectTitle = (id: string): string => app.projects.find((p) => p.id === id)?.title ?? id;
 
   /** The value of the built-in view in the choice of views (no saved view has it: an id names an area and a slug). */
   const BOARD_ID = '@board';
@@ -67,12 +71,18 @@
   let makeProblem = $state('');
   let titleBox = $state<HTMLInputElement | null>(null);
 
-  const fromFilter = $derived(selectOfFilter(app.filter));
+  const fromFilter = $derived(selectOfFilter(app.filter, { projects: app.viewsState.selectsProjects }));
   /** The selection the new view will get: the one being tried, else the filter of the list, else none. */
   const chosenSelect = $derived(draftSelect ?? (fromList ? fromFilter.select : emptySelect()));
   const parts = $derived(selectParts(chosenSelect));
   const partValue = (key: string, value: string): string =>
-    key === 'statuses' ? labelOf(app.lang, 'status', value) : key === 'actors' ? labelOf(app.lang, 'actor', value) : value;
+    key === 'statuses'
+      ? labelOf(app.lang, 'status', value)
+      : key === 'actors'
+        ? labelOf(app.lang, 'actor', value)
+        : key === 'projects'
+          ? projectTitle(value)
+          : value;
 
   function startMaking(): void {
     making = true;
@@ -327,6 +337,7 @@
     add('kind', s.kinds);
     add('tags', s.tags);
     add('plan', s.plans);
+    add('project', s.projects ?? []);
     if (s.query) parts.push(`"${s.query}"`);
     return parts.length > 0 ? parts.join(' · ') : t('views.selection_all');
   }

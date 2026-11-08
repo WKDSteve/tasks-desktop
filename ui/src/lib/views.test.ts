@@ -62,6 +62,23 @@ describe('the saved views', () => {
     expect('query' in selectOfFilter(filter({ query: '  ' })).select).toBe(false);
   });
 
+  it('a view holds the projects of the filter only when the engine selects by them', () => {
+    const byProject = filter({ fields: { project: ['ALL/mobile'], tag: ['ui'] } });
+    // An engine without `select.projects`: the project is left out, and said.
+    expect(selectOfFilter(byProject)).toEqual({ select: { ...emptySelect(), tags: ['ui'] }, dropped: true });
+    // One with it: kept, and nothing is lost.
+    expect(selectOfFilter(byProject, { projects: true })).toEqual({
+      select: { ...emptySelect(), tags: ['ui'], projects: ['ALL/mobile'] },
+      dropped: false,
+    });
+    // No project chosen: the word is not sent, "not in a project" has none.
+    expect('projects' in selectOfFilter(filter(), { projects: true }).select).toBe(false);
+    expect(selectOfFilter(filter({ fields: { project: ['none'] } }), { projects: true })).toEqual({ select: emptySelect(), dropped: true });
+    // And back: the projects of a view are the field of the filter.
+    expect(filterOfSelect({ ...emptySelect(), projects: ['ALL/mobile'] }).fields).toEqual({ project: ['ALL/mobile'] });
+    expect(selectParts({ ...emptySelect(), projects: ['ALL/mobile'] })).toEqual([{ key: 'projects', values: ['ALL/mobile'] }]);
+  });
+
   it('fold a group that is open and open one that is folded', () => {
     expect(toggledGroup(['a'], 'b')).toEqual(['a', 'b']);
     expect(toggledGroup(['a', 'b'], 'a')).toEqual(['b']);

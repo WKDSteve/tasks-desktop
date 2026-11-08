@@ -59,7 +59,7 @@ export function viewMenuItems(
 
 /**
  * The selection of a group of a view: the selection of the view, narrowed to the value of the group - where a view can
- * hold that narrowing (status, who, kind, tags, plan, area). Null for a field it cannot (priority, effort, value,
+ * hold that narrowing (status, who, kind, tags, plan, project, area). Null for a field it cannot (priority, effort, value,
  * phase, readiness) and for the group of the tasks that have none.
  */
 export function selectOfGroup(select: ViewSelect, field: GroupField, value: string): ViewSelect | null {
@@ -70,11 +70,12 @@ export function selectOfGroup(select: ViewSelect, field: GroupField, value: stri
 }
 
 /** The list of a selection that narrows by the value of a field. */
-const SELECT_OF_FIELD: Partial<Record<GroupField, 'statuses' | 'actors' | 'kinds' | 'tags' | 'plans' | 'areas'>> = {
+const SELECT_OF_FIELD: Partial<Record<GroupField, 'statuses' | 'actors' | 'kinds' | 'tags' | 'plans' | 'projects' | 'areas'>> = {
   status: 'statuses',
   actor: 'actors',
   kind: 'kinds',
   tags: 'tags',
   plan: 'plans',
+  project: 'projects',
   area: 'areas',
 };

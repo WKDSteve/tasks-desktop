@@ -6249,6 +6249,20 @@ describe('the saved views', () => {
     m.app.stop();
   });
 
+  it('a task stands in the project of its plan, or in its own, when the views group by project', async () => {
+    const m = made(['views', 'groupings']);
+    await m.app.start(null);
+    m.app.snapshot = {
+      ...m.app.snapshot!,
+      plans: [{ id: 'pub/app', title: 'App', areas: [], phase_order: [], valid: true, etag: 'sha256:plan', project: 'ALL/mobile' }],
+    };
+    expect(m.app.derivedValues(task('pub/x', { plan: 'pub/app' }), 'project')).toEqual(['ALL/mobile']);
+    expect(m.app.derivedValues(task('pub/y', { project: 'ALL/web' }), 'project')).toEqual(['ALL/web']);
+    // In no project: no value, so the task stands in the group of none.
+    expect(m.app.derivedValues(task('pub/z'), 'project')).toEqual([]);
+    m.app.stop();
+  });
+
   it('the board is the built-in view: opening it asks for the fields its bar makes views with', async () => {
     const m = made(['views', 'groupings', 'reorder']);
     await m.app.start(null);

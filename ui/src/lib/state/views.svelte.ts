@@ -77,6 +77,11 @@ export class ViewsState {
     return this.groupingsNow ?? this.groupings;
   }
 
+  /** Whether a view can select by project (`select.projects`): the engine names the field `project` in its groupings. */
+  get selectsProjects(): boolean {
+    return this.groupingsShown?.fields.some((f) => f.field === 'project') ?? false;
+  }
+
   choose(id: string): void {
     this.draft = null;
     this.openId = id;

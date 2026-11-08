@@ -430,10 +430,12 @@ tasks, a project with only parked plans) is finished by hand (`plan_close`, `pro
 first and the page says what would happen, or which tasks and plans still hold it open; there is no way back, and a
 project the last plan takes with it is named. The head of the page switches to another project. The plan wizard makes a project too (`project_new`), and a plan can be made in a project and one of
 its stages. The filter of the list has the field *Project*: the tasks of the project's plans and its own (the page
-reads which plan belongs to which project from the snapshot, since the engine has no grouping by project yet); a saved
-view cannot hold it and says so. A finish that closes a project offers no undo (reopening the task would leave the
-project closed). Not yet: grouping a saved view by project (the engine's `tasks.groupings` has no such field) and the
-project bar in a timeline (the timeline view is not built).
+reads which plan belongs to which project from the snapshot). A saved view groups by *Project* too (read only, like
+*Readiness*: a card is not dragged to another project; the group is named by the project's title, and a task stands in
+the project of its plan or in its own), and a view made from the list keeps its project filter (`select.projects`;
+an engine without the field leaves it out and the form says so). A finish that closes a project offers no undo
+(reopening the task would leave the project closed). Not yet: the project bar in a timeline (the timeline view is not
+built).
 
 **Parked with a reason** (an engine with the capabilities `waits` and `waits_for`). A parked task may name what it
 waits for from outside (`waits_for`, one word such as `mac`). The detail has the field *Waits for*: a reason parks the

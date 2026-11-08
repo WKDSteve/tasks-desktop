@@ -778,9 +778,15 @@ export class App {
 
   /**
    * The values of the derived fields of a grouping that the task entry does not hold: `cross` (whether the task connects
-   * areas) is the engine's `tasks.links` - `several` for a task it names among those that touch two or more areas.
+   * areas) is the engine's `tasks.links` - `several` for a task it names among those that touch two or more areas;
+   * `project` is the project of the task's plan, or its own (the entry holds only its own: `projectOf`, the rule of the
+   * engine's `projects.project_of`).
    */
   readonly derivedValues: Derived = (task, field) => {
+    if (field === 'project') {
+      const project = this.projectOf(task);
+      return project === undefined || project === '' ? [] : [project];
+    }
     if (field !== 'cross') return undefined;
     const touched = this.groupCrossIndex.get(task.id);
     return [touched && touched.size >= 2 ? 'several' : 'one'];

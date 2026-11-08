@@ -7379,6 +7379,44 @@ test('a project: its page with goal, rollup, own tasks and the plans by stage, t
   }
 });
 
+test('a view grouped by project: a task stands in the project of its plan or in its own, the group is named by the title of the project', async ({
+  page,
+}) => {
+  const { vault } = state();
+  const files = [
+    [join(vault, 'ALL', 'ROADMAP', 'projects', 'e2e-projekt-p002.md'), `---\ntitle: Projekt p002\nstatus: doing\nareas: [ALL]\nphase_order: [basis]\ncreated: 2026-11-08\nupdated: 2026-11-08\n---\n\nA project the views group by.\n`],
+    [join(vault, 'nvim-config', 'ROADMAP', 'plans', 'e2e-projplan-c002.md'), `---\ntitle: Projplan c002\nstatus: doing\nareas: [nvim-config]\nproject: ALL/e2e-projekt-p002\nphase: basis\nphase_order: []\ncreated: 2026-11-08\nupdated: 2026-11-08\n---\n\nA plan of the project.\n`],
+    [join(vault, 'nvim-config', 'ROADMAP', 'tasks', 'e2e-projtask-t002.md'), `---\ntitle: Projtask t002\nstatus: open\nkind: task\nplan: nvim-config/e2e-projplan-c002\ncreated: 2026-11-08\nupdated: 2026-11-08\n---\n\nIn the plan of the project.\n`],
+    [join(vault, 'ALL', 'ROADMAP', 'tasks', 'e2e-projown-o002.md'), `---\ntitle: Projown o002\nstatus: open\nkind: task\nproject: ALL/e2e-projekt-p002\ncreated: 2026-11-08\nupdated: 2026-11-08\n---\n\nThe project's own.\n`],
+  ] as const;
+  try {
+    for (const [path, text] of files) {
+      mkdirSync(join(path, '..'), { recursive: true });
+      writeFileSync(path, text);
+    }
+    await pair(page);
+    const make = page.getByRole('button', { name: 'New view' });
+    await openViewsByKey(page, make);
+    await make.click();
+    const form = page.getByRole('form', { name: 'New view' });
+    await form.getByLabel('Name').fill('E2e by project v002');
+    await form.getByLabel('Kept in area').selectOption('lib.nvim');
+    await form.getByLabel('Group by').selectOption({ label: 'Project' });
+    await write(page, () => form.getByRole('button', { name: 'Create view' }).click());
+    await expect.poll(() => viewFile('lib.nvim', 'E2e by project v002'), { timeout: WRITE_BUDGET }).not.toBeNull();
+    expect(readFileSync(viewFile('lib.nvim', 'E2e by project v002')!, 'utf8')).toContain('group_by: project');
+    const open = page.getByRole('region', { name: 'E2e by project v002' });
+    // The engine names the project among the values; the page puts the task of its plan and its own task in it.
+    const group = open.locator('section[data-group="ALL/e2e-projekt-p002"]');
+    await expect(group).toContainText('Projekt p002');
+    await expect(group).toContainText('Projtask t002');
+    await expect(group).toContainText('Projown o002');
+    await expectAccessible(page, 'a view grouped by project');
+  } finally {
+    for (const [path] of files) rmSync(path, { force: true });
+  }
+});
+
 test('a reason parks a task, the overview counts it by reason, and Bring all back sets the tasks of the reason to open', async ({
   page,
 }) => {
