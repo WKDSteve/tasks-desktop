@@ -13,11 +13,14 @@
     FINISHED_PAGE,
     FINISHED_READ,
     finishedFilter,
+    finishedOf,
+    listIsPart,
     METRICS,
     metricValues,
     narrowFinished,
     PERIOD_MODES,
     periodDays,
+    periodTasks,
     shiftPeriod,
     type DailyPrefs,
     type IgnoredPart,
@@ -28,6 +31,7 @@
   import { dailyPng, printDaily, saveBlob, type DailyRow } from '../lib/dailyExport';
   import { narrows } from '../lib/filter';
   import { translate, type Key } from '../lib/i18n';
+  import DailyList, { type DailyGroup } from './DailyList.svelte';
 
   let { app }: { app: App } = $props();
   const t = (key: Key, params: Record<string, string | number> = {}) => translate(app.lang, key, params);
@@ -118,7 +122,8 @@
   const narrowed = $derived(read !== null && narrows(rest) ? narrowFinished(read, rest) : null);
   const finished = $derived(narrowed?.doc ?? read);
 
-  const values = $derived(metricValues(filtered ? app.shown : app.tasks, finished, days, narrowed?.cut ?? false));
+  const counted = $derived(filtered ? app.shown : app.tasks);
+  const values = $derived(metricValues(counted, finished, days, narrowed?.cut ?? false));
   /** The parts of the filter not taken for the finished tasks, in words; only while a figure of them is shown. */
   const ignoredText = $derived(needsFinished ? forFinished.ignored.map(partName).join(', ') : '');
 
@@ -158,6 +163,38 @@
     if (v.value === null) return '–';
     return `${v.partial ? '≥ ' : ''}${v.value}`;
   }
+
+  // The float with the tasks behind a number (or, from the title, behind the three of the period): chosen with the same
+  // functions the numbers are counted with.
+  let listed = $state<Metric | 'all' | null>(null);
+  const openTasks = $derived(periodTasks(counted, days));
+
+  function groupOf(metric: Metric): DailyGroup | null {
+    const heading = `${textOf(metric)} ${t(`daily.m.${metric}` as Key)}`;
+    if (metric === 'created') return { key: metric, heading, cut: false, open: openTasks.created, list: () => app.listCreatedIn(days) };
+    // The list has no filter for "changed but not made" in the days: no way there that would show more than were counted.
+    if (metric === 'changed') return { key: metric, heading, cut: false, open: openTasks.changed };
+    if (finished === null) return null;
+    return {
+      key: metric,
+      heading,
+      // Of the read ones, not of the narrowed (whose number is all there is): more finished than read is a part.
+      cut: read !== null && listIsPart(read, values[metric].partial),
+      finished: finishedOf(metric, finished),
+      ...(metric === 'effort' ? { extra: 'effort' as const } : metric === 'commits' ? { extra: 'commit' as const } : {}),
+      // The view Done narrows by one area only: it shows these tasks when nothing else of the filter narrows them.
+      ...(metric === 'finished' && !narrows(rest) ? { list: () => app.showFinishedIn(days) } : {}),
+    };
+  }
+
+  const groups = $derived.by<DailyGroup[] | null>(() => {
+    if (listed === null) return null;
+    const keys: Metric[] = listed === 'all' ? ['finished', 'created', 'changed'] : [listed];
+    return keys.map(groupOf).filter((g): g is DailyGroup => g !== null);
+  });
+  const listTitle = $derived(
+    listed === null ? '' : `${listed === 'all' ? title : `${textOf(listed)} ${t(`daily.m.${listed}` as Key)}`} · ${rangeText}`,
+  );
 
   const rows = $derived<DailyRow[]>(shownMetrics.map((m) => ({ label: t(`daily.m.${m}` as Key), value: textOf(m) })));
 
@@ -203,7 +240,11 @@
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <section data-tile="daily" class="card daily" aria-label={t('daily.title')} bind:this={card} onkeydown={onKey}>
   <header>
-    <h2 class="eyebrow" data-hint={t('hint.ui.daily')}>{title} <span class="muted day" data-range>{rangeText}</span></h2>
+    <h2 class="eyebrow" data-hint={t('hint.ui.daily')}>
+      <button type="button" class="all" data-all data-hint={t('daily.list.all', { range: rangeText })} onclick={() => (listed = 'all')}
+        >{title} <span class="muted day" data-range>{rangeText}</span></button
+      >
+    </h2>
     <div class="icons">
       <button type="button" class="icon" data-turn="prev" aria-label={t('daily.prev')} data-hint={t('daily.prev')} disabled={!canPage(period, -1, app.today)} onclick={() => turn(-1)}>
         <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M10 3 5 8l5 5" /></svg>
@@ -267,12 +308,26 @@
     <ul class="figures">
       {#each shownMetrics as metric (metric)}
         <li data-figure={metric} data-hint={t(`hint.ui.daily.m.${metric}` as Key)}>
-          <span class="num">{textOf(metric)}</span>
-          <span class="muted">{t(`daily.m.${metric}` as Key)}</span>
+          {#if values[metric].value === null}
+            <span class="num">{textOf(metric)}</span>
+            <span class="muted">{t(`daily.m.${metric}` as Key)}</span>
+          {:else}
+            <button
+              type="button"
+              class="figure"
+              aria-label={t('daily.list.aria', { n: textOf(metric), what: t(`daily.m.${metric}` as Key), range: rangeText })}
+              onclick={() => (listed = metric)}
+            >
+              <span class="num">{textOf(metric)}</span>
+              <span class="muted">{t(`daily.m.${metric}` as Key)}</span>
+            </button>
+          {/if}
         </li>
       {/each}
     </ul>
   {/if}
+
+  <DailyList {app} title={listTitle} {groups} onclose={() => (listed = null)} />
 </section>
 
 <style>
@@ -371,6 +426,25 @@
     display: flex;
     align-items: baseline;
     gap: 0.4rem;
+  }
+  .figures .figure,
+  .all {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 0.4rem;
+    background: none;
+    border: 1px solid transparent;
+    border-radius: var(--radius);
+    color: inherit;
+    font: inherit;
+    letter-spacing: inherit;
+    text-transform: inherit;
+    cursor: pointer;
+    padding: 0 0.2rem;
+  }
+  .figures .figure:hover,
+  .all:hover {
+    background: var(--surface-2);
   }
   .figures .num {
     font-size: 1.4rem;

@@ -2038,6 +2038,66 @@ test('the tile Today counts only the tasks the filter of the list keeps: finishe
   }
 });
 
+test('a number of the tile Today opens the tasks it counts in a float; the title opens all three, and the made ones open in the list', async ({ page }) => {
+  const { vault } = state();
+  const now = new Date();
+  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  // One finished, one made and one changed today, all found by one word of their titles (the tests share the vault).
+  const files = [
+    [join(vault, 'lib.nvim', 'Backlog', 'FEATURES', `${today}_e2e-dailylist-d001.md`), `---\ntitle: Dailylist d001\nstatus: done\nkind: task\neffort: XS\ncreated: ${today}\nupdated: ${today}\n---\n\nFinished today.\n`],
+    [join(vault, 'lib.nvim', 'ROADMAP', 'tasks', 'e2e-dailylist-o001.md'), `---\ntitle: Dailylist o001\nstatus: open\nkind: task\ncreated: ${today}\nupdated: ${today}\n---\n\nMade today.\n`],
+    [join(vault, 'lib.nvim', 'ROADMAP', 'tasks', 'e2e-dailylist-c001.md'), `---\ntitle: Dailylist c001\nstatus: open\nkind: task\ncreated: 2020-01-01\nupdated: ${today}\n---\n\nChanged today.\n`],
+  ] as const;
+  try {
+    for (const [path, text] of files) {
+      mkdirSync(join(path, '..'), { recursive: true });
+      writeFileSync(path, text);
+    }
+    await pair(page);
+    await chooseView(page, 'View', 'List');
+    await page.getByRole('searchbox', { name: /search/i }).first().fill('Dailylist');
+    await chooseView(page, 'View', 'Today');
+    const card = page.locator('section[data-tile="daily"]');
+    await expect(card.locator('li[data-figure="created"] .num')).toHaveText('1');
+    const float = page.locator('dialog.daily-list');
+    const rows = (group: string) => float.locator(`section[data-group="${group}"] li[data-task]`);
+
+    // "new": the one made today, not the one changed today. Esc closes.
+    await card.getByRole('button', { name: /^Show the 1 new,/ }).click();
+    await expect(float).toBeVisible();
+    await expect(rows('created')).toHaveText([/Dailylist o001/]);
+    await expect(float.locator('section[data-group]')).toHaveCount(1);
+    await expectAccessible(page, 'the float of the tile Today');
+    await page.keyboard.press('Escape');
+    await expect(float).toBeHidden();
+
+    // "changed": the older one changed today, without the one made today.
+    await card.getByRole('button', { name: /^Show the 1 changed,/ }).click();
+    await expect(rows('changed')).toHaveText([/Dailylist c001/]);
+    await page.keyboard.press('Escape');
+
+    // "finished": the one of the Backlog.
+    await card.getByRole('button', { name: /^Show the 1 finished,/ }).click();
+    await expect(rows('finished')).toHaveText([/Dailylist d001/]);
+    await page.keyboard.press('Escape');
+
+    // The title: the three groups of the period together.
+    // The title keeps its name as a heading ("Today" and the day): the button is named by its text.
+    await card.getByRole('heading', { name: /Today/ }).getByRole('button').click();
+    await expect(float.locator('section[data-group]')).toHaveCount(3);
+    await expect(rows('finished')).toHaveText([/Dailylist d001/]);
+    await expect(rows('created')).toHaveText([/Dailylist o001/]);
+    await expect(rows('changed')).toHaveText([/Dailylist c001/]);
+
+    // "Open in the list" of the made ones: the list with the filter and the made day, the made one alone.
+    await float.locator('section[data-group="created"] button[data-list]').click();
+    await expect(float).toBeHidden();
+    await expect(page.locator('button.row')).toHaveText([/Dailylist o001/]);
+  } finally {
+    for (const [path] of files) rmSync(path, { force: true });
+  }
+});
+
 test('the capture dialog writes after, plan, phase, due and start into the file', async ({ page }) => {
   await pair(page);
   await closeFloat(page);

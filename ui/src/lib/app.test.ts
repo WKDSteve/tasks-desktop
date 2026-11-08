@@ -4166,6 +4166,22 @@ describe('writing', () => {
       app.openCountInList('ready');
       expect(app.view).toBe('today');
     });
+
+    it('opens the tasks made in the days of the tile Today in the list, keeping the filter and a narrower made span', async () => {
+      const { app } = await ready();
+      app.filter = { ...freshFilter(), statuses: ['open'], dates: { created: { from: '2026-11-04' } } };
+      app.listCreatedIn({ since: '2026-11-02', until: '2026-11-08' });
+      expect(app.view).toBe('list');
+      expect(app.filter.statuses).toEqual(['open']);
+      expect(app.filter.dates.created).toEqual({ from: '2026-11-04', to: '2026-11-08' });
+    });
+
+    it('opens the tasks finished in the days of the tile Today in the view Done, with these days', async () => {
+      const { app } = await ready();
+      app.showFinishedIn({ since: '2026-11-02', until: '2026-11-08' });
+      expect(app.view).toBe('done');
+      expect(app.finishedPrefs).toMatchObject({ preset: 'custom', from: '2026-11-02', to: '2026-11-08' });
+    });
   });
 
   describe('the vaults', () => {

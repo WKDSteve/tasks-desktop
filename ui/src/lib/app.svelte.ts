@@ -3090,6 +3090,25 @@ export class App {
     this.setView('list');
   }
 
+  /**
+   * The tasks made in `days`, from the tile Today, in the list: the filter stays and keeps only the days the tasks were
+   * made on (inside a span of the made date it already has), so the list shows the tasks the number counted.
+   */
+  listCreatedIn(days: { since: string; until: string }): void {
+    const had = this.filter.dates.created;
+    const from = had?.from && had.from > days.since ? had.from : days.since;
+    const to = had?.to && had.to < days.until ? had.to : days.until;
+    this.filter = { ...this.filter, dates: { ...this.filter.dates, created: { from, to } } };
+    this.setView('list');
+  }
+
+  /** The tasks finished in `days`, from the tile Today, in the view Done: its period is these days, its area the filter's. */
+  showFinishedIn(days: { since: string; until: string }): void {
+    this.setFinishedPrefs({ ...this.finishedPrefs, preset: 'custom', from: days.since, to: days.until });
+    this.finishedStartArea = this.finishedArea;
+    this.setView('done');
+  }
+
   /** Put the block `tile` before (or after) `target`; `visible` are the blocks on the page, for the number said aloud. */
   moveTile(tile: OrderedTile, target: OrderedTile, after: boolean, visible: readonly OrderedTile[]): void {
     this.todayState.move(tile, target, after, visible);

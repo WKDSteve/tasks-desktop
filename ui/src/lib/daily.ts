@@ -110,6 +110,55 @@ export const FINISHED_PAGE = 100;
 /** The finished tasks read for a period, over several pages, at most. */
 export const FINISHED_READ = 500;
 
+/** The open tasks of the period: made in it, and changed in it without being made in it (each task in one of the two). */
+export function periodTasks<T extends Pick<TaskEntry, 'created' | 'updated'>>(tasks: readonly T[], days: Days): { created: T[]; changed: T[] } {
+  const created: T[] = [];
+  const changed: T[] = [];
+  const within = (day: string | undefined) => day !== undefined && day >= days.since && day <= days.until;
+  for (const task of tasks) {
+    if (within(task.created as unknown as string | undefined)) created.push(task);
+    else if (within(task.updated as unknown as string | undefined)) changed.push(task);
+  }
+  return { created, changed };
+}
+
+/** The evaluations that are counted from the finished tasks. */
+export type FinishedMetric = Exclude<Metric, 'created' | 'changed'>;
+
+/** The commit a finished task names as done in, or none. */
+const commitOf = (item: FinishedItem): string | undefined =>
+  typeof item.done_in === 'string' && item.done_in !== '' ? item.done_in : undefined;
+
+/**
+ * The finished tasks behind an evaluation, of those that were read: all of them, the quick wins, those with an effort,
+ * those that name a commit, the bugs, those of priority 1. The tile counts with the same choice.
+ */
+export function finishedOf(metric: FinishedMetric, finished: Finished): FinishedItem[] {
+  const items = finished.items;
+  switch (metric) {
+    case 'finished':
+      return [...items];
+    case 'quick':
+      return items.filter((i) => i.effort_days !== undefined && i.effort_days <= QUICK_DAYS);
+    case 'effort':
+      return items.filter((i) => i.effort_days !== undefined);
+    case 'commits':
+      return items.filter((i) => commitOf(i) !== undefined);
+    case 'bugs':
+      return items.filter((i) => i.kind === 'bug');
+    case 'prio1':
+      return items.filter((i) => i.prio === 1);
+  }
+}
+
+/**
+ * Whether the list behind a figure of the finished ones is a part of them: the figure says at least, or the engine
+ * counted more than were read (its own figures are exact then, the list is not).
+ */
+export function listIsPart(read: Finished, partial: boolean): boolean {
+  return partial || read.items.length < read.total;
+}
+
 /**
  * Every evaluation for the days. `created` and `changed` come from the open tasks (a task made and finished within the
  * period is counted as finished); the others from the finished tasks of the Backlogs, `null` while they are not known.
@@ -121,22 +170,17 @@ export function metricValues(
   /** The finished tasks are a filtered part of those that were read, and more were there: every figure is at least. */
   cut = false,
 ): Record<Metric, MetricValue> {
-  let created = 0;
-  let changed = 0;
-  for (const task of tasks) {
-    const made = task.created as unknown as string | undefined;
-    const touched = task.updated as unknown as string | undefined;
-    if (made !== undefined && made >= days.since && made <= days.until) created += 1;
-    else if (touched !== undefined && touched >= days.since && touched <= days.until) changed += 1;
-  }
+  const open = periodTasks(tasks, days);
+  const created = open.created.length;
+  const changed = open.changed.length;
   const none: MetricValue = { value: null, partial: false };
   const known = (value: number, partial = false): MetricValue => ({ value, partial });
   if (finished === null) {
     return { finished: none, created: known(created), changed: known(changed), quick: none, effort: none, commits: none, bugs: none, prio1: none };
   }
   const read = cut || finished.items.length < finished.total;
-  const quick = finished.items.filter((i) => i.effort_days !== undefined && i.effort_days <= QUICK_DAYS).length;
-  const commits = new Set(finished.items.map((i) => i.done_in).filter((c): c is string => typeof c === 'string' && c !== '')).size;
+  const quick = finishedOf('quick', finished).length;
+  const commits = new Set(finishedOf('commits', finished).map(commitOf)).size;
   const kind = (name: string) => finished.stats.by_kind.find((k) => k.kind === name)?.count ?? 0;
   const prio = (n: number) => finished.stats.by_prio.find((p) => p.prio === n)?.count ?? 0;
   return {

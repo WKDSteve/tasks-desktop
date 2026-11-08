@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Finished, FinishedItem } from './contract';
-import { finishedFilter, metricValues, narrowFinished } from './daily';
+import { finishedFilter, finishedOf, listIsPart, metricValues, narrowFinished, periodTasks, type FinishedMetric } from './daily';
 import { freshFilter, type Filter } from './filter';
 
 const figures = (tasks: never[], day: string) => {
@@ -103,5 +103,70 @@ describe('the filter of the list on the tile', () => {
     // Without a filter the engine's figures stand as they are.
     expect(metricValues([], doc(items, 700), day).finished).toEqual({ value: 700, partial: false });
     expect(metricValues([], doc(items, 700), day).effort.value).toBe(99);
+  });
+});
+
+describe('the tasks behind each figure', () => {
+  const day = { since: '2026-11-02', until: '2026-11-08' };
+  const item = (id: string, extra: Partial<FinishedItem> = {}): FinishedItem =>
+    ({ id, area: 'a', slug: id, title: id, tags: [], file: `${id}.md`, ...extra }) as FinishedItem;
+  // The figures of a document are those `narrowFinished` sums up (an empty filter keeps all): the same as the engine's.
+  const read = narrowFinished(
+    {
+      kind: 'tasks.finished',
+      total: 5,
+      offset: 0,
+      limit: 100,
+      items: [
+        item('q', { effort_days: 0.25, kind: 'bug', prio: 1, done_in: 'abc' }),
+        item('m', { effort_days: 3, prio: 2, done_in: 'abc' }),
+        item('b', { kind: 'bug', prio: 1, done_in: 'def' }),
+        item('h', { effort_days: 0.5 }),
+        item('n', { done_in: '' }),
+      ],
+      undated: 0,
+      incomplete: [],
+      stats: { effort_days: 0, without_effort: 0, by_area: [], by_kind: [], by_prio: [], by_month: [], by_week: [] },
+    } as unknown as Finished,
+    freshFilter(),
+  ).doc;
+
+  it('lists as many open tasks as are counted: the made ones, and the changed ones without the made', () => {
+    const tasks = [
+      { id: 'made', created: '2026-11-03', updated: '2026-11-07' },
+      { id: 'changed', created: '2026-10-01', updated: '2026-11-08' },
+      { id: 'old', created: '2026-10-01', updated: '2026-10-30' },
+      { id: 'later', created: '2026-11-09' },
+    ] as never[];
+    const open = periodTasks(tasks as { id: string; created?: string; updated?: string }[], day);
+    expect(open.created.map((t) => t.id)).toEqual(['made']);
+    expect(open.changed.map((t) => t.id)).toEqual(['changed']);
+    const v = metricValues(tasks, null, day);
+    expect([v.created.value, v.changed.value]).toEqual([open.created.length, open.changed.length]);
+  });
+
+  it('lists the finished tasks each figure counts, the same number', () => {
+    const v = metricValues([], read, day);
+    for (const metric of ['finished', 'quick', 'bugs', 'prio1'] as FinishedMetric[]) {
+      expect(finishedOf(metric, read).length, metric).toBe(v[metric].value);
+    }
+    expect(finishedOf('quick', read).map((i) => i.id)).toEqual(['q', 'h']);
+    // The effort is a sum of days: the list is the tasks with an effort, adding up to the figure.
+    const withEffort = finishedOf('effort', read);
+    expect(withEffort.map((i) => i.id)).toEqual(['q', 'm', 'h']);
+    expect(Math.round(withEffort.reduce((sum, i) => sum + (i.effort_days ?? 0), 0) * 10) / 10).toBe(v.effort.value);
+    // The commits are the different ones: the list is the tasks that name one.
+    const named = finishedOf('commits', read);
+    expect(named.map((i) => i.id)).toEqual(['q', 'm', 'b']);
+    expect(new Set(named.map((i) => i.done_in)).size).toBe(v.commits.value);
+  });
+
+  it('says the list is a part when more were finished than were read, also where the figure itself is exact', () => {
+    const more = { ...read, total: 600 } as Finished;
+    const v = metricValues([], more, day);
+    expect(v.finished).toEqual({ value: 600, partial: false });
+    expect(listIsPart(more, v.finished.partial)).toBe(true);
+    expect(listIsPart(read, false)).toBe(false);
+    expect(listIsPart(read, true)).toBe(true);
   });
 });
