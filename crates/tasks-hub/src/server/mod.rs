@@ -21,12 +21,10 @@
 //! is closed the same way until it is deliberately opened.
 
 use std::collections::HashMap;
-use std::convert::Infallible;
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::pin::Pin;
 use std::sync::{Arc, Mutex as StdMutex};
-use std::task::{Context, Poll};
 use std::time::Duration;
 
 use appkit_core::authn::{Clock, Secret};
@@ -55,6 +53,7 @@ use crate::store::{self, RefreshOptions, SnapshotStore, StoreOptions};
 use crate::ui::UiFiles;
 use crate::usage::UsageLog;
 use crate::watch::{self as fswatch, Hint};
+use appkit_hub::streams::StreamCounter;
 
 mod answer;
 mod check;
@@ -84,52 +83,6 @@ pub const APP_NAME: &str = crate::IDENTITY.app;
 /// The default port. It is part of the origin, so it is fixed (concept 3.3);
 /// below the ephemeral ranges of Windows (49152) and Linux (32768).
 pub const DEFAULT_PORT: u16 = crate::IDENTITY.default_port;
-
-/// The event streams that are open, by session token.
-#[derive(Default)]
-struct StreamCounter {
-    by_token: StdMutex<HashMap<String, usize>>,
-}
-
-/// One open stream; the place is given back when it is dropped.
-struct StreamGuard {
-    counter: Arc<StreamCounter>,
-    token: String,
-}
-
-impl StreamCounter {
-    fn acquire(self: &Arc<Self>, token: &str, max: usize) -> Option<StreamGuard> {
-        let mut map = self
-            .by_token
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        let open = map.entry(token.to_owned()).or_insert(0);
-        if *open >= max {
-            return None;
-        }
-        *open += 1;
-        Some(StreamGuard {
-            counter: Arc::clone(self),
-            token: token.to_owned(),
-        })
-    }
-}
-
-impl Drop for StreamGuard {
-    fn drop(&mut self) {
-        let mut map = self
-            .counter
-            .by_token
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        if let Some(open) = map.get_mut(&self.token) {
-            *open = open.saturating_sub(1);
-            if *open == 0 {
-                map.remove(&self.token);
-            }
-        }
-    }
-}
 
 /// The core of the hub with the runtime of this app.
 type Shared = appkit_hub::Core<VaultRuntime>;
