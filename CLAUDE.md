@@ -13,7 +13,8 @@ python tools/build-mobile.py            # Handy-Seite (tasks-mobile aus mobile.l
 touch crates/tasks-hub/src/ui.rs        # sonst bettet das Binary die alte Oberfläche ein
 cargo build --locked
 cargo fmt --check && cargo clippy --workspace --all-targets --locked -- -D warnings
-cargo test --workspace --locked
+cargo test --workspace --locked --exclude hub-testkit
+cargo test --locked -p hub-testkit -- --test-threads=1   # Hubs mit Engine und Zeitgrenzen: nacheinander (wie die CI)
 cd ui && pnpm e2e                        # echtes Binary, echte Engine, axe
 python tools/check-control-chars.py
 python tools/check-color-literals.py --root ui/src --tokens ui/src/palette.css   # no colour outside tokens and palette (CI job hygiene)

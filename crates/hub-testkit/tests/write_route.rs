@@ -19,6 +19,12 @@ use tasks_hub::server::{
 };
 use tasks_hub::store::RefreshOptions;
 
+/// The tests of this file run one after the other. Each starts a hub (and an engine, real or fake) of its own and waits
+/// a bounded time for an answer or an event; side by side they took the time from each other and failed now and then
+/// on the runner, also before any change of the code they test (`tasks-desktop/write-route-tests-flackern-auf-dem-
+/// runner-the-hub-did-not-an`). What is asked and the bounds stay as they are.
+static ONE_AT_A_TIME: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
 struct Rig {
     server: RunningServer,
     vault: PathBuf,
@@ -172,6 +178,7 @@ const JSON: &str = "application/json";
 
 #[tokio::test]
 async fn a_write_goes_through_and_the_next_read_is_the_new_state() {
+    let _one_at_a_time = ONE_AT_A_TIME.lock().await;
     let r = rig("write").await;
     let (_, before) = get(&r, "/api/tasks/snapshot").await;
 
@@ -192,6 +199,7 @@ async fn a_write_goes_through_and_the_next_read_is_the_new_state() {
 
 #[tokio::test]
 async fn a_write_refused_as_a_conflict_reads_the_vault_again_before_it_answers() {
+    let _one_at_a_time = ONE_AT_A_TIME.lock().await;
     let r = rig("conflict").await;
     let (_, before) = get(&r, "/api/tasks/snapshot").await;
     // The file is changed outside (an editor) and the engine refuses the write on the version read: the hub's
@@ -211,6 +219,7 @@ async fn a_write_refused_as_a_conflict_reads_the_vault_again_before_it_answers()
 
 #[tokio::test]
 async fn the_newest_screenshot_is_taken_only_from_the_folders_of_the_settings() {
+    let _one_at_a_time = ONE_AT_A_TIME.lock().await;
     // None set: latest is refused at the door, the engine is not asked (nothing reaches it, nothing is written).
     let r = rig("attach-none").await;
     let latest = r#"{"ops":[{"op":"attach","id":"alpha.nvim/t1","from":"latest"}]}"#;
@@ -245,6 +254,7 @@ async fn the_newest_screenshot_is_taken_only_from_the_folders_of_the_settings() 
 
 #[tokio::test]
 async fn a_dry_run_changes_and_scans_nothing() {
+    let _one_at_a_time = ONE_AT_A_TIME.lock().await;
     let r = rig("dry").await;
     let (_, before) = get(&r, "/api/tasks/snapshot").await;
     let calls_before = std::fs::read_to_string(r.vault.join(".fake-calls"))
@@ -268,6 +278,7 @@ async fn a_dry_run_changes_and_scans_nothing() {
 
 #[tokio::test]
 async fn a_dry_run_costs_the_writes_nothing() {
+    let _one_at_a_time = ONE_AT_A_TIME.lock().await;
     // The pairing of the rig takes two of the mutations: two writes are left.
     let r = rig_with(
         "dry-free",
@@ -300,6 +311,7 @@ async fn a_dry_run_costs_the_writes_nothing() {
 
 #[tokio::test]
 async fn the_ops_route_has_a_limit_of_its_own_in_the_guard_before_the_credential() {
+    let _one_at_a_time = ONE_AT_A_TIME.lock().await;
     // Everything sent to `ops`, dry runs included, counts: three, then the limit. The pairing of the
     // rig went to other routes and did not count here.
     let r = rig_with(
@@ -327,6 +339,7 @@ async fn the_ops_route_has_a_limit_of_its_own_in_the_guard_before_the_credential
 
 #[tokio::test]
 async fn a_plan_may_be_asked_for_and_an_unknown_operation_is_not() {
+    let _one_at_a_time = ONE_AT_A_TIME.lock().await;
     let r = rig("plan").await;
     let body = r#"{"dry_run":true,"ops":[{"op":"plan_new","area":"alpha.nvim","title":"A plan"}]}"#;
     let (status, doc) = post(&r, "/api/tasks/ops", body, JSON, true).await;
@@ -359,6 +372,7 @@ async fn a_plan_may_be_asked_for_and_an_unknown_operation_is_not() {
 
 #[tokio::test]
 async fn a_request_that_is_plainly_not_one_is_refused_at_the_door() {
+    let _one_at_a_time = ONE_AT_A_TIME.lock().await;
     let r = rig("form").await;
     let many: String = (0..101)
         .map(|i| format!(r#"{{"op":"set","id":"alpha.nvim/t{i}","patch":{{}}}}"#))
@@ -412,6 +426,7 @@ async fn a_request_that_is_plainly_not_one_is_refused_at_the_door() {
 
 #[tokio::test]
 async fn a_write_needs_a_session_and_json() {
+    let _one_at_a_time = ONE_AT_A_TIME.lock().await;
     let r = rig("door").await;
     let body = r#"{"ops":[{"op":"set","id":"alpha.nvim/t1","patch":{"prio":1}}]}"#;
     let (status, _) = post(&r, "/api/tasks/ops", body, JSON, false).await;
@@ -430,6 +445,7 @@ async fn a_write_needs_a_session_and_json() {
 
 #[tokio::test]
 async fn the_preview_of_finishing_a_task_is_read_only_and_checks_the_id() {
+    let _one_at_a_time = ONE_AT_A_TIME.lock().await;
     let r = rig("preview").await;
     let (status, doc) = get(&r, "/api/tasks/done_preview?id=alpha.nvim/t1").await;
     assert_eq!(status, 200, "{doc}");
@@ -447,6 +463,7 @@ async fn the_preview_of_finishing_a_task_is_read_only_and_checks_the_id() {
 
 #[tokio::test]
 async fn the_estimate_route_refuses_what_is_plainly_not_a_question_and_asks_the_engine_otherwise() {
+    let _one_at_a_time = ONE_AT_A_TIME.lock().await;
     let r = rig("estimate").await;
     let many: String = (0..1001)
         .map(|i| format!(r#""alpha.nvim/t{i}""#))
@@ -506,6 +523,7 @@ async fn the_estimate_route_refuses_what_is_plainly_not_a_question_and_asks_the_
 
 #[tokio::test]
 async fn a_question_of_estimate_costs_the_writes_nothing() {
+    let _one_at_a_time = ONE_AT_A_TIME.lock().await;
     let r = rig("estimate-limit").await;
     // More questions than the strict limit of the writes (60 in the window) are answered ...
     for i in 0..80 {
@@ -520,6 +538,7 @@ async fn a_question_of_estimate_costs_the_writes_nothing() {
 
 #[tokio::test]
 async fn the_graph_of_a_task_is_a_read_that_checks_the_id_and_the_direction() {
+    let _one_at_a_time = ONE_AT_A_TIME.lock().await;
     let r = rig("plan-for").await;
     for direction in ["", "&direction=needs", "&direction=unlocks"] {
         let (status, doc) = get(
@@ -570,6 +589,7 @@ async fn check_until_over(r: &Rig) -> Value {
 
 #[tokio::test]
 async fn the_check_is_a_job_that_answers_at_once_and_runs_one_at_a_time() {
+    let _one_at_a_time = ONE_AT_A_TIME.lock().await;
     let r = rig("check-job").await;
     // Nothing has run yet.
     let (status, doc) = get(&r, "/api/tasks/check").await;
@@ -597,6 +617,7 @@ async fn the_check_is_a_job_that_answers_at_once_and_runs_one_at_a_time() {
 
 #[tokio::test]
 async fn a_check_that_fails_says_so_in_words_that_hold_no_path() {
+    let _one_at_a_time = ONE_AT_A_TIME.lock().await;
     let r = rig("check-fail").await;
     std::fs::write(r.vault.join(".fake-check-fail"), "").unwrap();
     let (status, _) = post(&r, "/api/tasks/check", "{}", JSON, true).await;
@@ -619,6 +640,7 @@ async fn a_check_that_fails_says_so_in_words_that_hold_no_path() {
 
 #[tokio::test]
 async fn the_check_start_refuses_what_is_not_a_question_and_the_state_takes_no_query() {
+    let _one_at_a_time = ONE_AT_A_TIME.lock().await;
     let r = rig("check-door").await;
     let cases = [
         ("not json", "{not json"),
@@ -649,6 +671,7 @@ async fn the_check_start_refuses_what_is_not_a_question_and_the_state_takes_no_q
 
 #[tokio::test]
 async fn a_check_that_runs_does_not_hold_up_the_other_questions_of_the_engine() {
+    let _one_at_a_time = ONE_AT_A_TIME.lock().await;
     let r = rig("check-aside").await;
     // The fake leaves its note when the check ends, so an answer before the note did not wait for it, however slow the
     // machine is (a limit on the time of the answer failed in CI). Long enough for a loaded machine to answer twice.
@@ -701,6 +724,7 @@ fn leftovers(r: &Rig) -> usize {
 
 #[tokio::test]
 async fn a_file_of_any_size_and_type_reaches_the_engine_and_is_gone_afterwards() {
+    let _one_at_a_time = ONE_AT_A_TIME.lock().await;
     let r = rig("upload").await;
     // Over the limit of one request of the guard, and not JSON.
     let body = "x".repeat(2 * 1024 * 1024);
@@ -720,6 +744,7 @@ async fn a_file_of_any_size_and_type_reaches_the_engine_and_is_gone_afterwards()
 
 #[tokio::test]
 async fn an_upload_needs_a_session_and_is_refused_at_the_door_when_it_is_no_request() {
+    let _one_at_a_time = ONE_AT_A_TIME.lock().await;
     let r = rig("upload-door").await;
     let origin = format!("http://127.0.0.1:{}", r.server.addr().port());
     let reply = client::request(
@@ -745,6 +770,7 @@ async fn an_upload_needs_a_session_and_is_refused_at_the_door_when_it_is_no_requ
 
 #[tokio::test]
 async fn a_page_does_not_name_the_folder_of_an_upload_at_the_door_of_the_writes() {
+    let _one_at_a_time = ONE_AT_A_TIME.lock().await;
     let r = rig("upload-ops").await;
     let request = r#"{"upload_dir":"C:/x","ops":[{"op":"attach","id":"alpha.nvim/t1","from":"upload","upload":"f","name":"a"}]}"#;
     let (status, doc) = post(&r, "/api/tasks/ops", request, JSON, true).await;

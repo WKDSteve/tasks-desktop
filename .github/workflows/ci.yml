@@ -135,7 +135,12 @@ jobs:
           "TEMP=$dir", "TMP=$dir", "TMPDIR=$dir", "JOB_TEMP=$dir" | Add-Content -Path $env:GITHUB_ENV
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
-      - run: cargo test --workspace --locked
+      # The tests of hub-testkit start hubs with a real or a fake engine and wait bounded times for answers and events;
+      # side by side on the busy runner they took the time from each other and failed now and then (the timing family of
+      # tasks-desktop/write-route-tests-flackern-auf-dem-runner-the-hub-did-not-an, 2026-11-08). They run one at a time
+      # (about 6 minutes); everything else runs in parallel as before.
+      - run: cargo test --workspace --locked --exclude hub-testkit
+      - run: cargo test --locked -p hub-testkit -- --test-threads=1
       # No test leaves a folder in the temp dir of this job (a test makes its folder with `Scratch`, which removes it
       # also after a failure). Strict: whatever name a test gave its folder counts; `nvim` and `nvim.0` are what the real
       # Neovim of the engine tests makes itself. The browser tests below have their own check (run-with-temp.mjs).

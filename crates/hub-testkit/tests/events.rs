@@ -23,6 +23,12 @@ use tasks_hub::store::RefreshOptions;
 mod common;
 use common::Sse;
 
+/// The tests of this file run one after the other. Each starts a hub (and an engine, real or fake) of its own and waits
+/// a bounded time for an answer or an event; side by side they took the time from each other and failed now and then
+/// on the runner, also before any change of the code they test (`tasks-desktop/write-route-tests-flackern-auf-dem-
+/// runner-the-hub-did-not-an`). What is asked and the bounds stay as they are.
+static ONE_AT_A_TIME: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
 struct Rig {
     server: RunningServer,
     vault: PathBuf,
@@ -186,6 +192,7 @@ const QUIET: Duration = Duration::from_millis(900);
 
 #[tokio::test]
 async fn a_stream_starts_with_where_it_stands() {
+    let _one_at_a_time = ONE_AT_A_TIME.lock().await;
     let r = rig("hello", Timing::default()).await;
     let mut sse = Sse::open(r.server.addr(), Some(&r.token)).await.unwrap();
     let first = sse.next(WAIT).await.expect("a hello");
@@ -200,6 +207,7 @@ async fn a_stream_starts_with_where_it_stands() {
 
 #[tokio::test]
 async fn a_change_in_the_vault_is_an_event_with_ids_only() {
+    let _one_at_a_time = ONE_AT_A_TIME.lock().await;
     let r = rig("change", Timing::default()).await;
     let mut sse = Sse::open(r.server.addr(), Some(&r.token)).await.unwrap();
     let _hello = sse.next(WAIT).await.unwrap();
@@ -224,6 +232,7 @@ async fn a_change_in_the_vault_is_an_event_with_ids_only() {
 
 #[tokio::test]
 async fn a_burst_of_changes_is_one_scan() {
+    let _one_at_a_time = ONE_AT_A_TIME.lock().await;
     let r = rig("burst", Timing::default()).await;
     let mut sse = Sse::open(r.server.addr(), Some(&r.token)).await.unwrap();
     let _hello = sse.next(WAIT).await.unwrap();
@@ -242,6 +251,7 @@ async fn a_burst_of_changes_is_one_scan() {
 
 #[tokio::test]
 async fn what_tools_leave_behind_does_not_wake_the_scan() {
+    let _one_at_a_time = ONE_AT_A_TIME.lock().await;
     let r = rig("leftovers", Timing::default()).await;
     let mut sse = Sse::open(r.server.addr(), Some(&r.token)).await.unwrap();
     let _hello = sse.next(WAIT).await.unwrap();
@@ -269,6 +279,7 @@ async fn what_tools_leave_behind_does_not_wake_the_scan() {
 
 #[tokio::test]
 async fn the_timer_catches_what_the_watcher_did_not_see() {
+    let _one_at_a_time = ONE_AT_A_TIME.lock().await;
     let r = rig(
         "timer",
         Timing {
@@ -288,6 +299,7 @@ async fn the_timer_catches_what_the_watcher_did_not_see() {
 
 #[tokio::test]
 async fn a_slow_first_snapshot_holds_the_head_and_the_stream_still_opens() {
+    let _one_at_a_time = ONE_AT_A_TIME.lock().await;
     // The first engine run of a fresh hub, slow as on a busy machine: longer than the five seconds the head used to be
     // given, shorter than the engine timeout of the rig (10 s). The stream opens once the snapshot is held.
     let r = rig("slow-first", Timing::default()).await;
@@ -305,6 +317,7 @@ async fn a_slow_first_snapshot_holds_the_head_and_the_stream_still_opens() {
 
 #[tokio::test]
 async fn the_timer_does_not_scan_for_nobody() {
+    let _one_at_a_time = ONE_AT_A_TIME.lock().await;
     let r = rig(
         "idle",
         Timing {
@@ -327,6 +340,7 @@ async fn the_timer_does_not_scan_for_nobody() {
 
 #[tokio::test]
 async fn a_folder_task_moved_as_a_whole_is_seen() {
+    let _one_at_a_time = ONE_AT_A_TIME.lock().await;
     let r = rig("folder-move", Timing::default()).await;
     let a = r.vault.join("a.nvim");
     let from = a.join("ROADMAP").join("tasks").join("folder-task");
@@ -349,6 +363,7 @@ async fn a_folder_task_moved_as_a_whole_is_seen() {
 
 #[tokio::test]
 async fn a_stream_ends_with_its_session() {
+    let _one_at_a_time = ONE_AT_A_TIME.lock().await;
     let r = rig(
         "session",
         Timing {
@@ -375,6 +390,7 @@ async fn a_stream_ends_with_its_session() {
 
 #[tokio::test]
 async fn a_client_can_ask_for_a_scan() {
+    let _one_at_a_time = ONE_AT_A_TIME.lock().await;
     let r = rig("rescan", Timing::default()).await;
     let mut sse = Sse::open(r.server.addr(), Some(&r.token)).await.unwrap();
     let _hello = sse.next(WAIT).await.unwrap();
@@ -399,6 +415,7 @@ async fn a_client_can_ask_for_a_scan() {
 
 #[tokio::test]
 async fn a_state_in_the_middle_of_a_change_is_read_again_before_it_is_shown() {
+    let _one_at_a_time = ONE_AT_A_TIME.lock().await;
     let r = rig("transient", Timing::default()).await;
     let mut sse = Sse::open(r.server.addr(), Some(&r.token)).await.unwrap();
     let _hello = sse.next(WAIT).await.unwrap();
@@ -418,6 +435,7 @@ async fn a_state_in_the_middle_of_a_change_is_read_again_before_it_is_shown() {
 
 #[tokio::test]
 async fn the_snapshot_is_served_from_memory() {
+    let _one_at_a_time = ONE_AT_A_TIME.lock().await;
     let r = rig("memory", Timing::default()).await;
     set_n(&r.vault, 2);
     for _ in 0..5 {
@@ -434,6 +452,7 @@ async fn the_snapshot_is_served_from_memory() {
 
 #[tokio::test]
 async fn a_session_holds_four_streams_and_gets_the_place_back() {
+    let _one_at_a_time = ONE_AT_A_TIME.lock().await;
     let r = rig("limit", Timing::default()).await;
     let mut open = Vec::new();
     for _ in 0..4 {
@@ -463,6 +482,7 @@ async fn a_session_holds_four_streams_and_gets_the_place_back() {
 
 #[tokio::test]
 async fn an_idle_stream_says_it_is_alive() {
+    let _one_at_a_time = ONE_AT_A_TIME.lock().await;
     let r = rig(
         "ping",
         Timing {
@@ -479,6 +499,7 @@ async fn an_idle_stream_says_it_is_alive() {
 
 #[tokio::test]
 async fn a_stream_needs_a_session_and_takes_no_query() {
+    let _one_at_a_time = ONE_AT_A_TIME.lock().await;
     let r = rig("auth", Timing::default()).await;
     assert_eq!(Sse::open(r.server.addr(), None).await.err(), Some(401));
     let wrong = Secret::generate(TOKEN_BYTES).unwrap().to_hex();

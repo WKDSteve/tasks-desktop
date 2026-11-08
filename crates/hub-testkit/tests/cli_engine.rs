@@ -9,6 +9,12 @@ use serde_json::{json, Value};
 use tasks_hub::config::Env;
 use tasks_hub::engine::{probe, Calls, CliEngine, CliEngineConfig, Engine, EngineError, Method};
 
+/// The tests of this file run one after the other. Each starts a hub (and an engine, real or fake) of its own and waits
+/// a bounded time for an answer or an event; side by side they took the time from each other and failed now and then
+/// on the runner, also before any change of the code they test (`tasks-desktop/write-route-tests-flackern-auf-dem-
+/// runner-the-hub-did-not-an`). What is asked and the bounds stay as they are.
+static ONE_AT_A_TIME: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
 fn fake_nvim() -> PathBuf {
     PathBuf::from(env!("CARGO_BIN_EXE_fake-nvim"))
 }
@@ -58,6 +64,7 @@ async fn wait_for_queued(engine: &CliEngine, n: usize) {
 
 #[tokio::test]
 async fn hello_is_probed_without_parameters() {
+    let _one_at_a_time = ONE_AT_A_TIME.lock().await;
     let engine = CliEngine::new(config(Env::from_process()));
     let info = probe(&engine).await.expect("probe");
     assert_eq!(info.schemas, vec![1]);
@@ -66,6 +73,7 @@ async fn hello_is_probed_without_parameters() {
 
 #[tokio::test]
 async fn the_child_gets_only_the_allow_listed_environment() {
+    let _one_at_a_time = ONE_AT_A_TIME.lock().await;
     let env = Env::from_pairs([
         ("PATH", "C:/bin"),
         ("SystemRoot", "C:/Windows"),
@@ -104,6 +112,7 @@ async fn the_child_gets_only_the_allow_listed_environment() {
 
 #[tokio::test]
 async fn exactly_one_question_is_in_flight() {
+    let _one_at_a_time = ONE_AT_A_TIME.lock().await;
     let engine = std::sync::Arc::new(CliEngine::new(config(Env::from_process())));
     let mut handles = Vec::new();
     for _ in 0..4 {
@@ -138,6 +147,7 @@ async fn exactly_one_question_is_in_flight() {
 
 #[tokio::test]
 async fn a_question_that_takes_too_long_is_killed() {
+    let _one_at_a_time = ONE_AT_A_TIME.lock().await;
     let mut cfg = config(Env::from_process());
     cfg.timeout = Duration::from_millis(400);
     let engine = CliEngine::new(cfg);
@@ -173,6 +183,7 @@ async fn a_question_that_takes_too_long_is_killed() {
 
 #[tokio::test]
 async fn a_full_queue_says_busy() {
+    let _one_at_a_time = ONE_AT_A_TIME.lock().await;
     let mut cfg = config(Env::from_process());
     cfg.max_queue = 1;
     let engine = std::sync::Arc::new(CliEngine::new(cfg));
@@ -199,6 +210,7 @@ async fn a_full_queue_says_busy() {
 
 #[tokio::test]
 async fn an_error_document_is_a_refusal_with_its_code() {
+    let _one_at_a_time = ONE_AT_A_TIME.lock().await;
     let engine = CliEngine::new(config(Env::from_process()));
     let params = fake(json!({ "error": "invalid_argument" }));
     let err = engine
@@ -217,6 +229,7 @@ async fn an_error_document_is_a_refusal_with_its_code() {
 
 #[tokio::test]
 async fn a_wrong_kind_or_schema_is_a_protocol_error() {
+    let _one_at_a_time = ONE_AT_A_TIME.lock().await;
     let engine = CliEngine::new(config(Env::from_process()));
     for params in [
         fake(json!({ "kind": "tasks.snapshot" })),
@@ -232,6 +245,7 @@ async fn a_wrong_kind_or_schema_is_a_protocol_error() {
 
 #[tokio::test]
 async fn a_process_without_a_document_fails_and_leaks_no_path() {
+    let _one_at_a_time = ONE_AT_A_TIME.lock().await;
     let engine = CliEngine::new(config(Env::from_process()));
     let params = fake(json!({ "exit": 3 }));
     let err = engine
@@ -251,6 +265,7 @@ async fn a_process_without_a_document_fails_and_leaks_no_path() {
 
 #[tokio::test]
 async fn an_answer_over_the_limit_is_refused() {
+    let _one_at_a_time = ONE_AT_A_TIME.lock().await;
     let engine = CliEngine::new(config(Env::from_process()));
     let params = fake(json!({ "huge": 200_000 }));
     let err = engine
@@ -262,6 +277,7 @@ async fn an_answer_over_the_limit_is_refused() {
 
 #[tokio::test]
 async fn stdin_is_printable_ascii_whatever_the_text_holds() {
+    let _one_at_a_time = ONE_AT_A_TIME.lock().await;
     let engine = CliEngine::new(config(Env::from_process()));
     let title = "K\u{e4}se \u{1f600}\r\nzwei\u{1a}drei\ttab";
     let params = json!({ "title": title, "fake": { "echo_stdin": true } });
@@ -286,6 +302,7 @@ async fn stdin_is_printable_ascii_whatever_the_text_holds() {
 
 #[tokio::test]
 async fn requests_the_hub_would_never_send_are_refused_before_a_process_starts() {
+    let _one_at_a_time = ONE_AT_A_TIME.lock().await;
     let engine = CliEngine::new(config(Env::from_process()));
     let obj = json!({});
     let arr = json!([1, 2]);
@@ -320,6 +337,7 @@ fn only_the_listed_methods_exist() {
 
 #[tokio::test]
 async fn a_write_runs_to_its_end_when_the_caller_gives_up() {
+    let _one_at_a_time = ONE_AT_A_TIME.lock().await;
     let engine = CliEngine::new(config(Env::from_process()));
     let (_done_dir, done) = marker("write-survives");
     let request = json!({ "schema": 1, "ops": [], "fake": { "sleep_ms": 400, "marker": done } });
@@ -333,6 +351,7 @@ async fn a_write_runs_to_its_end_when_the_caller_gives_up() {
 
 #[tokio::test]
 async fn a_read_nobody_waits_for_is_never_started() {
+    let _one_at_a_time = ONE_AT_A_TIME.lock().await;
     let engine = CliEngine::new(config(Env::from_process()));
     let blocker = fake(json!({ "sleep_ms": 600 }));
     let first = engine.call(Calls::List, Some(&blocker));
@@ -351,6 +370,7 @@ async fn a_read_nobody_waits_for_is_never_started() {
 
 #[tokio::test]
 async fn a_dry_run_nobody_waits_for_is_never_started() {
+    let _one_at_a_time = ONE_AT_A_TIME.lock().await;
     let engine = CliEngine::new(config(Env::from_process()));
     let blocker = fake(json!({ "sleep_ms": 600 }));
     let first = engine.call(Calls::List, Some(&blocker));
@@ -368,6 +388,7 @@ async fn a_dry_run_nobody_waits_for_is_never_started() {
 
 #[tokio::test]
 async fn a_dry_run_that_fails_is_a_plain_failure() {
+    let _one_at_a_time = ONE_AT_A_TIME.lock().await;
     let engine = CliEngine::new(config(Env::from_process()));
     let request = json!({ "schema": 1, "dry_run": true, "ops": [], "fake": { "exit": 3 } });
     let err = engine
@@ -379,6 +400,7 @@ async fn a_dry_run_that_fails_is_a_plain_failure() {
 
 #[tokio::test]
 async fn a_write_that_does_not_end_with_a_document_has_an_unknown_outcome() {
+    let _one_at_a_time = ONE_AT_A_TIME.lock().await;
     let engine = CliEngine::new(config(Env::from_process()));
     let request = json!({ "schema": 1, "ops": [], "fake": { "exit": 3 } });
     let err = engine
@@ -406,6 +428,7 @@ async fn a_write_that_does_not_end_with_a_document_has_an_unknown_outcome() {
 
 #[tokio::test]
 async fn a_write_that_times_out_has_an_unknown_outcome() {
+    let _one_at_a_time = ONE_AT_A_TIME.lock().await;
     let mut cfg = config(Env::from_process());
     cfg.timeout = Duration::from_millis(300);
     let engine = CliEngine::new(cfg);
@@ -419,6 +442,7 @@ async fn a_write_that_times_out_has_an_unknown_outcome() {
 
 #[tokio::test]
 async fn a_program_that_does_not_start_is_not_an_unknown_outcome() {
+    let _one_at_a_time = ONE_AT_A_TIME.lock().await;
     let mut cfg = config(Env::from_process());
     cfg.nvim = std::env::temp_dir().join("tasks-desktop-no-such-program.exe");
     let engine = CliEngine::new(cfg);
@@ -433,6 +457,7 @@ async fn a_program_that_does_not_start_is_not_an_unknown_outcome() {
 
 #[tokio::test]
 async fn a_request_over_the_engine_limit_is_refused_before_a_process_starts() {
+    let _one_at_a_time = ONE_AT_A_TIME.lock().await;
     let mut cfg = config(Env::from_process());
     // If a process were started the program would not exist.
     cfg.nvim = std::env::temp_dir().join("tasks-desktop-no-such-program.exe");
@@ -448,6 +473,7 @@ async fn a_request_over_the_engine_limit_is_refused_before_a_process_starts() {
 
 #[tokio::test]
 async fn an_answer_is_returned_without_its_line_ending() {
+    let _one_at_a_time = ONE_AT_A_TIME.lock().await;
     let engine = CliEngine::new(config(Env::from_process()));
     let reply = engine.call(Calls::Hello, None).await.expect("hello");
     assert!(!reply.text.ends_with('\n') && !reply.text.ends_with('\r'));
@@ -466,6 +492,7 @@ fn check_engine(name: &str, timeout: Duration) -> (Scratch, CliEngine) {
 
 #[tokio::test]
 async fn a_check_may_take_ten_times_the_usual_time() {
+    let _one_at_a_time = ONE_AT_A_TIME.lock().await;
     let (dir, engine) = check_engine("factor", Duration::from_millis(500));
     std::fs::write(dir.join(".fake-check-ms"), "1200").unwrap();
     // 1.2 s is more than the usual 0.5 s ...
@@ -482,6 +509,7 @@ async fn a_check_may_take_ten_times_the_usual_time() {
 
 #[tokio::test]
 async fn a_check_that_is_given_up_is_stopped_with_its_process() {
+    let _one_at_a_time = ONE_AT_A_TIME.lock().await;
     let (dir, engine) = check_engine("given-up", Duration::from_secs(10));
     std::fs::write(dir.join(".fake-check-ms"), "1500").unwrap();
     let engine = std::sync::Arc::new(engine);
