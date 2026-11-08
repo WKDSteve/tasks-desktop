@@ -2,7 +2,9 @@
   // The tile Today: what happened in a period, in the evaluations the person chose. Three icons in its corner: turn the
   // page (a day, a week, a month, or days that are typed, and back and forth through them), print or save it (an image,
   // or a page for the printer or a PDF), and choose what is counted. The made and the changed tasks are counted from the
-  // snapshot; the finished ones and what is derived from them are asked of the engine (the Backlogs).
+  // snapshot; the finished ones and what is derived from them are asked of the engine (the Backlogs). The filter of the
+  // list holds here too: the open tasks are those the list shows, the finished ones are narrowed the same way by the
+  // parts of the filter a finished task carries, and the tile names the parts it could not take for them.
   import type { App } from '../lib/app.svelte';
   import type { Finished } from '../lib/contract';
   import {
@@ -10,17 +12,21 @@
     currentPeriod,
     FINISHED_PAGE,
     FINISHED_READ,
+    finishedFilter,
     METRICS,
     metricValues,
+    narrowFinished,
     PERIOD_MODES,
     periodDays,
     shiftPeriod,
     type DailyPrefs,
+    type IgnoredPart,
     type Metric,
     type Period,
     type PeriodMode,
   } from '../lib/daily';
   import { dailyPng, printDaily, saveBlob, type DailyRow } from '../lib/dailyExport';
+  import { narrows } from '../lib/filter';
   import { translate, type Key } from '../lib/i18n';
 
   let { app }: { app: App } = $props();
@@ -63,12 +69,12 @@
   }
 
   /** The finished tasks of the days, a page at a time (the engine's page is short), up to `FINISHED_READ`; `null` on a failure. */
-  async function readFinished(since: string, until: string, signal: AbortSignal): Promise<Finished | null> {
+  async function readFinished(since: string, until: string, area: string | undefined, signal: AbortSignal): Promise<Finished | null> {
     try {
       let all: Finished | undefined;
       let offset = 0;
       for (;;) {
-        const page = await app.finished({ since, until, limit: FINISHED_PAGE, offset }, signal);
+        const page = await app.finished({ ...(area !== undefined ? { area } : {}), since, until, limit: FINISHED_PAGE, offset }, signal);
         all = all ? { ...all, items: [...all.items, ...page.items] } : page;
         offset += FINISHED_PAGE;
         if (page.items.length < FINISHED_PAGE || offset >= Math.min(page.total, FINISHED_READ)) return all;
@@ -82,30 +88,70 @@
   // evaluation needs them.
   // An answer is kept with the days it is for: while the next period is on its way the old numbers are not shown under
   // the new days (a dash instead).
-  let answer = $state<{ since: string; until: string; doc: Finished } | null>(null);
-  const finished = $derived(answer !== null && answer.since === days.since && answer.until === days.until ? answer.doc : null);
+  // The filter of the list: one area (or area group) is asked of the engine, which keeps the read short; the rest is
+  // applied to what was read.
+  const filtered = $derived(narrows(app.filter));
+  const forFinished = $derived(finishedFilter(app.matchFilter(app.filter)));
+  const area = $derived(filtered ? app.finishedArea : undefined);
+  let answer = $state<{ since: string; until: string; area: string | undefined; doc: Finished } | null>(null);
+  const read = $derived(
+    answer !== null && answer.since === days.since && answer.until === days.until && answer.area === area ? answer.doc : null,
+  );
   const needsFinished = $derived(prefs.metrics.some((m) => m !== 'created' && m !== 'changed'));
   $effect(() => {
     const { since, until } = days;
+    const name = area;
     void app.snapshot?.rev;
     if (!needsFinished || !app.can('finished')) {
       answer = null;
       return;
     }
     const controller = new AbortController();
-    void readFinished(since, until, controller.signal).then((doc) => {
-      if (!controller.signal.aborted) answer = doc === null ? null : { since, until, doc };
+    void readFinished(since, until, name, controller.signal).then((doc) => {
+      if (!controller.signal.aborted) answer = doc === null ? null : { since, until, area: name, doc };
     });
     return () => controller.abort();
   });
+  // What is left to narrow by on the page: the areas are not, when the engine was asked for them. Nothing left, the
+  // engine's figures stand as they are (exact, also beyond what was read).
+  const rest = $derived(area !== undefined ? { ...forFinished.filter, areas: [] } : forFinished.filter);
+  const narrowed = $derived(read !== null && narrows(rest) ? narrowFinished(read, rest) : null);
+  const finished = $derived(narrowed?.doc ?? read);
 
-  const values = $derived(metricValues(app.tasks, finished, days));
+  const values = $derived(metricValues(filtered ? app.shown : app.tasks, finished, days, narrowed?.cut ?? false));
+  /** The parts of the filter not taken for the finished tasks, in words; only while a figure of them is shown. */
+  const ignoredText = $derived(needsFinished ? forFinished.ignored.map(partName).join(', ') : '');
+
+  function partName(part: IgnoredPart): string {
+    switch (part.kind) {
+      case 'status':
+        return t('field.status');
+      case 'actor':
+        return t('field.actor');
+      case 'field':
+        return t(`filter.field.${part.key}` as Key);
+      case 'date':
+        return t(`filter.date.${part.key}` as Key);
+      case 'updated':
+        return t('filter.updated');
+      case 'reminder':
+        return t('filter.reminder');
+      case 'cross':
+        return t('filter.cross');
+      case 'quickWin':
+        return t('filter.quick_win.on');
+      case 'overdue':
+        return t('filter.overdue.on');
+    }
+  }
   const shownMetrics = $derived(METRICS.filter((m) => prefs.metrics.includes(m)));
 
   const title = $derived(
     isToday ? t('daily.title') : t(`daily.mode.${prefs.mode}` as Key),
   );
   const rangeText = $derived(days.since === days.until ? days.since : `${days.since} – ${days.until}`);
+  /** The days as an export names them, with the word that the filter of the list holds. */
+  const exportRange = $derived(filtered ? `${rangeText} · ${t('daily.filtered')}` : rangeText);
 
   function textOf(metric: Metric): string {
     const v = values[metric];
@@ -130,7 +176,7 @@
 
   async function saveImage(): Promise<void> {
     open = null;
-    const blob = await dailyPng(document, colors(), title, rangeText, rows);
+    const blob = await dailyPng(document, colors(), title, exportRange, rows);
     if (blob === null || !saveBlob(document, `tasks-${days.since}${days.since === days.until ? '' : `_${days.until}`}.png`, blob)) {
       app.tell('error', 'daily.png_failed');
     }
@@ -138,7 +184,7 @@
 
   function print(): void {
     open = null;
-    printDaily(document, window, title, rangeText, rows);
+    printDaily(document, window, title, exportRange, rows);
   }
 
   function onWindowClick(event: MouseEvent): void {
@@ -207,6 +253,12 @@
         </label>
       {/each}
     </div>
+  {/if}
+
+  {#if filtered}
+    <p class="muted filtered" data-filtered data-hint={t('hint.ui.daily.filtered')}>
+      {t('daily.filtered')}{#if ignoredText !== ''}<span data-ignored> · {t('daily.ignored', { parts: ignoredText })}</span>{/if}
+    </p>
   {/if}
 
   {#if shownMetrics.length === 0}
@@ -324,7 +376,8 @@
     font-size: 1.4rem;
     font-weight: 600;
   }
-  .none {
+  .none,
+  .filtered {
     margin: 0.3rem 0 0;
   }
   .hide {

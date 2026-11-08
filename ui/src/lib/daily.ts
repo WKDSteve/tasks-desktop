@@ -3,7 +3,8 @@
 // functions; the finished tasks and their figures are the engine's (`tasks.finished`), the made and the changed ones
 // are counted from the snapshot (`created`, `updated`).
 
-import type { Finished, TaskEntry } from './contract';
+import type { Finished, FinishedItem, TaskEntry } from './contract';
+import { DATE_KEYS, FIELD_KEYS, matches, type DateKey, type FieldKey, type Filter } from './filter';
 import { addDays, isDay } from './finished';
 
 // ── the period ────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -117,6 +118,8 @@ export function metricValues(
   tasks: readonly Pick<TaskEntry, 'created' | 'updated'>[],
   finished: Finished | null,
   days: Days,
+  /** The finished tasks are a filtered part of those that were read, and more were there: every figure is at least. */
+  cut = false,
 ): Record<Metric, MetricValue> {
   let created = 0;
   let changed = 0;
@@ -131,20 +134,133 @@ export function metricValues(
   if (finished === null) {
     return { finished: none, created: known(created), changed: known(changed), quick: none, effort: none, commits: none, bugs: none, prio1: none };
   }
-  const cut = finished.items.length < finished.total;
+  const read = cut || finished.items.length < finished.total;
   const quick = finished.items.filter((i) => i.effort_days !== undefined && i.effort_days <= QUICK_DAYS).length;
   const commits = new Set(finished.items.map((i) => i.done_in).filter((c): c is string => typeof c === 'string' && c !== '')).size;
   const kind = (name: string) => finished.stats.by_kind.find((k) => k.kind === name)?.count ?? 0;
   const prio = (n: number) => finished.stats.by_prio.find((p) => p.prio === n)?.count ?? 0;
   return {
-    finished: known(finished.total),
+    finished: known(finished.total, cut),
     created: known(created),
     changed: known(changed),
-    quick: known(quick, cut),
-    effort: known(Math.round(finished.stats.effort_days * 10) / 10),
-    commits: known(commits, cut),
-    bugs: known(kind('bug')),
-    prio1: known(prio(1)),
+    quick: known(quick, read),
+    effort: known(Math.round(finished.stats.effort_days * 10) / 10, cut),
+    commits: known(commits, read),
+    bugs: known(kind('bug'), cut),
+    prio1: known(prio(1), cut),
+  };
+}
+
+// ── the filter of the list ────────────────────────────────────────────────────────────────────────────────────────
+
+/** The fields of the filter a finished task carries (an entry of `tasks.finished`); the others it has no word for. */
+const FINISHED_FIELDS: ReadonlySet<FieldKey> = new Set<FieldKey>(['kind', 'prio', 'effort', 'value', 'tag', 'plan', 'phase']);
+
+/** A part of the filter that the finished tasks cannot be judged by: what the tile names as not taken for them. */
+export type IgnoredPart =
+  | { kind: 'status' | 'actor' | 'updated' | 'reminder' | 'cross' | 'quickWin' | 'overdue' }
+  | { kind: 'field'; key: FieldKey }
+  | { kind: 'date'; key: DateKey };
+
+/**
+ * The filter of the list as it holds for the finished tasks: the areas, the text and the fields a finished entry
+ * carries (kind, priority, effort, value, tags, plan, phase, and the ranges of the three ordered ones) as they are;
+ * what it has no word for (its status is done, who did it, its dates, its project, the readiness, a reminder, whether
+ * it connects areas, a quick win of the open ones) is left out and named in `ignored`.
+ */
+export function finishedFilter(filter: Filter): { filter: Filter; ignored: IgnoredPart[] } {
+  const ignored: IgnoredPart[] = [];
+  if (filter.statuses.length > 0) ignored.push({ kind: 'status' });
+  if (filter.actors.length > 0) ignored.push({ kind: 'actor' });
+  const fields: Filter['fields'] = {};
+  for (const key of FIELD_KEYS) {
+    const chosen = filter.fields[key];
+    if (!chosen || chosen.length === 0) continue;
+    if (FINISHED_FIELDS.has(key)) fields[key] = chosen;
+    else ignored.push({ kind: 'field', key });
+  }
+  for (const key of DATE_KEYS) {
+    const span = filter.dates[key];
+    if (span && (span.from || span.to)) ignored.push({ kind: 'date', key });
+  }
+  if (filter.updated !== '') ignored.push({ kind: 'updated' });
+  if (filter.reminder !== '') ignored.push({ kind: 'reminder' });
+  if (filter.cross) ignored.push({ kind: 'cross' });
+  if (filter.quickWin) ignored.push({ kind: 'quickWin' });
+  if (filter.overdue) ignored.push({ kind: 'overdue' });
+  return {
+    filter: {
+      ...filter,
+      statuses: [],
+      actors: [],
+      fields,
+      matchAll: filter.matchAll.filter((k) => k === 'tag'),
+      dates: {},
+      updated: '',
+      reminder: '',
+      cross: false,
+      quickWin: false,
+      overdue: false,
+    },
+    ignored,
+  };
+}
+
+/** A finished entry as the filter of the list reads a task: the fields it carries, nothing else. */
+function asTask(item: FinishedItem): TaskEntry {
+  return {
+    id: item.id,
+    area: item.area,
+    slug: item.slug,
+    title: item.title,
+    status: 'done',
+    kind: item.kind,
+    prio: item.prio,
+    effort: item.effort,
+    effort_days: item.effort_days,
+    value: item.value,
+    tags: item.tags,
+    category: [],
+    plan: item.plan,
+    phase: item.phase,
+  } as unknown as TaskEntry;
+}
+
+/**
+ * The finished tasks that were read, narrowed by `filter` (made with `finishedFilter`) the way the list narrows the open
+ * ones: their number, their effort and the counts by kind and by priority are those of the ones kept (the rows by
+ * area, month and week are left empty: the tile does not show them). `cut` says that more were finished than were
+ * read, so every figure is at least.
+ */
+export function narrowFinished(doc: Finished, filter: Filter): { doc: Finished; cut: boolean } {
+  const items = doc.items.filter((item) => matches(asTask(item), filter));
+  const count = <K extends string | number>(key: (i: FinishedItem) => K | undefined) => {
+    const rows = new Map<K | undefined, { count: number; effort_days: number }>();
+    for (const item of items) {
+      const row = rows.get(key(item)) ?? { count: 0, effort_days: 0 };
+      row.count += 1;
+      row.effort_days += item.effort_days ?? 0;
+      rows.set(key(item), row);
+    }
+    return [...rows.entries()].sort((a, b) => b[1].count - a[1].count);
+  };
+  const effort = items.reduce((sum, i) => sum + (i.effort_days ?? 0), 0);
+  return {
+    doc: {
+      ...doc,
+      total: items.length,
+      items,
+      stats: {
+        effort_days: effort,
+        without_effort: items.filter((i) => i.effort_days === undefined).length,
+        by_area: [],
+        by_kind: count((i) => i.kind).map(([kind, row]) => ({ ...(kind !== undefined ? { kind } : {}), ...row })),
+        by_prio: count((i) => i.prio).map(([prio, row]) => ({ ...(prio !== undefined ? { prio } : {}), ...row })),
+        by_month: [],
+        by_week: [],
+      },
+    },
+    cut: doc.items.length < doc.total,
   };
 }
 

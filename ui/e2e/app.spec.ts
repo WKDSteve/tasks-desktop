@@ -1988,6 +1988,56 @@ test('the start page has a small summary of today: tasks finished, made and chan
   await expect(card).toBeVisible();
 });
 
+test('the tile Today counts only the tasks the filter of the list keeps: finished, made and changed, and says it is filtered', async ({ page }) => {
+  const { vault } = state();
+  const now = new Date();
+  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  // Two finished today and one made today, all found by one word of their titles (the tests share the vault).
+  const files = [
+    [join(vault, 'lib.nvim', 'Backlog', 'FEATURES', `${today}_e2e-dailyfilter-d001.md`), `---\ntitle: Dailyfilter d001\nstatus: done\nkind: task\neffort: XS\ncreated: ${today}\nupdated: ${today}\n---\n\nFinished today.\n`],
+    [join(vault, 'nvim-config', 'Backlog', 'FEATURES', `${today}_e2e-dailyfilter-d002.md`), `---\ntitle: Dailyfilter d002\nstatus: done\nkind: bug\neffort: M\ncreated: ${today}\nupdated: ${today}\n---\n\nFinished today too.\n`],
+    [join(vault, 'lib.nvim', 'ROADMAP', 'tasks', 'e2e-dailyfilter-o001.md'), `---\ntitle: Dailyfilter o001\nstatus: open\nkind: task\ncreated: ${today}\nupdated: ${today}\n---\n\nMade today.\n`],
+  ] as const;
+  try {
+    for (const [path, text] of files) {
+      mkdirSync(join(path, '..'), { recursive: true });
+      writeFileSync(path, text);
+    }
+    await pair(page);
+    const card = page.locator('section[data-tile="daily"]');
+    const figure = (name: string) => card.locator(`li[data-figure="${name}"] .num`);
+    await expect(figure('finished')).toHaveText(/^\d+$/);
+    await expect(card.locator('[data-filtered]')).toHaveCount(0);
+
+    // The search box is the list's: the word is typed there, and the start page counts with it.
+    const search = async (word: string) => {
+      // The list may show no row (the word finds no open task): not `showList`, which waits for one.
+      await chooseView(page, 'View', 'List');
+      await page.getByRole('searchbox', { name: /search/i }).first().fill(word);
+      await chooseView(page, 'View', 'Today');
+    };
+
+    // The word of the titles: two finished, one made, none changed - and the tile says that it is filtered.
+    await search('Dailyfilter');
+    await expect(card.locator('[data-filtered]')).toHaveText('Filtered');
+    await expect(figure('finished')).toHaveText('2');
+    await expect(figure('created')).toHaveText('1');
+    await expect(figure('changed')).toHaveText('0');
+    // A narrower word: the one made today is out, the two finished stay.
+    await search('Dailyfilter d00');
+    await expect(figure('finished')).toHaveText('2');
+    await expect(figure('created')).toHaveText('0');
+    await expectAccessible(page, 'the tile Today, filtered');
+
+    // The filter cleared: every task of the vault again, at least the two of the test.
+    await search('');
+    await expect(card.locator('[data-filtered]')).toHaveCount(0);
+    await expect.poll(async () => Number((await figure('finished').textContent())?.trim())).toBeGreaterThanOrEqual(2);
+  } finally {
+    for (const [path] of files) rmSync(path, { force: true });
+  }
+});
+
 test('the capture dialog writes after, plan, phase, due and start into the file', async ({ page }) => {
   await pair(page);
   await closeFloat(page);
