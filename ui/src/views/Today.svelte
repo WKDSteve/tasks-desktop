@@ -37,6 +37,14 @@
   // A finished task is not in the list, so no filter can match it.
   const reminders = $derived(dueItems(app.shown, filtered ? [] : snapshot?.reminders, app.today));
   const shown = (tile: Tile) => !app.hiddenTiles.includes(tile);
+  // What the parked tasks wait for is the engine's count of the vault, like the next task: the filter does not narrow it.
+  const waits = $derived(app.waits);
+  /** The reason whose Bring all back asks for its confirmation now. */
+  let releasing: string | null = $state(null);
+  const releaseOf = (key: string) => {
+    const tasks = app.parkedFor(key);
+    return { n: tasks.length, areas: [...new Set(tasks.map((x) => x.area))].sort().join(', ') };
+  };
 
   // The counts need the snapshot; without them there is no block to keep room for.
   const showOverview = $derived(shown('counts') && snapshot !== null);
@@ -79,7 +87,10 @@
   const visible = $derived(
     app.tileOrder.filter(
       (tile) =>
-        shown(tile) && (tile !== 'remind' || reminders.length > 0) && (tile !== 'cdx' || cdx.length > 0),
+        shown(tile) &&
+        (tile !== 'remind' || reminders.length > 0) &&
+        (tile !== 'cdx' || cdx.length > 0) &&
+        (tile !== 'parked' || (waits?.parked ?? 0) > 0),
     ),
   );
   const rank = (tile: OrderedTile) => app.tileOrder.indexOf(tile) + 1;
@@ -326,6 +337,60 @@
       </section>
     {/if}
 
+    {#if shown('parked') && waits && waits.parked > 0}
+      <section use:sizeable={sizeParams('parked')} data-tile="parked" style:order={rank('parked')} class:drop={over === 'parked'} ondragover={(e) => dragOver(e, 'parked')} ondragleave={() => (over = null)} ondrop={(e) => drop(e, 'parked')} class="card" aria-label={t('today.parked')}>
+        <header>
+          <h2 class="eyebrow" data-hint={t('hint.ui.today.parked')}>{t('today.parked')} ({waits.parked})</h2>
+          {@render handle('parked')}
+          <button
+            type="button"
+            class="hide"
+            aria-label={t('today.hide')}
+            title={t('today.hide')}
+            onclick={() => app.hideTile('parked')}>×</button
+          >
+        </header>
+        <ul class="plain waits">
+          {#each waits.keys as entry (entry.key)}
+            <li data-waits={entry.key}>
+              <button type="button" class="link" onclick={() => app.openParkedInList(entry.key)}>{entry.key}</button>
+              <span class="num">{entry.count}</span>
+              <span class="muted">{entry.areas.join(', ')}</span>
+              {#if app.can('ops')}
+                <button type="button" class="link release" disabled={app.locked} onclick={() => (releasing = releasing === entry.key ? null : entry.key)}
+                  >{t('parked.release')}</button
+                >
+              {/if}
+              {#if releasing === entry.key}
+                {@const plan = releaseOf(entry.key)}
+                <div class="confirm" role="group" aria-label={t('parked.release')}>
+                  <p>{t('parked.release_preview', { n: plan.n, key: entry.key, areas: plan.areas })}</p>
+                  <button
+                    type="button"
+                    disabled={app.locked || plan.n === 0}
+                    onclick={() => {
+                      releasing = null;
+                      void app.releaseWaits(entry.key);
+                    }}>{t('parked.release_confirm')}</button
+                  >
+                  <button type="button" onclick={() => (releasing = null)}>{t('parked.release_cancel')}</button>
+                </div>
+              {/if}
+            </li>
+          {/each}
+          {#if waits.without_reason > 0}
+            <li data-waits="">
+              <button type="button" class="link" onclick={() => app.openParkedInList(null)}>{t('parked.none')}</button>
+              <span class="num">{waits.without_reason}</span>
+            </li>
+          {/if}
+          {#if waits.invalid > 0}
+            <li class="muted">{t('parked.invalid', { n: waits.invalid })}</li>
+          {/if}
+        </ul>
+      </section>
+    {/if}
+
     {#if shown('remind') && reminders.length > 0}
       <section use:sizeable={sizeParams('remind')} data-tile="remind" style:order={rank('remind')} class:drop={over === 'remind'} ondragover={(e) => dragOver(e, 'remind')} ondragleave={() => (over = null)} ondrop={(e) => drop(e, 'remind')} class="card" aria-label={t('remind.title')}>
         <header>
@@ -539,6 +604,18 @@
     list-style: none;
     padding: 0;
     margin: 0;
+  }
+  .waits li {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0 0.5rem;
+  }
+  .waits .release {
+    margin-left: auto;
+  }
+  .waits .confirm {
+    flex-basis: 100%;
   }
   .plain li {
     padding: 0.2rem 0;

@@ -211,6 +211,18 @@ fn tasks_fill(call: &Call<'_>, doc: &mut Value) {
                 "severity": ["low", "medium", "high", "critical"],
             });
         }
+        "waits" => {
+            doc["rev"] = json!("rev:aaaaaa");
+            doc["digest"] = json!("sha256:00000000000000aa");
+            doc["parked"] = json!(4);
+            doc["without_reason"] = json!(1);
+            doc["invalid"] = json!(0);
+            doc["keys"] = json!([
+                { "key": "mac", "count": 2, "areas": ["alpha.nvim", "beta.nvim"] },
+                { "key": "vendor", "count": 1, "areas": ["alpha.nvim"] },
+            ]);
+            doc["incomplete"] = json!([]);
+        }
         "links" => {
             doc["rev"] = json!("rev:aaaaaa");
             doc["digest"] = json!("sha256:00000000000000aa");

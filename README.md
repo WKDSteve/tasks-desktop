@@ -435,6 +435,15 @@ view cannot hold it and says so. A finish that closes a project offers no undo (
 project closed). Not yet: grouping a saved view by project (the engine's `tasks.groupings` has no such field) and the
 project bar in a timeline (the timeline view is not built).
 
+**Parked with a reason** (an engine with the capabilities `waits` and `waits_for`). A parked task may name what it
+waits for from outside (`waits_for`, one word such as `mac`). The detail has the field *Waits for*: a reason parks the
+task, an empty field takes the reason away, and another status takes it away too (the engine moves both; both at once
+in one change is refused in its words). The overview has the block *Parked*: one line per reason with the number of
+its tasks and their areas, the parked tasks without a reason, and those whose reason is no key (the engine counts it,
+`GET /api/tasks/waits`). A reason opens its tasks in the list, as does the filter field *Waits for* (with *none* for the
+ones parked without a reason). *Bring all back …* names the number and the areas first; only the confirmation sets
+every task of the reason to open, each on the version shown, in one request that the message takes back together.
+
 The interface can create a task (`c`, or the Project menu), change status,
 priority, who, kind, effort, value and tags in the detail, tick a step of the plan section and add a dated line to the notes (the box of a step shows what the file says; a click asks the engine first), attach a screenshot to a task (*Attach screenshot* in the detail, or the box in the new-task form: the image on the clipboard of the machine the hub runs on, else its newest screenshot; the detail then shows the link to put into the text),
 change several marked

@@ -243,7 +243,7 @@ test('the worker serves the embedded WASM and refuses a second init', async () =
 // must differ: the time of the answer and the runtime (`engine`: no Neovim in the browser).
 const READ_METHODS = [
   'hello', 'areas', 'snapshot', 'list', 'next', 'links', 'groupings', 'views', 'lists', 'order', 'finished', 'check',
-  'estimate',
+  'estimate', 'waits',
 ];
 const BY_ID = ['task', 'done_preview', 'plan_for'];
 

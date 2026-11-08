@@ -16,7 +16,7 @@ export interface TodayHost {
   setItem(key: string, value: string): void;
 }
 
-const TILE_LABELS = { next: 'today.next', waiting: 'today.waiting', remind: 'remind.title', cdx: 'today.cdx' } as const;
+const TILE_LABELS = { next: 'today.next', waiting: 'today.waiting', parked: 'today.parked', remind: 'remind.title', cdx: 'today.cdx' } as const;
 
 /** The remembered hidden blocks; anything that is not a known block is dropped. */
 export function parseTiles(text: string | null): Tile[] {

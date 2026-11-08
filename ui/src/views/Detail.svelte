@@ -28,6 +28,9 @@
   import Blocks from 'appkit-ui/Blocks.svelte';
 
   let { app }: { app: App } = $props();
+  // The detail can stand twice at once (the float and the side): each has its own list of the reasons.
+  const uid = $props.id();
+  const waitsList = `waits-keys-${uid}`;
 
   const t = (key: Key, params: Record<string, string | number> = {}) =>
     translate(app.lang, key, params);
@@ -499,6 +502,30 @@
             {/each}
           </select>
         </label>
+        {#if app.can('waits_for')}
+          <label>
+            <span data-hint={t('hint.field.waits_for')}>{t('field.waits_for')}</span>
+            <!-- A reason parks the task, an empty field takes the reason away; the engine judges the word. -->
+            <input
+              type="text"
+              value={shown.waits_for ?? ''}
+              data-field="waits_for"
+              list={waitsList}
+              spellcheck="false"
+              autocomplete="off"
+              disabled={app.locked}
+              onchange={(e) => {
+                const value = e.currentTarget.value.trim();
+                if (value !== (shown.waits_for ?? '')) void app.editField(shown.id, 'waits_for', value === '' ? null : value);
+              }}
+            />
+            <datalist id={waitsList}>
+              {#each app.waits?.keys ?? [] as entry (entry.key)}
+                <option value={entry.key}></option>
+              {/each}
+            </datalist>
+          </label>
+        {/if}
         {#each ['due', 'start'] as const as key (key)}
           <label>
             <span>{t(`field.${key}`)}</span>

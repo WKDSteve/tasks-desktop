@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+  NONE,
+  fieldValues,
   activeFilters,
   applyFilter,
   areaLabel,
@@ -85,5 +87,14 @@ describe('filter', () => {
   });
   it('finds what waits for a decision of the user', () => {
     expect(waitingForMe(list).map((t) => t.id)).toEqual(['b/three']);
+  });
+});
+
+describe('the reason a parked task waits for', () => {
+  it('is a value only of a parked task: its key, or none for one parked without a reason', () => {
+    expect(fieldValues(task('a/x', { status: 'parked', waits_for: 'mac' }), 'waits_for')).toEqual(['mac']);
+    expect(fieldValues(task('a/y', { status: 'parked' }), 'waits_for')).toEqual([NONE]);
+    // A task that left parked has no reason, whatever an older list still says.
+    expect(fieldValues(task('a/z', { status: 'open', waits_for: 'mac' }), 'waits_for')).toEqual([]);
   });
 });

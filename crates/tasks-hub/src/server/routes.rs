@@ -684,6 +684,27 @@ pub(super) async fn finished(State(st): State<Arc<Shared>>, RawQuery(query): Raw
     }
 }
 
+/// `GET /api/tasks/waits?area=`: what the parked tasks wait for (per `waits_for` key the number of tasks and their areas,
+/// the parked ones without a reason). A read; the counting is the engine's.
+pub(super) async fn waits(State(st): State<Arc<Shared>>, RawQuery(query): RawQuery) -> Response {
+    let params = match parse_query(query.as_deref(), &["area"]) {
+        Ok(p) => p,
+        Err(why) => return error_body(StatusCode::BAD_REQUEST, "bad_query", why),
+    };
+    let mut request = serde_json::Map::new();
+    if let Some(area) = params.get("area") {
+        if crate::config::valid_area_name(area).is_err() {
+            return error_body(StatusCode::BAD_REQUEST, "bad_query", "area is not a name");
+        }
+        request.insert("area".to_owned(), json!(area));
+    }
+    let request = serde_json::Value::Object(request);
+    match ask(&st, Calls::Waits, Some(&request)).await {
+        Ok(reply) => json_response(StatusCode::OK, reply.text, None),
+        Err(response) => response,
+    }
+}
+
 /// The orders of `tasks list --sort` that the engine takes in the contract (`default` is the plan's order). A word
 /// outside this list never reaches the engine.
 const SORTS: [&str; 12] = [

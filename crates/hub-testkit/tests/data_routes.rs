@@ -329,6 +329,21 @@ async fn the_groupings_of_the_engine_come_through_unchanged() {
 }
 
 #[tokio::test]
+async fn waits_passes_the_area_and_the_answer_of_the_engine() {
+    let h = hub(Some(fake_engine()), ready()).await;
+    let r = get(&h, "/api/tasks/waits?area=alpha.nvim", &[]).await;
+    assert_eq!(r.status, 200, "{r:?}");
+    let doc: Value = serde_json::from_str(&r.body).unwrap();
+    assert_eq!(doc["kind"], "tasks.waits");
+    assert_eq!(doc["parked"], 4);
+    assert_eq!(doc["keys"][0]["key"], "mac");
+    assert_eq!(doc["keys"][0]["areas"][1], "beta.nvim");
+    let none = hub(None, ready()).await;
+    let r = get(&none, "/api/tasks/waits", &[]).await;
+    assert_eq!(r.status, 503, "{r:?}");
+}
+
+#[tokio::test]
 async fn the_views_of_the_engine_come_through_unchanged() {
     let h = hub(Some(fake_engine()), ready()).await;
     let r = get(&h, "/api/tasks/views", &[]).await;
@@ -410,6 +425,9 @@ async fn queries_that_are_not_plain_are_refused_before_the_engine() {
         "/api/tasks/finished?limit=abc",
         "/api/tasks/finished?offset=-1",
         "/api/tasks/finished?area=a&area=b",
+        "/api/tasks/waits?x=1",
+        "/api/tasks/waits?area=..",
+        "/api/tasks/waits?area=a&area=b",
         "/api/tasks/order?sort=sideways",
         "/api/tasks/order?sort=roi&sort=roi",
         "/api/tasks/order?limit=5",

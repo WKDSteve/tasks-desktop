@@ -266,6 +266,19 @@ class FakeHub {
     if (ids === undefined) throw new ApiError(400, 'invalid_argument', 'no such order');
     return { rev: this.doc.rev, ids };
   }
+  waitsCalls = 0;
+  waitsDoc: unknown = {
+    kind: 'tasks.waits',
+    parked: 3,
+    without_reason: 1,
+    invalid: 0,
+    keys: [{ key: 'mac', count: 2, areas: ['other', 'pub'] }],
+    incomplete: [],
+  };
+  async waits() {
+    this.waitsCalls += 1;
+    return this.waitsDoc as never;
+  }
   async next() {
     this.nextCalls += 1;
     return { alternatives: [], cdx: [], incomplete: [] };
@@ -2129,6 +2142,54 @@ describe('writing', () => {
     expect(app.toast?.kind).toBe('ok');
     // The way back is the inverses in the opposite order, as one batch.
     expect(app.toast?.undo?.map((o) => (o.op === 'set' ? o.id : ''))).toEqual(['pub/a', 'pub/c']);
+  });
+
+  describe('the parked tasks by what they wait for', () => {
+    const parked = () => [
+      task('pub/a', { etag: 'e1', status: 'parked', waits_for: 'mac' }),
+      task('pub/b', { etag: 'e2', status: 'parked' }),
+      task('other/c', { etag: 'e3', status: 'parked', waits_for: 'mac' }),
+      task('pub/d', { etag: 'e4', status: 'open' }),
+    ];
+
+    it('brings back every task of a reason in ONE request, each set to open on its own version', async () => {
+      const { app, hub } = await ready(parked(), { capabilities: ['ops', 'waits', 'waits_for'] });
+      expect(app.parkedFor('mac').map((t) => t.id)).toEqual(['pub/a', 'other/c']);
+      await app.releaseWaits('mac');
+      expect(hub.sent).toHaveLength(1);
+      expect(hub.sent[0]?.ops).toEqual([
+        { op: 'set', id: 'pub/a', patch: { status: 'open' }, if_match: 'e1' },
+        { op: 'set', id: 'other/c', patch: { status: 'open' }, if_match: 'e3' },
+      ]);
+      expect(app.toast?.kind).toBe('ok');
+    });
+
+    it('sends nothing for a reason no task of the list waits for', async () => {
+      const { app, hub } = await ready(parked(), { capabilities: ['ops', 'waits'] });
+      await app.releaseWaits('vendor');
+      expect(hub.sent).toHaveLength(0);
+    });
+
+    it('opens the list of a reason, and of the parked ones without one', async () => {
+      const { app } = await ready(parked(), { capabilities: ['ops', 'waits', 'waits_for'] });
+      app.openParkedInList('mac');
+      expect(app.view).toBe('list');
+      expect(app.shown.map((t) => t.id)).toEqual(['pub/a', 'other/c']);
+      app.openParkedInList(null);
+      expect(app.shown.map((t) => t.id)).toEqual(['pub/b']);
+    });
+
+    it('reads what they wait for once per state of the list, and not from an engine without it', async () => {
+      const { app, hub } = await ready(parked(), { capabilities: ['ops', 'waits'] });
+      await app.loadWaits();
+      await app.loadWaits();
+      expect(hub.waitsCalls).toBe(1);
+      expect(app.waits?.keys[0]?.key).toBe('mac');
+      const old = await ready(parked(), { capabilities: ['ops'] });
+      await old.app.loadWaits();
+      expect(old.hub.waitsCalls).toBe(0);
+      expect(old.app.waits).toBeNull();
+    });
   });
 
   it('keeps the marks of moved tasks when a read that began before the move answers with the old list', async () => {
@@ -4857,18 +4918,18 @@ describe('the order of the tiles of the overview', () => {
   it('is remembered, taken from a damaged memory as the standard, and reset', async () => {
     const { app, prefs } = make({ token: 't' });
     app.moveTile('cdx', 'next', false, ['next', 'waiting', 'remind', 'cdx']);
-    expect(app.tileOrder).toEqual(['cdx', 'next', 'waiting', 'remind']);
+    expect(app.tileOrder).toEqual(['cdx', 'next', 'waiting', 'parked', 'remind']);
     expect(app.tileOrderChanged).toBe(true);
     expect(app.tileNote).toBe('Eine KI-Sitzung könnte übernehmen ist jetzt Nummer 1 von 4');
-    expect(prefs.get('tasks-desktop.tiles-order')).toBe('["cdx","next","waiting","remind"]');
+    expect(prefs.get('tasks-desktop.tiles-order')).toBe('["cdx","next","waiting","parked","remind"]');
     app.resetTileOrder();
-    expect(app.tileOrder).toEqual(['next', 'waiting', 'remind', 'cdx']);
+    expect(app.tileOrder).toEqual(['next', 'waiting', 'parked', 'remind', 'cdx']);
     expect(app.tileOrderChanged).toBe(false);
 
     const kept = make({ token: 't', prefs: new Map([['tasks-desktop.tiles-order', '["waiting","x","waiting"]']]) });
-    expect(kept.app.tileOrder).toEqual(['waiting', 'next', 'remind', 'cdx']);
+    expect(kept.app.tileOrder).toEqual(['waiting', 'next', 'parked', 'remind', 'cdx']);
     const broken = make({ token: 't', prefs: new Map([['tasks-desktop.tiles-order', '{']]) });
-    expect(broken.app.tileOrder).toEqual(['next', 'waiting', 'remind', 'cdx']);
+    expect(broken.app.tileOrder).toEqual(['next', 'waiting', 'parked', 'remind', 'cdx']);
   });
 });
 

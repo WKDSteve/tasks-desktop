@@ -18,6 +18,7 @@ export const FIELD_KEYS = [
   'plan',
   'phase',
   'project',
+  'waits_for',
 ] as const;
 export type FieldKey = (typeof FIELD_KEYS)[number];
 
@@ -142,6 +143,10 @@ export function fieldValues(task: TaskEntry, key: FieldKey, projectOf?: ProjectO
       return one(task.phase);
     case 'project':
       return one(projectOf ? projectOf(task) : task.project);
+    case 'waits_for':
+      // Only a parked task waits for something from outside: its reason, or none (parked by choice). Any other task
+      // has no value, so a filter by reason never keeps it.
+      return task.status === 'parked' ? one(task.waits_for) : [];
     case 'tag':
       return task.tags.length > 0 ? task.tags : [NONE];
     case 'category':

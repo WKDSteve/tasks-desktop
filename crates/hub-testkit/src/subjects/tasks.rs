@@ -49,6 +49,7 @@ impl Subject for Tasks {
             "groupings",
             "views",
             "finished",
+            "waits",
             "events",
             "ops",
         ]

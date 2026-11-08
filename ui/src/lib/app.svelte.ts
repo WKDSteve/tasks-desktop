@@ -32,13 +32,14 @@ import type {
   TaskEntry,
   View as SavedView,
   ViewSelect,
+  Waits,
 } from './contract';
 import { expandAreas, isAreaGroup, NO_AREA, type AreaGroupInfo } from './areaGroups';
 import type { Op } from './api';
 import { indexOfLinks, touchedAreas } from './cross';
 import { planProjects, projectOfTask, projectsOf, type ClosePreview, type Project } from './projects';
 import { parsePrefs, type Prefs as FinishedPrefs } from './finished';
-import { activeFilters, applyFilter, areaCounts, filterVaultOf, freshFilter, moveSelection, parseFilter, serializeFilter, type Filter } from './filter';
+import { activeFilters, applyFilter, areaCounts, filterVaultOf, freshFilter, moveSelection, NONE as NO_VALUE, parseFilter, serializeFilter, type Filter } from './filter';
 import { chipLabel } from './filter-chips';
 import { inboxOf, triageKey } from './inbox';
 import type { Finding } from './check';
@@ -603,6 +604,8 @@ export class App {
   #order = $state.raw<Map<string, number> | null>(null);
   #orders = 0;
   next = $state.raw<Next | null>(null);
+  /** What the parked tasks wait for, as the engine counts it (`waits`); `null` until read, or for an engine without it. */
+  waits = $state.raw<Waits | null>(null);
   hubAreas = $state.raw<HubArea[]>([]);
   detail = $state.raw<Detail>({ state: 'none' });
   /** What the hub found in the text of the tasks for the words in the filter. */
@@ -2902,6 +2905,12 @@ export class App {
     this.setView('list');
   }
 
+  /** The list of the parked tasks that wait for `key` (`null`: the ones parked without a reason), without other filters. */
+  openParkedInList(key: string | null): void {
+    this.filter = { ...freshFilter(), fields: { waits_for: [key ?? NO_VALUE] } };
+    this.setView('list');
+  }
+
   /** Take every chosen area, status and actor and the search words away. */
   resetFilter(): void {
     this.filter = freshFilter();
@@ -3288,6 +3297,8 @@ export class App {
     this.#order = null;
     this.next = null;
     this.nextFor = null;
+    this.waits = null;
+    this.waitsFor = null;
     this.hubAreas = [];
     this.links = null;
     this.detail = { state: 'none' };
@@ -3423,7 +3434,7 @@ export class App {
     // Not on the board: its bar needs the fields only for the form of a new view, asked when the board is opened (a
     // question after every write there would stand in front of the next one).
     if (this.view === 'views') void this.viewsState.loadGroupings();
-    if (this.view === 'today') await this.loadNext();
+    if (this.view === 'today') await Promise.all([this.loadNext(), this.loadWaits()]);
   }
 
   /** The rev the links are being asked for. */
@@ -3579,6 +3590,8 @@ export class App {
   }
 
   private nextFor: string | null = null;
+  /** The digest of the list the parked tasks were counted for. */
+  private waitsFor: string | null = null;
   private searchTimer: ReturnType<typeof setTimeout> | undefined;
   private searchAbort: AbortController | null = null;
   private detailAbort: AbortController | null = null;
@@ -3591,6 +3604,46 @@ export class App {
   private classesMoved = false;
 
   /** The next task, read when the list it belongs to is not the one held. */
+  /**
+   * What the parked tasks wait for (`waits`, capability `waits`), read when the list it belongs to is not the one held.
+   * An engine without it has none, and the overview shows no block of them.
+   */
+  async loadWaits(): Promise<void> {
+    if (!this.can('waits')) return;
+    const key = this.snapshot?.digest ?? null;
+    if (this.waits !== null && key !== null && this.waitsFor === key) return;
+    try {
+      this.waits = await this.env.hub.waits();
+      this.waitsFor = key;
+    } catch {
+      // The old one stays.
+    }
+  }
+
+  /** The parked tasks of the list that wait for `key`: what Bring all back would set to open. */
+  parkedFor(key: string): TaskEntry[] {
+    return this.tasks.filter((t) => t.status === 'parked' && t.waits_for === key);
+  }
+
+  /**
+   * Bring back every parked task that waits for `key`: the engine has no operation of its own for it, so it is one
+   * `set` with `status: open` per task, each on the version shown (the engine drops the reason with the status). The
+   * toast says how many went through and takes them back together.
+   */
+  async releaseWaits(key: string): Promise<void> {
+    const ops = this.parkedFor(key).map((t) => ({
+      op: 'set' as const,
+      id: t.id,
+      patch: { status: 'open' },
+      ...(t.etag ? { if_match: t.etag } : {}),
+    }));
+    if (ops.length === 0) {
+      this.say('ok', 'bulk.nothing');
+      return;
+    }
+    await this.write(ops, { onAnswer: this.batchAnswer(ops) });
+  }
+
   async loadNext(): Promise<void> {
     const key = this.snapshot?.digest ?? null;
     if (this.next !== null && key !== null && this.nextFor === key) return;
@@ -3619,7 +3672,10 @@ export class App {
       if (this.viewsBehind()) void this.readViews();
     }
     safe(() => this.env.prefs.setItem('tasks-desktop.view', view));
-    if (view === 'today' && this.phase === 'ready') void this.loadNext();
+    if (view === 'today' && this.phase === 'ready') {
+      void this.loadNext();
+      void this.loadWaits();
+    }
   }
 
   /** The selection stays on the task id; a task that is gone clears it. */

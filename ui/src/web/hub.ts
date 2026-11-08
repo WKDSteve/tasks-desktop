@@ -353,6 +353,13 @@ export function createWebHub(deps: HubDeps): WebHub {
         }
         return passOn('finished', params);
       }
+      case 'waits': {
+        const q = parseQuery(query, ['area']);
+        if (typeof q === 'string') return errorBody(400, 'bad_query', q);
+        const area = q.get('area');
+        if (area !== undefined && !validAreaName(area)) return errorBody(400, 'bad_query', 'area is not a name');
+        return passOn('waits', area === undefined ? {} : { area });
+      }
       case 'links':
       case 'groupings':
       case 'views':

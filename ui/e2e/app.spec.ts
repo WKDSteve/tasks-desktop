@@ -7378,3 +7378,51 @@ test('a project: its page with goal, rollup, own tasks and the plans by stage, t
     }
   }
 });
+
+test('a reason parks a task, the overview counts it by reason, and Bring all back sets the tasks of the reason to open', async ({
+  page,
+}) => {
+  test.slow();
+  await prepare(page);
+  await pair(page);
+  const title = 'Waits e2e r001';
+  const key = 'e2e-waits-r001';
+  await capture(page, title, { keep: true });
+  const dir = join(state().vault, 'lib.nvim', 'ROADMAP', 'tasks');
+  const file = join(dir, readdirSync(dir).find((name) => readFileSync(join(dir, name), 'utf8').includes(`title: ${title}`))!);
+  try {
+    // A reason typed into the detail parks the task: the engine moves the status with it.
+    const field = taskFloat(page).locator('input[data-field="waits_for"]');
+    await write(page, async () => {
+      await field.fill(key);
+      await field.press('Enter');
+    });
+    await expect.poll(() => readFileSync(file, 'utf8')).toMatch(new RegExp(`^waits_for: ${key}$`, 'm'));
+    expect(readFileSync(file, 'utf8')).toMatch(/^status: parked$/m);
+    await expect(taskFloat(page).locator('[data-field="status"]')).toHaveValue('parked');
+    await closeFloat(page);
+
+    // The overview has a line for the reason, with the number of its tasks and their areas.
+    await chooseView(page, 'View', 'Today');
+    const tile = page.getByRole('region', { name: 'Parked' });
+    const line = tile.locator(`li[data-waits="${key}"]`);
+    await expect(line).toContainText('1');
+    await expect(line).toContainText('lib.nvim');
+    expect(await violations(page)).toEqual([]);
+
+    // Bring all back asks first and says how many tasks of which areas; only the confirmation writes.
+    await line.getByRole('button', { name: 'Bring all back …' }).click();
+    const confirm = line.getByRole('group', { name: 'Bring all back …' });
+    await expect(confirm).toContainText(`Set 1 parked tasks waiting for ${key} to open? Areas: lib.nvim.`);
+    // The blocks of the overview are `.card`s that are never dragged: `settled()` does not apply here, the answer does.
+    const answer = nextAnswer(page);
+    await confirm.getByRole('button', { name: 'Bring back' }).click();
+    await answer;
+    await expect.poll(() => readFileSync(file, 'utf8')).toMatch(/^status: open$/m);
+    expect(readFileSync(file, 'utf8')).not.toContain('waits_for');
+    await expect(line).toHaveCount(0);
+  } finally {
+    // Left in the shared vault it would be one more open task of lib.nvim in the counts of other tests.
+    rmSync(file, { force: true });
+  }
+});

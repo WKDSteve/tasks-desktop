@@ -16,6 +16,7 @@ import type {
   Snapshot,
   TaskDocument,
   Views,
+  Waits,
 } from './contract';
 import type { ViewForm } from './views';
 import type { About } from './about';
@@ -394,6 +395,12 @@ export class Hub extends HubClient<Snapshot> {
       .map(([key, value]) => `${key}=${encodeURIComponent(String(value)).replace(/%2F/gi, '/')}`);
     const path = `/api/tasks/finished${parts.length > 0 ? `?${parts.join('&')}` : ''}`;
     return this.json<Finished>(path, signal ? { signal } : undefined);
+  }
+
+  /** What the parked tasks wait for: per `waits_for` key the number of tasks and their areas (the engine counts). */
+  waits(area?: string): Promise<Waits> {
+    const query = area === undefined ? '' : `?area=${encodeURIComponent(area)}`;
+    return this.json<Waits>(`/api/tasks/waits${query}`);
   }
 
   /** Where the areas hang together: the links between the open tasks of different areas. */

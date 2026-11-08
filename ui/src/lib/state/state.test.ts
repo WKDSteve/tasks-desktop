@@ -222,7 +222,8 @@ describe('the start page layout', () => {
     const p = profile({ 'tasks-desktop.tiles-hidden': '["next","nonsense","daily"]', 'tasks-desktop.tiles-order': '["waiting","next","remind","cdx"]' });
     const state = new TodayState(p.host);
     expect(state.hidden).toEqual(['next', 'daily']);
-    expect(state.order).toEqual(['waiting', 'next', 'remind', 'cdx']);
+    // A block that came after the order was kept (parked) is put at its end.
+    expect(state.order).toEqual(['waiting', 'next', 'remind', 'cdx', 'parked']);
     expect(state.orderChanged).toBe(true);
   });
 
