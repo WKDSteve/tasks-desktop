@@ -851,7 +851,7 @@ pub(super) async fn open_file(State(st): State<Arc<Shared>>, body: Bytes) -> Res
         Ok(f) => f,
         Err(why) => return error_body(StatusCode::BAD_REQUEST, "open_refused", why),
     };
-    match opener.open(&file) {
+    match opener.open(&file, None) {
         Ok(()) => axum::Json(json!({ "ok": true })).into_response(),
         Err(why) => error_body(StatusCode::BAD_GATEWAY, "open_failed", &why),
     }
