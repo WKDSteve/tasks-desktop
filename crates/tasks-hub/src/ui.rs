@@ -40,7 +40,14 @@ impl UiFiles {
     /// built without `ui/dist`).
     #[must_use]
     pub fn embedded() -> Self {
-        let files = EMBEDDED
+        Self::from_static(EMBEDDED)
+    }
+
+    /// Files given as (key, content type, bytes), keyed like the embedded table (`index.html`,
+    /// `assets/x.js`, `m/index.html`): the embedded interface, and a page for the tests.
+    #[must_use]
+    pub fn from_static(entries: &[(&'static str, &'static str, &'static [u8])]) -> Self {
+        let files = entries
             .iter()
             .map(|(key, content_type, bytes)| {
                 (
@@ -66,6 +73,8 @@ impl UiFiles {
     pub fn get(&self, request_path: &str) -> Option<&UiFile> {
         let key = match request_path {
             "/" => "index.html",
+            // The phone page (tasks-mobile), embedded by build.rs under `m/`.
+            "/m/" => "m/index.html",
             other => other.strip_prefix('/')?,
         };
         self.files.get(key)
@@ -163,6 +172,7 @@ fn content_type(path: &Path) -> Option<&'static str> {
         "png" => "image/png",
         "ico" => "image/x-icon",
         "woff2" => "font/woff2",
+        "webmanifest" => "application/manifest+json",
         _ => return None,
     })
 }
@@ -178,6 +188,30 @@ mod tests {
         let dir = Scratch::new(&format!("ui-{name}"));
         std::fs::create_dir_all(dir.join("assets")).unwrap();
         dir
+    }
+
+    #[test]
+    fn the_phone_page_is_served_under_m() {
+        let ui = UiFiles::from_static(&[
+            ("index.html", "text/html; charset=utf-8", b"desk"),
+            ("m/index.html", "text/html; charset=utf-8", b"phone"),
+            ("m/sw.js", "text/javascript; charset=utf-8", b"w"),
+            ("m/manifest.webmanifest", "application/manifest+json", b"{}"),
+        ]);
+        assert_eq!(&ui.get("/m/").unwrap().bytes[..], b"phone");
+        assert_eq!(&ui.get("/").unwrap().bytes[..], b"desk");
+        assert_eq!(
+            ui.get("/m/manifest.webmanifest").unwrap().content_type,
+            "application/manifest+json"
+        );
+        assert!(ui.get("/m/sw.js").is_some());
+        for no in ["/m", "/m/index", "/m/../index.html", "/m//sw.js"] {
+            assert!(ui.get(no).is_none(), "{no}");
+        }
+        assert_eq!(
+            content_type(Path::new("manifest.webmanifest")),
+            Some("application/manifest+json")
+        );
     }
 
     #[test]

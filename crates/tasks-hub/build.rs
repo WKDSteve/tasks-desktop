@@ -29,6 +29,7 @@ fn content_type(path: &Path) -> Option<&'static str> {
         "png" => "image/png",
         "ico" => "image/x-icon",
         "woff2" => "font/woff2",
+        "webmanifest" => "application/manifest+json",
         _ => return None,
     })
 }
@@ -99,6 +100,40 @@ fn main() {
                 }
             }
         }
+    }
+    // The phone page (tasks-mobile, `tools/build-mobile.py` from `mobile.lock`), served under `/m/`: its page,
+    // manifest and worker, and the files directly in `assets/` and `icons/`. CI and the release builds set
+    // TASKS_HUB_REQUIRE_MOBILE, so that a build without it fails instead of shipping a hub with no phone page.
+    println!("cargo:rerun-if-env-changed=TASKS_HUB_REQUIRE_MOBILE");
+    let mobile = manifest
+        .join("..")
+        .join("..")
+        .join("ui")
+        .join("dist-mobile");
+    if mobile.join("index.html").is_file() {
+        for name in ["index.html", "manifest.webmanifest", "sw.js"] {
+            if mobile.join(name).is_file() {
+                entries.push((format!("m/{name}"), mobile.join(name)));
+            }
+        }
+        for sub in ["assets", "icons"] {
+            if let Ok(dir) = std::fs::read_dir(mobile.join(sub)) {
+                for entry in dir.flatten() {
+                    let name = entry.file_name().to_string_lossy().into_owned();
+                    if plain_name(&name)
+                        && entry.path().is_file()
+                        && content_type(&entry.path()).is_some()
+                    {
+                        entries.push((format!("m/{sub}/{name}"), entry.path()));
+                    }
+                }
+            }
+        }
+    } else {
+        assert!(
+            std::env::var_os("TASKS_HUB_REQUIRE_MOBILE").is_none(),
+            "TASKS_HUB_REQUIRE_MOBILE is set but ui/dist-mobile/index.html is missing: run tools/build-mobile.py"
+        );
     }
     entries.sort();
 

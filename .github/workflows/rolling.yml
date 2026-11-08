@@ -65,7 +65,7 @@ jobs:
       short: ${{ steps.prepare.outputs.short }}
     steps:
       - id: prepare
-        uses: WKDSteve/appkit/release-kit/prepare@5ebb3d7c583c81414cfbb2cff2b53e8e3f17e5d7 # v0.39.0
+        uses: WKDSteve/appkit/release-kit/prepare@230102f87b51ef0635b1ebdbf83ddcac75a8efe0 # v0.40.0
         with:
           sha: ${{ github.event.workflow_run.head_sha }}
           token: ${{ github.token }}
@@ -86,6 +86,10 @@ jobs:
         run: |
           pnpm install --frozen-lockfile
           pnpm build
+      # The phone page (tasks-mobile, pinned in mobile.lock) is part of the binary too, under /m/; a build without it
+      # fails (TASKS_HUB_REQUIRE_MOBILE), so no hub ships without its phone page.
+      - name: Build the phone page
+        run: python tools/build-mobile.py
       # The engine goes into the program, so that a double click needs no Neovim and no checkouts (tools/nvim.lock,
       # engine.lock). The smoke test compares it with the full Neovim of the runner.
       - name: Pack the engine
@@ -96,6 +100,7 @@ jobs:
         env:
           TASKS_HUB_BUILD: ${{ needs.prepare.outputs.short }}
           TASKS_HUB_ENGINE_BUNDLE: target/engine-bundle/engine-bundle.bin
+          TASKS_HUB_REQUIRE_MOBILE: "1"
         run: cargo build --release --locked -p tasks-hub
       - name: Pack and look at what it says
         env:
@@ -134,7 +139,7 @@ jobs:
           pattern: rolling-*
           path: dist
           merge-multiple: true
-      - uses: WKDSteve/appkit/release-kit/publish@5ebb3d7c583c81414cfbb2cff2b53e8e3f17e5d7 # v0.39.0
+      - uses: WKDSteve/appkit/release-kit/publish@230102f87b51ef0635b1ebdbf83ddcac75a8efe0 # v0.40.0
         with:
           token: ${{ github.token }}
           tag: latest

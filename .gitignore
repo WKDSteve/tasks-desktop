@@ -18,3 +18,6 @@ Thumbs.db
 # A local [patch] of appkit (see CLAUDE.md): never committed.
 /.cargo/config.toml
 __pycache__/
+
+# The phone page, built by tools/build-mobile.py from mobile.lock (embedded by build.rs).
+/ui/dist-mobile/

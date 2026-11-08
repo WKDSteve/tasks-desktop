@@ -1125,7 +1125,13 @@ pub(super) fn guard_rules() -> GuardRules {
         ],
     )
     .with_upload_path(crate::IDENTITY.route("upload"))
+    // The phone page (tasks-mobile) under /m/, with its manifest, its worker and the Trusted Types policy it
+    // registers the worker with (tasks-mobile/src/lib/worker.ts).
+    .with_installable_page("/m", MOBILE_WORKER_POLICY)
 }
+
+/// The Trusted Types policy of the phone page, named in tasks-mobile (`src/lib/worker.ts`).
+pub(super) const MOBILE_WORKER_POLICY: &str = "tasks-mobile-worker";
 
 #[cfg(test)]
 mod sort_words {

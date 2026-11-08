@@ -28,6 +28,8 @@ env:
   CARGO_TERM_COLOR: always
   # A missing engine is a failure in CI, not a skipped test.
   TASKS_DESKTOP_REQUIRE_ENGINE: "1"
+  # The phone page must be embedded (crates/tasks-hub/build.rs).
+  TASKS_HUB_REQUIRE_MOBILE: "1"
   TASKS_ENGINE_DIR: ${{ github.workspace }}/engine/tasks.nvim
   LIB_NVIM_DIR: ${{ github.workspace }}/engine/lib.nvim
 
@@ -79,6 +81,10 @@ jobs:
         run: |
           pnpm install --frozen-lockfile
           pnpm build
+      # The phone page (tasks-mobile, pinned in mobile.lock) is part of the binary too, under /m/; a build without it
+      # fails (TASKS_HUB_REQUIRE_MOBILE), so no hub ships without its phone page.
+      - name: Build the phone page
+        run: python tools/build-mobile.py
       # The engine of the web variant: tasks.nvim in wasmoon (Lua 5.4) must answer every read method byte for byte as
       # nvim does on the pinned commits (ui/web/engine.test.mjs).
       #

@@ -2,4 +2,4 @@
 
 mod tasks;
 
-pub use self::tasks::Tasks;
+pub use self::tasks::{Tasks, TasksWithPhonePage, PHONE_PREFIX, PHONE_WORKER_POLICY};

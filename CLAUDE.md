@@ -9,6 +9,7 @@ Engine (`tasks.nvim`), die Seite zeigt nur (Regel WEB-13). Übergabe und Regelwe
 
 ```
 cd ui && pnpm check && pnpm test && pnpm build
+python tools/build-mobile.py            # Handy-Seite (tasks-mobile aus mobile.lock) nach ui/dist-mobile, unter /m/
 touch crates/tasks-hub/src/ui.rs        # sonst bettet das Binary die alte Oberfläche ein
 cargo build --locked
 cargo fmt --check && cargo clippy --workspace --all-targets --locked -- -D warnings

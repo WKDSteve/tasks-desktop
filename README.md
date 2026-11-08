@@ -205,6 +205,19 @@ device. The code in the link is for one use, like on the machine itself, and the
 no rights of its own: whoever can use this local port on the device can reach the pairing page, so do not forward it with
 `-g`. A port the device already uses cannot be forwarded: then free it, or set another `port` in the hub's settings.
 
+### The phone page (`/m/`)
+
+On a phone, open the same link with `/m/` in front of the `#` (`http://127.0.0.1:PORT/m/#pair=<code>`): that is
+[tasks-mobile](https://github.com/WKDSteve/tasks-mobile), a page made for a phone that can be installed as an app
+(Chrome on Android: menu, *Install app*) and that is a share target for links and text from other apps. It lists the
+open tasks, creates one, sets a status, answers open questions and finishes a task after the engine said what that sets
+off; offline it keeps the last list (14 days at most) and queues what you create or change until the hub is reached
+again. It shows and keeps only areas of the class `public` or `internal`. The page is built from the commit
+`mobile.lock` pins (`python tools/build-mobile.py`) and embedded in the program; its policy is the desktop page's plus
+its manifest, its service worker and the one Trusted Types policy it registers the worker with (see appkit's
+SECURITY.md). How to use it on a phone: [docs/USAGE.md of tasks-mobile](https://github.com/WKDSteve/tasks-mobile/blob/main/docs/USAGE.md).
+The session ends when the app is closed; pair again then.
+
 ## The rolling build (the newest `main`, one click)
 
 After every green CI run on `main`, the workflow `rolling` builds the program of that commit for Windows

@@ -12,6 +12,78 @@ use appkit_testkit::subject::{StartConfig, Subject};
 /// `tasks-hub`, with no engine, no vault and no page.
 pub struct Tasks;
 
+/// `tasks-hub` with a desktop page and the phone page under `/m/` (as a build with `ui/dist-mobile` has).
+pub struct TasksWithPhonePage;
+
+/// The prefix and the Trusted Types policy of the phone page.
+pub const PHONE_PREFIX: &str = "/m";
+pub const PHONE_WORKER_POLICY: &str = "tasks-mobile-worker";
+
+fn start_with(
+    cfg: StartConfig,
+    ui: tasks_hub::ui::UiFiles,
+) -> BoxFuture<'static, std::io::Result<RunningServer>> {
+    Box::pin(async move {
+        start(ServerConfig {
+            addr: cfg.addr,
+            limits: cfg.limits,
+            clock: cfg.clock,
+            pairing_ttl: cfg.pairing_ttl,
+            control_secret: cfg.control_secret,
+            instance: cfg.instance,
+            engine: None,
+            policy: Arc::new(AreaPolicy::default()),
+            usage: None,
+            ui,
+            watch: None,
+            status: cfg.status,
+        })
+        .await
+    })
+}
+
+const DATA_ROUTES: [&str; 13] = [
+    "snapshot",
+    "task",
+    "next",
+    "areas",
+    "about",
+    "links",
+    "enums",
+    "groupings",
+    "views",
+    "finished",
+    "waits",
+    "events",
+    "ops",
+];
+
+impl Subject for TasksWithPhonePage {
+    fn identity(&self) -> &'static AppIdentity {
+        &tasks_hub::IDENTITY
+    }
+
+    fn start(&self, cfg: StartConfig) -> BoxFuture<'_, std::io::Result<RunningServer>> {
+        start_with(
+            cfg,
+            tasks_hub::ui::UiFiles::from_static(&[
+                ("index.html", "text/html; charset=utf-8", b"<!doctype html>"),
+                (
+                    "m/index.html",
+                    "text/html; charset=utf-8",
+                    b"<!doctype html>",
+                ),
+                ("m/sw.js", "text/javascript; charset=utf-8", b"//"),
+                ("m/manifest.webmanifest", "application/manifest+json", b"{}"),
+            ]),
+        )
+    }
+
+    fn data_routes(&self) -> Vec<&'static str> {
+        DATA_ROUTES.to_vec()
+    }
+}
+
 impl Subject for Tasks {
     fn identity(&self) -> &'static AppIdentity {
         &tasks_hub::IDENTITY
