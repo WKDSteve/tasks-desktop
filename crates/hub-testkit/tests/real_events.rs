@@ -39,6 +39,12 @@ use tokio::net::TcpStream;
 mod common;
 use common::Sse;
 
+/// The tests of this file run one after the other. Each starts a hub, a watcher and an engine of its own and measures
+/// how fast a change reaches the stream; side by side they took the time from each other and crossed their bound now
+/// and then (`tasks-desktop/write-route-tests-flackern-auf-dem-runner-the-hub-did-not-an`), also before any change of
+/// the code they test. What is measured and the bound stay as they are.
+static ONE_AT_A_TIME: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
 fn copy_dir(from: &Path, to: &Path) {
     std::fs::create_dir_all(to).unwrap();
     for entry in std::fs::read_dir(from).unwrap() {
@@ -327,6 +333,7 @@ fn folder_task(vault: &Path, slug: &str) {
 
 #[tokio::test]
 async fn an_edit_of_a_task_file_reaches_the_stream_within_two_seconds() {
+    let _one_at_a_time = ONE_AT_A_TIME.lock().await;
     let Some(mut r) = rig("edit", |_| {}).await else {
         return;
     };
@@ -378,6 +385,7 @@ async fn an_edit_of_a_task_file_reaches_the_stream_within_two_seconds() {
 #[tokio::test]
 async fn a_folder_task_moved_through_the_write_route_is_in_the_event_and_the_snapshot_when_it_is_answered(
 ) {
+    let _one_at_a_time = ONE_AT_A_TIME.lock().await;
     let slug = "folio-route";
     let Some(mut r) = rig("move-route", |v| folder_task(v, slug)).await else {
         return;
@@ -429,6 +437,7 @@ async fn a_folder_task_moved_through_the_write_route_is_in_the_event_and_the_sna
 
 #[tokio::test]
 async fn a_folder_task_moved_by_the_engine_beside_the_hub_reaches_the_stream_through_the_watcher() {
+    let _one_at_a_time = ONE_AT_A_TIME.lock().await;
     // The engine is called beside the hub, as Neovim does: the hub's own write route is not involved, so the only way
     // the hub can learn of the move is the watcher. Without it the event never comes (the periodic scan is slower).
     let slug = "folio-engine-move";
@@ -473,6 +482,7 @@ async fn a_folder_task_moved_by_the_engine_beside_the_hub_reaches_the_stream_thr
 #[tokio::test]
 async fn a_folder_task_finished_by_the_engine_beside_the_hub_reaches_the_stream_through_the_watcher(
 ) {
+    let _one_at_a_time = ONE_AT_A_TIME.lock().await;
     // `done` moves the folder task into the Backlog as a whole; the open id goes.
     let slug = "folio-engine-done";
     let Some(mut r) = rig("engine-done", |v| folder_task(v, slug)).await else {
@@ -511,6 +521,7 @@ async fn a_folder_task_finished_by_the_engine_beside_the_hub_reaches_the_stream_
 
 #[tokio::test]
 async fn a_folder_task_renamed_from_outside_reaches_the_stream_as_a_whole_within_two_seconds() {
+    let _one_at_a_time = ONE_AT_A_TIME.lock().await;
     // The engine run from Neovim moves the folder; the hub only watches. The
     // system reports the folder (on Linux: a rename in two halves, from and
     // to), never the task file in it.
