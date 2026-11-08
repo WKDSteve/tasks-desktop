@@ -8,6 +8,7 @@
 //!   `ops` run moves it on; every snapshot is counted in `.fake-calls`;
 //! * `.fake-transient`: the next snapshot has a task with a passing problem (`duplicate-id`);
 //! * `.fake-bodies-page`: how many bodies one page holds;
+//! * `.fake-snapshot-ms`: a `snapshot` takes that long (an engine started slowly on a busy machine);
 //! * `.fake-task-ms`, `.fake-task-calls`: a `task` read takes that long, and every one is counted;
 //! * `.fake-task-file`: the file every task is in;
 //! * `.fake-check-ms`, `.fake-check-done`, `.fake-check-fail`: a `check` takes that long, leaves a
@@ -34,6 +35,11 @@ pub const TASKS_DOCUMENTS: Documents = Documents {
 
 fn tasks_before(call: &Call<'_>) {
     let base = Path::new(&call.vault);
+    if call.method == "snapshot"
+        && let Ok(text) = std::fs::read_to_string(base.join(".fake-snapshot-ms"))
+    {
+        std::thread::sleep(Duration::from_millis(text.trim().parse().unwrap_or(0)));
+    }
     if call.method == "task"
         && let Ok(text) = std::fs::read_to_string(base.join(".fake-task-ms"))
     {

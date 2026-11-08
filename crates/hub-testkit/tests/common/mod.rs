@@ -7,6 +7,12 @@ use serde_json::Value;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 
+/// How long the head of a stream may take. The hub sends it once it holds the snapshot the stream starts from: an engine
+/// run, the first one of a hub that was just started. A busy machine starts that process slowly (seen: more than five
+/// seconds while other suites ran), and the hub itself waits at most its engine timeout (10 s in these rigs, 30 s for the
+/// real engine) before it answers with the failure. Longer than that is a stream that does not come.
+pub const HEAD_BUDGET: Duration = Duration::from_secs(35);
+
 /// An open event stream, read the way a browser's `fetch` would.
 pub struct Sse {
     stream: TcpStream,
@@ -32,7 +38,7 @@ impl Sse {
             if let Some(i) = buf.windows(4).position(|w| w == b"\r\n\r\n") {
                 break i;
             }
-            let n = tokio::time::timeout(Duration::from_secs(5), stream.read(&mut chunk))
+            let n = tokio::time::timeout(HEAD_BUDGET, stream.read(&mut chunk))
                 .await
                 .expect("a reply")
                 .unwrap();

@@ -286,6 +286,23 @@ async fn the_timer_catches_what_the_watcher_did_not_see() {
 }
 
 #[tokio::test]
+async fn a_slow_first_snapshot_holds_the_head_and_the_stream_still_opens() {
+    // The first engine run of a fresh hub, slow as on a busy machine: longer than the five seconds the head used to be
+    // given, shorter than the engine timeout of the rig (10 s). The stream opens once the snapshot is held.
+    let r = rig("slow-first", Timing::default()).await;
+    std::fs::write(r.vault.join(".fake-snapshot-ms"), "6000").unwrap();
+    let opened = std::time::Instant::now();
+    let mut sse = Sse::open(r.server.addr(), Some(&r.token)).await.unwrap();
+    assert!(
+        opened.elapsed() >= Duration::from_secs(5),
+        "the snapshot was not slow"
+    );
+    std::fs::remove_file(r.vault.join(".fake-snapshot-ms")).unwrap();
+    let hello = sse.next(WAIT).await.unwrap();
+    assert!(hello.contains("event: hello"), "{hello}");
+}
+
+#[tokio::test]
 async fn the_timer_does_not_scan_for_nobody() {
     let r = rig(
         "idle",
