@@ -80,4 +80,12 @@ test('the desktop page keeps its policy, and /m without a slash is not the page'
   expect((await page.request.get('/m/nope.js')).status()).toBe(404);
   const manifest = await page.request.get('/m/manifest.webmanifest');
   expect(manifest.headers()['content-type']).toBe('application/manifest+json');
+  // Every icon the manifest names is served from /m/icons/, the PNGs (maskable, monochrome) as PNG.
+  const icons = ((await manifest.json()) as { icons: { src: string }[] }).icons.map((i) => i.src);
+  expect(icons.some((src) => src.endsWith('.png'))).toBe(true);
+  for (const src of icons) {
+    const icon = await page.request.get(new URL(src, 'http://x/m/').pathname);
+    expect(icon.status(), src).toBe(200);
+    expect(icon.headers()['content-type'], src).toBe(src.endsWith('.png') ? 'image/png' : 'image/svg+xml');
+  }
 });
