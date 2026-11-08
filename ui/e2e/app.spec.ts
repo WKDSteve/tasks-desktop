@@ -2098,6 +2098,39 @@ test('a number of the tile Today opens the tasks it counts in a float; the title
   }
 });
 
+test('the float of the tile Today lists a task finished twice once per file, and the page keeps working', async ({ page }) => {
+  const { vault } = state();
+  const now = new Date();
+  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  // The same task in two files of the Backlog (finished, opened again, finished again): one id, two files.
+  const files = [
+    [join(vault, 'lib.nvim', 'Backlog', 'FEATURES', `${today}_e2e-dailytwice-t001.md`), `---\ntitle: Dailytwice t001\nstatus: done\nkind: task\ncreated: ${today}\nupdated: ${today}\n---\n\nFinished first.\n`],
+    [join(vault, 'lib.nvim', 'Backlog', 'TASKS', `${today}_e2e-dailytwice-t001.md`), `---\ntitle: Dailytwice t001\nstatus: done\nkind: task\ncreated: ${today}\nupdated: ${today}\n---\n\nFinished again.\n`],
+  ] as const;
+  const errors: string[] = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  try {
+    for (const [path, text] of files) {
+      mkdirSync(join(path, '..'), { recursive: true });
+      writeFileSync(path, text);
+    }
+    await pair(page);
+    await chooseView(page, 'View', 'List');
+    await page.getByRole('searchbox', { name: /search/i }).first().fill('Dailytwice');
+    await chooseView(page, 'View', 'Today');
+    const card = page.locator('section[data-tile="daily"]');
+    await expect(card.locator('li[data-figure="finished"] .num')).toHaveText('2');
+    await card.getByRole('button', { name: /^Show the 2 finished,/ }).click();
+    const float = page.locator('dialog.daily-list');
+    await expect(float.locator('section[data-group="finished"] li[data-task]')).toHaveText([/Dailytwice t001/, /Dailytwice t001/]);
+    await page.keyboard.press('Escape');
+    await expect(float).toBeHidden();
+    expect(errors).toEqual([]);
+  } finally {
+    for (const [path] of files) rmSync(path, { force: true });
+  }
+});
+
 test('the capture dialog writes after, plan, phase, due and start into the file', async ({ page }) => {
   await pair(page);
   await closeFloat(page);

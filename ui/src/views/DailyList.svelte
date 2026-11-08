@@ -92,7 +92,7 @@
               <span class="muted">{task.area} · {labelOf(app.lang, 'status', task.status)} · {String(group.key === 'created' ? task.created : task.updated)}</span>
             </li>
           {/each}
-          {#each group.finished ?? [] as item (item.id)}
+          {#each group.finished ?? [] as item (item.file)}
             <li data-task={item.id}>
               <button type="button" class="link" onclick={() => openFinished(item)}>{markHidden(item.title)}</button>
               <span class="muted"
