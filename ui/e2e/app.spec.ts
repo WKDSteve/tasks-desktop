@@ -3940,6 +3940,11 @@ test('the plan wizard does not make a plan from a name the engine has not confir
   // The areas the plan covers follow the file's area until they are chosen.
   await dialog.getByLabel('Area of the plan file').selectOption('cascade.nvim');
   await expect(dialog.getByRole('button', { name: /^Areas the plan covers/ })).toContainText('cascade.nvim');
+  // The x of the choice is drawn inside its button, also where the choice is as wide as the dialog (a grid cell).
+  const areasBox = await dialog.getByRole('button', { name: /^Areas the plan covers/ }).boundingBox();
+  const xBox = await dialog.getByRole('button', { name: 'Remove the selection Areas the plan covers' }).boundingBox();
+  expect(xBox!.x).toBeGreaterThanOrEqual(areasBox!.x);
+  expect(xBox!.x + xBox!.width).toBeLessThanOrEqual(areasBox!.x + areasBox!.width + 1);
   // Escape closes the popup of the areas and leaves the dialog and what was typed in it.
   await dialog.getByRole('button', { name: /^Areas the plan covers/ }).click();
   await expect(dialog.getByRole('group', { name: 'Areas the plan covers' })).toBeVisible();
