@@ -484,6 +484,34 @@ export function filterVaultOf(text: string | null): string | null | undefined {
   }
 }
 
+/**
+ * The filter as short text for a place of the history and the address: what is on, search words included, and nothing
+ * that is off (`{}` for a filter with nothing on). `filterOfText` reads it back.
+ */
+export function filterText(filter: Filter): string {
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(filter)) {
+    if (value === false || value === '') continue;
+    if (Array.isArray(value) && value.length === 0) continue;
+    if (typeof value === 'object' && value !== null && !Array.isArray(value) && Object.keys(value).length === 0) continue;
+    out[key] = key === 'query' ? (value as string).trim() : value;
+  }
+  if (out.query === '') delete out.query;
+  return JSON.stringify(out);
+}
+
+/** The filter of a text made by `filterText`: what it cannot read (a broken text, an unknown value) is left off. */
+export function filterOfText(text: string): Filter {
+  const out = parseFilter(text);
+  try {
+    const raw = JSON.parse(text) as { query?: unknown } | null;
+    if (raw !== null && typeof raw === 'object' && typeof raw.query === 'string') out.query = raw.query;
+  } catch {
+    // parseFilter has left it empty already
+  }
+  return out;
+}
+
 export function parseFilter(text: string | null): Filter {
   const out = freshFilter();
   let raw: unknown;

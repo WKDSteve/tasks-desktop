@@ -239,6 +239,50 @@ test('a view of the menu is a link: a new tab at its address takes the session o
   expect(problems).toEqual([]);
 });
 
+test('the filter belongs to its place: typing writes no entry, Back and Forward set the filter each place had, a link carries it', async ({ page, context }) => {
+  const problems = await pair(page);
+  await showList(page);
+  const search = page.getByRole('searchbox', { name: /search/i }).first();
+  const goTo = async (name: string) => {
+    await page.getByRole('menuitem', { name: 'View', exact: true }).click();
+    await page.getByRole('menuitemradio', { name, exact: true }).click();
+  };
+  const entries = () => page.evaluate(() => history.length);
+  const filterInAddress = () =>
+    page.evaluate(() => {
+      const part = location.hash.slice(1).split('&').find((p) => p.startsWith('filter='));
+      return part === undefined ? null : (JSON.parse(decodeURIComponent(part.slice(7))) as unknown);
+    });
+
+  // Typing in the search box is no step of the history: the entry of the place takes the words, and the address too.
+  const before = await entries();
+  await search.pressSequentially('beta', { delay: 30 });
+  await expect.poll(filterInAddress).toEqual({ query: 'beta' });
+  expect(await entries()).toBe(before);
+
+  // Another place keeps the filter; the list, come back to, drops it there; Forward gives the other place its own.
+  await goTo('Inbox');
+  await expect(page.locator('section.inbox')).toBeVisible();
+  await page.goBack();
+  await expect(search).toHaveValue('beta');
+  await search.fill('');
+  await expect.poll(filterInAddress).toBeNull();
+  await page.goForward();
+  await expect(page.locator('section.inbox')).toBeVisible();
+  await expect.poll(filterInAddress).toEqual({ query: 'beta' });
+  await page.goBack();
+  await expect(search).toHaveValue('');
+
+  // A link with the filter: a new tab shows the place with it.
+  await search.fill('beta');
+  await expect.poll(filterInAddress).toEqual({ query: 'beta' });
+  const tab = await context.newPage();
+  await tab.goto(page.url());
+  await expect(tab.getByRole('searchbox', { name: /search/i }).first()).toHaveValue('beta');
+  await tab.close();
+  expect(problems).toEqual([]);
+});
+
 test('eight windows of one tab are all live on one stream, and the next one takes over when its window closes', async ({ page, context }) => {
   test.setTimeout(120_000);
   const streams: string[] = [];

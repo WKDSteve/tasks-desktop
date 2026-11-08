@@ -4,7 +4,7 @@ import { installAppHistory, placeAddress } from './history';
 
 /**
  * Make every change of the view or of the open task an entry of the history of the tab, with the place in the
- * address (history.ts).
+ * address (history.ts); a change of the filter is written into the entry of the place.
  */
 export function trackHistory(
   app: App,
@@ -17,11 +17,12 @@ export function trackHistory(
   );
   const stopEffect = $effect.root(() => {
     $effect(() => {
-      // Only the place is watched; reading the list for it (a vanished task) happens untracked.
+      // Only the place and its filter are watched; reading the list for it (a vanished task) happens untracked.
       void app.view;
       void app.selectedId;
       void app.peeking;
       void app.solo;
+      void app.filter;
       history.sync();
     });
   });

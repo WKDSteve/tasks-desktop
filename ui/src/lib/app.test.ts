@@ -962,6 +962,19 @@ describe('App', () => {
     app.stop();
   });
 
+  it('takes the filter the address names over the remembered one, and keeps the remembered one when it names none', () => {
+    const prefs = new Map<string, string>();
+    const first = make({ prefs });
+    first.app.filter = { ...freshFilter(), statuses: ['blocked'] };
+    const linked = make({ prefs });
+    linked.app.openPlace('list', null, '{"statuses":["open"],"query":"board"}');
+    expect(linked.app.filter.statuses).toEqual(['open']);
+    expect(linked.app.filter.query).toBe('board');
+    const plain = make({ prefs: new Map([['tasks-desktop.filter', '{"statuses":["blocked"]}']]) });
+    plain.app.openPlace('list', null);
+    expect(plain.app.filter.statuses).toEqual(['blocked']);
+  });
+
   it('opens the view of a place whose task is gone, and says so', async () => {
     const { app, hub } = make({ token: 't' });
     hub.doc = snapshot([task('pub/a')], 'rev:1');

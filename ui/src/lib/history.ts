@@ -3,10 +3,16 @@
 // `history.state`; the view and the open task are also in the fragment of the address (`#view=list&open=<id>`), so
 // that a reload, a copied address and a link opened in a new tab show the same place. A window of one task keeps its
 // own fragment (`#task=<id>`, route.ts): while the page is one, the address is left to it.
+//
+// The filter of the list belongs to a place too: each entry keeps the filter its place had when it was left, Back and
+// Forward set it again. A change of the filter is no step of its own: it is written into the entry of the place
+// (a moment after the last change, so that typing in the search box does not write at every key). It is in the
+// address as well (`&filter=...`, while it is short enough): a copied link and a new tab show the same filter.
 
 import { installNav, type Nav, type NavAddress, type NavHistory, type NavWindow } from 'appkit-ui/nav';
 import type { Route } from 'appkit-ui/route';
 import type { View } from './app.svelte';
+import { filterOfText, filterText, type Filter } from './filter';
 import { ROUTED_VIEWS, type RoutedView } from './route';
 
 const VIEWS: readonly string[] = ROUTED_VIEWS;
@@ -17,14 +23,19 @@ void sameViews;
 
 /** The route of a place: its view, and the task open in it. Whether it is looked at in the popup is not kept. */
 export function placeRoute(place: Place): Route {
-  return place.selectedId === null ? { view: place.view } : { view: place.view, open: place.selectedId };
+  return {
+    view: place.view,
+    ...(place.selectedId !== null ? { open: place.selectedId } : {}),
+    // A filter with nothing on is no part of the address (an address without one keeps the filter the page has).
+    ...(place.filter !== undefined && place.filter !== '{}' ? { filter: place.filter } : {}),
+  };
 }
 
 /** The place a route names, or null (no view, or a name that is no view). */
 export function routePlace(route: Record<string, string>): Place | null {
   const view = route.view;
   if (view === undefined || !VIEWS.includes(view)) return null;
-  return { view: view as View, selectedId: route.open ?? null };
+  return { view: view as View, selectedId: route.open ?? null, ...(route.filter !== undefined ? { filter: route.filter } : {}) };
 }
 
 /** The address of the page as the history keeps it; `solo`: the page is a window of one task now. */
@@ -40,16 +51,19 @@ export interface Place {
   view: View;
   selectedId: string | null;
   peek?: true;
+  /** The filter of the list at this place (`filterText`); missing in a place from before it was kept: left as it is. */
+  filter?: string;
 }
 
 export function isPlace(value: unknown): value is Place {
   if (typeof value !== 'object' || value === null) return false;
-  const v = value as { view?: unknown; selectedId?: unknown; peek?: unknown };
+  const v = value as { view?: unknown; selectedId?: unknown; peek?: unknown; filter?: unknown };
   return (
     typeof v.view === 'string' &&
     VIEWS.includes(v.view) &&
     (v.selectedId === null || typeof v.selectedId === 'string') &&
-    (v.peek === undefined || v.peek === true)
+    (v.peek === undefined || v.peek === true) &&
+    (v.filter === undefined || typeof v.filter === 'string')
   );
 }
 
@@ -59,6 +73,8 @@ export interface HistoryApp {
   selectedId: string | null;
   /** The open task is looked at in the popup over the view. */
   peeking: boolean;
+  /** The filter of the list: kept with the place, set again by Back and Forward. */
+  filter: Filter;
   tasks: readonly { id: string }[];
   setView(view: View): void;
   select(id: string | null): void;
@@ -67,23 +83,52 @@ export interface HistoryApp {
 }
 
 export interface AppHistory {
-  /** The app may have changed its place: record it. Called whenever the view or the selection changed. */
+  /** The app may have changed its place or its filter: record it. Called whenever the view, the selection or the filter changed. */
   sync(): void;
   stop(): void;
+}
+
+/** How long the filter has to stay before it is written into the entry of the place. */
+export const FILTER_SETTLE_MS = 400;
+
+/** The timers the history waits with (the window's; a test gives its own). */
+export interface HistoryTimers {
+  setTimeout(run: () => void, ms: number): unknown;
+  clearTimeout(handle: unknown): void;
+}
+
+const windowTimers: HistoryTimers = {
+  setTimeout: (run, ms) => setTimeout(run, ms),
+  clearTimeout: (handle) => clearTimeout(handle as ReturnType<typeof setTimeout>),
+};
+
+/** The same place, the filter aside. */
+function samePlace(a: Place, b: Place): boolean {
+  return a.view === b.view && a.selectedId === b.selectedId && a.peek === b.peek;
 }
 
 export function installAppHistory(
   app: HistoryApp,
   win: NavWindow & { history: NavHistory },
   address?: NavAddress<Place>,
+  timers: HistoryTimers = windowTimers,
 ): AppHistory {
   let last: Place | null = null;
+  /** A change of the filter waiting to be written into the entry of the place. */
+  let settling: unknown = null;
+  const settle = (): void => {
+    if (settling === null) return;
+    timers.clearTimeout(settling);
+    settling = null;
+  };
   const nav: Nav<Place> = installNav<Place>({
     history: win.history,
     window: win,
     isState: isPlace,
     ...(address ? { address } : {}),
     restore(place) {
+      // A filter still waiting belongs to the entry that is left: it is not written into the one come to.
+      settle();
       app.setView(place.view);
       // A task that is gone cannot be opened: the place is the view alone, and takes the entry it came from.
       const open = place.selectedId !== null && app.tasks.some((t) => t.id === place.selectedId);
@@ -92,8 +137,11 @@ export function installAppHistory(
       const peek = open && place.peek === true;
       if (peek && place.selectedId !== null) app.peek(place.selectedId);
       else app.closePeek();
-      last = { view: place.view, selectedId: open ? place.selectedId : null, ...(peek ? { peek: true as const } : {}) };
-      if (!open && place.selectedId !== null) nav.record(last, { replace: true });
+      // The filter of the place; a place from before the filter was kept leaves the filter as it is.
+      if (place.filter !== undefined && place.filter !== filterText(app.filter)) app.filter = filterOfText(place.filter);
+      const filter = filterText(app.filter);
+      last = { view: place.view, selectedId: open ? place.selectedId : null, ...(peek ? { peek: true as const } : {}), filter };
+      if ((!open && place.selectedId !== null) || place.filter !== filter) nav.record(last, { replace: true });
     },
   });
   return {
@@ -102,7 +150,29 @@ export function installAppHistory(
         view: app.view,
         selectedId: app.selectedId,
         ...(app.peeking && app.selectedId !== null ? { peek: true as const } : {}),
+        filter: filterText(app.filter),
       };
+      if (last !== null && samePlace(last, now)) {
+        if (last.filter === now.filter) {
+          // The same place: the kit puts the address back where another part of the page changed it (a window of one
+          // task that becomes a page of views). A filter still waiting is written when its moment has passed.
+          if (settling === null) nav.record(now);
+          return;
+        }
+        // Only the filter changed: the entry of the place takes it, once it has stayed a moment.
+        last = now;
+        settle();
+        settling = timers.setTimeout(() => {
+          settling = null;
+          if (last !== null) nav.record(last, { replace: true });
+        }, FILTER_SETTLE_MS);
+        return;
+      }
+      // Another place: the entry left keeps the filter it had last.
+      if (settling !== null && last !== null) {
+        settle();
+        nav.record(last, { replace: true });
+      }
       // The open task vanished by itself (finished, moved away): that place is left, not a new step.
       const vanished =
         last !== null &&
@@ -113,6 +183,9 @@ export function installAppHistory(
       nav.record(now, vanished ? { replace: true } : undefined);
       last = now;
     },
-    stop: () => nav.stop(),
+    stop: () => {
+      settle();
+      nav.stop();
+    },
   };
 }

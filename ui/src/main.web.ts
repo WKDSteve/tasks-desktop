@@ -212,7 +212,7 @@ async function begin(folder: string | null, readOnly: boolean): Promise<void> {
     },
   };
   const state = new AppState(env);
-  if (place !== null) state.openPlace(place.view, place.selectedId);
+  if (place !== null) state.openPlace(place.view, place.selectedId, place.filter);
   if (routed !== null) state.openRoute(routed);
   installTooltips(document, window, { regionLabel: () => translate(state.lang, 'hint.region') });
   void unmount(entryUi);

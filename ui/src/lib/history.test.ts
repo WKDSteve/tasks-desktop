@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { readRoute, routeHash } from 'appkit-ui/route';
 import {
+  FILTER_SETTLE_MS,
   installAppHistory,
   isPlace,
   placeAddress,
@@ -10,6 +11,7 @@ import {
   type Place,
 } from './history';
 import type { View } from './app.svelte';
+import { filterText, freshFilter, type Filter } from './filter';
 
 /** A tab: a list of entries and a position, like the real history. */
 function tab() {
@@ -48,6 +50,7 @@ function fakeApp(ids: string[]) {
     view: 'today',
     selectedId: null,
     peeking: false,
+    filter: freshFilter(),
     get tasks() {
       return this.ids.map((id) => ({ id }));
     },
@@ -82,8 +85,14 @@ describe('isPlace', () => {
 });
 
 describe('installAppHistory', () => {
+  // The places as the tests before the filter wrote them: a filter with nothing on is left out.
   const places = (t: ReturnType<typeof tab>) =>
-    t.entries.map((e) => (e as { state: Place } | null)?.state ?? null);
+    t.entries.map((e) => {
+      const state = (e as { state: Place } | null)?.state ?? null;
+      if (state === null || state.filter !== '{}') return state;
+      const { filter: _filter, ...rest } = state;
+      return rest;
+    });
 
   it('makes an entry per place, and Back and Forward bring the page there', () => {
     const t = tab();
@@ -262,5 +271,167 @@ describe('the place in the address', () => {
     app.view = 'list';
     h.sync();
     expect(a.location.hash).toBe('#view=list&open=pub%2Fa');
+  });
+});
+
+describe('the filter of a place', () => {
+  /** Timers that run when the test says so. */
+  function clock() {
+    let now = 0;
+    const waiting = new Map<number, { at: number; run: () => void }>();
+    let next = 1;
+    return {
+      setTimeout(run: () => void, ms: number) {
+        waiting.set(next, { at: now + ms, run });
+        return next++;
+      },
+      clearTimeout(handle: unknown) {
+        waiting.delete(handle as number);
+      },
+      pass(ms: number) {
+        now += ms;
+        for (const [id, w] of [...waiting]) {
+          if (w.at <= now) {
+            waiting.delete(id);
+            w.run();
+          }
+        }
+      },
+      get pending() {
+        return waiting.size;
+      },
+    };
+  }
+  const filterOf = (t: ReturnType<typeof tab>, at: number) => ((t.entries[at] as { state: Place } | null)?.state ?? null)?.filter;
+  const open: Filter = { ...freshFilter(), statuses: ['open'] };
+
+  it('keeps the filter with its place: changing it writes no new entry, Back sets the one the place had, Forward the other', () => {
+    const t = tab();
+    const c = clock();
+    const app = fakeApp(['a/1']);
+    app.view = 'list';
+    const h = installAppHistory(app, t, undefined, c);
+    h.sync();
+    app.filter = open;
+    h.sync();
+    // Not yet written: the filter waits a moment, then takes the entry of the place.
+    expect(filterOf(t, 0)).toBe('{}');
+    c.pass(FILTER_SETTLE_MS);
+    expect(t.entries.length).toBe(1);
+    expect(filterOf(t, 0)).toBe(filterText(open));
+    // Another place with another filter.
+    app.view = 'board';
+    h.sync();
+    app.filter = freshFilter();
+    h.sync();
+    c.pass(FILTER_SETTLE_MS);
+    expect(t.entries.length).toBe(2);
+    t.go(-1);
+    expect(app.view).toBe('list');
+    expect(app.filter.statuses).toEqual(['open']);
+    t.go(1);
+    expect(app.view).toBe('board');
+    expect(app.filter.statuses).toEqual([]);
+    // Setting the filter of a place is no change of it: nothing is pushed.
+    h.sync();
+    c.pass(FILTER_SETTLE_MS);
+    expect(t.entries.length).toBe(2);
+  });
+
+  it('writes typing in the search box once, after the last key', () => {
+    const t = tab();
+    const c = clock();
+    const app = fakeApp([]);
+    let writes = 0;
+    const counted = {
+      ...t,
+      history: {
+        pushState: (d: unknown) => t.history.pushState(d),
+        replaceState: (d: unknown) => {
+          writes += 1;
+          t.history.replaceState(d);
+        },
+      },
+    };
+    const h = installAppHistory(app, counted, undefined, c);
+    h.sync();
+    writes = 0;
+    for (const query of ['b', 'bo', 'boa', 'boar', 'board']) {
+      app.filter = { ...freshFilter(), query };
+      h.sync();
+      c.pass(50);
+    }
+    expect(writes).toBe(0);
+    c.pass(FILTER_SETTLE_MS);
+    expect(writes).toBe(1);
+    expect(t.entries.length).toBe(1);
+    expect(JSON.parse(filterOf(t, 0) ?? '')).toEqual({ query: 'board' });
+  });
+
+  it('gives a place left before its filter was written that filter, and the next place its own', () => {
+    const t = tab();
+    const c = clock();
+    const app = fakeApp([]);
+    app.view = 'list';
+    const h = installAppHistory(app, t, undefined, c);
+    h.sync();
+    app.filter = open;
+    h.sync();
+    // Left at once (a click on a view while the filter is still waiting).
+    app.view = 'board';
+    h.sync();
+    expect(c.pending).toBe(0);
+    expect(filterOf(t, 0)).toBe(filterText(open));
+    expect(filterOf(t, 1)).toBe(filterText(open));
+    // A filter that changes with the place (a number opened in the list): the place left keeps the one it had.
+    app.view = 'list';
+    app.filter = { ...open, areas: ['a'] };
+    h.sync();
+    expect(filterOf(t, 1)).toBe(filterText(open));
+    expect(filterOf(t, 2)).toBe(filterText({ ...open, areas: ['a'] }));
+  });
+
+  it('does not write a waiting filter into the entry Back comes to', () => {
+    const t = tab();
+    const c = clock();
+    const app = fakeApp([]);
+    const h = installAppHistory(app, t, undefined, c);
+    h.sync();
+    app.view = 'list';
+    h.sync();
+    app.filter = open;
+    h.sync();
+    t.go(-1);
+    c.pass(FILTER_SETTLE_MS);
+    expect(filterOf(t, 0)).toBe('{}');
+    expect(app.filter.statuses).toEqual([]);
+  });
+
+  it('leaves the filter as it is for a place from before it was kept, and reads a broken or unknown one without a fault', () => {
+    const t = tab();
+    const app = fakeApp([]);
+    app.filter = open;
+    const h = installAppHistory(app, t);
+    h.sync();
+    t.entries.push({ appkitNav: 1, state: { view: 'list', selectedId: null } });
+    t.go(1);
+    expect(app.view).toBe('list');
+    expect(app.filter.statuses).toEqual(['open']);
+    t.entries.push({ appkitNav: 1, state: { view: 'board', selectedId: null, filter: '{"statuses":["open"],"nope":1,"tags":' } });
+    t.go(1);
+    expect(app.view).toBe('board');
+    expect(app.filter).toEqual(freshFilter());
+    // The entry takes the filter as it was read.
+    expect(filterOf(t, 2)).toBe('{}');
+  });
+
+  it('puts a filter into the address and reads it back, and leaves one with nothing on out', () => {
+    const place: Place = { view: 'list', selectedId: null, filter: filterText({ ...open, query: 'board' }) };
+    const route = placeRoute(place);
+    expect(Object.keys(route)).toEqual(['view', 'filter']);
+    const back = routePlace(readRoute(routeHash(route)));
+    expect(back).toEqual(place);
+    expect(placeRoute({ view: 'list', selectedId: null, filter: '{}' })).toEqual({ view: 'list' });
+    expect(routePlace(readRoute('#view=list'))).toEqual({ view: 'list', selectedId: null });
   });
 });

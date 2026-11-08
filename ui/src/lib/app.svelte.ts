@@ -39,7 +39,7 @@ import type { Op } from './api';
 import { indexOfLinks, touchedAreas } from './cross';
 import { planProjects, projectOfTask, projectsOf, type ClosePreview, type Project } from './projects';
 import { parsePrefs, type Prefs as FinishedPrefs } from './finished';
-import { activeFilters, applyFilter, areaCounts, filterVaultOf, freshFilter, moveSelection, NONE as NO_VALUE, parseFilter, serializeFilter, type Filter } from './filter';
+import { activeFilters, applyFilter, areaCounts, filterOfText, filterVaultOf, freshFilter, moveSelection, NONE as NO_VALUE, parseFilter, serializeFilter, type Filter } from './filter';
 import { chipLabel } from './filter-chips';
 import { inboxOf, triageKey } from './inbox';
 import type { Finding } from './check';
@@ -2987,8 +2987,10 @@ export class App {
    * The address named a place (a reload, a copied address, a link opened in a new tab): the page opens on its view,
    * with its task open as soon as the list has it.
    */
-  openPlace(view: View, open: string | null): void {
+  openPlace(view: View, open: string | null, filter?: string): void {
     this.view = view;
+    // The filter the address names (a link, a new tab, a reload); an address without one keeps the remembered filter.
+    if (filter !== undefined) this.filter = filterOfText(filter);
     this.#openRoute = open;
     if (open !== null && this.tasks.some((t) => t.id === open)) this.takeRoute();
   }
