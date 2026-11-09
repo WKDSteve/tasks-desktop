@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { devices } from '@playwright/test';
 import { expect, test } from './fixtures';
@@ -67,6 +67,25 @@ test('the phone page pairs, shows only the classified areas and creates a task t
   await expect(page.getByTestId('queue').locator('li')).toHaveAttribute('data-state', 'conflict');
   expect(readFileSync(file, 'utf8')).toBe(changed);
   await page.getByRole('button', { name: 'Drop' }).click();
+
+  // Finishing through the engine: the engine serves no finished task, so the page goes back to the list and says it
+  // is done, never "the PC refused: no such task" (seen on a Fairphone, tasks-mobile 748586a).
+  await page.getByRole('button', { name: 'New', exact: true }).click();
+  await page.getByLabel('Title').fill('Phone finish m002');
+  await page.getByLabel('Area').selectOption('lib.nvim');
+  await page.getByRole('button', { name: 'Create' }).click();
+  await expect(page.getByTestId('notice')).toContainText('Created');
+  await page.getByRole('button', { name: 'List' }).click();
+  await page.locator('[data-id="lib.nvim/phone-finish-m002"]').click();
+  await page.getByRole('button', { name: 'Finish …' }).click();
+  await page.getByRole('button', { name: 'Yes, finish' }).click();
+  await expect(page.getByTestId('notice')).toHaveText('Done: “Phone finish m002”');
+  await expect(page.getByRole('alert')).toHaveCount(0);
+  await expect(page.locator('[data-id="lib.nvim/phone-finish-m002"]')).toHaveCount(0);
+  // A finished task moves within the area; it is there once, finished.
+  const finished = readdirSync(join(vault, 'lib.nvim'), { recursive: true, encoding: 'utf8' }).filter((f) => f.endsWith('phone-finish-m002.md'));
+  expect(finished).toHaveLength(1);
+  expect(readFileSync(join(vault, 'lib.nvim', finished[0]!), 'utf8')).toMatch(/^status: done$/m);
 
   // The worker is registered under the policy of /m/ and keeps no route of the hub.
   await page.waitForFunction(async () => (await navigator.serviceWorker.ready).active !== null);
