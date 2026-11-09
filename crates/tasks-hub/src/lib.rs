@@ -17,6 +17,7 @@ pub mod editor;
 pub mod engine;
 pub mod loginentry;
 pub mod newvault;
+pub mod repos;
 pub mod search;
 pub mod server;
 pub mod setup;
