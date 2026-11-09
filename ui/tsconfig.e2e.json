@@ -3,5 +3,5 @@
   "compilerOptions": {
     "types": ["node"]
   },
-  "include": ["e2e/**/*.ts", "e2e-web/**/*.ts", "playwright*.config.ts"]
+  "include": ["e2e/**/*.ts", "e2e-web/**/*.ts", "e2e-device/**/*.ts", "playwright*.config.ts"]
 }

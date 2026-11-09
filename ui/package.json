@@ -9,6 +9,7 @@
     "check": "svelte-check --tsconfig ./tsconfig.json && tsc -p tsconfig.kit.json && tsc -p tsconfig.e2e.json",
     "test": "vitest run",
     "e2e": "playwright test",
+    "e2e:device": "playwright test -c playwright.device.config.ts",
     "probe": "node probe/build.mjs",
     "web:test": "node --experimental-strip-types --test \"web/*.test.mjs\"",
     "web:check": "node --experimental-strip-types web/engine-page.mjs",
@@ -20,11 +21,13 @@
     "@playwright/test": "^1.63.0",
     "@sveltejs/vite-plugin-svelte": "^7.3.1",
     "@types/node": "^24.19.2",
+    "@types/ws": "^8.18.2",
     "svelte": "^5.57.1",
     "svelte-check": "^4.7.6",
     "typescript": "^6.0.3",
     "vite": "^8.3.4",
-    "vitest": "^5.0.3"
+    "vitest": "^5.0.3",
+    "ws": "^8.22.1"
   },
   "dependencies": {
     "appkit-ui": "github:WKDSteve/appkit#v0.44.0&path:ui-kit",

@@ -18,7 +18,7 @@ const docIndex = JSON.stringify(
 
 const test = {
   environment: 'node' as const,
-  include: ['src/**/*.test.ts'],
+  include: ['src/**/*.test.ts', 'e2e-device/**/*.test.ts'],
 };
 
 // `vite build --mode web` builds the page of the web variant: one module with everything in it, out of `dist-web/`.

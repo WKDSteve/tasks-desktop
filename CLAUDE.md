@@ -16,6 +16,7 @@ cargo fmt --check && cargo clippy --workspace --all-targets --locked -- -D warni
 cargo test --workspace --locked --exclude hub-testkit
 cargo test --locked -p hub-testkit -- --test-threads=1   # Hubs mit Engine und Zeitgrenzen: nacheinander (wie die CI)
 cd ui && pnpm e2e                        # echtes Binary, echte Engine, axe
+cd ui && pnpm e2e:device                 # Handy-Seite am echten Android-Handy (adb); ohne Handy übersprungen
 python tools/check-control-chars.py
 python tools/check-color-literals.py --root ui/src --tokens ui/src/palette.css   # no colour outside tokens and palette (CI job hygiene)
 python tools/check-bundle-size.py   # after pnpm build: the main chunk stays within its budget
@@ -83,6 +84,23 @@ pnpm web:build && PLAYWRIGHT_BROWSERS_PATH="$PWD/node_modules/.cache/ms-playwrig
 
 ## Browser-Tests (Playwright)
 
+- **Geräte-Suite** (`pnpm e2e:device`, `ui/e2e-device/`, nicht in der CI): fährt die Handy-Seite in Chrome auf einem
+  angesteckten Android-Handy, gegen den Hub der Tests (eigener Vault, freier Port, derselbe globale Setup wie
+  `pnpm e2e`). Voraussetzung: USB-Debugging an, `adb devices` zeigt das Gerät (mehrere: `ANDROID_SERIAL`). Ohne Gerät
+  werden die Fälle übersprungen, mit Grund in der Ausgabe. Playwright geht über Chromes DevTools-Socket
+  (`adb forward ... localabstract:chrome_devtools_remote`, wie chrome://inspect; `_android.launchBrowser` hängt auf
+  Geräten ohne Root), die Seite über `adb reverse` auf den Port des Laufs. Eingaben gehen nur an den eigenen Tab, nie
+  auf den Bildschirm. Dazwischen sitzt ein CDP-Filter (`ui/e2e-device/cdp-filter.ts`): Playwright sieht nur die
+  Tabs, die die Suite selbst anlegt (und die Worker ihres Origins), von allen anderen Tabs löst er sich sofort wieder.
+  Sonst hängt `connectOverCDP` sich an jeden lebenden Tab, und Chrome auf Android lässt das Lösen eines Service Workers
+  darin (die installierte Handy-Seite des echten Hubs) unbeantwortet: der Connect wartet ewig. Gestartet wird nur, wenn
+  ein Chrome-Tab, der Startbildschirm oder nichts vorne ist (eine installierte Web-App oder ein Custom Tab läuft zwar
+  unter Chromes Paket, ist aber eine App der Person, und die Tabs der Suite lägen pausiert dahinter), sonst sofort "the phone is in use" und nichts passiert; dann holt
+  der Start Chrome nach vorne. Ist vor einem Fall eine andere App vorne, bricht der Lauf ebenso ab. Port 17615 (der echte Hub) und dessen `adb reverse` fasst die Suite nie an; ihr eigener
+  Port, die Weiterleitung und die Daten ihres Origins gehen am Ende weg. Offline heißt: `adb reverse` weg und die
+  Seite per DevTools offline (eine offene Verbindung überlebt das Entfernen des reverse-Ports). Das Teilen-Ziel wird
+  über die URL des `share_target` geprüft (das, was Chrome für die installierte App öffnet); der Teilen-Dialog von
+  Android selbst bleibt Handarbeit. Nur auf dem privaten Rechner (`not-on-workstation`).
 - Die Hub-Tests (`pnpm e2e`) nehmen je Lauf einen freien Port (`ensureE2ePort` in `ui/e2e/port.ts`, im globalen
   Setup) und einen eigenen Ergebnisordner `ui/test-results/run-<pid>`: Runner, Terminal und andere Sitzungen auf diesem
   Rechner können gleichzeitig laufen. `TASKS_E2E_PORT` erzwingt einen bestimmten Port. Ein Lauf löscht die
