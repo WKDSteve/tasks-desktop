@@ -306,6 +306,10 @@ fn app_routes(core: &Arc<Shared>) -> Router<Arc<Shared>> {
             &r("repos/save"),
             post(self::repos::repo_save).layer(DefaultBodyLimit::max(64 * 1024)),
         )
+        .route(
+            &r("repos/open"),
+            post(self::repos::repo_open).layer(DefaultBodyLimit::max(small)),
+        )
 }
 
 #[cfg(test)]

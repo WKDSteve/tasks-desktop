@@ -220,3 +220,73 @@ pub(super) async fn repo_save(State(st): State<Arc<Shared>>, body: Bytes) -> Res
         ),
     }
 }
+
+/// `POST /api/tasks/repos/open` `{ "id", "what": "folder" | "nvim" }`: show the folder of a tile in the file manager, or
+/// start Neovim in it. The page names the tile, never a folder; the hub starts the program with the folder as its one
+/// argument (no shell).
+pub(super) async fn repo_open(State(st): State<Arc<Shared>>, body: Bytes) -> Response {
+    let Some(store) = st.rt().repos.clone() else {
+        return unavailable();
+    };
+    let Some(opener) = st.rt().opener.clone() else {
+        return error_body(
+            StatusCode::NOT_FOUND,
+            "open_unavailable",
+            "this hub cannot open a folder",
+        );
+    };
+    let map = match vault_request(&body, &["id", "what"]) {
+        Ok(m) => m,
+        Err(r) => return r,
+    };
+    let id = match vault_text(&map, "id", repos::ID_LEN) {
+        Ok(id) if repos::valid_id(&id) => id,
+        Ok(_) => {
+            return error_body(
+                StatusCode::BAD_REQUEST,
+                "bad_id",
+                "id is 8 lowercase letters or digits",
+            )
+        }
+        Err(r) => return r,
+    };
+    let what = map
+        .get("what")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or_default()
+        .to_owned();
+    if what != "folder" && what != "nvim" {
+        return error_body(
+            StatusCode::BAD_REQUEST,
+            "bad_request",
+            "what is folder or nvim",
+        );
+    }
+    let Some(folder) = store.folder(&id) else {
+        return error_body(StatusCode::NOT_FOUND, "not_found", "there is no such tile");
+    };
+    if !folder.is_dir() {
+        return error_body(
+            StatusCode::NOT_FOUND,
+            "folder_missing",
+            "the folder of the tile is not there",
+        );
+    }
+    let opened = tokio::task::spawn_blocking(move || {
+        if what == "folder" {
+            opener.reveal(&folder)
+        } else {
+            opener.open(&folder, None)
+        }
+    })
+    .await;
+    match opened {
+        Ok(Ok(())) => axum::Json(json!({ "ok": true })).into_response(),
+        Ok(Err(why)) => error_body(StatusCode::BAD_GATEWAY, "open_failed", &why),
+        Err(_) => error_body(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "open_failed",
+            "the start stopped unexpectedly",
+        ),
+    }
+}

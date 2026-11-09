@@ -1,7 +1,8 @@
 //! The routes of the repo tiles over a real hub: the document, a group and a tile, the image of a tile with its policy,
 //! the folders that are refused (never named in the answer), and a save on a state that is gone.
 
-use std::sync::Arc;
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use appkit_core::authn::{ManualClock, Secret, CODE_BYTES, TOKEN_BYTES};
@@ -9,6 +10,7 @@ use hub_testkit::scratch::Scratch;
 use serde_json::{json, Value};
 use tasks_hub::classes::AreaPolicy;
 use tasks_hub::client;
+use tasks_hub::editor::FileOpener;
 use tasks_hub::repos::Store;
 use tasks_hub::server::{start_with, Extras, HubStatus, Limits, RunningServer, ServerConfig};
 
@@ -18,7 +20,32 @@ struct Rig {
     _config: Scratch,
 }
 
+/// An opener that writes down what it would have started.
+#[derive(Default)]
+struct Seen(Mutex<Vec<(String, PathBuf)>>);
+
+impl FileOpener for Seen {
+    fn open(&self, file: &Path, _line: Option<u32>) -> Result<(), String> {
+        self.0
+            .lock()
+            .unwrap()
+            .push(("nvim".into(), file.to_path_buf()));
+        Ok(())
+    }
+    fn reveal(&self, dir: &Path) -> Result<(), String> {
+        self.0
+            .lock()
+            .unwrap()
+            .push(("folder".into(), dir.to_path_buf()));
+        Ok(())
+    }
+}
+
 async fn rig(name: &str) -> Rig {
+    rig_with(name, None).await
+}
+
+async fn rig_with(name: &str, opener: Option<Arc<dyn FileOpener>>) -> Rig {
     let config = Scratch::new(&format!("repos-route-{name}"));
     let control = Secret::generate(TOKEN_BYTES).unwrap();
     let server = start_with(
@@ -46,6 +73,7 @@ async fn rig(name: &str) -> Rig {
         },
         Extras {
             repos: Some(Arc::new(Store::open(&config))),
+            opener,
             ..Extras::default()
         },
     )
@@ -245,4 +273,87 @@ async fn a_folder_that_is_not_one_is_refused_without_its_path_and_an_old_state_i
     }))
     .await;
     assert_eq!(status, 400);
+}
+
+#[tokio::test]
+async fn a_tile_opens_its_folder_or_neovim_in_it_by_its_id_and_never_by_a_path() {
+    let seen = Arc::new(Seen::default());
+    let r = rig_with("open", Some(Arc::clone(&seen) as Arc<dyn FileOpener>)).await;
+    let repo = Scratch::new("repos-route-open");
+    let doc: Value = serde_json::from_str(&get(&r, "/api/tasks/repos").await.body).unwrap();
+    post(&r, "/api/tasks/repos/save", &json!({
+        "rev": doc["rev"], "groups": [{ "id": "gggg0001", "title": "UI", "tiles": [] }], "names": {}
+    }))
+    .await;
+    let (_, doc, _) = post(
+        &r,
+        "/api/tasks/repos/add",
+        &json!({ "path": repo.to_string_lossy(), "group": "gggg0001" }),
+    )
+    .await;
+    let id = doc["repos"]
+        .as_object()
+        .unwrap()
+        .keys()
+        .next()
+        .unwrap()
+        .clone();
+    assert_eq!(
+        post(
+            &r,
+            "/api/tasks/repos/open",
+            &json!({ "id": id, "what": "folder" })
+        )
+        .await
+        .0,
+        200
+    );
+    assert_eq!(
+        post(
+            &r,
+            "/api/tasks/repos/open",
+            &json!({ "id": id, "what": "nvim" })
+        )
+        .await
+        .0,
+        200
+    );
+    assert_eq!(
+        *seen.0.lock().unwrap(),
+        vec![
+            ("folder".to_owned(), repo.to_path_buf()),
+            ("nvim".to_owned(), repo.to_path_buf())
+        ]
+    );
+    assert_eq!(
+        post(
+            &r,
+            "/api/tasks/repos/open",
+            &json!({ "id": id, "what": "shell" })
+        )
+        .await
+        .0,
+        400
+    );
+    assert_eq!(
+        post(
+            &r,
+            "/api/tasks/repos/open",
+            &json!({ "id": "nothere1", "what": "folder" })
+        )
+        .await
+        .0,
+        404
+    );
+    assert_eq!(
+        post(
+            &r,
+            "/api/tasks/repos/open",
+            &json!({ "path": "C:/x", "what": "folder" })
+        )
+        .await
+        .0,
+        400
+    );
+    assert_eq!(seen.0.lock().unwrap().len(), 2, "nothing else was started");
 }
