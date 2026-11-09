@@ -237,6 +237,7 @@ async fn rig(name: &str, with_admin: bool) -> Rig {
                 snapshot_root: None,
                 vaults: Some(admin),
                 opener: None,
+                repos: None,
             },
         )
         .await

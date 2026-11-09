@@ -244,7 +244,7 @@ fn label_of(path: &Path, fallback: &str) -> String {
 }
 
 /// The folder a person gave for a vault: whole path, not a network share, and there.
-fn checked_folder(path: &str) -> Result<PathBuf, String> {
+pub(crate) fn checked_folder(path: &str) -> Result<PathBuf, String> {
     // A network share is not looked at: opening `\\host\share` makes Windows sign in to that host, and a
     // page that asks for it could point the machine at one it does not own. A drive or a mount is fine.
     if is_remote_path(path) {
@@ -696,6 +696,8 @@ pub async fn serve(opts: ServeOptions) -> Result<(), String> {
     let vaults: Arc<dyn VaultAdmin<VaultTarget>> = config_vaults;
     let snapshot_root = env.path("REPOS_DIR");
     let upload_dir = dir.join("uploads");
+    // The repo tiles of this device, beside config.json: read once, then held and written by the hub alone.
+    let repos = Arc::new(crate::repos::Store::open(&dir));
     let extras = || Extras {
         attach_dirs: attach_dirs.clone(),
         upload_dir: Some(upload_dir.clone()),
@@ -709,6 +711,7 @@ pub async fn serve(opts: ServeOptions) -> Result<(), String> {
         login: Some(Arc::new(crate::loginentry::SystemLoginEntry)),
         all_vaults: Some(Arc::clone(&all_vaults)),
         sheet_run: Some(Arc::clone(&sheet_run)),
+        repos: Some(Arc::clone(&repos)),
     };
     let running = match server::start_with(make_cfg(want), extras()).await {
         Ok(r) => r,

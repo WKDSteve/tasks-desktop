@@ -58,6 +58,7 @@ use appkit_hub::streams::StreamCounter;
 mod answer;
 mod check;
 mod events;
+mod repos;
 mod routes;
 mod runtime;
 mod settings;
@@ -124,6 +125,8 @@ pub struct Extras {
     /// The folder of the plugin checkouts (`REPOS_DIR`) the text snapshots of the test sheets are read from; none: the
     /// route answers 404.
     pub snapshot_root: Option<std::path::PathBuf>,
+    /// The repo tiles of this device (`repos.json` in the config folder); none: the routes say this hub keeps none.
+    pub repos: Option<Arc<crate::repos::Store>>,
 }
 
 /// Bind and serve, with a list of vaults the page may choose from.
@@ -146,6 +149,7 @@ pub async fn start_with(cfg: ServerConfig, extras: Extras) -> std::io::Result<Ru
         upload_dir,
         upload_engine,
         snapshot_root,
+        repos,
     } = extras;
     if let Some(dir) = &upload_dir {
         self::upload::sweep_leftovers(dir);
@@ -165,6 +169,7 @@ pub async fn start_with(cfg: ServerConfig, extras: Extras) -> std::io::Result<Ru
         snapshot_root: snapshot_root.map(Arc::new),
         upload_dir: upload_dir.map(Arc::new),
         upload_engine,
+        repos,
         attach_dirs: Arc::new(
             attach_dirs
                 .iter()
@@ -291,6 +296,16 @@ fn app_routes(core: &Arc<Shared>) -> Router<Arc<Shared>> {
             &r("vault_create"),
             post(vault_create).layer(DefaultBodyLimit::max(small)),
         )
+        .route(&r("repos"), get(self::repos::repos))
+        .route(&r("repos/image"), get(self::repos::repo_image))
+        .route(
+            &r("repos/add"),
+            post(self::repos::repo_add).layer(DefaultBodyLimit::max(4 * 1024)),
+        )
+        .route(
+            &r("repos/save"),
+            post(self::repos::repo_save).layer(DefaultBodyLimit::max(64 * 1024)),
+        )
 }
 
 #[cfg(test)]
@@ -412,6 +427,7 @@ mod tests {
                 attach_dirs: Arc::default(),
                 upload_dir: None,
                 upload_engine: None,
+                repos: None,
             },
         ))
     }

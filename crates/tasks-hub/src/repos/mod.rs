@@ -335,6 +335,169 @@ pub fn new_id(taken: &dyn Fn(&str) -> bool) -> Result<String, String> {
     Err("no free id".to_owned())
 }
 
+/// Why a change of the tiles is refused.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Refused {
+    /// The request is not one the hub takes: the reason.
+    Bad(String),
+    /// The state the page changed is not the one held any more (`rev`): the page reads it again.
+    Stale,
+    /// The file could not be written: the reason, without a path.
+    Io(String),
+}
+
+/// The tiles as the hub holds them: the folder they are kept in and what was read or written last. One change at a
+/// time, each one written whole before it is answered.
+pub struct Store {
+    dir: PathBuf,
+    held: std::sync::Mutex<Loaded>,
+    one: std::sync::Mutex<()>,
+}
+
+impl Store {
+    /// Read the file of the config folder `dir`; a broken one is held as [`Loaded::Invalid`].
+    #[must_use]
+    pub fn open(dir: &Path) -> Self {
+        Self {
+            dir: dir.to_path_buf(),
+            held: std::sync::Mutex::new(load(dir)),
+            one: std::sync::Mutex::new(()),
+        }
+    }
+
+    fn held(&self) -> std::sync::MutexGuard<'_, Loaded> {
+        self.held
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+
+    /// The document of the tiles as held now; `areas` are the areas of the vault a tile may open.
+    #[must_use]
+    pub fn document(&self, areas: &[String], policy: &AreaPolicy) -> Value {
+        let loaded = self.held().clone();
+        document(&loaded, areas, policy, &|path| image::image(path).is_some())
+    }
+
+    /// The image of the repo `id`, read now; `None` when there is no such repo or it has none.
+    #[must_use]
+    pub fn image(&self, id: &str) -> Option<image::Image> {
+        let path = self.folder(id)?;
+        image::image(&path)
+    }
+
+    /// The folder of the repo `id`, for the hub's own use (opening it); never sent to the page.
+    #[must_use]
+    pub fn folder(&self, id: &str) -> Option<PathBuf> {
+        match &*self.held() {
+            Loaded::Ok(file, _) => file.repos.get(id).map(|r| r.path.clone()),
+            _ => None,
+        }
+    }
+
+    /// The file as it is now (an empty one in place of none or of a broken one).
+    fn current(&self) -> (ReposFile, String) {
+        match &*self.held() {
+            Loaded::Ok(file, rev) => (file.clone(), rev.clone()),
+            Loaded::Missing | Loaded::Invalid(_) => (ReposFile::default(), rev_of("")),
+        }
+    }
+
+    fn write(&self, file: &ReposFile) -> Result<(), Refused> {
+        let rev = save(&self.dir, file).map_err(Refused::Io)?;
+        *self.held() = Loaded::Ok(file.clone(), rev);
+        Ok(())
+    }
+
+    /// Add the repo in `folder` (already checked: absolute, local, there) as a tile of the group `group`, named `name`
+    /// or after its folder. A folder that is a repo already is placed again, not added twice; a repo the group holds
+    /// is not placed twice.
+    ///
+    /// # Errors
+    ///
+    /// [`Refused`]: no such group, a name that is not one, a limit, the file.
+    pub fn add(&self, folder: &Path, name: Option<&str>, group: &str) -> Result<(), Refused> {
+        let _one = self
+            .one
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let (mut file, _) = self.current();
+        let Some(at) = file.groups.iter().position(|g| g.id == group) else {
+            return Err(Refused::Bad("there is no such group".to_owned()));
+        };
+        let known = file
+            .repos
+            .iter()
+            .find(|(_, r)| r.path == folder)
+            .map(|(id, _)| id.clone());
+        let id = match known {
+            Some(id) => id,
+            None => {
+                let label = label_of(folder);
+                let name = name.map_or(label.as_str(), str::trim).to_owned();
+                let id = new_id(&|id| file.repos.contains_key(id)).map_err(Refused::Io)?;
+                file.repos.insert(
+                    id.clone(),
+                    Repo {
+                        path: folder.to_path_buf(),
+                        name,
+                    },
+                );
+                id
+            }
+        };
+        if !file.groups[at].tiles.contains(&id) {
+            file.groups[at].tiles.push(id);
+        }
+        file.validate().map_err(Refused::Bad)?;
+        self.write(&file)
+    }
+
+    /// The groups, their order, titles and tiles and the names of the repos as the page sends them, on the state it
+    /// read (`rev`). The paths stay as they are; a repo that no group holds any more is gone.
+    ///
+    /// # Errors
+    ///
+    /// [`Refused::Stale`] for another `rev`; [`Refused::Bad`] for a repo that is not there or a form that does not hold.
+    pub fn save(
+        &self,
+        rev: &str,
+        groups: Vec<Group>,
+        names: &BTreeMap<String, String>,
+    ) -> Result<(), Refused> {
+        let _one = self
+            .one
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let (mut file, held) = self.current();
+        if rev != held {
+            return Err(Refused::Stale);
+        }
+        for (id, name) in names {
+            let Some(repo) = file.repos.get_mut(id) else {
+                return Err(Refused::Bad(
+                    "a name is for a repo that is not there".to_owned(),
+                ));
+            };
+            name.trim().clone_into(&mut repo.name);
+        }
+        for tile in groups.iter().flat_map(|g| &g.tiles) {
+            if !file.repos.contains_key(tile) {
+                return Err(Refused::Bad(
+                    "a group names a repo that is not there".to_owned(),
+                ));
+            }
+        }
+        let placed: std::collections::BTreeSet<String> = groups
+            .iter()
+            .flat_map(|g| g.tiles.iter().cloned())
+            .collect();
+        file.repos.retain(|id, _| placed.contains(id));
+        file.groups = groups;
+        file.validate().map_err(Refused::Bad)?;
+        self.write(&file)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -550,5 +713,58 @@ mod tests {
         let other = new_id(&|candidate| candidate == first).unwrap();
         assert_ne!(other, first);
         assert!(new_id(&|_| true).is_err());
+    }
+
+    #[test]
+    fn the_store_adds_a_tile_once_saves_on_the_state_read_and_drops_a_repo_no_group_holds() {
+        let dir = Scratch::new("repos-store");
+        let repo = Scratch::new("repos-store-repo");
+        let store = Store::open(&dir);
+        let policy = AreaPolicy::default();
+        let rev = store.document(&[], &policy)["rev"]
+            .as_str()
+            .unwrap()
+            .to_owned();
+        // A group first, from the page (its id is the page's), then a tile in it.
+        let group = Group {
+            id: "gggg0001".into(),
+            title: "UI".into(),
+            tiles: vec![],
+        };
+        store
+            .save(&rev, vec![group.clone()], &BTreeMap::new())
+            .unwrap();
+        assert_eq!(
+            store.add(&repo, None, "nogroup1"),
+            Err(Refused::Bad("there is no such group".into()))
+        );
+        store.add(&repo, None, "gggg0001").unwrap();
+        store.add(&repo, Some("Twice"), "gggg0001").unwrap();
+        let doc = store.document(&[], &policy);
+        let repos = doc["repos"].as_object().unwrap().clone();
+        assert_eq!(repos.len(), 1, "one repo for one folder");
+        let (id, entry) = repos.iter().next().unwrap();
+        assert_eq!(entry["name"], json!(label_of(&repo)));
+        assert_eq!(doc["groups"][0]["tiles"], json!([id]));
+        // A save on an old state is stale; on the state read it renames and reorders.
+        assert_eq!(
+            store.save(&rev, vec![], &BTreeMap::new()),
+            Err(Refused::Stale)
+        );
+        let now = doc["rev"].as_str().unwrap().to_owned();
+        let mut names = BTreeMap::new();
+        names.insert(id.clone(), "Renamed".to_owned());
+        let mut placed = group.clone();
+        placed.tiles = vec![id.clone()];
+        store.save(&now, vec![placed], &names).unwrap();
+        assert_eq!(store.document(&[], &policy)["repos"][id]["name"], "Renamed");
+        // Taken out of every group: the repo is gone, and the file says so after a new start.
+        let now = store.document(&[], &policy)["rev"]
+            .as_str()
+            .unwrap()
+            .to_owned();
+        store.save(&now, vec![group], &BTreeMap::new()).unwrap();
+        assert_eq!(Store::open(&dir).document(&[], &policy)["repos"], json!({}));
+        assert!(store.folder(id).is_none());
     }
 }

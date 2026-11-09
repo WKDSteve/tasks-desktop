@@ -62,7 +62,7 @@ fn start_with(
     })
 }
 
-const DATA_ROUTES: [&str; 13] = [
+const DATA_ROUTES: [&str; 15] = [
     "snapshot",
     "task",
     "next",
@@ -76,6 +76,8 @@ const DATA_ROUTES: [&str; 13] = [
     "waits",
     "events",
     "ops",
+    "repos",
+    "repos/image",
 ];
 
 impl Subject for TasksWithPhonePage {
@@ -146,6 +148,8 @@ impl Subject for Tasks {
             "waits",
             "events",
             "ops",
+            "repos",
+            "repos/image",
         ]
     }
 }
