@@ -56,10 +56,38 @@ export interface Front {
   activity: string;
 }
 
-/** The window in front on the phone (its focused window), or null when none is told. */
+/**
+ * The window in front, read from `dumpsys window`: null only when no window has the focus. A focused window without an
+ * app component (the notification shade, the lock screen, a popup) is named by its title, with no activity: it is not
+ * Chrome, so the phone counts as in use.
+ */
+export function parseFocus(dumpsys: string): Front | null {
+  const focus = /mCurrentFocus=(?:null|Window\{\S+ \S+ ([^}]*)\})/.exec(dumpsys);
+  const title = focus?.[1]?.trim();
+  if (title === undefined || title === '') return null;
+  const slash = title.indexOf('/');
+  return slash < 0 ? { pkg: title, activity: '' } : { pkg: title.slice(0, slash), activity: title.slice(slash + 1) };
+}
+
+/** The window in front on the phone (its focused window), or null when none has the focus. */
 export function foreground(serial: string): Front | null {
-  const focus = /mCurrentFocus=Window\{\S+ \S+ ([\w.]+)\/([\w.$]+)/.exec(adb(serial, 'shell', 'dumpsys', 'window'));
-  return focus ? { pkg: focus[1]!, activity: focus[2]! } : null;
+  return parseFocus(adb(serial, 'shell', 'dumpsys', 'window'));
+}
+
+/**
+ * Runs every step of a clean-up, also when one fails (a loose cable fails the first adb call, the next may still
+ * matter), and throws the first error afterwards.
+ */
+export async function cleanUp(steps: (() => unknown)[]): Promise<void> {
+  const errors: unknown[] = [];
+  for (const step of steps) {
+    try {
+      await step();
+    } catch (error) {
+      errors.push(error);
+    }
+  }
+  if (errors.length > 0) throw errors[0];
 }
 
 /**
@@ -166,20 +194,22 @@ export async function connect(serial: string, hubPort: number): Promise<Phone> {
     if (!context) throw new Error('Chrome on the phone has no browser context');
     return { serial, hubPort, devtoolsPort, filter, browser, context };
   } catch (error) {
-    await filter?.close();
-    reverse(serial, hubPort, false);
-    adb(serial, 'forward', '--remove', `tcp:${devtoolsPort}`);
+    // The error of the connect is the one to tell; one of the clean-up would hide it.
+    await cleanUp([
+      () => filter?.close(),
+      () => reverse(serial, hubPort, false),
+      () => adb(serial, 'forward', '--remove', `tcp:${devtoolsPort}`),
+    ]).catch(() => undefined);
     throw error;
   }
 }
 
 /** Removes what `connect` set up: the pages are closed by the tests, the filter, forward and reverse port go here. */
 export async function disconnect(phone: Phone): Promise<void> {
-  try {
-    await phone.browser.close();
-  } finally {
-    await phone.filter.close();
-    reverse(phone.serial, phone.hubPort, false);
-    adb(phone.serial, 'forward', '--remove', `tcp:${phone.devtoolsPort}`);
-  }
+  await cleanUp([
+    () => phone.browser.close(),
+    () => phone.filter.close(),
+    () => reverse(phone.serial, phone.hubPort, false),
+    () => adb(phone.serial, 'forward', '--remove', `tcp:${phone.devtoolsPort}`),
+  ]);
 }

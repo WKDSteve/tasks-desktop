@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { chromeTab, phoneFree } from './android';
+import { chromeTab, cleanUp, parseFocus, phoneFree } from './android';
 import { TargetFilter, type CdpMessage } from './cdp-filter';
 
 const ORIGIN = 'http://127.0.0.1:50123';
@@ -244,5 +244,46 @@ describe('phoneFree', () => {
     expect(phoneFree(chrome('org.chromium.chrome.browser.customtabs.CustomTabActivity'), home)).toBe(false);
     expect(chromeTab(chrome('org.chromium.chrome.browser.webapps.WebappActivity'))).toBe(false);
     expect(chromeTab(chrome('org.chromium.chrome.browser.ChromeTabbedActivity2'))).toBe(true);
+  });
+});
+
+describe('parseFocus', () => {
+  it('reads the app and activity of the focused window', () => {
+    const out = '  mCurrentFocus=Window{11bad61 u0 com.android.chrome/com.google.android.apps.chrome.Main}\n';
+    expect(parseFocus(out)).toEqual({ pkg: 'com.android.chrome', activity: 'com.google.android.apps.chrome.Main' });
+  });
+
+  it('a focused window without an app (shade, lock screen, popup) is not free', () => {
+    const shade = parseFocus('  mCurrentFocus=Window{4ab77d6 u0 NotificationShade}\n');
+    expect(shade).toEqual({ pkg: 'NotificationShade', activity: '' });
+    expect(phoneFree(shade, 'com.android.launcher3')).toBe(false);
+    expect(phoneFree(parseFocus('mCurrentFocus=Window{1 u0 PopupWindow:5d3c0f2}'), 'com.android.launcher3')).toBe(
+      false,
+    );
+  });
+
+  it('no focus at all is null', () => {
+    expect(parseFocus('  mCurrentFocus=null\n')).toBeNull();
+    expect(parseFocus('')).toBeNull();
+  });
+});
+
+describe('cleanUp', () => {
+  it('runs every step when one fails and throws the first error', async () => {
+    const ran: string[] = [];
+    const first = new Error('cable');
+    await expect(
+      cleanUp([
+        () => ran.push('a'),
+        () => {
+          throw first;
+        },
+        async () => ran.push('c'),
+        () => {
+          throw new Error('later');
+        },
+      ]),
+    ).rejects.toBe(first);
+    expect(ran).toEqual(['a', 'c']);
   });
 });
