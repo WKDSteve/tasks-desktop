@@ -16,7 +16,7 @@ import {
   toggleMark,
 } from './bulk';
 import { planOp, type PlanForm, type PlanKind, type PlanPreview } from './planwizard';
-import { connectOp, edgeOp, phaseOp, type DepEdge, type EdgeAction, type EdgeKind } from './depGraph';
+import { connectOp, edgeOp, parseGraphOrder, phaseOp, type DepEdge, type EdgeAction, type EdgeKind, type GraphOrder } from './depGraph';
 import { COLUMNS, columnsOf, isColumn, neighbourColumn, placeNear, stepInGroup, type Column, type Move } from './board';
 import { ApiError, type CheckAll, type SheetRunState, type Hub, type HubArea, type HubAreas, type SearchResult, type VaultList } from './api';
 import { cacheableClass, cacheableList, type CachedList, type ListStore } from './cache';
@@ -353,6 +353,8 @@ export class App {
   planDisplay = $state<'stages' | 'graph'>('stages');
   /** The rows of the plan graph: the stages of the engine, or the phases of the plan. */
   graphRows = $state<'stage' | 'phase'>('stage');
+  /** The order of one's own inside the rows of the plan graph, per plan: shown only, kept in the prefs (D6). */
+  graphOrder = $state.raw<GraphOrder>({});
   /** The sizes the person dragged the blocks of the page to (the tiles of today, the list). */
   tileSizes = $state<Sizes>({});
   /** The block whose grip is shown, if any (one at a time). */
@@ -666,6 +668,7 @@ export class App {
     this.folds = parseFolds(safe(() => env.prefs.getItem('tasks-desktop.folds')));
     this.planDisplay = safe(() => env.prefs.getItem('tasks-desktop.plan-display')) === 'graph' ? 'graph' : 'stages';
     this.graphRows = safe(() => env.prefs.getItem('tasks-desktop.graph-rows')) === 'phase' ? 'phase' : 'stage';
+    this.graphOrder = parseGraphOrder(safe(() => env.prefs.getItem('tasks-desktop.graph-order')));
     this.tileSizes = parseSizes(safe(() => env.prefs.getItem('tasks-desktop.sizes')));
     this.sort = parseSort(safe(() => env.prefs.getItem('tasks-desktop.sort')));
     this.listMemory = parseListMemory(safe(() => env.prefs.getItem('tasks-desktop.lists')));
@@ -2746,6 +2749,22 @@ export class App {
   setGraphRows(rows: 'stage' | 'phase'): void {
     this.graphRows = rows;
     safe(() => this.env.prefs.setItem('tasks-desktop.graph-rows', rows));
+  }
+
+  /**
+   * Keep the order of one row of the plan graph (`ids`), or forget it (`null`); `row` null forgets every row of the
+   * plan. Nothing of the vault changes.
+   */
+  setGraphOrder(plan: string, row: string | null, ids: string[] | null): void {
+    const rows = { ...(this.graphOrder[plan] ?? {}) };
+    if (row === null) for (const key of Object.keys(rows)) delete rows[key];
+    else if (ids === null) delete rows[row];
+    else rows[row] = ids;
+    const next = { ...this.graphOrder };
+    if (Object.keys(rows).length > 0) next[plan] = rows;
+    else delete next[plan];
+    this.graphOrder = next;
+    safe(() => this.env.prefs.setItem('tasks-desktop.graph-order', JSON.stringify(next)));
   }
 
   /** Set the folds of the blocks of one view, and remember them. */

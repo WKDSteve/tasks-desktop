@@ -1,6 +1,21 @@
 import { describe, expect, it } from 'vitest';
 import { task } from './fixtures';
-import { connectOp, criticalEdges, crossings, depGraphOf, edgeOp, focusStages, neighbourOf, orderRows, phaseOp, phaseRows, type DepRow } from './depGraph';
+import {
+  applyOrder,
+  connectOp,
+  criticalEdges,
+  crossings,
+  depGraphOf,
+  edgeOp,
+  focusStages,
+  movedInRow,
+  neighbourOf,
+  orderRows,
+  parseGraphOrder,
+  phaseOp,
+  phaseRows,
+  type DepRow,
+} from './depGraph';
 
 describe('the plan as a graph', () => {
   it('takes the stages as rows and the tasks own blocked_by and after as arrows, between drawn tasks only', () => {
@@ -171,5 +186,37 @@ describe('the plan as a graph', () => {
     expect(phaseOp(t, '')).toEqual({ op: 'set', id: 'a/1', patch: { phase: null }, if_match: 'e3' });
     expect(phaseOp(t, 'build')).toBeNull();
     expect(phaseOp(task('a/2'), '')).toBeNull();
+  });
+
+  it('puts a kept order first in a row, drops the tasks that left it and keeps the new ones after it', () => {
+    const rows: DepRow[] = [
+      { stage: 0, ids: ['a', 'b', 'c'] },
+      { stage: 1, ids: ['d', 'e'] },
+    ];
+    const key = (r: DepRow) => String(r.stage);
+    expect(applyOrder(rows, undefined, key)).toEqual(rows);
+    expect(applyOrder(rows, { '0': ['c', 'gone', 'a'] }, key)).toEqual([
+      { stage: 0, ids: ['c', 'a', 'b'] },
+      { stage: 1, ids: ['d', 'e'] },
+    ]);
+  });
+
+  it('moves a task one place in its row or before another, and says nothing when it would not move', () => {
+    expect(movedInRow(['a', 'b', 'c'], 'b', { step: -1 })).toEqual(['b', 'a', 'c']);
+    expect(movedInRow(['a', 'b', 'c'], 'b', { step: 1 })).toEqual(['a', 'c', 'b']);
+    expect(movedInRow(['a', 'b', 'c'], 'a', { step: -1 })).toBeNull();
+    expect(movedInRow(['a', 'b', 'c'], 'c', { step: 1 })).toBeNull();
+    expect(movedInRow(['a', 'b', 'c'], 'c', { before: 'a' })).toEqual(['c', 'a', 'b']);
+    expect(movedInRow(['a', 'b', 'c'], 'a', { before: 'c' })).toEqual(['b', 'a', 'c']);
+    expect(movedInRow(['a', 'b', 'c'], 'a', { before: 'b' })).toBeNull();
+    expect(movedInRow(['a', 'b', 'c'], 'x', { step: 1 })).toBeNull();
+    expect(movedInRow(['a', 'b', 'c'], 'a', { before: 'x' })).toBeNull();
+  });
+
+  it('reads the kept orders and drops what is not one', () => {
+    expect(parseGraphOrder(null)).toEqual({});
+    expect(parseGraphOrder('not json')).toEqual({});
+    expect(parseGraphOrder('[1]')).toEqual({});
+    expect(parseGraphOrder('{"p":{"0":["a","b"],"1":[2]},"q":"x","r":{}}')).toEqual({ p: { '0': ['a', 'b'] } });
   });
 });

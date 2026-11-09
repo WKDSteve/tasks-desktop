@@ -250,6 +250,9 @@ const en = {
   'graph.legend':
     'Each row is a stage. A solid arrow: the task waits for the one it comes from (blocked_by). A dashed arrow: it comes after it (after, which holds nothing up). Thick: the critical path. The arrow keys walk the tasks; n shows only what a task needs, u only what waits for it. A click on an arrow (or Enter on it) takes it away or turns it hard or soft; Delete takes it away. Drag a task onto another (or l, then the arrow keys and Enter): the other waits for it; with Alt soft.',
   'graph.rows': 'Rows by',
+  'graph.order.before': '{title} then stands before {before} (shown only, no file changes).',
+  'graph.order.own': 'An order of your own inside the rows (Shift with the left or right key, or a drag with Shift), kept for this plan.',
+  'graph.order.reset': 'Back to the order of the plan',
   'graph.rows.stage': 'Stage',
   'graph.rows.phase': 'Phase',
   'graph.legend.phase': 'Each row is a phase of the plan. Drag a task onto the free space of another row (or Alt with the up or down key) to put it into that phase.',
@@ -1752,6 +1755,9 @@ const de: Record<Key, string> = {
   'graph.legend':
     'Jede Reihe ist eine Stufe. Ein durchgezogener Pfeil: der Task wartet auf den, von dem der Pfeil kommt (blocked_by). Gestrichelt: er kommt danach (after, hält nichts auf). Dick: der kritische Pfad. Die Pfeiltasten wandern durch die Tasks; n zeigt nur, was ein Task braucht, u nur, was auf ihn wartet. Ein Klick auf einen Pfeil (oder Enter darauf) löst ihn oder macht ihn hart oder weich; Entf löst ihn. Einen Task auf einen anderen ziehen (oder l, dann die Pfeiltasten und Enter): der andere wartet auf ihn; mit Alt weich.',
   'graph.rows': 'Reihen nach',
+  'graph.order.before': '{title} steht dann vor {before} (nur Anzeige, keine Datei ändert sich).',
+  'graph.order.own': 'Eine eigene Reihenfolge in den Reihen (Shift mit Pfeil links oder rechts, oder Ziehen mit Shift), für diesen Plan gemerkt.',
+  'graph.order.reset': 'Zurück zur Reihenfolge des Plans',
   'graph.rows.stage': 'Stufe',
   'graph.rows.phase': 'Etappe',
   'graph.legend.phase': 'Jede Reihe ist eine Etappe des Plans. Einen Task auf den freien Platz einer anderen Reihe ziehen (oder Alt mit Pfeil hoch oder runter) setzt ihn in diese Etappe.',

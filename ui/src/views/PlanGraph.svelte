@@ -9,13 +9,16 @@
   // A task dropped on another (the mouse, or a finger by its grip), or `l` and then the keys, makes the other wait
   // for it: hard, or soft with Alt. The arrow to come is drawn dashed while it is chosen; the engine refuses a cycle.
   // A plan with phases can lay its rows by phase: a task dropped on the free space of another row (or Alt with the up
-  // and down keys) moves into that phase.
+  // and down keys) moves into that phase. Inside a row a task moves with Shift and the left or right key, or a drag
+  // with Shift onto a task of its row: shown only, kept for the plan in the prefs, no file changes.
   import type { App } from '../lib/app.svelte';
   import {
+    applyOrder,
     connectOp,
     criticalEdges,
     depGraphOf,
     focusStages,
+    movedInRow,
     neighbourOf,
     orderRows,
     phaseOp,
@@ -36,6 +39,7 @@
     path,
     cycles,
     phaseOrder = [],
+    planKey = '',
     onopen,
   }: {
     app: App;
@@ -45,6 +49,8 @@
     cycles: readonly string[][];
     /** The phases of the chosen plan, in its order (none: no rows by phase). */
     phaseOrder?: readonly string[];
+    /** The plan shown ('' the whole vault): the order of one's own inside its rows is kept under it. */
+    planKey?: string;
     onopen: (id: string) => void;
   } = $props();
 
@@ -60,7 +66,8 @@
   const shown = $derived(focusStages(stages, focus?.ids ?? null));
   const graph = $derived(depGraphOf(shown));
   const byPhase = $derived(app.graphRows === 'phase' && phaseOrder.length > 0);
-  const rows = $derived(orderRows(byPhase ? phaseRows(shown, phaseOrder) : graph.rows, graph.edges));
+  const ownOrder = $derived(app.graphOrder[planKey]);
+  const rows = $derived(applyOrder(orderRows(byPhase ? phaseRows(shown, phaseOrder) : graph.rows, graph.edges), ownOrder, (r) => rowKey(r)));
   const tasks = $derived(new Map(stages.flatMap((s) => s.tasks).map((task) => [task.id, task] as const)));
   // The tasks of the focus this plan (or the filter) does not hold: named as a number, not drawn.
   const outside = $derived(focus ? [...focus.ids].filter((id) => !tasks.has(id)).length : 0);
@@ -164,6 +171,12 @@
       e.preventDefault();
       e.stopPropagation();
       stepPhase(id, e.key === 'ArrowUp' ? -1 : 1);
+      return;
+    }
+    if (e.shiftKey && !e.altKey && !e.ctrlKey && !e.metaKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+      e.preventDefault();
+      e.stopPropagation();
+      shiftInRow(id, { step: e.key === 'ArrowLeft' ? -1 : 1 });
       return;
     }
     if ((e.key === 'n' || e.key === 'u') && !e.ctrlKey && !e.metaKey && !e.altKey && app.can('plan_for')) {
@@ -274,10 +287,27 @@
     if (canMove(id, next.phase)) void moveTo(id, next.phase);
   }
 
+  // -- the order inside a row (shown only) --
+
+  /** The task a dragged one would be put before, with Shift, in its own row. */
+  let placing = $state<{ id: string; before: string } | null>(null);
+
+  const rowOf = (id: string): DepRow | undefined => rows.find((r) => r.ids.includes(id));
+
+  function shiftInRow(id: string, to: { step: -1 | 1 } | { before: string }): void {
+    const row = rowOf(id);
+    const ids = row ? movedInRow(row.ids, id, to) : null;
+    if (!row || !ids) return;
+    app.setGraphOrder(planKey, rowKey(row), ids);
+    focused = id;
+    requestAnimationFrame(() => canvas?.querySelector<HTMLElement>(`[data-node="${CSS.escape(id)}"]`)?.focus());
+  }
+
   // What the join will do, in words (a screen reader hears it as the target changes).
   const linkNote = $derived.by(() => {
     const join = linking;
     if (!join) return null;
+    if (placing) return t('graph.order.before', { title: markHidden(titleOf(placing.id)), before: markHidden(titleOf(placing.before)) });
     if (moving) {
       const title = markHidden(titleOf(moving.id));
       return moving.phase === '' ? t('graph.move.none', { title }) : t('graph.move.phase', { title, phase: markHidden(moving.phase) });
@@ -305,6 +335,16 @@
   }
   function onDragOver(e: DragEvent, id: string): void {
     if (linking?.by !== 'drag') return;
+    // With Shift, a task of the same row: put it before that one (shown only).
+    if (e.shiftKey && id !== linking.from && rowOf(id) !== undefined && rowOf(id) === rowOf(linking.from)) {
+      e.preventDefault();
+      if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+      moving = null;
+      if (linking.to !== null) choose(null);
+      if (placing?.before !== id) placing = { id: linking.from, before: id };
+      return;
+    }
+    placing = null;
     if (!canTake(id)) {
       if (linking.to === id) choose(null);
       return;
@@ -317,12 +357,20 @@
   function onDrop(e: DragEvent, id: string): void {
     if (linking?.by !== 'drag') return;
     e.preventDefault();
+    if (placing) {
+      const place = placing;
+      placing = null;
+      linking = null;
+      shiftInRow(place.id, { before: place.before });
+      return;
+    }
     choose(id, e.altKey);
     void connect(e.altKey);
   }
   function onDragEnd(): void {
     if (linking?.by === 'drag') linking = null;
     moving = null;
+    placing = null;
   }
 
   // A finger or a pen, by the grip of a task (HTML5 drag does not start on a touch screen).
@@ -485,6 +533,12 @@
       {/each}
     </div>
     {#if byPhase}<p class="legend">{t('graph.legend.phase')}</p>{/if}
+  {/if}
+  {#if ownOrder}
+    <p class="own-order">
+      <span>{t('graph.order.own')}</span>
+      <button type="button" class="link" onclick={() => app.setGraphOrder(planKey, null, null)}>{t('graph.order.reset')}</button>
+    </p>
   {/if}
   <!-- Always there (empty while nothing is joined): a drag that starts does not push the graph down under the pointer. -->
   <p class="link-note" role="status">{linkNote ?? ''}</p>
@@ -806,6 +860,14 @@
   .row.target {
     outline: 2px dashed var(--focus);
     outline-offset: 2px;
+  }
+  .own-order {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin: 0;
+    color: var(--muted);
+    font-size: 0.85rem;
   }
   .link-note {
     margin: 0;

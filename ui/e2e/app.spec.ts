@@ -1575,6 +1575,79 @@ test('the plan as a graph by phase: a row per phase, a drop on the free space of
   }
 });
 
+test('the plan as a graph: a task moves inside its row with Shift and a key or a drag, only on screen, kept for the plan, and back', async ({ page }) => {
+  test.slow();
+  const info = test.info();
+  const tag = `r${String(info.repeatEachIndex).padStart(3, '0')}t${info.retry}`;
+  const plan = `graph-order-e2e-${tag}`;
+  const dir = join(state().vault, 'lib.nvim', 'ROADMAP');
+  const planFile = join(dir, 'plans', `${plan}.md`);
+  const files = ['a', 'b', 'c'].map((n) => join(dir, 'tasks', `${plan}-${n}.md`));
+  writeFileSync(planFile, `---\ntitle: Graph order ${tag}\nstatus: doing\nareas: [lib.nvim]\ncreated: 2026-01-01\nupdated: 2026-01-01\n---\n\nA plan of this test.\n`);
+  ['a', 'b', 'c'].forEach((n, i) =>
+    writeFileSync(files[i]!, `---\ntitle: Order ${n} ${tag}\nstatus: open\nkind: task\nplan: lib.nvim/${plan}\n---\n\nText.\n`),
+  );
+  const texts = () => files.map((f) => readFileSync(f, 'utf8'));
+  const before = texts();
+  try {
+    await pair(page);
+    await chooseView(page, 'View', 'Plan');
+    const select = page.getByRole('combobox', { name: 'Plan' });
+    await expect(select.locator(`option[value="lib.nvim/${plan}"]`)).toBeAttached();
+    await select.selectOption(`lib.nvim/${plan}`);
+    await page.getByRole('group', { name: 'Show the plan as' }).getByRole('button', { name: 'Graph' }).click();
+    const graph = page.getByRole('region', { name: 'The plan as a graph' });
+    // The three wait for nothing: one row (the first stage).
+    const order = () => graph.locator('[data-row="0"] [data-node]').evaluateAll((nodes) => nodes.map((n) => n.getAttribute('data-node')!));
+    await expect.poll(async () => (await order()).length).toBe(3);
+    const first = await order();
+    const [x, y, z] = first as [string, string, string];
+    const node = (id: string) => graph.locator(`[data-node="${id}"]`);
+    await expect(graph.getByRole('button', { name: 'Back to the order of the plan' })).toHaveCount(0);
+
+    // Shift with the left key: the second one first; the keys stay on it.
+    await node(y).focus();
+    await page.keyboard.press('Shift+ArrowLeft');
+    await expect.poll(order).toEqual([y, x, z]);
+    await expect(node(y)).toBeFocused();
+
+    // A drag with Shift onto a task of the same row: the last one before the first. (Playwright's drag does not carry
+    // a held Shift into the drag events; the events of a real drag with Shift are sent here as the browser sends them.)
+    await page.evaluate(
+      ([from, to]) => {
+        const el = (id: string) => document.querySelector(`[data-node="${CSS.escape(id)}"]`)!;
+        const data = new DataTransfer();
+        const send = (target: Element, type: string, shiftKey: boolean) =>
+          target.dispatchEvent(new DragEvent(type, { bubbles: true, cancelable: true, dataTransfer: data, shiftKey }));
+        send(el(from), 'dragstart', false);
+        send(el(to), 'dragover', true);
+        send(el(to), 'drop', true);
+        send(el(from), 'dragend', true);
+      },
+      [z, y] as const,
+    );
+    await expect.poll(order).toEqual([z, y, x]);
+    // Shown only: no file changed, and no arrow was made.
+    expect(texts()).toEqual(before);
+    await expect(graph.locator('path.line')).toHaveCount(0);
+
+    // Kept for the plan over a reload.
+    await page.reload();
+    await chooseView(page, 'View', 'Plan');
+    await page.getByRole('combobox', { name: 'Plan' }).selectOption(`lib.nvim/${plan}`);
+    await expect.poll(order).toEqual([z, y, x]);
+    await expectAccessible(page, 'the plan graph with an order of its own');
+
+    // Back to the order of the plan.
+    await graph.getByRole('button', { name: 'Back to the order of the plan' }).click();
+    await expect.poll(order).toEqual(first);
+    await expect(graph.getByRole('button', { name: 'Back to the order of the plan' })).toHaveCount(0);
+    expect(consoleProblems.get(page)).toEqual([]);
+  } finally {
+    for (const path of [...files, planFile]) removeFile(path);
+  }
+});
+
 /** Each entry of the open popup of Export: whole in the window, and the element at its middle is the entry itself. */
 async function exportEntriesReachable(page: Page): Promise<{ name: string; inside: boolean; hit: boolean }[]> {
   return page.evaluate(() =>

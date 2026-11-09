@@ -110,6 +110,61 @@ export function phaseOp(task: TaskEntry, phase: string): Op | null {
   return { op: 'set', id: task.id, patch: { phase: phase === '' ? null : phase }, ...(task.etag ? { if_match: task.etag } : {}) };
 }
 
+/** An order of one's own inside the rows of a plan, by the key of the row: shown only, no file changes (D6). */
+export type RowOrder = Record<string, string[]>;
+/** The orders of every plan ('' is the whole vault). */
+export type GraphOrder = Record<string, RowOrder>;
+
+/** The rows with the order of one's own first: its tasks that are still in the row, then the others as they came. */
+export function applyOrder(rows: readonly DepRow[], saved: RowOrder | undefined, keyOf: (row: DepRow) => string): DepRow[] {
+  return rows.map((row) => {
+    const own = saved?.[keyOf(row)];
+    if (!own) return row;
+    const here = new Set(row.ids);
+    const first = own.filter((id) => here.has(id));
+    const placed = new Set(first);
+    return { ...row, ids: [...first, ...row.ids.filter((id) => !placed.has(id))] };
+  });
+}
+
+/** `id` moved inside its row: one place to the left or right (`step`), or just before `before`. */
+export function movedInRow(ids: readonly string[], id: string, to: { step: -1 | 1 } | { before: string }): string[] | null {
+  const from = ids.indexOf(id);
+  if (from < 0) return null;
+  const rest = ids.filter((x) => x !== id);
+  let at: number;
+  if ('step' in to) at = from + to.step;
+  else {
+    at = rest.indexOf(to.before);
+    if (at < 0 || to.before === id) return null;
+  }
+  if (at < 0 || at > rest.length || ('step' in to && at === from)) return null;
+  const out = [...rest.slice(0, at), id, ...rest.slice(at)];
+  return out.every((x, i) => x === ids[i]) ? null : out;
+}
+
+/** The orders as the prefs keep them; anything else in the text is dropped (a hand-edited or old value). */
+export function parseGraphOrder(text: string | null): GraphOrder {
+  if (!text) return {};
+  let value: unknown;
+  try {
+    value = JSON.parse(text);
+  } catch {
+    return {};
+  }
+  const out: GraphOrder = {};
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return out;
+  for (const [plan, rows] of Object.entries(value as Record<string, unknown>)) {
+    if (typeof rows !== 'object' || rows === null || Array.isArray(rows)) continue;
+    const kept: RowOrder = {};
+    for (const [row, ids] of Object.entries(rows as Record<string, unknown>)) {
+      if (Array.isArray(ids) && ids.every((id) => typeof id === 'string')) kept[row] = ids as string[];
+    }
+    if (Object.keys(kept).length > 0) out[plan] = kept;
+  }
+  return out;
+}
+
 /** Where each task stands: its row and its place in the row. */
 function places(rows: readonly DepRow[]): Map<string, { row: number; col: number }> {
   const out = new Map<string, { row: number; col: number }>();

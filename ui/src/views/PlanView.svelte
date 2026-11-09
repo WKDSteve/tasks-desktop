@@ -273,7 +273,7 @@
 
     {#if app.planDisplay === 'graph'}
       {#if stages.length > 0}
-        <PlanGraph {app} {stages} {critical} path={path?.path ?? []} {cycles} phaseOrder={plans.find((p) => p.id === planId)?.phase_order ?? []} onopen={open} />
+        <PlanGraph {app} {stages} {critical} path={path?.path ?? []} {cycles} phaseOrder={plans.find((p) => p.id === planId)?.phase_order ?? []} planKey={planId} onopen={open} />
       {:else}
         <p class="muted">{t(planEmptyKey(narrows(app.filter), stagesOf(app.tasks, planId === '' ? null : planId).length))}</p>
       {/if}

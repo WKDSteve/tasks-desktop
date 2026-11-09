@@ -454,6 +454,9 @@ shown, undone from the message:
 - **By phase.** In a plan with phases the rows can be its phases instead (*Rows by: Stage | Phase*, kept), one row per
   phase and one for the tasks without: a task dropped on the free space of another row, or `Alt` with the up or down
   key, moves into that phase (`phase`).
+- **Order inside a row.** `Shift` with the left or right key, or a drag with `Shift` onto a task of the same row,
+  moves a task inside its row: shown only, no file changes, kept for the plan in the browser (*Back to the order of
+  the plan* forgets it).
 
 **Projects** (an engine with the capability `projects`; without it the Plan view stays as described above). A project
 is the level above plans: project, plan, task, and the steps of a task (its `## Plan` section) are its subtasks, shown
