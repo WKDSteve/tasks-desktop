@@ -59,6 +59,7 @@ import type { MenuItem } from 'appkit-ui/menu';
 import { cellDropOps, cellsOf, dropOps, groupsOf, NONE, type Cell, type Derived, type Drop, type Grouping } from './groups';
 import { TodayState } from './state/today.svelte';
 import { GraphState } from './state/graph.svelte';
+import { ReposState } from './state/repos.svelte';
 import type { DailyPrefs } from './daily';
 import { parseConflictMode, type ConflictMode } from 'appkit-ui/conflicts';
 import type { CountKey, CountView } from './counts';
@@ -109,7 +110,7 @@ const NOTE_MAX = 1000;
 
 export type Phase = 'starting' | 'needs_pairing' | 'offline' | 'unavailable' | 'ready';
 export type Connection = 'live' | 'reconnecting' | 'offline';
-export type View = 'today' | 'list' | 'board' | 'plan' | 'inbox' | 'abnahme' | 'cross' | 'calendar' | 'stats' | 'done' | 'views';
+export type View = 'today' | 'list' | 'board' | 'plan' | 'inbox' | 'abnahme' | 'cross' | 'calendar' | 'stats' | 'done' | 'views' | 'repos';
 export type Theme = 'auto' | 'light' | 'dark';
 /** The blocks of the Today view that a person may hide. */
 export { ORDERED_TILES, TILES, type OrderedTile, type Tile } from './tiles-list';
@@ -440,6 +441,27 @@ export class App {
   get matrixPending(): boolean {
     return this.matrixState.pending;
   }
+  /** The repo tiles of this device (their own state: `state/repos.svelte.ts`). */
+  readonly reposState = new ReposState({
+    repos: () => this.env.hub.repos(),
+    repoAdd: (body) => this.env.hub.repoAdd(body),
+    repoSave: (body) => this.env.hub.repoSave(body),
+  });
+
+  /** The image of a tile, read with the session. */
+  repoImage(id: string): Promise<Blob | null> {
+    return this.env.hub.repoImage(id);
+  }
+
+  /** Show the folder of a tile in the file manager, or start Neovim in it, on the machine of the hub. */
+  async openRepo(id: string, what: 'folder' | 'nvim'): Promise<void> {
+    try {
+      await this.env.hub.repoOpen(id, what);
+    } catch (error) {
+      this.say('error', 'repos.open_failed', { message: error instanceof Error ? error.message : '' });
+    }
+  }
+
   /** The graph of one task in the plan view (its own state: `state/graph.svelte.ts`). */
   readonly graphState = new GraphState({
     ready: () => this.phase === 'ready',
@@ -690,7 +712,8 @@ export class App {
       view === 'calendar' ||
       view === 'stats' ||
       view === 'done' ||
-      view === 'views'
+      view === 'views' ||
+      view === 'repos'
         ? view
         : 'today';
   }
@@ -2974,6 +2997,12 @@ export class App {
   /** What a number of the statistics counts, in the list: `filter` is the one that is on, narrowed by the click. */
   openStatsInList(filter: Filter): void {
     this.filter = filter;
+    this.setView('list');
+  }
+
+  /** The tasks of one area in the list, without other filters (a click on a repo tile). */
+  openAreaInList(area: string): void {
+    this.filter = { ...freshFilter(), areas: [area] };
     this.setView('list');
   }
 

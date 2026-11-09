@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  dropIndex,
   groupAdded,
   groupMoved,
   groupRemoved,
@@ -70,6 +71,15 @@ describe('the order of the tiles', () => {
     expect(tiles(tileMoved(groups(), 'aaaa0003', 'gggg0001', 'gggg0002', 0))).toEqual(tiles(groups()));
   });
 
+  it('puts a tile dropped onto another before that one, also further on in its own row', () => {
+    const row = ['aaaa0001', 'aaaa0002', 'aaaa0003'];
+    const one = (moved: RepoGroup[]) => moved.find((g) => g.id === 'gggg0001')!.tiles;
+    const g = [{ id: 'gggg0001', title: 'T', tiles: row }];
+    expect(one(tileMoved(g, 'aaaa0001', 'gggg0001', 'gggg0001', dropIndex(row, 'aaaa0001', 'gggg0001', 'gggg0001', 2)))).toEqual(['aaaa0002', 'aaaa0001', 'aaaa0003']);
+    expect(one(tileMoved(g, 'aaaa0003', 'gggg0001', 'gggg0001', dropIndex(row, 'aaaa0003', 'gggg0001', 'gggg0001', 0)))).toEqual(['aaaa0003', 'aaaa0001', 'aaaa0002']);
+    expect(dropIndex(row, 'aaaa0001', 'gggg0001', 'gggg0002', 2)).toBe(2);
+  });
+
   it('copies a tile into a group once, takes it out of one group, or out of all', () => {
     expect(tiles(tileCopied(groups(), 'aaaa0003', 'gggg0001'))[0]).toEqual(['gggg0001', ['aaaa0001', 'aaaa0002', 'aaaa0003']]);
     expect(tiles(tileCopied(groups(), 'aaaa0001', 'gggg0002'))).toEqual(tiles(groups()));
@@ -104,11 +114,11 @@ describe('what a tile needs', () => {
 
   it('makes an id of 8 lowercase letters or digits, not a taken one', () => {
     let n = 0;
-    const random = (b: Uint8Array) => b.map(() => (n++ * 7) % 256);
+    const random = (k: number) => Array.from({ length: k }, () => (n++ * 7) % 256);
     const first = newId(random);
     expect(first).toMatch(/^[a-z0-9]{8}$/);
     expect(newId(random, (id) => id === first)).not.toBe(first);
-    expect(() => newId(() => new Uint8Array(8), () => true)).toThrow('no free id');
+    expect(() => newId((k) => new Array<number>(k).fill(0), () => true)).toThrow('no free id');
   });
 
   it('sends the groups and the names on the state it read', () => {

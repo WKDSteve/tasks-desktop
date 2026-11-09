@@ -247,6 +247,11 @@ export class Hub extends HubClient<Snapshot> {
     return parseRepos(await this.postJson<unknown>('/api/tasks/repos/save', body));
   }
 
+  /** Show the folder of a tile in the file manager, or start Neovim in it (`what`). */
+  repoOpen(id: string, what: 'folder' | 'nvim'): Promise<void> {
+    return this.post('/api/tasks/repos/open', { id, what });
+  }
+
   /**
    * The image of a tile, read with the session (an `<img src>` would not send it) as a blob the page shows from an
    * address it makes itself; `null` when the repo has none or it could not be read.

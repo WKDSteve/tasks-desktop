@@ -6,7 +6,7 @@ import type { View } from './app.svelte';
 
 /**
  * `g h` is Today, `g l` the list, `g p` the plan, `g b` the board, `g i` the inbox, `g a` the acceptance, `g s` the
- * statistics, `g v` the saved views.
+ * statistics, `g v` the saved views, `g r` the repo tiles.
  */
 export const keymap = withChord(defaultKeymap, {
   h: 'today',
@@ -17,6 +17,7 @@ export const keymap = withChord(defaultKeymap, {
   a: 'abnahme',
   s: 'stats',
   v: 'views',
+  r: 'repos',
 } satisfies Record<string, View>);
 
 /** The press of a key as the kit reads it. */

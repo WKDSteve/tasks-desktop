@@ -93,6 +93,15 @@ export function tileMoved(groups: readonly RepoGroup[], id: string, from: string
   return out;
 }
 
+/**
+ * The place a drop onto the tile at `at` of the group `to` puts the tile at, as `tileMoved` counts it (in the row
+ * without the tile): before that tile. In its own row a tile that stood before it leaves a gap, so the place is one less.
+ */
+export function dropIndex(tiles: readonly string[], id: string, from: string, to: string, at: number): number {
+  const was = tiles.indexOf(id);
+  return from === to && was >= 0 && was < at ? at - 1 : at;
+}
+
 /** The tile `id` put into the group `to` as well (at its end), when it is not there. */
 export function tileCopied(groups: readonly RepoGroup[], id: string, to: string): RepoGroup[] {
   const out = copyGroups(groups);
@@ -143,12 +152,12 @@ export function initial(name: string): string {
   return first ? first.toLocaleUpperCase() : '?';
 }
 
-/** A new id of a group: 8 lowercase letters or digits from `random` (bytes; the page gives `crypto.getRandomValues`). */
-export function newId(random: (bytes: Uint8Array) => Uint8Array, taken: (id: string) => boolean = () => false): string {
+/** A new id of a group: 8 lowercase letters or digits from `random` (`n` random bytes; the page uses `crypto`). */
+export function newId(random: (n: number) => ArrayLike<number>, taken: (id: string) => boolean = () => false): string {
   const alphabet = 'abcdefghijklmnopqrstuvwxyz0123456789';
   for (let attempt = 0; attempt < 16; attempt += 1) {
-    const bytes = random(new Uint8Array(8));
-    const id = [...bytes].map((b) => alphabet[b % alphabet.length]).join('');
+    const bytes = Array.from(random(8));
+    const id = bytes.map((b) => alphabet[b % alphabet.length]).join('');
     if (!taken(id)) return id;
   }
   throw new Error('no free id');

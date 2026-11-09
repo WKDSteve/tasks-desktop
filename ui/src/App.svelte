@@ -500,6 +500,14 @@
                 },
               ]
             : []),
+          {
+            kind: 'radio' as const,
+            label: t('nav.repos'),
+            hint: t('hint.item.nav.repos'),
+            checked: app.view === 'repos',
+            onselect: () => app.setView('repos'),
+            ...apart('repos'),
+          },
           // The export belongs to the view that is shown: it takes what that view draws.
           { kind: 'section', label: t('menu.sec.export') },
           ...exportItems(ready),
@@ -754,7 +762,9 @@
                       ? t('nav.done')
                       : app.view === 'views'
                         ? t('nav.views')
-                        : t('nav.list')}
+                        : app.view === 'repos'
+                          ? t('nav.repos')
+                          : t('nav.list')}
         </h1>
         {#if alone}
           <!-- A window of one task (detached from a float): its detail, alone, as wide as the window allows. -->
@@ -780,6 +790,8 @@
           <Lazy {app} load={() => import('./views/FinishedView.svelte')} />
         {:else if app.view === 'views'}
           <ViewsView {app} />
+        {:else if app.view === 'repos'}
+          <Lazy {app} load={() => import('./views/ReposView.svelte')} />
         {:else}
           <ListView {app} bind:searchBox />
         {/if}

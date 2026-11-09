@@ -8022,3 +8022,91 @@ test('an x in a choice of the filter takes that choice away in one click, and th
   await expect(page.locator('select[data-range="prio-min"]')).toHaveValue('');
   expect(consoleProblems.get(page)).toEqual([]);
 });
+
+test('repo tiles: groups and tiles are made, an image or a letter, moved with the keys and the mouse, kept, and a tile opens its area and its folder', async ({ page }) => {
+  test.slow();
+  const info = test.info();
+  const tag = `r${String(info.repeatEachIndex).padStart(3, '0')}t${info.retry}`;
+  const root = join(state().config, '..', `tiles-${tag}`);
+  const folder = (name: string, files: Record<string, string> = {}): string => {
+    const dir = join(root, name);
+    mkdirSync(dir, { recursive: true });
+    for (const [file, text] of Object.entries(files)) writeFileSync(join(dir, file), text);
+    return dir;
+  };
+  const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"><rect width="8" height="8"/></svg>';
+  // lib.nvim is an area of the vault: its tile opens the tasks of that area.
+  const lib = folder('lib.nvim', { 'logo.svg': svg });
+  const plain = folder(`plain-${tag}`);
+  const hostile = folder(`hostile-${tag}`, { 'logo.svg': '<svg><script>alert(1)</script></svg>' });
+  try {
+    await pair(page);
+    await chooseView(page, 'View', 'Repos');
+    const tab = page.getByRole('region', { name: 'Repos', exact: true });
+    await expect(tab).toBeVisible();
+
+    for (const title of [`Files ${tag}`, `UI ${tag}`]) {
+      await tab.getByLabel('New group', { exact: true }).fill(title);
+      await tab.getByRole('button', { name: 'Make the group' }).click();
+      await expect(tab.getByRole('heading', { name: title })).toBeVisible();
+    }
+    const add = async (path: string): Promise<void> => {
+      await tab.getByLabel('Folder of the repo').fill(path);
+      await tab.getByLabel('Into the group').selectOption({ label: `Files ${tag}` });
+      await tab.getByRole('button', { name: 'Add the repo' }).click();
+      await expect(tab.locator('button.face', { hasText: path.split(/[\\/]/).pop()! })).toBeVisible();
+    };
+    await add(lib);
+    await add(plain);
+    await add(hostile);
+    const face = (name: string) => tab.locator('button.face', { hasText: name });
+    await expect(face(`hostile-${tag}`)).toBeVisible();
+    // An image is read with the session and shown from a blob of the page; no image, or an SVG with a script: a letter.
+    await expect(face('lib.nvim').locator('img')).toHaveAttribute('src', /^blob:/);
+    await expect(face(`plain-${tag}`).locator('.initial')).toHaveText('P');
+    await expect(face(`hostile-${tag}`).locator('img')).toHaveCount(0);
+    // A folder that is no folder is refused, and its words are not said back.
+    await tab.getByLabel('Folder of the repo').fill('relative/folder');
+    await tab.getByRole('button', { name: 'Add the repo' }).click();
+    await expect(tab.getByRole('alert')).toBeVisible();
+    await expect(tab.getByRole('alert')).not.toContainText('relative');
+    await expectAccessible(page, 'the repo tiles');
+
+    // The keys: Shift with the left key puts plain first in its group, Shift with down into the next group.
+    const row = (title: string) =>
+      tab.locator('section.group').filter({ has: page.getByRole('heading', { name: title }) }).locator('button.face');
+    await face(`plain-${tag}`).focus();
+    await page.keyboard.press('Shift+ArrowLeft');
+    await expect(row(`Files ${tag}`)).toHaveText([/^P\s*plain/, /lib\.nvim/, /hostile/]);
+    await expect(tab.locator('[aria-live="polite"]')).toContainText(`plain-${tag} is now in Files ${tag}, place 1.`);
+    await face(`plain-${tag}`).focus();
+    await page.keyboard.press('Shift+ArrowDown');
+    await expect(row(`UI ${tag}`)).toHaveText([/plain/]);
+    // The mouse: hostile onto the row of UI.
+    await face(`hostile-${tag}`).locator('..').locator('..').dragTo(tab.locator('section.group').filter({ has: page.getByRole('heading', { name: `UI ${tag}` }) }).locator('ul.row'));
+    await expect(row(`UI ${tag}`)).toHaveText([/plain/, /hostile/]);
+    // The file of the device holds it, and a reload shows it.
+    const file = readFileSync(join(state().config, 'repos.json'), 'utf8');
+    expect(file).toContain(`UI ${tag}`);
+    expect(file).not.toContain('logo.svg');
+    await page.reload();
+    await chooseView(page, 'View', 'Repos');
+    await expect(row(`UI ${tag}`)).toHaveText([/plain/, /hostile/]);
+
+    // The menu of a tile opens its folder on the machine of the hub (the test writes down what would be opened).
+    const log = join(state().config, '..', 'editor.log');
+    rmSync(log, { force: true });
+    await tab.getByRole('button', { name: `Menu of plain-${tag}` }).click();
+    await tab.getByRole('button', { name: 'Open the folder' }).click();
+    await expect.poll(() => (existsSync(log) ? readFileSync(log, 'utf8') : '')).toContain(`plain-${tag}`);
+
+    // A tile of an area opens the tasks of that area.
+    await face('lib.nvim').click();
+    await expect(page.getByRole('heading', { level: 1, name: 'List' })).toBeVisible();
+    await expect(page.getByRole('button', { name: /^Areas/ }).first()).toContainText('lib.nvim');
+    // The one refusal above (the folder that is no folder) is a 400 the browser reports; nothing else.
+    expect((consoleProblems.get(page) ?? []).filter((m) => !m.includes('status of 400'))).toEqual([]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
