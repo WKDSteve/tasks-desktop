@@ -19,6 +19,7 @@ import type {
   Waits,
 } from './contract';
 import type { ViewForm } from './views';
+import { parseRepos, type HubRepos, type RepoGroup } from './repos';
 import type { About } from './about';
 import { ApiError, failure, HubClient, textOf, type Hello, type SnapshotResult as KitSnapshotResult } from 'appkit-ui/client';
 
@@ -231,6 +232,35 @@ export class Hub extends HubClient<Snapshot> {
   }
 
   /** The fields the open tasks can be grouped by, with their values and how each is written (the engine's). */
+  /** The repo tiles of this device (`hub.repos`): no path, ever. */
+  async repos(): Promise<HubRepos> {
+    return parseRepos(await this.json<unknown>('/api/tasks/repos'));
+  }
+
+  /** A folder as a tile of a group; the answer is the new document. */
+  async repoAdd(body: { path: string; name?: string; group: string }): Promise<HubRepos> {
+    return parseRepos(await this.postJson<unknown>('/api/tasks/repos/add', body));
+  }
+
+  /** The groups and names on the state read; another state is an `ApiError` with the code `stale`. */
+  async repoSave(body: { rev: string; groups: RepoGroup[]; names: Record<string, string> }): Promise<HubRepos> {
+    return parseRepos(await this.postJson<unknown>('/api/tasks/repos/save', body));
+  }
+
+  /**
+   * The image of a tile, read with the session (an `<img src>` would not send it) as a blob the page shows from an
+   * address it makes itself; `null` when the repo has none or it could not be read.
+   */
+  async repoImage(id: string): Promise<Blob | null> {
+    if (!/^[a-z0-9]{8}$/.test(id)) return null;
+    try {
+      const response = await this.request(`/api/tasks/repos/image?id=${id}`);
+      return response.ok ? await response.blob() : null;
+    } catch {
+      return null;
+    }
+  }
+
   groupings(): Promise<Groupings> {
     return this.json<Groupings>('/api/tasks/groupings');
   }

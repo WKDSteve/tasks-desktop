@@ -8,6 +8,8 @@ import { ConflictsState } from './conflicts.svelte';
 import { TodayState } from './today.svelte';
 import { VaultsState } from './vaults.svelte';
 import { ViewsState, type ViewsHost } from './views.svelte';
+import { ReposState, type ReposHost } from './repos.svelte';
+import { parseRepos, type HubRepos } from '../repos';
 import type { Groupings, View, Views } from '../contract';
 
 const conflict = (key: string): Conflict => ({ key, id: `a/${key}`, op: { op: 'set', id: `a/${key}`, patch: {} }, code: 'conflict', at: 1 });
@@ -337,5 +339,57 @@ describe('the views', () => {
     readOnly = false;
     await state.toggle({ ...view, id: 'pub/b' } as View, { title: 'A', display: 'list', group_by: 'status', collapsed: [] } as never, 'open');
     expect(written).toHaveLength(1);
+  });
+});
+
+describe('the repo tiles', () => {
+  const doc = (rev: string, title = 'UI'): HubRepos =>
+    parseRepos({ kind: 'hub.repos', rev, repos: {}, groups: [{ id: 'gggg0001', title, tiles: [] }] });
+  const host = (over: Partial<ReposHost> = {}): ReposHost => ({
+    repos: vi.fn(async () => doc('r1')),
+    repoAdd: vi.fn(async () => doc('r2')),
+    repoSave: vi.fn(async () => doc('r3')),
+    ...over,
+  });
+
+  it('reads the document, and a hub that keeps none is told apart from one that did not answer', async () => {
+    const ok = new ReposState(host());
+    await ok.load();
+    expect([ok.read, ok.doc?.rev]).toEqual(['ready', 'r1']);
+    const none = new ReposState(host({ repos: vi.fn(async () => Promise.reject(new ApiError(404, 'repos_unavailable', 'no'))) }));
+    await none.load();
+    expect(none.read).toBe('unavailable');
+    const gone = new ReposState(host({ repos: vi.fn(async () => Promise.reject(new ApiError(502, 'x', 'no'))) }));
+    await gone.load();
+    expect(gone.read).toBe('failed');
+  });
+
+  it('sends a change on the state read and draws what the hub answered, one at a time', async () => {
+    const h = host();
+    const state = new ReposState(h);
+    await state.load();
+    const groups = state.doc!.groups;
+    const first = state.save(groups, { aaaa0001: 'Tasks' });
+    expect(await state.add('C:/x', 'gggg0001')).toBe(false);
+    expect(await first).toBe(true);
+    expect(h.repoSave).toHaveBeenCalledWith({ rev: 'r1', groups, names: { aaaa0001: 'Tasks' } });
+    expect(state.doc?.rev).toBe('r3');
+    expect(await state.add('C:/x', 'gggg0001', '  ')).toBe(true);
+    expect(h.repoAdd).toHaveBeenCalledWith({ path: 'C:/x', group: 'gggg0001' });
+  });
+
+  it('reads the tiles again after a clash of states, and says a refusal in the hub words', async () => {
+    const h = host({
+      repoSave: vi.fn(async () => Promise.reject(new ApiError(409, 'stale', 'changed meanwhile'))),
+      repoAdd: vi.fn(async () => Promise.reject(new ApiError(400, 'bad_folder', 'there is no such folder'))),
+    });
+    const state = new ReposState(h);
+    await state.load();
+    expect(await state.save([])).toBe(false);
+    expect(state.problem).toBe('stale');
+    expect(h.repos).toHaveBeenCalledTimes(2);
+    expect(await state.add('C:/nope', 'gggg0001')).toBe(false);
+    expect(state.problem).toBe('there is no such folder');
+    expect(state.saving).toBe(false);
   });
 });
