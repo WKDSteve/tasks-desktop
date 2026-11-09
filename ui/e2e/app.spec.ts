@@ -1325,7 +1325,7 @@ test('the plan as a graph: n draws only what a task needs, u only what waits for
   // n on beta: only beta and what it needs (alpha); iota and the cycle are not drawn.
   await node('lib.nvim/beta').focus();
   await page.keyboard.press('n');
-  await expect(graph.getByRole('status')).toContainText('Only what Beta waits for alpha needs.');
+  await expect(graph.locator('p.focus-note')).toContainText('Only what Beta waits for alpha needs.');
   await expect(node('cascade.nvim/iota')).toHaveCount(0);
   await expect(node('lib.nvim/cyc-a')).toHaveCount(0);
   await expect(node('lib.nvim/alpha')).toBeVisible();
@@ -1337,7 +1337,7 @@ test('the plan as a graph: n draws only what a task needs, u only what waits for
   // u on alpha: alpha and what waits for it (beta and iota), not the cycle.
   await node('lib.nvim/alpha').focus();
   await page.keyboard.press('u');
-  await expect(graph.getByRole('status')).toContainText(/^Only what waits for /);
+  await expect(graph.locator('p.focus-note')).toContainText(/^Only what waits for /);
   await expect(node('cascade.nvim/iota')).toBeVisible();
   await expect(node('lib.nvim/beta')).toBeVisible();
   await expect(node('lib.nvim/cyc-a')).toHaveCount(0);
@@ -1346,7 +1346,7 @@ test('the plan as a graph: n draws only what a task needs, u only what waits for
 
   // The whole plan again.
   await graph.getByRole('button', { name: 'Show the whole plan' }).click();
-  await expect(graph.getByRole('status')).toHaveCount(0);
+  await expect(graph.locator('p.focus-note')).toHaveCount(0);
   await expect(node('lib.nvim/cyc-a')).toBeVisible();
   await expect(node('cascade.nvim/iota')).toBeVisible();
   expect(consoleProblems.get(page)).toEqual([]);
@@ -1481,14 +1481,14 @@ test('the plan as a graph: a task dropped on another joins them, so do l and the
     await expectAccessible(page, 'a join of the graph on its way');
     await graphWrite(() => page.keyboard.press('Alt+Enter'));
     await expect(line('b', 'c')).toHaveAttribute('data-kind', 'after');
-    await expect(note).toHaveCount(0);
+    await expect(note).toBeEmpty();
 
     // Escape stops a join, and nothing is written.
     await node('c').focus();
     await page.keyboard.press('l');
-    await expect(note).toBeVisible();
+    await expect(note).not.toBeEmpty();
     await page.keyboard.press('Escape');
-    await expect(note).toHaveCount(0);
+    await expect(note).toBeEmpty();
     await expect(graph.locator('path.line.preview')).toHaveCount(0);
 
     // b dropped on a: a would wait for b, which waits for a. The engine says no; nothing changes.
@@ -1497,6 +1497,79 @@ test('the plan as a graph: a task dropped on another joins them, so do l and the
     await expect(page.getByRole('alert')).toContainText('would form a cycle');
     await expect(line('b', 'a')).toHaveCount(0);
     expect(readFileSync(file('a'), 'utf8')).toBe(before);
+  } finally {
+    for (const path of [file('a'), file('b'), file('c'), planFile]) removeFile(path);
+  }
+});
+
+test('the plan as a graph by phase: a row per phase, a drop on the free space of a row or Alt with a key sets the phase, and the choice stays', async ({ page }) => {
+  test.slow();
+  const info = test.info();
+  const tag = `r${String(info.repeatEachIndex).padStart(3, '0')}t${info.retry}`;
+  const plan = `graph-phase-e2e-${tag}`;
+  const dir = join(state().vault, 'lib.nvim', 'ROADMAP');
+  const planFile = join(dir, 'plans', `${plan}.md`);
+  const file = (n: string) => join(dir, 'tasks', `${plan}-${n}.md`);
+  const id = (n: string) => `lib.nvim/${plan}-${n}`;
+  writeFileSync(planFile, `---\ntitle: Graph phase ${tag}\nstatus: doing\nareas: [lib.nvim]\nphase_order: [build, test]\ncreated: 2026-01-01\nupdated: 2026-01-01\n---\n\nA plan of this test.\n`);
+  writeFileSync(file('a'), `---\ntitle: Phase a ${tag}\nstatus: open\nkind: task\nplan: lib.nvim/${plan}\nphase: build\n---\n\nText.\n`);
+  writeFileSync(file('b'), `---\ntitle: Phase b ${tag}\nstatus: open\nkind: task\nplan: lib.nvim/${plan}\nphase: test\n---\n\nText.\n`);
+  writeFileSync(file('c'), `---\ntitle: Phase c ${tag}\nstatus: open\nkind: task\nplan: lib.nvim/${plan}\n---\n\nText.\n`);
+  try {
+    await pair(page);
+    await chooseView(page, 'View', 'Plan');
+    const select = page.getByRole('combobox', { name: 'Plan' });
+    await expect(select.locator(`option[value="lib.nvim/${plan}"]`)).toBeAttached();
+    await select.selectOption(`lib.nvim/${plan}`);
+    await page.getByRole('group', { name: 'Show the plan as' }).getByRole('button', { name: 'Graph' }).click();
+    const graph = page.getByRole('region', { name: 'The plan as a graph' });
+    const node = (n: string) => graph.locator(`[data-node="${id(n)}"]`);
+    const rowOf = (n: string) => node(n).evaluate((el) => el.closest('[data-row]')?.getAttribute('data-row'));
+    const graphWrite = async (step: () => Promise<unknown>): Promise<void> => {
+      const answer = nextAnswer(page);
+      await step();
+      await answer;
+      await expect(graph).toHaveAttribute('aria-busy', 'false', { timeout: WRITE_BUDGET });
+    };
+    const phaseOf = (n: string) => readFileSync(file(n), 'utf8').match(/^phase: (.*)$/m)?.[1] ?? '';
+
+    // By phase: the phases of the plan in order, the tasks without one last.
+    const rowsBy = graph.getByRole('group', { name: 'Rows by' });
+    await rowsBy.getByRole('button', { name: 'Phase' }).click();
+    await expect(rowsBy.getByRole('button', { name: 'Phase' })).toHaveAttribute('aria-pressed', 'true');
+    await expect(graph.locator('[data-row]')).toHaveCount(3);
+    expect(await graph.locator('[data-row]').evaluateAll((rows) => rows.map((r) => r.getAttribute('data-row')))).toEqual(['phase:build', 'phase:test', 'phase:']);
+    expect(await rowOf('a')).toBe('phase:build');
+    expect(await rowOf('c')).toBe('phase:');
+    await expectAccessible(page, 'the plan graph by phase');
+
+    // The mouse: c dropped on the head of the row of build (free space, no task) goes into build.
+    await graphWrite(() => node('c').dragTo(graph.getByRole('group', { name: 'Phase build' }).locator('.row-head')));
+    await expect.poll(() => rowOf('c')).toBe('phase:build');
+    await expect.poll(() => phaseOf('c')).toBe('build');
+
+    // The keys: Alt with the down key, a into the next phase (test), then once more into none (the key goes away).
+    await node('a').focus();
+    await graphWrite(() => page.keyboard.press('Alt+ArrowDown'));
+    await expect.poll(() => rowOf('a')).toBe('phase:test');
+    await expect.poll(() => phaseOf('a')).toBe('test');
+    await expect(node('a')).toBeFocused();
+    await graphWrite(() => page.keyboard.press('Alt+ArrowDown'));
+    await expect.poll(() => rowOf('a')).toBe('phase:');
+    await expect.poll(() => readFileSync(file('a'), 'utf8')).not.toMatch(/^phase:/m);
+
+    // A task dropped on a task still joins them, also by phase: b waits for c.
+    await graphWrite(() => node('c').dragTo(node('b')));
+    await expect(graph.locator(`path.line[data-edge="${id('c')}>${id('b')}"]`)).toHaveAttribute('data-kind', 'blocked_by');
+    expect(phaseOf('b')).toBe('test');
+
+    // The choice stays over a reload (the plan is chosen again: the page does not keep it).
+    await page.reload();
+    await chooseView(page, 'View', 'Plan');
+    await page.getByRole('combobox', { name: 'Plan' }).selectOption(`lib.nvim/${plan}`);
+    await expect(page.getByRole('group', { name: 'Rows by' }).getByRole('button', { name: 'Phase' })).toHaveAttribute('aria-pressed', 'true');
+    await page.getByRole('group', { name: 'Rows by' }).getByRole('button', { name: 'Stage' }).click();
+    expect(consoleProblems.get(page)).toEqual([]);
   } finally {
     for (const path of [file('a'), file('b'), file('c'), planFile]) removeFile(path);
   }

@@ -16,7 +16,7 @@ import {
   toggleMark,
 } from './bulk';
 import { planOp, type PlanForm, type PlanKind, type PlanPreview } from './planwizard';
-import { connectOp, edgeOp, type DepEdge, type EdgeAction, type EdgeKind } from './depGraph';
+import { connectOp, edgeOp, phaseOp, type DepEdge, type EdgeAction, type EdgeKind } from './depGraph';
 import { COLUMNS, columnsOf, isColumn, neighbourColumn, placeNear, stepInGroup, type Column, type Move } from './board';
 import { ApiError, type CheckAll, type SheetRunState, type Hub, type HubArea, type HubAreas, type SearchResult, type VaultList } from './api';
 import { cacheableClass, cacheableList, type CachedList, type ListStore } from './cache';
@@ -351,6 +351,8 @@ export class App {
   folds = $state<FoldMemory>(emptyFolds());
   /** How the plan is drawn: its stages as cards, or as a graph (the stages as rows, the dependencies as arrows). */
   planDisplay = $state<'stages' | 'graph'>('stages');
+  /** The rows of the plan graph: the stages of the engine, or the phases of the plan. */
+  graphRows = $state<'stage' | 'phase'>('stage');
   /** The sizes the person dragged the blocks of the page to (the tiles of today, the list). */
   tileSizes = $state<Sizes>({});
   /** The block whose grip is shown, if any (one at a time). */
@@ -663,6 +665,7 @@ export class App {
     this.listColumns = parseColumns(safe(() => env.prefs.getItem('tasks-desktop.list-columns')));
     this.folds = parseFolds(safe(() => env.prefs.getItem('tasks-desktop.folds')));
     this.planDisplay = safe(() => env.prefs.getItem('tasks-desktop.plan-display')) === 'graph' ? 'graph' : 'stages';
+    this.graphRows = safe(() => env.prefs.getItem('tasks-desktop.graph-rows')) === 'phase' ? 'phase' : 'stage';
     this.tileSizes = parseSizes(safe(() => env.prefs.getItem('tasks-desktop.sizes')));
     this.sort = parseSort(safe(() => env.prefs.getItem('tasks-desktop.sort')));
     this.listMemory = parseListMemory(safe(() => env.prefs.getItem('tasks-desktop.lists')));
@@ -2489,6 +2492,14 @@ export class App {
     if (op) await this.write([op]);
   }
 
+  /** Put a task into a phase of its plan ('' takes the phase away): a drop into a row of the graph by phase. */
+  async setPhase(id: string, phase: string): Promise<void> {
+    if (this.refusedReadOnly() || this.refusedWhileSaving()) return;
+    const task = this.tasks.find((t) => t.id === id);
+    const op = task ? phaseOp(task, phase) : null;
+    if (op) await this.write([op]);
+  }
+
   /** A card dropped on the zone for finished work: the same two steps as the button. */
   async dropOnDone(id: string): Promise<void> {
     if (!this.shown.some((t) => t.id === id)) return;
@@ -2729,6 +2740,12 @@ export class App {
   setPlanDisplay(display: 'stages' | 'graph'): void {
     this.planDisplay = display;
     safe(() => this.env.prefs.setItem('tasks-desktop.plan-display', display));
+  }
+
+  /** Lay the rows of the plan graph by stage or by phase, and remember the choice. */
+  setGraphRows(rows: 'stage' | 'phase'): void {
+    this.graphRows = rows;
+    safe(() => this.env.prefs.setItem('tasks-desktop.graph-rows', rows));
   }
 
   /** Set the folds of the blocks of one view, and remember them. */

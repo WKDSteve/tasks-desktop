@@ -16,9 +16,13 @@ export interface DepEdge {
   kind: EdgeKind;
 }
 
-/** One row of the picture: a stage of the engine (`null`: the tasks in a cycle, which have none). */
+/**
+ * One row of the picture: a stage of the engine (`null`: the tasks in a cycle, which have none), or, in the rows by
+ * phase, a phase of the plan (`phase`; '' for the tasks without one, and `stage` is then null and says nothing).
+ */
 export interface DepRow {
   stage: number | null;
+  phase?: string;
   ids: string[];
 }
 
@@ -89,6 +93,23 @@ export function connectOp(task: TaskEntry, from: string, kind: EdgeKind): Op | n
   return { op: 'set', id: task.id, patch: { [kind]: [...(task[kind] ?? []), from] }, ...(task.etag ? { if_match: task.etag } : {}) };
 }
 
+/**
+ * The rows by phase: one per phase of the plan in its order (also one no task stands in yet: a place to drop on),
+ * then the tasks without a phase, or with one the plan does not name. Inside a row the plan order of the stages.
+ */
+export function phaseRows(stages: readonly Stage[], order: readonly string[]): DepRow[] {
+  const rows: DepRow[] = [...order, ''].map((phase) => ({ stage: null, phase, ids: [] }));
+  const at = new Map(rows.map((r, i) => [r.phase!, i] as const));
+  for (const task of stages.flatMap((s) => s.tasks)) rows[at.get(task.phase ?? '') ?? order.length]!.ids.push(task.id);
+  return rows;
+}
+
+/** The write that puts `task` into `phase` ('' takes its phase away); `null` when it is there already. */
+export function phaseOp(task: TaskEntry, phase: string): Op | null {
+  if ((task.phase ?? '') === phase) return null;
+  return { op: 'set', id: task.id, patch: { phase: phase === '' ? null : phase }, ...(task.etag ? { if_match: task.etag } : {}) };
+}
+
 /** Where each task stands: its row and its place in the row. */
 function places(rows: readonly DepRow[]): Map<string, { row: number; col: number }> {
   const out = new Map<string, { row: number; col: number }>();
@@ -103,7 +124,7 @@ function places(rows: readonly DepRow[]): Map<string, { row: number; col: number
  * the order it had (the plan order at first), so the result never depends on anything but the data.
  */
 export function orderRows(rows: readonly DepRow[], edges: readonly DepEdge[], sweeps = 4): DepRow[] {
-  let out = rows.map((r) => ({ stage: r.stage, ids: [...r.ids] }));
+  let out = rows.map((r) => ({ ...r, ids: [...r.ids] }));
   const sortRow = (index: number, neighbours: (id: string) => string[]): void => {
     const at = places(out);
     const row = out[index]!;
@@ -116,7 +137,7 @@ export function orderRows(rows: readonly DepRow[], edges: readonly DepEdge[], sw
       return { id, col, key: cols.length === 0 ? own : cols.reduce((a, b) => a + b, 0) / cols.length };
     });
     keyed.sort((a, b) => a.key - b.key || a.col - b.col);
-    out[index] = { stage: row.stage, ids: keyed.map((k) => k.id) };
+    out[index] = { ...row, ids: keyed.map((k) => k.id) };
   };
   const before = new Map<string, string[]>();
   const after = new Map<string, string[]>();
@@ -130,7 +151,7 @@ export function orderRows(rows: readonly DepRow[], edges: readonly DepEdge[], sw
   }
   // The first row is sorted by what waits below, and that may have moved it from the plan order for nothing: a sweep
   // never makes the crossings more, but the result is kept only when it crosses fewer than the plan order.
-  out = crossings(out, edges) <= crossings(rows, edges) ? out : rows.map((r) => ({ stage: r.stage, ids: [...r.ids] }));
+  out = crossings(out, edges) <= crossings(rows, edges) ? out : rows.map((r) => ({ ...r, ids: [...r.ids] }));
   return out;
 }
 

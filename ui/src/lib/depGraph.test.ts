@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { task } from './fixtures';
-import { connectOp, criticalEdges, crossings, depGraphOf, edgeOp, focusStages, neighbourOf, orderRows, type DepRow } from './depGraph';
+import { connectOp, criticalEdges, crossings, depGraphOf, edgeOp, focusStages, neighbourOf, orderRows, phaseOp, phaseRows, type DepRow } from './depGraph';
 
 describe('the plan as a graph', () => {
   it('takes the stages as rows and the tasks own blocked_by and after as arrows, between drawn tasks only', () => {
@@ -147,5 +147,29 @@ describe('the plan as a graph', () => {
     expect(connectOp(c, 'a/c', 'blocked_by')).toBeNull();
     expect(connectOp(c, 'a/1', 'after')).toBeNull();
     expect(connectOp(c, 'a/2', 'blocked_by')).toBeNull();
+  });
+
+  it('lays the rows by phase: each phase of the plan in its order, an empty one too, then the tasks without one', () => {
+    const stages = [
+      { stage: 0, tasks: [task('a/1', { phase: 'test' }), task('a/2')] },
+      { stage: 1, tasks: [task('a/3', { phase: 'build', blocked_by: ['a/1'] }), task('a/4', { phase: 'gone' })] },
+    ];
+    const rows = phaseRows(stages, ['build', 'test', 'ship']);
+    expect(rows).toEqual([
+      { stage: null, phase: 'build', ids: ['a/3'] },
+      { stage: null, phase: 'test', ids: ['a/1'] },
+      { stage: null, phase: 'ship', ids: [] },
+      { stage: null, phase: '', ids: ['a/2', 'a/4'] },
+    ]);
+    // The order of a row keeps the phase of the row.
+    expect(orderRows(rows, depGraphOf(stages).edges).map((r) => r.phase)).toEqual(['build', 'test', 'ship', '']);
+  });
+
+  it('puts a task into a phase with one set, or takes its phase away, and writes nothing where it is already', () => {
+    const t = task('a/1', { phase: 'build', etag: 'e3' });
+    expect(phaseOp(t, 'test')).toEqual({ op: 'set', id: 'a/1', patch: { phase: 'test' }, if_match: 'e3' });
+    expect(phaseOp(t, '')).toEqual({ op: 'set', id: 'a/1', patch: { phase: null }, if_match: 'e3' });
+    expect(phaseOp(t, 'build')).toBeNull();
+    expect(phaseOp(task('a/2'), '')).toBeNull();
   });
 });

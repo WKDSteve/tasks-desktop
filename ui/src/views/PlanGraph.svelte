@@ -8,8 +8,22 @@
   // Enter on it: a small menu; Delete takes it away), and so is each row of the table: one `set` at the waiting task.
   // A task dropped on another (the mouse, or a finger by its grip), or `l` and then the keys, makes the other wait
   // for it: hard, or soft with Alt. The arrow to come is drawn dashed while it is chosen; the engine refuses a cycle.
+  // A plan with phases can lay its rows by phase: a task dropped on the free space of another row (or Alt with the up
+  // and down keys) moves into that phase.
   import type { App } from '../lib/app.svelte';
-  import { connectOp, criticalEdges, depGraphOf, focusStages, neighbourOf, orderRows, type DepEdge, type EdgeAction } from '../lib/depGraph';
+  import {
+    connectOp,
+    criticalEdges,
+    depGraphOf,
+    focusStages,
+    neighbourOf,
+    orderRows,
+    phaseOp,
+    phaseRows,
+    type DepEdge,
+    type DepRow,
+    type EdgeAction,
+  } from '../lib/depGraph';
   import { createGrip, farEnough, placeAt, type PointerDragEvent } from '../lib/pointerDrag';
   import { hintOf, labelOf, translate, type Key } from '../lib/i18n';
   import type { Stage } from '../lib/plan';
@@ -21,6 +35,7 @@
     critical,
     path,
     cycles,
+    phaseOrder = [],
     onopen,
   }: {
     app: App;
@@ -28,6 +43,8 @@
     critical: ReadonlySet<string>;
     path: readonly string[];
     cycles: readonly string[][];
+    /** The phases of the chosen plan, in its order (none: no rows by phase). */
+    phaseOrder?: readonly string[];
     onopen: (id: string) => void;
   } = $props();
 
@@ -42,7 +59,8 @@
   });
   const shown = $derived(focusStages(stages, focus?.ids ?? null));
   const graph = $derived(depGraphOf(shown));
-  const rows = $derived(orderRows(graph.rows, graph.edges));
+  const byPhase = $derived(app.graphRows === 'phase' && phaseOrder.length > 0);
+  const rows = $derived(orderRows(byPhase ? phaseRows(shown, phaseOrder) : graph.rows, graph.edges));
   const tasks = $derived(new Map(stages.flatMap((s) => s.tasks).map((task) => [task.id, task] as const)));
   // The tasks of the focus this plan (or the filter) does not hold: named as a number, not drawn.
   const outside = $derived(focus ? [...focus.ids].filter((id) => !tasks.has(id)).length : 0);
@@ -51,8 +69,8 @@
   // A row draws its first tasks; the rest on a press (a stage of hundreds is not one block of work, as in the stages).
   const FIRST = 50;
   let opened = $state<ReadonlySet<string>>(new Set());
-  const rowKey = (stage: number | null): string => (stage === null ? 'cycle' : String(stage));
-  const drawnRows = $derived(rows.map((r) => ({ ...r, ids: opened.has(rowKey(r.stage)) ? r.ids : r.ids.slice(0, FIRST) })));
+  const rowKey = (row: DepRow): string => (row.phase !== undefined ? `phase:${row.phase}` : row.stage === null ? 'cycle' : String(row.stage));
+  const drawnRows = $derived(rows.map((r) => ({ ...r, ids: opened.has(rowKey(r)) ? r.ids : r.ids.slice(0, FIRST) })));
   const drawnIds = $derived(new Set(drawnRows.flatMap((r) => r.ids)));
 
   // The one task the Tab key lands on (the others are reached with the arrow keys): the selected one, else the first.
@@ -142,6 +160,12 @@
       linking = { from: id, to: null, soft: false, by: 'keys' };
       return;
     }
+    if (byPhase && e.altKey && !e.ctrlKey && !e.metaKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown') && !app.locked) {
+      e.preventDefault();
+      e.stopPropagation();
+      stepPhase(id, e.key === 'ArrowUp' ? -1 : 1);
+      return;
+    }
     if ((e.key === 'n' || e.key === 'u') && !e.ctrlKey && !e.metaKey && !e.altKey && app.can('plan_for')) {
       e.preventDefault();
       e.stopPropagation();
@@ -201,10 +225,63 @@
     preview = a && b ? arrow(a, b, { left: frame.left - canvas.scrollLeft, top: frame.top - canvas.scrollTop }) : null;
   });
 
+  // -- moving a task into another phase (the rows by phase) --
+
+  /** The phase the task being dragged would move into (over the free space of a row), if any. */
+  let moving = $state<{ id: string; phase: string } | null>(null);
+
+  function canMove(id: string, phase: string): boolean {
+    const task = tasks.get(id);
+    return byPhase && task !== undefined && phaseOp(task, phase) !== null;
+  }
+
+  function onRowOver(e: DragEvent, phase: string | undefined): void {
+    if (phase === undefined || linking?.by !== 'drag') return;
+    // Over a task the task decides (a join); this is the free space of the row.
+    if (e.target instanceof Element && e.target.closest('[data-node]')) return;
+    if (!canMove(linking.from, phase)) {
+      moving = null;
+      return;
+    }
+    e.preventDefault();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+    if (linking.to !== null) choose(null);
+    if (moving?.phase !== phase) moving = { id: linking.from, phase };
+  }
+
+  function onRowDrop(e: DragEvent, phase: string | undefined): void {
+    if (phase === undefined || linking?.by !== 'drag') return;
+    if (e.target instanceof Element && e.target.closest('[data-node]')) return;
+    e.preventDefault();
+    const id = linking.from;
+    linking = null;
+    moving = null;
+    if (canMove(id, phase)) void moveTo(id, phase);
+  }
+
+  async function moveTo(id: string, phase: string): Promise<void> {
+    await app.setPhase(id, phase);
+    // The task is drawn in its new row: the keys stay on it.
+    focused = id;
+    requestAnimationFrame(() => canvas?.querySelector<HTMLElement>(`[data-node="${CSS.escape(id)}"]`)?.focus());
+  }
+
+  /** Alt with up or down: the task into the phase of the row above or below. */
+  function stepPhase(id: string, dir: -1 | 1): void {
+    const at = rows.findIndex((r) => r.ids.includes(id));
+    const next = rows[at + dir];
+    if (at < 0 || next?.phase === undefined) return;
+    if (canMove(id, next.phase)) void moveTo(id, next.phase);
+  }
+
   // What the join will do, in words (a screen reader hears it as the target changes).
   const linkNote = $derived.by(() => {
     const join = linking;
     if (!join) return null;
+    if (moving) {
+      const title = markHidden(titleOf(moving.id));
+      return moving.phase === '' ? t('graph.move.none', { title }) : t('graph.move.phase', { title, phase: markHidden(moving.phase) });
+    }
     const from = markHidden(titleOf(join.from));
     if (join.to === null) return t(join.by === 'keys' ? 'graph.link.start' : 'graph.link.drag', { from });
     return t(join.soft ? 'graph.link.soft' : 'graph.link.hard', { from, to: markHidden(titleOf(join.to)) });
@@ -222,7 +299,8 @@
       return;
     }
     e.dataTransfer?.setData('text/plain', id);
-    if (e.dataTransfer) e.dataTransfer.effectAllowed = 'link';
+    // A join (a drop on a task) or, by phase, a move (a drop on the free space of a row).
+    if (e.dataTransfer) e.dataTransfer.effectAllowed = 'linkMove';
     linking = { from: id, to: null, soft: false, by: 'drag' };
   }
   function onDragOver(e: DragEvent, id: string): void {
@@ -233,6 +311,7 @@
     }
     e.preventDefault();
     if (e.dataTransfer) e.dataTransfer.dropEffect = 'link';
+    moving = null;
     if (linking.to !== id || linking.soft !== e.altKey) choose(id, e.altKey);
   }
   function onDrop(e: DragEvent, id: string): void {
@@ -243,6 +322,7 @@
   }
   function onDragEnd(): void {
     if (linking?.by === 'drag') linking = null;
+    moving = null;
   }
 
   // A finger or a pen, by the grip of a task (HTML5 drag does not start on a touch screen).
@@ -259,11 +339,21 @@
     }
     if (linking?.by !== 'finger' || linking.from !== e.id) return;
     if (e.phase === 'move') {
-      choose(farEnough(fingerFrom, e) ? placeAt(document, e.x, e.y, 'data-node') : null);
+      const far = farEnough(fingerFrom, e);
+      const on = far ? placeAt(document, e.x, e.y, 'data-node') : null;
+      choose(on);
+      // Not over a task it can join: the free space of a row by phase moves the task there.
+      const phase = far && linking.to === null && on === null ? placeAt(document, e.x, e.y, 'data-phase') : null;
+      moving = phase !== null && canMove(e.id, phase) ? { id: e.id, phase } : null;
       return;
     }
+    const move = moving;
+    moving = null;
     if (e.phase === 'end' && linking.to !== null) void connect(false);
-    else linking = null;
+    else {
+      linking = null;
+      if (e.phase === 'end' && move) void moveTo(move.id, move.phase);
+    }
   }
 
   // -- the arrows as controls --
@@ -375,12 +465,29 @@
   const toggleKey = (edge: DepEdge): Key => (edge.kind === 'blocked_by' ? 'graph.edge.soften' : 'graph.edge.harden');
 
   const titleOf = (id: string): string => tasks.get(id)?.title ?? app.graphDoc?.nodes.find((n) => n.id === id)?.title ?? id;
-  const rowName = (stage: number | null): string => (stage === null ? t('plan.no_stage') : t('plan.stage', { n: stage }));
+  const rowName = (row: DepRow): string =>
+    row.phase !== undefined
+      ? row.phase === ''
+        ? t('graph.phase.none')
+        : t('graph.phase.row', { phase: markHidden(row.phase) })
+      : row.stage === null
+        ? t('plan.no_stage')
+        : t('plan.stage', { n: row.stage });
+  const isCycle = (row: DepRow): boolean => row.phase === undefined && row.stage === null;
 </script>
 
 <section class="graph" aria-label={t('graph.view')} aria-busy={app.saving}>
   <p class="legend">{t('graph.legend')}</p>
-  {#if linkNote}<p class="link-note" role="status">{linkNote}</p>{/if}
+  {#if phaseOrder.length > 0}
+    <div class="rows-by" role="group" aria-label={t('graph.rows')}>
+      {#each ['stage', 'phase'] as const as by (by)}
+        <button type="button" aria-pressed={app.graphRows === by} onclick={() => app.setGraphRows(by)}>{t(`graph.rows.${by}`)}</button>
+      {/each}
+    </div>
+    {#if byPhase}<p class="legend">{t('graph.legend.phase')}</p>{/if}
+  {/if}
+  <!-- Always there (empty while nothing is joined): a drag that starts does not push the graph down under the pointer. -->
+  <p class="link-note" role="status">{linkNote ?? ''}</p>
   {#if focus}
     <p class="focus-note" role="status">
       <span>{t(focus.direction === 'needs' ? 'graph.focus.needs' : 'graph.focus.unlocks', { title: markHidden(titleOf(focus.id)) })}</span>
@@ -419,11 +526,21 @@
       {/each}
       {#if preview}<path class="line preview" d={preview} marker-end="url(#dep-head)" />{/if}
     </svg>
-    {#each drawnRows as row, r (rowKey(row.stage))}
+    {#each drawnRows as row, r (rowKey(row))}
       {@const all = rows[r]!.ids.length}
-      <div class="row" class:cycle={row.stage === null} data-row={rowKey(row.stage)}>
-        <h3 class="row-head">{rowName(row.stage)} ({all})</h3>
-        {#if row.stage === null}
+      <div
+        class="row"
+        role="group"
+        aria-label={rowName(row)}
+        class:cycle={isCycle(row)}
+        class:target={moving !== null && moving.phase === row.phase}
+        data-row={rowKey(row)}
+        data-phase={row.phase}
+        ondragover={(e) => onRowOver(e, row.phase)}
+        ondrop={(e) => onRowDrop(e, row.phase)}
+      >
+        <h3 class="row-head">{rowName(row)} ({all})</h3>
+        {#if isCycle(row)}
           {#each cycles as cycle, i (i)}<p class="cycle-note">{t('plan.cycle')}: <code>{markHidden(cycle.join(' → '))}</code></p>{/each}
         {/if}
         <div class="nodes">
@@ -475,7 +592,7 @@
             </button>
           {/each}
           {#if all > row.ids.length}
-            <button type="button" class="more" onclick={() => (opened = new Set([...opened, rowKey(row.stage)]))}>
+            <button type="button" class="more" onclick={() => (opened = new Set([...opened, rowKey(row)]))}>
               {t('graph.more', { n: all - row.ids.length })}
             </button>
           {/if}
@@ -668,8 +785,31 @@
     touch-action: none;
     user-select: none;
   }
+  /* Stage or phase: two buttons of one choice, as Stages or graph above. */
+  .rows-by {
+    display: inline-flex;
+    gap: 0.4rem;
+  }
+  .rows-by button {
+    background: var(--surface-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 0.2rem 0.55rem;
+    cursor: pointer;
+  }
+  .rows-by button[aria-pressed='true'] {
+    border-color: var(--accent);
+    font-weight: 600;
+  }
+  /* The row a dragged task would move into. */
+  .row.target {
+    outline: 2px dashed var(--focus);
+    outline-offset: 2px;
+  }
   .link-note {
     margin: 0;
+    min-height: 1.35em;
     font-size: 0.9rem;
   }
   .line.soft {
