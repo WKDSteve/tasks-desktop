@@ -256,7 +256,7 @@ development setting).
 The page is sent with
 
 ```
-default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self';
+default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' blob:;
 connect-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none';
 form-action 'none'; require-trusted-types-for 'script';
 trusted-types svelte-trusted-html
@@ -522,6 +522,30 @@ nothing. The path must be absolute without `.` or `..`, its parent must exist, a
 folder (never a file, never a folder with something in it: nothing is merged or overwritten). The one exception is a folder that holds exactly the structure of the same area and nothing else, what an earlier try left when the second step was refused: it is taken as it is, so that the person can try again. The area must be a plain folder
 name. It makes `<path>/<area>/ROADMAP/tasks`, the folders the engine looks for, and does not register the vault: the page
 then calls `vaults/add` as for any folder. All three routes need a session and count as mutations.
+
+## Repository folders (`/api/tasks/repos`, `repos/image`, `repos/add`, `repos/save`, `repos/open`)
+
+The repo tiles are of this device: `repos.json` in the config folder (beside `config.json`), written by the hub alone,
+whole and atomically (a temporary file and a rename). The page sends ids and texts; a path only when a folder is added
+(`repos/add`), checked as a vault folder is (a whole path, not a network share, a folder that is there) and never sent
+back, not in an error either. The document (`hub.repos`) names a repo by the last part of its folder (`label`), its
+name, whether it has an image and its area, never by its path. `repos/save` takes the groups and names on the state the
+page read (`rev`); another state is a 409 with the document as it is now. `repos/open` starts the file manager on the
+folder of a tile, or Neovim in it, with the folder as the one argument (no shell); the page names the tile, never a
+folder.
+
+What the hub reads in a repository folder is the image of its tile, and only what a fixed table names, in this order:
+`logo.*` and `icon.*` in the root, then in `assets/`, `docs/` and `.github/`, then `favicon.*`, each with the
+extensions `svg`, `png`, `webp`, `jpg`, `jpeg`; last the first image the `README.md` names, only as a plain relative path
+(no `..`, no scheme, no query) and only from its first 64 KiB. No folder is listed. A candidate is read only as a regular
+file (a link is not followed), of at most 512 KiB (looked at before and while reading), whose real path lies under the
+real path of the repository, and whose first bytes are what its extension says; an SVG that holds a script is refused.
+The image route (`repos/image?id=`) needs a session like every data route and answers with the type of the image,
+`X-Content-Type-Options: nosniff`, no caching and `Content-Security-Policy: default-src 'none'; style-src
+'unsafe-inline'; sandbox`, so nothing in it runs even if it were opened as a page. An `<img src>` does not send the
+session: the page reads the image with it and shows it from a `blob:` address it made itself, which is why the policy of
+the page allows `img-src 'self' blob:` (a `data:` image stays refused). A repository folder has no data class: nothing
+of it but this image and the folder's last name leaves the hub, and only to the paired page of this device.
 
 ## The ranges of the fields (`GET /api/tasks/enums`)
 
