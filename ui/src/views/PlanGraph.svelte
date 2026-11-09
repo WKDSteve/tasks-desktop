@@ -4,9 +4,10 @@
   // click opens a task as in the stages. The keys walk the tasks (left and right in a row, up and down to the next
   // row); the dependencies stand once more as a table under the picture, for a screen reader and for a quick read.
   // While the graph of one task is open (what it needs, or what waits for it: the engine's `planfor`, the panel above),
-  // only its tasks are drawn; `n` and `u` on a task open that focus for it.
+  // only its tasks are drawn; `n` and `u` on a task open that focus for it. An arrow is a control too (a click, or
+  // Enter on it: a small menu; Delete takes it away), and so is each row of the table: one `set` at the waiting task.
   import type { App } from '../lib/app.svelte';
-  import { criticalEdges, depGraphOf, focusStages, neighbourOf, orderRows, type DepEdge } from '../lib/depGraph';
+  import { criticalEdges, depGraphOf, focusStages, neighbourOf, orderRows, type DepEdge, type EdgeAction } from '../lib/depGraph';
   import { hintOf, labelOf, translate, type Key } from '../lib/i18n';
   import type { Stage } from '../lib/plan';
   import { markHidden } from '../lib/text';
@@ -138,11 +139,119 @@
     canvas?.querySelector<HTMLElement>(`[data-node="${CSS.escape(next)}"]`)?.focus();
   }
 
+  // -- the arrows as controls --
+
+  const edgeKey = (edge: DepEdge): string => `${edge.kind}:${edge.from}>${edge.to}`;
+  /** The menu of one arrow, where it was asked for (in the frame of the canvas's content). */
+  let menu = $state<{ edge: DepEdge; x: number; y: number } | null>(null);
+  let menuBox: HTMLDivElement | undefined = $state();
+
+  function edgeLabel(edge: DepEdge): string {
+    return t('graph.edge.label', {
+      to: markHidden(titleOf(edge.to)),
+      from: markHidden(titleOf(edge.from)),
+      kind: t(edge.kind === 'blocked_by' ? 'graph.kind.blocked_by' : 'graph.kind.after'),
+    });
+  }
+
+  const hitOf = (edge: DepEdge): SVGPathElement | null =>
+    canvas?.querySelector<SVGPathElement>(`path.hit[data-edge-key="${CSS.escape(edgeKey(edge))}"]`) ?? null;
+
+  function openMenu(edge: DepEdge, at?: { clientX: number; clientY: number }): void {
+    if (!canvas) return;
+    let x: number;
+    let y: number;
+    if (at) {
+      const frame = canvas.getBoundingClientRect();
+      x = at.clientX - frame.left + canvas.scrollLeft;
+      y = at.clientY - frame.top + canvas.scrollTop;
+    } else {
+      // From the keyboard: at the middle of the arrow.
+      const hit = hitOf(edge);
+      const mid = hit ? hit.getPointAtLength(hit.getTotalLength() / 2) : { x: 0, y: 0 };
+      x = mid.x;
+      y = mid.y;
+    }
+    menu = { edge, x, y };
+    requestAnimationFrame(() => menuBox?.querySelector<HTMLElement>('button')?.focus());
+  }
+
+  function closeMenu(back = true): void {
+    const edge = menu?.edge;
+    menu = null;
+    if (back && edge) hitOf(edge)?.focus();
+  }
+
+  function openTask(id: string): void {
+    menu = null;
+    onopen(id);
+  }
+
+  async function act(edge: DepEdge, action: EdgeAction): Promise<void> {
+    menu = null;
+    await app.editEdge(edge, action);
+    // The arrow is gone or drawn anew: the keys go on from the task that waits.
+    focused = edge.to;
+    canvas?.querySelector<HTMLElement>(`[data-node="${CSS.escape(edge.to)}"]`)?.focus();
+  }
+
+  function onHitKey(e: KeyboardEvent, edge: DepEdge): void {
+    if (e.key === 'Delete' || e.key === 'Backspace') {
+      e.preventDefault();
+      void act(edge, 'remove');
+    } else if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      openMenu(edge);
+    }
+  }
+
+  function onMenuKey(e: KeyboardEvent): void {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      e.stopPropagation();
+      closeMenu();
+    }
+  }
+
+  // A press inside the menu: WebKit does not give a pressed button the focus, the focus leaves the menu, and the
+  // menu must not close before the click arrives.
+  let pressing = false;
+
+  function onMenuFocusOut(e: FocusEvent): void {
+    const next = e.relatedTarget as Node | null;
+    if (pressing || (next && menuBox?.contains(next))) return;
+    closeMenu(false);
+  }
+
+  // A press outside the open menu closes it.
+  $effect(() => {
+    if (!menu) return;
+    const down = (e: PointerEvent): void => {
+      pressing = !!menuBox?.contains(e.target as Node);
+      if (!pressing) closeMenu(false);
+    };
+    const up = (): void => {
+      // After the click of this press (a click comes after pointerup, in the same task).
+      setTimeout(() => (pressing = false));
+    };
+    window.addEventListener('pointerdown', down, true);
+    window.addEventListener('pointerup', up, true);
+    return () => {
+      pressing = false;
+      window.removeEventListener('pointerdown', down, true);
+      window.removeEventListener('pointerup', up, true);
+    };
+  });
+
+  // The arrows of the task the keys are on are the ones Tab reaches (after the task); the others by the mouse.
+  const tabbable = (edge: DepEdge): boolean => tabStop !== null && (edge.from === tabStop || edge.to === tabStop);
+  const toggleKey = (edge: DepEdge): Key => (edge.kind === 'blocked_by' ? 'graph.edge.soften' : 'graph.edge.harden');
+
   const titleOf = (id: string): string => tasks.get(id)?.title ?? app.graphDoc?.nodes.find((n) => n.id === id)?.title ?? id;
   const rowName = (stage: number | null): string => (stage === null ? t('plan.no_stage') : t('plan.stage', { n: stage }));
 </script>
 
-<section class="graph" aria-label={t('graph.view')}>
+<section class="graph" aria-label={t('graph.view')} aria-busy={app.saving}>
   <p class="legend">{t('graph.legend')}</p>
   {#if focus}
     <p class="focus-note" role="status">
@@ -216,13 +325,52 @@
         </div>
       </div>
     {/each}
+    <svg class="hits" width={size.w} height={size.h} viewBox={`0 0 ${size.w} ${size.h}`}>
+      {#each lines as line (edgeKey(line.edge))}
+        <path
+          class="hit"
+          role="button"
+          tabindex={tabbable(line.edge) ? 0 : -1}
+          aria-label={edgeLabel(line.edge)}
+          data-edge-key={edgeKey(line.edge)}
+          d={line.d}
+          onclick={(e) => openMenu(line.edge, e)}
+          onkeydown={(e) => onHitKey(e, line.edge)}
+        />
+      {/each}
+    </svg>
+    {#if menu}
+      {@const edge = menu.edge}
+      <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+      <!-- Escape of any of its buttons closes the menu, and leaving it with Tab does: the group listens for them. -->
+      <div
+        class="edge-menu"
+        role="group"
+        aria-label={edgeLabel(edge)}
+        style:left={`${menu.x}px`}
+        style:top={`${menu.y}px`}
+        bind:this={menuBox}
+        onkeydown={onMenuKey}
+        onfocusout={onMenuFocusOut}
+      >
+        <button type="button" onclick={() => act(edge, 'remove')}>{t('graph.edge.remove')}</button>
+        <button type="button" onclick={() => act(edge, 'toggle')}>{t(toggleKey(edge))}</button>
+        <button type="button" onclick={() => openTask(edge.to)}>{t('graph.edge.open_to', { title: markHidden(titleOf(edge.to)) })}</button>
+        <button type="button" onclick={() => openTask(edge.from)}>{t('graph.edge.open_from', { title: markHidden(titleOf(edge.from)) })}</button>
+      </div>
+    {/if}
   </div>
   <details class="edges">
     <summary>{t('graph.edges', { n: graph.edges.length })}</summary>
     {#if graph.edges.length > 0}
       <table>
         <thead>
-          <tr><th scope="col">{t('graph.col.waits')}</th><th scope="col">{t('graph.col.on')}</th><th scope="col">{t('graph.col.kind')}</th></tr>
+          <tr>
+            <th scope="col">{t('graph.col.waits')}</th>
+            <th scope="col">{t('graph.col.on')}</th>
+            <th scope="col">{t('graph.col.kind')}</th>
+            <th scope="col">{t('graph.col.change')}</th>
+          </tr>
         </thead>
         <tbody>
           {#each graph.edges as edge (`${edge.kind}:${edge.from}>${edge.to}`)}
@@ -230,6 +378,14 @@
               <td><button type="button" class="link" onclick={() => onopen(edge.to)}>{markHidden(titleOf(edge.to))}</button></td>
               <td><button type="button" class="link" onclick={() => onopen(edge.from)}>{markHidden(titleOf(edge.from))}</button></td>
               <td>{t(edge.kind === 'blocked_by' ? 'graph.kind.blocked_by' : 'graph.kind.after')}</td>
+              <td class="change">
+                <button type="button" class="link" aria-label={`${t('graph.edge.remove')}: ${edgeLabel(edge)}`} onclick={() => act(edge, 'remove')}
+                  >{t('graph.edge.remove')}</button
+                >
+                <button type="button" class="link" aria-label={`${t(toggleKey(edge))}: ${edgeLabel(edge)}`} onclick={() => act(edge, 'toggle')}
+                  >{t(toggleKey(edge))}</button
+                >
+              </td>
             </tr>
           {/each}
         </tbody>
@@ -277,6 +433,56 @@
     pointer-events: none;
     overflow: visible;
   }
+  /* The arrows as controls: a wide stroke nobody sees, under the boxes (a box wins where an arrow passes it). */
+  .hits {
+    position: absolute;
+    left: 0;
+    top: 0;
+    z-index: 0;
+    pointer-events: none;
+    overflow: visible;
+  }
+  .hit {
+    fill: none;
+    stroke: transparent;
+    stroke-width: 12;
+    pointer-events: stroke;
+    cursor: pointer;
+  }
+  .hit:hover,
+  .hit:focus-visible {
+    stroke: var(--focus);
+    stroke-opacity: 0.45;
+    outline: none;
+  }
+  .edge-menu {
+    position: absolute;
+    z-index: 2;
+    display: grid;
+    gap: 0.15rem;
+    min-width: 12rem;
+    padding: 0.3rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+  }
+  .edge-menu button {
+    text-align: left;
+    padding: 0.3rem 0.5rem;
+    border: none;
+    border-radius: var(--radius);
+    background: none;
+    color: var(--text);
+    cursor: pointer;
+  }
+  .edge-menu button:hover,
+  .edge-menu button:focus-visible {
+    background: var(--surface-2);
+  }
+  td.change {
+    display: flex;
+    gap: 0.6rem;
+  }
   .line {
     fill: none;
     stroke: var(--muted);
@@ -321,6 +527,7 @@
   }
   .node {
     position: relative;
+    z-index: 1;
     display: grid;
     gap: 0.2rem;
     width: 13rem;
@@ -382,6 +589,8 @@
     overflow-wrap: anywhere;
   }
   .more {
+    position: relative;
+    z-index: 1;
     align-self: center;
     background: none;
     border: 1px dashed var(--border);

@@ -3,6 +3,7 @@
 // what this adds is the order inside a row that crosses fewer arrows, and the crossings it is measured by. The same
 // data give the same picture.
 
+import type { Op } from './api';
 import type { TaskEntry } from './contract';
 import type { Stage } from './plan';
 
@@ -56,6 +57,26 @@ export function focusStages(stages: readonly Stage[], ids: ReadonlySet<string> |
   return stages
     .map((s) => ({ stage: s.stage, tasks: s.tasks.filter((t) => ids.has(t.id)) }))
     .filter((s) => s.tasks.length > 0);
+}
+
+export type EdgeAction = 'remove' | 'toggle';
+
+/**
+ * The write that takes one arrow away (`remove`), or makes a hard one soft and a soft one hard (`toggle`): one `set`
+ * at the task that waits, on the version shown. A list left empty is taken away (`null`). No arrow of the task as it
+ * is shown: nothing to write (`null`); whether the change is allowed is the engine's to say.
+ */
+export function edgeOp(task: TaskEntry, edge: DepEdge, action: EdgeAction): Op | null {
+  const list = task[edge.kind] ?? [];
+  if (task.id !== edge.to || !list.includes(edge.from)) return null;
+  const rest = list.filter((id) => id !== edge.from);
+  const patch: Record<string, string[] | null> = { [edge.kind]: rest.length > 0 ? rest : null };
+  if (action === 'toggle') {
+    const other = edge.kind === 'blocked_by' ? 'after' : 'blocked_by';
+    const was = task[other] ?? [];
+    patch[other] = was.includes(edge.from) ? was : [...was, edge.from];
+  }
+  return { op: 'set', id: task.id, patch, ...(task.etag ? { if_match: task.etag } : {}) };
 }
 
 /** Where each task stands: its row and its place in the row. */

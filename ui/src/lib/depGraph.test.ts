@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { task } from './fixtures';
-import { criticalEdges, crossings, depGraphOf, focusStages, neighbourOf, orderRows, type DepRow } from './depGraph';
+import { criticalEdges, crossings, depGraphOf, edgeOp, focusStages, neighbourOf, orderRows, type DepRow } from './depGraph';
 
 describe('the plan as a graph', () => {
   it('takes the stages as rows and the tasks own blocked_by and after as arrows, between drawn tasks only', () => {
@@ -122,5 +122,19 @@ describe('the plan as a graph', () => {
     expect(g.edges).toEqual([{ from: 'a/1', to: 'a/3', kind: 'blocked_by' }]);
     // The blocker the focus leaves out is counted as not shown, as a filter's.
     expect(g.hidden.get('a/3')).toBe(1);
+  });
+
+  it('writes one set at the waiting task to take an arrow away or to turn it hard or soft, on the version shown', () => {
+    const b = task('a/b', { blocked_by: ['a/1', 'a/2'], after: ['a/3'], etag: 'e1' });
+    const hard = { from: 'a/1', to: 'a/b', kind: 'blocked_by' } as const;
+    expect(edgeOp(b, hard, 'remove')).toEqual({ op: 'set', id: 'a/b', patch: { blocked_by: ['a/2'] }, if_match: 'e1' });
+    expect(edgeOp(b, hard, 'toggle')).toEqual({ op: 'set', id: 'a/b', patch: { blocked_by: ['a/2'], after: ['a/3', 'a/1'] }, if_match: 'e1' });
+    // The last one of a list takes the key away; soft to hard.
+    const soft = { from: 'a/3', to: 'a/b', kind: 'after' } as const;
+    expect(edgeOp(b, soft, 'remove')).toEqual({ op: 'set', id: 'a/b', patch: { after: null }, if_match: 'e1' });
+    expect(edgeOp(b, soft, 'toggle')).toEqual({ op: 'set', id: 'a/b', patch: { after: null, blocked_by: ['a/1', 'a/2', 'a/3'] }, if_match: 'e1' });
+    // An arrow the task does not have (any more), or of another task: nothing to write.
+    expect(edgeOp(b, { from: 'a/9', to: 'a/b', kind: 'blocked_by' }, 'remove')).toBeNull();
+    expect(edgeOp(b, { from: 'a/1', to: 'a/c', kind: 'blocked_by' }, 'remove')).toBeNull();
   });
 });

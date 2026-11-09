@@ -1352,6 +1352,84 @@ test('the plan as a graph: n draws only what a task needs, u only what waits for
   expect(consoleProblems.get(page)).toEqual([]);
 });
 
+test('the plan as a graph: an arrow is taken away or turned hard or soft, by its menu, by Delete and by the table, and undone', async ({ page }) => {
+  test.slow();
+  const info = test.info();
+  const tag = `r${String(info.repeatEachIndex).padStart(3, '0')}t${info.retry}`;
+  const plan = `graph-edit-e2e-${tag}`;
+  const dir = join(state().vault, 'lib.nvim', 'ROADMAP');
+  const planFile = join(dir, 'plans', `${plan}.md`);
+  const a = join(dir, 'tasks', `${plan}-a.md`);
+  const b = join(dir, 'tasks', `${plan}-b.md`);
+  writeFileSync(planFile, `---\ntitle: Graph edit ${tag}\nstatus: doing\nareas: [lib.nvim]\ncreated: 2026-01-01\nupdated: 2026-01-01\n---\n\nA plan of this test.\n`);
+  writeFileSync(a, `---\ntitle: Edit first ${tag}\nstatus: open\nkind: task\nplan: lib.nvim/${plan}\n---\n\nText.\n`);
+  writeFileSync(b, `---\ntitle: Edit second ${tag}\nstatus: open\nkind: task\nplan: lib.nvim/${plan}\nblocked_by: [lib.nvim/${plan}-a]\n---\n\nText.\n`);
+  try {
+    await pair(page);
+    await chooseView(page, 'View', 'Plan');
+    const select = page.getByRole('combobox', { name: 'Plan' });
+    await expect(select.locator(`option[value="lib.nvim/${plan}"]`)).toBeAttached();
+    await select.selectOption(`lib.nvim/${plan}`);
+    await page.getByRole('group', { name: 'Show the plan as' }).getByRole('button', { name: 'Graph' }).click();
+    const graph = page.getByRole('region', { name: 'The plan as a graph' });
+    // A write of the graph: its answer, then the list read again (the graph is busy until then).
+    const graphWrite = async (step: () => Promise<unknown>): Promise<void> => {
+      const answer = nextAnswer(page);
+      await step();
+      await answer;
+      await expect(graph).toHaveAttribute('aria-busy', 'false', { timeout: WRITE_BUDGET });
+    };
+    const edge = `lib.nvim/${plan}-a>lib.nvim/${plan}-b`;
+    const line = graph.locator(`path.line[data-edge="${edge}"]`);
+    await expect(line).toHaveAttribute('data-kind', 'blocked_by');
+
+    // A click on the middle of the arrow opens its menu; soft it is.
+    const mid = await graph.locator(`path.hit[data-edge-key="blocked_by:${edge}"]`).evaluate((el) => {
+      const path = el as SVGPathElement;
+      const at = path.getPointAtLength(path.getTotalLength() / 2);
+      const box = path.ownerSVGElement!.getBoundingClientRect();
+      return { x: box.left + at.x, y: box.top + at.y };
+    });
+    await page.mouse.click(mid.x, mid.y);
+    const menu = graph.getByRole('group', { name: `Edit second ${tag} waits for Edit first ${tag}, hard (blocked_by)` });
+    await expect(menu).toBeVisible();
+    await expect(menu.getByRole('button').first()).toBeFocused();
+    await expectAccessible(page, 'the menu of an arrow');
+    await graphWrite(() => menu.getByRole('button', { name: 'Make it soft (after)' }).click());
+    await expect(line).toHaveAttribute('data-kind', 'after');
+    await expect.poll(() => readFileSync(b, 'utf8')).toMatch(new RegExp(`^after: \\[?lib\\.nvim/${plan}-a\\]?$`, 'm'));
+    expect(readFileSync(b, 'utf8')).not.toMatch(/^blocked_by:/m);
+    // The keys go on from the task that waits.
+    await expect(graph.locator(`[data-node="lib.nvim/${plan}-b"]`)).toBeFocused();
+
+    // Tab from the task reaches its arrow; Enter opens the menu, Escape gives the arrow the keys back, Delete takes it away.
+    await page.keyboard.press('Tab');
+    const hit = graph.locator(`path.hit[data-edge-key="after:${edge}"]`);
+    await expect(hit).toBeFocused();
+    await page.keyboard.press('Enter');
+    await expect(graph.getByRole('group', { name: /waits for/ })).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(graph.getByRole('group', { name: /waits for/ })).toHaveCount(0);
+    await expect(hit).toBeFocused();
+    await graphWrite(() => page.keyboard.press('Delete'));
+    await expect(graph.locator(`path.line[data-edge="${edge}"]`)).toHaveCount(0);
+    await expect.poll(() => readFileSync(b, 'utf8')).not.toMatch(/^after:/m);
+
+    // Undo: the soft arrow is back.
+    await graphWrite(() => page.getByRole('button', { name: 'Undo' }).click());
+    await expect(line).toHaveAttribute('data-kind', 'after');
+
+    // The table does the same: hard again.
+    await graph.getByText(/^The dependencies as a list/).click();
+    await graphWrite(() => graph.locator('details.edges').getByRole('button', { name: /^Make it hard \(blocked_by\): / }).click());
+    await expect(line).toHaveAttribute('data-kind', 'blocked_by');
+    await expect.poll(() => readFileSync(b, 'utf8')).toMatch(/^blocked_by:/m);
+    expect(consoleProblems.get(page)).toEqual([]);
+  } finally {
+    for (const path of [a, b, planFile]) removeFile(path);
+  }
+});
+
 /** Each entry of the open popup of Export: whole in the window, and the element at its middle is the entry itself. */
 async function exportEntriesReachable(page: Page): Promise<{ name: string; inside: boolean; hit: boolean }[]> {
   return page.evaluate(() =>

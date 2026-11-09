@@ -16,6 +16,7 @@ import {
   toggleMark,
 } from './bulk';
 import { planOp, type PlanForm, type PlanKind, type PlanPreview } from './planwizard';
+import { edgeOp, type DepEdge, type EdgeAction } from './depGraph';
 import { COLUMNS, columnsOf, isColumn, neighbourColumn, placeNear, stepInGroup, type Column, type Move } from './board';
 import { ApiError, type CheckAll, type SheetRunState, type Hub, type HubArea, type HubAreas, type SearchResult, type VaultList } from './api';
 import { cacheableClass, cacheableList, type CachedList, type ListStore } from './cache';
@@ -2464,6 +2465,17 @@ export class App {
         ...(task.etag ? { if_match: task.etag } : {}),
       },
     ]);
+  }
+
+  /**
+   * One arrow of the plan graph: taken away (`remove`), or turned hard or soft (`toggle`). One `set` at the task that
+   * waits, on the version shown; the engine says whether it may, and the toast takes it back.
+   */
+  async editEdge(edge: DepEdge, action: EdgeAction): Promise<void> {
+    if (this.refusedReadOnly() || this.refusedWhileSaving()) return;
+    const task = this.tasks.find((t) => t.id === edge.to);
+    const op = task ? edgeOp(task, edge, action) : null;
+    if (op) await this.write([op]);
   }
 
   /** A card dropped on the zone for finished work: the same two steps as the button. */
