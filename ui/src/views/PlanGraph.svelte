@@ -252,6 +252,8 @@
     if (phase === undefined || linking?.by !== 'drag') return;
     // Over a task the task decides (a join); this is the free space of the row.
     if (e.target instanceof Element && e.target.closest('[data-node]')) return;
+    // Off the task it was to be put before: what the drop does now is said, not that.
+    placing = null;
     if (!canMove(linking.from, phase)) {
       moving = null;
       return;

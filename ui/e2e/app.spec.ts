@@ -1548,6 +1548,35 @@ test('the plan as a graph by phase: a row per phase, a drop on the free space of
     await expect.poll(() => rowOf('c')).toBe('phase:build');
     await expect.poll(() => phaseOf('c')).toBe('build');
 
+    // A drag with Shift over a task of its row says it would stand before it; on the free space of another row it says
+    // the phase instead (the drop there moves it, it does not order it). The events as a real drag sends them.
+    const said = await page.evaluate(
+      ([from, before]) => {
+        const el = (sel: string) => document.querySelector(sel)!;
+        const note = () => document.querySelector('p.link-note')!.textContent ?? '';
+        const data = new DataTransfer();
+        const send = (target: Element, type: string, shiftKey: boolean) =>
+          target.dispatchEvent(new DragEvent(type, { bubbles: true, cancelable: true, dataTransfer: data, shiftKey }));
+        send(el(`[data-node="${CSS.escape(from)}"]`), 'dragstart', false);
+        send(el(`[data-node="${CSS.escape(before)}"]`), 'dragover', true);
+        return new Promise<string[]>((done) =>
+          requestAnimationFrame(() => {
+            const first = note();
+            send(el('[data-row="phase:test"] .row-head'), 'dragover', false);
+            requestAnimationFrame(() => {
+              const second = note();
+              send(el(`[data-node="${CSS.escape(from)}"]`), 'dragend', false);
+              done([first, second]);
+            });
+          }),
+        );
+      },
+      [id('c'), id('a')] as const,
+    );
+    expect(said[0]).toContain('then stands before');
+    expect(said[1]).toBe(`Phase c ${tag} then belongs to phase test.`);
+    expect(phaseOf('c')).toBe('build');
+
     // The keys: Alt with the down key, a into the next phase (test), then once more into none (the key goes away).
     await node('a').focus();
     await graphWrite(() => page.keyboard.press('Alt+ArrowDown'));
