@@ -1312,6 +1312,46 @@ for (const scheme of ['light', 'dark'] as const) {
   });
 }
 
+test('the plan as a graph: n draws only what a task needs, u only what waits for it, and one press gives the whole plan back', async ({ page }) => {
+  await pair(page);
+  await chooseView(page, 'View', 'Plan');
+  const choice = page.getByRole('group', { name: 'Show the plan as' });
+  await choice.getByRole('button', { name: 'Graph' }).click();
+  const graph = page.getByRole('region', { name: 'The plan as a graph' });
+  const node = (id: string) => graph.locator(`[data-node="${id}"]`);
+  // The fixture: beta and iota wait for alpha (blocked_by), cyc-a and cyc-b for each other.
+  await expect(node('cascade.nvim/iota')).toBeVisible();
+
+  // n on beta: only beta and what it needs (alpha); iota and the cycle are not drawn.
+  await node('lib.nvim/beta').focus();
+  await page.keyboard.press('n');
+  await expect(graph.getByRole('status')).toContainText('Only what Beta waits for alpha needs.');
+  await expect(node('cascade.nvim/iota')).toHaveCount(0);
+  await expect(node('lib.nvim/cyc-a')).toHaveCount(0);
+  await expect(node('lib.nvim/alpha')).toBeVisible();
+  await expect(node('lib.nvim/beta')).toHaveClass(/\broot\b/);
+  await expect(graph.locator('path[data-edge="lib.nvim/alpha>lib.nvim/beta"]')).toHaveCount(1);
+  // The key stays on the task (the panel above does not take it).
+  await expect(node('lib.nvim/beta')).toBeFocused();
+
+  // u on alpha: alpha and what waits for it (beta and iota), not the cycle.
+  await node('lib.nvim/alpha').focus();
+  await page.keyboard.press('u');
+  await expect(graph.getByRole('status')).toContainText(/^Only what waits for /);
+  await expect(node('cascade.nvim/iota')).toBeVisible();
+  await expect(node('lib.nvim/beta')).toBeVisible();
+  await expect(node('lib.nvim/cyc-a')).toHaveCount(0);
+  await expect(node('lib.nvim/alpha')).toHaveClass(/\broot\b/);
+  await expectAccessible(page, 'the focus of the graph');
+
+  // The whole plan again.
+  await graph.getByRole('button', { name: 'Show the whole plan' }).click();
+  await expect(graph.getByRole('status')).toHaveCount(0);
+  await expect(node('lib.nvim/cyc-a')).toBeVisible();
+  await expect(node('cascade.nvim/iota')).toBeVisible();
+  expect(consoleProblems.get(page)).toEqual([]);
+});
+
 /** Each entry of the open popup of Export: whole in the window, and the element at its middle is the entry itself. */
 async function exportEntriesReachable(page: Page): Promise<{ name: string; inside: boolean; hit: boolean }[]> {
   return page.evaluate(() =>

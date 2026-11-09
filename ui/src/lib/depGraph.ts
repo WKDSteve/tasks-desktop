@@ -47,6 +47,17 @@ export function depGraphOf(stages: readonly Stage[]): DepGraph {
   return { rows, edges, hidden };
 }
 
+/**
+ * The stages cut to the tasks of a focus (what one task needs, or what waits for it, as the engine's `planfor` names
+ * them); a stage left without a task goes. No focus: the stages as they are.
+ */
+export function focusStages(stages: readonly Stage[], ids: ReadonlySet<string> | null): readonly Stage[] {
+  if (ids === null) return stages;
+  return stages
+    .map((s) => ({ stage: s.stage, tasks: s.tasks.filter((t) => ids.has(t.id)) }))
+    .filter((s) => s.tasks.length > 0);
+}
+
 /** Where each task stands: its row and its place in the row. */
 function places(rows: readonly DepRow[]): Map<string, { row: number; col: number }> {
   const out = new Map<string, { row: number; col: number }>();

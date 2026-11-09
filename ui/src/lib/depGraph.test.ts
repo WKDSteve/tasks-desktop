@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { task } from './fixtures';
-import { criticalEdges, crossings, depGraphOf, neighbourOf, orderRows, type DepRow } from './depGraph';
+import { criticalEdges, crossings, depGraphOf, focusStages, neighbourOf, orderRows, type DepRow } from './depGraph';
 
 describe('the plan as a graph', () => {
   it('takes the stages as rows and the tasks own blocked_by and after as arrows, between drawn tasks only', () => {
@@ -104,5 +104,23 @@ describe('the plan as a graph', () => {
     expect(neighbourOf(rows, 'e', 'up')).toBe('c');
     expect(neighbourOf(rows, 'a', 'up')).toBeNull();
     expect(neighbourOf(rows, 'zz', 'up')).toBeNull();
+  });
+
+  it('cuts the stages to the tasks of a focus, drops a stage left empty, and draws only the arrows between them', () => {
+    const stages = [
+      { stage: 0, tasks: [task('a/1'), task('a/2')] },
+      { stage: 1, tasks: [task('a/3', { blocked_by: ['a/1', 'a/2'] })] },
+      { stage: 2, tasks: [task('a/4', { blocked_by: ['a/2'] })] },
+    ];
+    expect(focusStages(stages, null)).toBe(stages);
+    const cut = focusStages(stages, new Set(['a/1', 'a/3', 'a/elsewhere']));
+    expect(cut.map((s) => [s.stage, s.tasks.map((t) => t.id)])).toEqual([
+      [0, ['a/1']],
+      [1, ['a/3']],
+    ]);
+    const g = depGraphOf(cut);
+    expect(g.edges).toEqual([{ from: 'a/1', to: 'a/3', kind: 'blocked_by' }]);
+    // The blocker the focus leaves out is counted as not shown, as a filter's.
+    expect(g.hidden.get('a/3')).toBe(1);
   });
 });

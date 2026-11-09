@@ -3,8 +3,10 @@
   // own blocked_by (a solid arrow) and after (a dashed one) between them, the critical path drawn thick. Read only: a
   // click opens a task as in the stages. The keys walk the tasks (left and right in a row, up and down to the next
   // row); the dependencies stand once more as a table under the picture, for a screen reader and for a quick read.
+  // While the graph of one task is open (what it needs, or what waits for it: the engine's `planfor`, the panel above),
+  // only its tasks are drawn; `n` and `u` on a task open that focus for it.
   import type { App } from '../lib/app.svelte';
-  import { criticalEdges, depGraphOf, neighbourOf, orderRows, type DepEdge } from '../lib/depGraph';
+  import { criticalEdges, depGraphOf, focusStages, neighbourOf, orderRows, type DepEdge } from '../lib/depGraph';
   import { hintOf, labelOf, translate, type Key } from '../lib/i18n';
   import type { Stage } from '../lib/plan';
   import { markHidden } from '../lib/text';
@@ -27,9 +29,19 @@
 
   const t = (key: Key, params: Record<string, string | number> = {}) => translate(app.lang, key, params);
 
-  const graph = $derived(depGraphOf(stages));
+  // The focus, once the engine's answer for the task and the way asked is there (until then the whole plan stays).
+  const focus = $derived.by(() => {
+    const open = app.graph;
+    const doc = app.graphDoc;
+    if (!open || !doc || doc.id !== open.id || doc.direction !== open.direction) return null;
+    return { id: open.id, direction: open.direction, ids: new Set([open.id, ...doc.nodes.map((n) => n.id)]) };
+  });
+  const shown = $derived(focusStages(stages, focus?.ids ?? null));
+  const graph = $derived(depGraphOf(shown));
   const rows = $derived(orderRows(graph.rows, graph.edges));
   const tasks = $derived(new Map(stages.flatMap((s) => s.tasks).map((task) => [task.id, task] as const)));
+  // The tasks of the focus this plan (or the filter) does not hold: named as a number, not drawn.
+  const outside = $derived(focus ? [...focus.ids].filter((id) => !tasks.has(id)).length : 0);
   const onPath = $derived(criticalEdges(path));
 
   // A row draws its first tasks; the rest on a press (a stage of hundreds is not one block of work, as in the stages).
@@ -107,6 +119,15 @@
   });
 
   function onNodeKey(e: KeyboardEvent, id: string): void {
+    if ((e.key === 'n' || e.key === 'u') && !e.ctrlKey && !e.metaKey && !e.altKey && app.can('plan_for')) {
+      e.preventDefault();
+      e.stopPropagation();
+      focused = id;
+      app.openGraph(id, e.key === 'n' ? 'needs' : 'unlocks');
+      // The focus stays on the task (it is drawn in its own focus): the panel above does not take it.
+      app.graphWantsFocus = false;
+      return;
+    }
     const keys: Record<string, 'left' | 'right' | 'up' | 'down'> = { ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'up', ArrowDown: 'down' };
     const dir = keys[e.key];
     if (dir === undefined) return;
@@ -117,12 +138,20 @@
     canvas?.querySelector<HTMLElement>(`[data-node="${CSS.escape(next)}"]`)?.focus();
   }
 
-  const titleOf = (id: string): string => tasks.get(id)?.title ?? id;
+  const titleOf = (id: string): string => tasks.get(id)?.title ?? app.graphDoc?.nodes.find((n) => n.id === id)?.title ?? id;
   const rowName = (stage: number | null): string => (stage === null ? t('plan.no_stage') : t('plan.stage', { n: stage }));
 </script>
 
 <section class="graph" aria-label={t('graph.view')}>
   <p class="legend">{t('graph.legend')}</p>
+  {#if focus}
+    <p class="focus-note" role="status">
+      <span>{t(focus.direction === 'needs' ? 'graph.focus.needs' : 'graph.focus.unlocks', { title: markHidden(titleOf(focus.id)) })}</span>
+      {#if outside > 0}<span class="muted">{t('graph.focus.outside', { n: outside })}</span>{/if}
+      <button type="button" class="link" onclick={() => app.closeGraph()}>{t('graph.focus.all')}</button>
+    </p>
+  {/if}
+  {#if focus && shown.length === 0}<p class="muted">{t('graph.focus.none')}</p>{/if}
   <div class="canvas" bind:this={canvas}>
     <svg class="arrows" aria-hidden="true" width={size.w} height={size.h} viewBox={`0 0 ${size.w} ${size.h}`}>
       <defs>
@@ -160,6 +189,7 @@
               type="button"
               class="node"
               class:critical={critical.has(id)}
+              class:root={id === focus?.id}
               class:waiting={task?.readiness?.state === 'waiting' || task?.readiness?.state === 'stuck'}
               data-node={id}
               tabindex={id === tabStop ? 0 : -1}
@@ -212,6 +242,18 @@
   .graph {
     display: grid;
     gap: 0.5rem;
+  }
+  .focus-note {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: baseline;
+    margin: 0;
+    font-size: 0.9rem;
+  }
+  .muted {
+    margin: 0;
+    color: var(--muted);
   }
   .legend {
     margin: 0;
@@ -301,6 +343,12 @@
   .node.critical {
     border-color: var(--accent);
     border-width: 2px;
+  }
+  /* The task the focus is about: a double frame, so it is found at once among the ones it needs. */
+  .node.root {
+    border-color: var(--accent);
+    border-style: double;
+    border-width: 4px;
   }
   .node.waiting {
     opacity: 0.75;
