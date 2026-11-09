@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { task } from './fixtures';
-import { criticalEdges, crossings, depGraphOf, edgeOp, focusStages, neighbourOf, orderRows, type DepRow } from './depGraph';
+import { connectOp, criticalEdges, crossings, depGraphOf, edgeOp, focusStages, neighbourOf, orderRows, type DepRow } from './depGraph';
 
 describe('the plan as a graph', () => {
   it('takes the stages as rows and the tasks own blocked_by and after as arrows, between drawn tasks only', () => {
@@ -136,5 +136,16 @@ describe('the plan as a graph', () => {
     // An arrow the task does not have (any more), or of another task: nothing to write.
     expect(edgeOp(b, { from: 'a/9', to: 'a/b', kind: 'blocked_by' }, 'remove')).toBeNull();
     expect(edgeOp(b, { from: 'a/1', to: 'a/c', kind: 'blocked_by' }, 'remove')).toBeNull();
+  });
+
+  it('joins a task to another with one set, hard or soft, and not to itself nor twice', () => {
+    const c = task('a/c', { blocked_by: ['a/1'], after: ['a/2'], etag: 'e2' });
+    expect(connectOp(c, 'a/3', 'blocked_by')).toEqual({ op: 'set', id: 'a/c', patch: { blocked_by: ['a/1', 'a/3'] }, if_match: 'e2' });
+    expect(connectOp(c, 'a/3', 'after')).toEqual({ op: 'set', id: 'a/c', patch: { after: ['a/2', 'a/3'] }, if_match: 'e2' });
+    expect(connectOp(task('a/d'), 'a/3', 'blocked_by')).toEqual({ op: 'set', id: 'a/d', patch: { blocked_by: ['a/3'] } });
+    // Itself, or joined already (either way): nothing to write.
+    expect(connectOp(c, 'a/c', 'blocked_by')).toBeNull();
+    expect(connectOp(c, 'a/1', 'after')).toBeNull();
+    expect(connectOp(c, 'a/2', 'blocked_by')).toBeNull();
   });
 });

@@ -79,6 +79,16 @@ export function edgeOp(task: TaskEntry, edge: DepEdge, action: EdgeAction): Op |
   return { op: 'set', id: task.id, patch, ...(task.etag ? { if_match: task.etag } : {}) };
 }
 
+/**
+ * The write that makes `task` wait for `from`: `from` into its `blocked_by` (`kind`), or into its `after` (soft). A task
+ * is not joined to itself, and not twice to the same task (hard or soft): nothing to write (`null`). A cycle is the
+ * engine's to find (`blocked-by-cycle`): the page reckons no graph.
+ */
+export function connectOp(task: TaskEntry, from: string, kind: EdgeKind): Op | null {
+  if (from === task.id || (task.blocked_by ?? []).includes(from) || (task.after ?? []).includes(from)) return null;
+  return { op: 'set', id: task.id, patch: { [kind]: [...(task[kind] ?? []), from] }, ...(task.etag ? { if_match: task.etag } : {}) };
+}
+
 /** Where each task stands: its row and its place in the row. */
 function places(rows: readonly DepRow[]): Map<string, { row: number; col: number }> {
   const out = new Map<string, { row: number; col: number }>();

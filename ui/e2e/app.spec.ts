@@ -1430,6 +1430,78 @@ test('the plan as a graph: an arrow is taken away or turned hard or soft, by its
   }
 });
 
+test('the plan as a graph: a task dropped on another joins them, so do l and the keys, and the engine refuses a cycle', async ({ page }) => {
+  test.slow();
+  const info = test.info();
+  const tag = `r${String(info.repeatEachIndex).padStart(3, '0')}t${info.retry}`;
+  const plan = `graph-join-e2e-${tag}`;
+  const dir = join(state().vault, 'lib.nvim', 'ROADMAP');
+  const planFile = join(dir, 'plans', `${plan}.md`);
+  const file = (n: string) => join(dir, 'tasks', `${plan}-${n}.md`);
+  const id = (n: string) => `lib.nvim/${plan}-${n}`;
+  writeFileSync(planFile, `---\ntitle: Graph join ${tag}\nstatus: doing\nareas: [lib.nvim]\ncreated: 2026-01-01\nupdated: 2026-01-01\n---\n\nA plan of this test.\n`);
+  // a first; b waits for a; c stands alone.
+  writeFileSync(file('a'), `---\ntitle: Join a ${tag}\nstatus: open\nkind: task\nplan: lib.nvim/${plan}\n---\n\nText.\n`);
+  writeFileSync(file('b'), `---\ntitle: Join b ${tag}\nstatus: open\nkind: task\nplan: lib.nvim/${plan}\nblocked_by: [${id('a')}]\n---\n\nText.\n`);
+  writeFileSync(file('c'), `---\ntitle: Join c ${tag}\nstatus: open\nkind: task\nplan: lib.nvim/${plan}\n---\n\nText.\n`);
+  try {
+    await pair(page);
+    await chooseView(page, 'View', 'Plan');
+    const select = page.getByRole('combobox', { name: 'Plan' });
+    await expect(select.locator(`option[value="lib.nvim/${plan}"]`)).toBeAttached();
+    await select.selectOption(`lib.nvim/${plan}`);
+    await page.getByRole('group', { name: 'Show the plan as' }).getByRole('button', { name: 'Graph' }).click();
+    const graph = page.getByRole('region', { name: 'The plan as a graph' });
+    const node = (n: string) => graph.locator(`[data-node="${id(n)}"]`);
+    const line = (from: string, to: string) => graph.locator(`path.line[data-edge="${id(from)}>${id(to)}"]`);
+    const graphWrite = async (step: () => Promise<unknown>): Promise<void> => {
+      const answer = nextAnswer(page);
+      await step();
+      await answer;
+      await expect(graph).toHaveAttribute('aria-busy', 'false', { timeout: WRITE_BUDGET });
+    };
+    await expect(line('a', 'b')).toHaveAttribute('data-kind', 'blocked_by');
+
+    // The mouse: a dropped on c, c waits for a.
+    await graphWrite(() => node('a').dragTo(node('c')));
+    await expect(line('a', 'c')).toHaveAttribute('data-kind', 'blocked_by');
+    await expect.poll(() => readFileSync(file('c'), 'utf8')).toMatch(new RegExp(`^blocked_by: \\[?${id('a').replace(/[.]/g, '\\.')}\\]?$`, 'm'));
+
+    // The keys: l on b, the arrow keys choose c, the arrow to come is drawn and said; Alt+Enter sets it soft.
+    await node('b').focus();
+    await page.keyboard.press('l');
+    const note = graph.locator('p.link-note');
+    await expect(note).toContainText(`Joining Join b ${tag}`);
+    // b and c share a row (both wait for a): c is beside b.
+    const beside = (await node('c').boundingBox())!.x > (await node('b').boundingBox())!.x ? 'ArrowRight' : 'ArrowLeft';
+    await page.keyboard.press(beside);
+    await expect(node('c')).toBeFocused();
+    await expect(note).toHaveText(`Join c ${tag} then waits for Join b ${tag} (hard).`);
+    await expect(graph.locator('path.line.preview')).toHaveCount(1);
+    await expectAccessible(page, 'a join of the graph on its way');
+    await graphWrite(() => page.keyboard.press('Alt+Enter'));
+    await expect(line('b', 'c')).toHaveAttribute('data-kind', 'after');
+    await expect(note).toHaveCount(0);
+
+    // Escape stops a join, and nothing is written.
+    await node('c').focus();
+    await page.keyboard.press('l');
+    await expect(note).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(note).toHaveCount(0);
+    await expect(graph.locator('path.line.preview')).toHaveCount(0);
+
+    // b dropped on a: a would wait for b, which waits for a. The engine says no; nothing changes.
+    const before = readFileSync(file('a'), 'utf8');
+    await graphWrite(() => node('b').dragTo(node('a')));
+    await expect(page.getByRole('alert')).toContainText('would form a cycle');
+    await expect(line('b', 'a')).toHaveCount(0);
+    expect(readFileSync(file('a'), 'utf8')).toBe(before);
+  } finally {
+    for (const path of [file('a'), file('b'), file('c'), planFile]) removeFile(path);
+  }
+});
+
 /** Each entry of the open popup of Export: whole in the window, and the element at its middle is the entry itself. */
 async function exportEntriesReachable(page: Page): Promise<{ name: string; inside: boolean; hit: boolean }[]> {
   return page.evaluate(() =>

@@ -6,8 +6,11 @@
   // While the graph of one task is open (what it needs, or what waits for it: the engine's `planfor`, the panel above),
   // only its tasks are drawn; `n` and `u` on a task open that focus for it. An arrow is a control too (a click, or
   // Enter on it: a small menu; Delete takes it away), and so is each row of the table: one `set` at the waiting task.
+  // A task dropped on another (the mouse, or a finger by its grip), or `l` and then the keys, makes the other wait
+  // for it: hard, or soft with Alt. The arrow to come is drawn dashed while it is chosen; the engine refuses a cycle.
   import type { App } from '../lib/app.svelte';
-  import { criticalEdges, depGraphOf, focusStages, neighbourOf, orderRows, type DepEdge, type EdgeAction } from '../lib/depGraph';
+  import { connectOp, criticalEdges, depGraphOf, focusStages, neighbourOf, orderRows, type DepEdge, type EdgeAction } from '../lib/depGraph';
+  import { createGrip, farEnough, placeAt, type PointerDragEvent } from '../lib/pointerDrag';
   import { hintOf, labelOf, translate, type Key } from '../lib/i18n';
   import type { Stage } from '../lib/plan';
   import { markHidden } from '../lib/text';
@@ -120,6 +123,25 @@
   });
 
   function onNodeKey(e: KeyboardEvent, id: string): void {
+    if (linking?.by === 'keys') {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        linking = null;
+        return;
+      }
+      if (e.key === 'Enter') {
+        // Not the click of the button: Enter sets the arrow (or does nothing on a task it cannot be set to).
+        e.preventDefault();
+        if (linking.to !== null) void connect(e.altKey);
+        return;
+      }
+    } else if (e.key === 'l' && !e.ctrlKey && !e.metaKey && !e.altKey && !app.locked) {
+      e.preventDefault();
+      e.stopPropagation();
+      linking = { from: id, to: null, soft: false, by: 'keys' };
+      return;
+    }
     if ((e.key === 'n' || e.key === 'u') && !e.ctrlKey && !e.metaKey && !e.altKey && app.can('plan_for')) {
       e.preventDefault();
       e.stopPropagation();
@@ -137,6 +159,111 @@
     if (next === null) return;
     focused = next;
     canvas?.querySelector<HTMLElement>(`[data-node="${CSS.escape(next)}"]`)?.focus();
+  }
+
+  // -- joining two tasks --
+
+  /** A join on its way: from which task, to which (once one is chosen that it can be set to), and by what. */
+  let linking = $state<{ from: string; to: string | null; soft: boolean; by: 'keys' | 'drag' | 'finger' } | null>(null);
+  let preview = $state<string | null>(null);
+
+  /** Whether `to` can be made to wait for the task being joined (not itself, not joined to it already). */
+  function canTake(to: string): boolean {
+    const task = tasks.get(to);
+    return linking !== null && task !== undefined && connectOp(task, linking.from, 'blocked_by') !== null;
+  }
+
+  function choose(to: string | null, soft = linking?.soft ?? false): void {
+    if (!linking) return;
+    linking = { ...linking, to: to !== null && canTake(to) ? to : null, soft };
+  }
+
+  async function connect(soft: boolean): Promise<void> {
+    const join = linking;
+    linking = null;
+    if (!join || join.to === null) return;
+    await app.connectEdge(join.from, join.to, soft ? 'after' : 'blocked_by');
+    focused = join.to;
+    canvas?.querySelector<HTMLElement>(`[data-node="${CSS.escape(join.to)}"]`)?.focus();
+  }
+
+  // The arrow to come, laid as the others are, between the two boxes as they are drawn now.
+  $effect(() => {
+    const join = linking;
+    void lines;
+    if (!join || join.to === null || !canvas) {
+      preview = null;
+      return;
+    }
+    const a = canvas.querySelector<HTMLElement>(`[data-node="${CSS.escape(join.from)}"]`)?.getBoundingClientRect();
+    const b = canvas.querySelector<HTMLElement>(`[data-node="${CSS.escape(join.to)}"]`)?.getBoundingClientRect();
+    const frame = canvas.getBoundingClientRect();
+    preview = a && b ? arrow(a, b, { left: frame.left - canvas.scrollLeft, top: frame.top - canvas.scrollTop }) : null;
+  });
+
+  // What the join will do, in words (a screen reader hears it as the target changes).
+  const linkNote = $derived.by(() => {
+    const join = linking;
+    if (!join) return null;
+    const from = markHidden(titleOf(join.from));
+    if (join.to === null) return t(join.by === 'keys' ? 'graph.link.start' : 'graph.link.drag', { from });
+    return t(join.soft ? 'graph.link.soft' : 'graph.link.hard', { from, to: markHidden(titleOf(join.to)) });
+  });
+
+  function onNodeFocus(id: string): void {
+    focused = id;
+    if (linking?.by === 'keys') choose(id === linking.from ? null : id);
+  }
+
+  // The mouse: HTML5 drag, a drop on a task joins.
+  function onDragStart(e: DragEvent, id: string): void {
+    if (app.locked) {
+      e.preventDefault();
+      return;
+    }
+    e.dataTransfer?.setData('text/plain', id);
+    if (e.dataTransfer) e.dataTransfer.effectAllowed = 'link';
+    linking = { from: id, to: null, soft: false, by: 'drag' };
+  }
+  function onDragOver(e: DragEvent, id: string): void {
+    if (linking?.by !== 'drag') return;
+    if (!canTake(id)) {
+      if (linking.to === id) choose(null);
+      return;
+    }
+    e.preventDefault();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = 'link';
+    if (linking.to !== id || linking.soft !== e.altKey) choose(id, e.altKey);
+  }
+  function onDrop(e: DragEvent, id: string): void {
+    if (linking?.by !== 'drag') return;
+    e.preventDefault();
+    choose(id, e.altKey);
+    void connect(e.altKey);
+  }
+  function onDragEnd(): void {
+    if (linking?.by === 'drag') linking = null;
+  }
+
+  // A finger or a pen, by the grip of a task (HTML5 drag does not start on a touch screen).
+  let fingerFrom = { x: 0, y: 0 };
+  const grip = createGrip(
+    () => onFinger,
+    () => app.locked,
+  );
+  function onFinger(e: PointerDragEvent): void {
+    if (e.phase === 'start') {
+      fingerFrom = { x: e.x, y: e.y };
+      linking = { from: e.id, to: null, soft: false, by: 'finger' };
+      return;
+    }
+    if (linking?.by !== 'finger' || linking.from !== e.id) return;
+    if (e.phase === 'move') {
+      choose(farEnough(fingerFrom, e) ? placeAt(document, e.x, e.y, 'data-node') : null);
+      return;
+    }
+    if (e.phase === 'end' && linking.to !== null) void connect(false);
+    else linking = null;
   }
 
   // -- the arrows as controls --
@@ -253,6 +380,7 @@
 
 <section class="graph" aria-label={t('graph.view')} aria-busy={app.saving}>
   <p class="legend">{t('graph.legend')}</p>
+  {#if linkNote}<p class="link-note" role="status">{linkNote}</p>{/if}
   {#if focus}
     <p class="focus-note" role="status">
       <span>{t(focus.direction === 'needs' ? 'graph.focus.needs' : 'graph.focus.unlocks', { title: markHidden(titleOf(focus.id)) })}</span>
@@ -261,7 +389,14 @@
     </p>
   {/if}
   {#if focus && shown.length === 0}<p class="muted">{t('graph.focus.none')}</p>{/if}
-  <div class="canvas" bind:this={canvas}>
+  <div
+    class="canvas"
+    bind:this={canvas}
+    onfocusout={(e) => {
+      // The keys left the graph: a join by the keys stops (it would wait unseen).
+      if (linking?.by === 'keys' && !canvas?.contains(e.relatedTarget as Node | null)) linking = null;
+    }}
+  >
     <svg class="arrows" aria-hidden="true" width={size.w} height={size.h} viewBox={`0 0 ${size.w} ${size.h}`}>
       <defs>
         <marker id="dep-head" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
@@ -282,6 +417,7 @@
           marker-end={line.critical ? 'url(#dep-head-critical)' : 'url(#dep-head)'}
         />
       {/each}
+      {#if preview}<path class="line preview" d={preview} marker-end="url(#dep-head)" />{/if}
     </svg>
     {#each drawnRows as row, r (rowKey(row.stage))}
       {@const all = rows[r]!.ids.length}
@@ -299,13 +435,23 @@
               class="node"
               class:critical={critical.has(id)}
               class:root={id === focus?.id}
+              class:link-from={linking?.from === id}
+              class:link-to={linking?.to === id}
               class:waiting={task?.readiness?.state === 'waiting' || task?.readiness?.state === 'stuck'}
               data-node={id}
               tabindex={id === tabStop ? 0 : -1}
               aria-current={id === app.selectedId ? 'true' : undefined}
-              onfocus={() => (focused = id)}
+              draggable={!app.locked}
+              onfocus={() => onNodeFocus(id)}
               onkeydown={(e) => onNodeKey(e, id)}
-              onclick={() => onopen(id)}
+              onclick={() => {
+                linking = null;
+                onopen(id);
+              }}
+              ondragstart={(e) => onDragStart(e, id)}
+              ondragover={(e) => onDragOver(e, id)}
+              ondrop={(e) => onDrop(e, id)}
+              ondragend={onDragEnd}
             >
               <span class="title">{markHidden(task?.title ?? id)}</span>
               <span class="meta">
@@ -315,6 +461,17 @@
                 {#if hidden > 0}<span class="tag soft" data-hint={t('graph.hidden_hint')}>{t('graph.hidden', { n: hidden })}</span>{/if}
               </span>
               <span class="id">{id}</span>
+              <!-- A finger joins by this grip (the keys have l, the mouse drags the whole task). -->
+              <span
+                class="grip"
+                data-hint={t('hint.ui.graph.grip')}
+                role="presentation"
+                aria-hidden="true"
+                onpointerdown={(e) => grip(e, id, 'start')}
+                onpointermove={(e) => grip(e, id, 'move')}
+                onpointerup={(e) => grip(e, id, 'end')}
+                onpointercancel={(e) => grip(e, id, 'cancel')}>⠿</span
+              >
             </button>
           {/each}
           {#if all > row.ids.length}
@@ -487,6 +644,33 @@
     fill: none;
     stroke: var(--muted);
     stroke-width: 1.5;
+  }
+  /* The arrow to come, while a join is chosen. */
+  .line.preview {
+    stroke: var(--focus);
+    stroke-width: 2;
+    stroke-dasharray: 3 3;
+  }
+  .node.link-from {
+    outline: 2px dashed var(--focus);
+    outline-offset: 2px;
+  }
+  .node.link-to {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
+  }
+  .grip {
+    position: absolute;
+    right: 0.3rem;
+    bottom: 0.2rem;
+    color: var(--muted);
+    cursor: grab;
+    touch-action: none;
+    user-select: none;
+  }
+  .link-note {
+    margin: 0;
+    font-size: 0.9rem;
   }
   .line.soft {
     stroke-dasharray: 5 4;

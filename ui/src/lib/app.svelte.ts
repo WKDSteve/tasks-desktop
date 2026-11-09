@@ -16,7 +16,7 @@ import {
   toggleMark,
 } from './bulk';
 import { planOp, type PlanForm, type PlanKind, type PlanPreview } from './planwizard';
-import { edgeOp, type DepEdge, type EdgeAction } from './depGraph';
+import { connectOp, edgeOp, type DepEdge, type EdgeAction, type EdgeKind } from './depGraph';
 import { COLUMNS, columnsOf, isColumn, neighbourColumn, placeNear, stepInGroup, type Column, type Move } from './board';
 import { ApiError, type CheckAll, type SheetRunState, type Hub, type HubArea, type HubAreas, type SearchResult, type VaultList } from './api';
 import { cacheableClass, cacheableList, type CachedList, type ListStore } from './cache';
@@ -2475,6 +2475,17 @@ export class App {
     if (this.refusedReadOnly() || this.refusedWhileSaving()) return;
     const task = this.tasks.find((t) => t.id === edge.to);
     const op = task ? edgeOp(task, edge, action) : null;
+    if (op) await this.write([op]);
+  }
+
+  /**
+   * Make `to` wait for `from` (a drop of one task of the plan graph on another, or the keys): `from` into the
+   * `blocked_by` of `to`, or into its `after`. One `set` on the version shown; a cycle is refused by the engine.
+   */
+  async connectEdge(from: string, to: string, kind: EdgeKind): Promise<void> {
+    if (this.refusedReadOnly() || this.refusedWhileSaving()) return;
+    const task = this.tasks.find((t) => t.id === to);
+    const op = task ? connectOp(task, from, kind) : null;
     if (op) await this.write([op]);
   }
 
