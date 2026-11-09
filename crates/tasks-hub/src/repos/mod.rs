@@ -20,6 +20,8 @@ use serde_json::{json, Value};
 
 use crate::classes::AreaPolicy;
 
+pub mod image;
+
 /// The name of the file in the config folder.
 pub const FILE: &str = "repos.json";
 /// The name the old file is kept under when an invalid one is written over.
