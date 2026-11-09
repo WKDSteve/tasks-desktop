@@ -436,6 +436,25 @@ stages, the phase counts and the warnings narrow to it (the choice is kept when 
 is left), while the state counts, the estimate and the critical path stay those of the
 whole vault.
 
+The choice *Graph* of the Plan view (kept over a reload) draws the same tasks as a graph: the stages as rows, an arrow
+from each task to the one that waits for it (solid for `blocked_by`, dashed for `after`, thick on the critical path),
+the tasks of a cycle in a row of their own. The arrow keys walk the tasks; the dependencies stand once more as a table
+under the picture, for a screen reader. The graph changes them too, each change one write of the engine on the version
+shown, undone from the message:
+
+- **Focus.** `n` on a task draws only what it needs before it can start, `u` only what waits for it (the engine's
+  `plan_for`, the list above the graph says the same); *Show the whole plan* gives the rest back.
+- **Join.** A task dropped on another (the mouse, or a finger by the grip of the task) makes the other wait for it:
+  into its `blocked_by`, or with `Alt` into its `after`. From the keys: `l` on the task, the arrow keys choose the one
+  that is to wait, `Enter` sets it hard, `Alt`+`Enter` soft, `Escape` stops. The arrow to come is drawn dashed and said
+  in words while it is chosen; a cycle is refused by the engine (`blocked-by-cycle`), in its words.
+- **Remove or turn.** A click on an arrow (or `Tab` from a task to its arrows and `Enter`) opens a small menu: remove
+  the dependency, make it soft or hard, open either task; `Delete` on an arrow removes it, and each row of the table
+  has the same actions.
+- **By phase.** In a plan with phases the rows can be its phases instead (*Rows by: Stage | Phase*, kept), one row per
+  phase and one for the tasks without: a task dropped on the free space of another row, or `Alt` with the up or down
+  key, moves into that phase (`phase`).
+
 **Projects** (an engine with the capability `projects`; without it the Plan view stays as described above). A project
 is the level above plans: project, plan, task, and the steps of a task (its `## Plan` section) are its subtasks, shown
 as `3/5` on its row, its card, in its detail and on the project page. The choice *Project* of the Plan view opens a
