@@ -16,8 +16,8 @@
   import { selectOfGroup } from '../lib/viewMenu';
   import { DRAFT_ID } from '../lib/state/views.svelte';
   import { createGrip, farEnough, placeAt, type PointerDragEvent } from '../lib/pointerDrag';
-  import Groups from './Groups.svelte';
-  import GroupMatrix from './GroupMatrix.svelte';
+  import Groups from 'appkit-ui/Groups.svelte';
+  import GroupMatrix from 'appkit-ui/GroupMatrix.svelte';
   import BoardView from './BoardView.svelte';
 
   /** `board`: the built-in view is shown, the board (columns by status, with its order, runs and finishing). */

@@ -1,22 +1,17 @@
 // Groups: the tasks of a view laid in groups by a field, and the operation that a drag from one group to another is.
 // Nothing here knows a field: which fields there are, what values each can have and how each is written is the engine's
-// (`tasks.groupings`, WEB-13). This only reads the value a task has for a field and turns a drop into the operation the
-// engine names for it (`set`, the list of tags, a move of the area).
+// (`tasks.groupings`, WEB-13). The groups, the cells and the neighbours are the kit's (`appkit-ui/groups`); this reads
+// the value a task has for a field and turns a drop into the operation the engine names for it (`set`, the list of tags,
+// a move of the area).
 
+import { cellsOf as kitCellsOf, groupsOf as kitGroupsOf, NONE, type Cell } from 'appkit-ui/groups';
 import type { Op } from './api';
 import type { Groupings, TaskEntry } from './contract';
 
+export { countOf, neighbourCell, neighbourGroup, NONE, type Cell, type Group } from 'appkit-ui/groups';
+
 /** A field a view can group by, as the engine describes it. */
 export type Grouping = Groupings['fields'][number];
-
-/** The value that stands for "this task has none" (a group of its own: a target too). */
-export const NONE = '';
-
-/** One group: its value (`NONE` for the tasks that have none) and the tasks that are in it. */
-export interface Group<T> {
-  value: string;
-  items: T[];
-}
 
 /**
  * The values of a derived field another document of the engine holds (not the task entry): the caller reads them there
@@ -44,42 +39,8 @@ export function valuesOf(task: TaskEntry, grouping: Grouping, derived?: Derived)
  * drop), a value the engine did not name after them in the order it is met, and the tasks that have none last. A task
  * with several values (tags) stands in each of their groups; the group of none shows only when some task has none.
  */
-export function groupsOf<T extends TaskEntry>(items: readonly T[], grouping: Grouping, derived?: Derived): Group<T>[] {
-  const groups = new Map<string, T[]>();
-  for (const value of grouping.values) groups.set(value, []);
-  const unnamed: string[] = [];
-  const none: T[] = [];
-  for (const item of items) {
-    const values = valuesOf(item, grouping, derived);
-    if (values.length === 0) {
-      none.push(item);
-      continue;
-    }
-    for (const value of values) {
-      let list = groups.get(value);
-      if (!list) {
-        list = [];
-        groups.set(value, list);
-        unnamed.push(value);
-      }
-      list.push(item);
-    }
-  }
-  const out: Group<T>[] = [...grouping.values, ...unnamed].map((value) => ({ value, items: groups.get(value) ?? [] }));
-  if (none.length > 0) out.push({ value: NONE, items: none });
-  return out;
-}
-
-/** The count a group shows: how many tasks are in it. */
-export function countOf(group: Group<unknown>): number {
-  return group.items.length;
-}
-
-/** The group before (`-1`) or after (`1`) `value`, or null at the end: where a key moves a card to. */
-export function neighbourGroup(groups: readonly Group<unknown>[], value: string, dir: 1 | -1): string | null {
-  const at = groups.findIndex((g) => g.value === value);
-  if (at < 0) return null;
-  return groups[at + dir]?.value ?? null;
+export function groupsOf<T extends TaskEntry>(items: readonly T[], grouping: Grouping, derived?: Derived) {
+  return kitGroupsOf(items, grouping, (task, g) => valuesOf(task, g, derived));
 }
 
 /** Whether a drop with `copy` (the Ctrl key) keeps the group it leaves: only a list of tags can; any other field moves. */
@@ -133,12 +94,6 @@ export function dropOps(task: TaskEntry, grouping: Grouping, from: string, to: s
   return { kind: 'ops', ops: [{ op: 'set', id: task.id, patch: { [grouping.field]: written(grouping, to) }, ...guard }] };
 }
 
-/** A cell of a matrix: the value of its row and of its column. */
-export interface Cell {
-  row: string;
-  column: string;
-}
-
 /**
  * The drop of `task` from the cell `from` onto the cell `to` of a matrix: what changes of the row and of the column, as
  * ONE `set` (both fields on the version shown, so the file is never left with one of them written). A field that stays
@@ -160,38 +115,11 @@ export function cellDropOps(task: TaskEntry, rows: Grouping, columns: Grouping, 
   return { kind: 'ops', ops: [{ op: 'set', id: task.id, patch, ...guard }] };
 }
 
-/** The cell next to `at` in a matrix: a row up or down (`rows`), a column to the left or right, or null at the edge. */
-export function neighbourCell(
-  rows: readonly Group<unknown>[],
-  columns: readonly Group<unknown>[],
-  at: Cell,
-  move: 'up' | 'down' | 'left' | 'right',
-): Cell | null {
-  if (move === 'up' || move === 'down') {
-    const row = neighbourGroup(rows, at.row, move === 'down' ? 1 : -1);
-    return row === null ? null : { row, column: at.column };
-  }
-  const column = neighbourGroup(columns, at.column, move === 'right' ? 1 : -1);
-  return column === null ? null : { row: at.row, column };
-}
-
 /**
  * The two fields of a matrix: the cells of rows by columns, each with the tasks in both. Rows and columns are the groups
  * of the two groupings over all the tasks (so every row has the same columns, an empty cell included); the task of a list
  * field stands in every cell it belongs to.
  */
-export function cellsOf<T extends TaskEntry>(
-  items: readonly T[],
-  rows: Grouping,
-  columns: Grouping,
-  derived?: Derived,
-): { row: string; column: string; items: T[] }[] {
-  const columnGroups = groupsOf(items, columns, derived).map((g) => ({ value: g.value, ids: new Set(g.items.map((i) => i.id)) }));
-  const out: { row: string; column: string; items: T[] }[] = [];
-  for (const row of groupsOf(items, rows, derived)) {
-    for (const column of columnGroups) {
-      out.push({ row: row.value, column: column.value, items: row.items.filter((i) => column.ids.has(i.id)) });
-    }
-  }
-  return out;
+export function cellsOf<T extends TaskEntry>(items: readonly T[], rows: Grouping, columns: Grouping, derived?: Derived) {
+  return kitCellsOf(items, rows, columns, (task, g) => valuesOf(task, g, derived));
 }
