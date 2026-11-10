@@ -5161,6 +5161,56 @@ body
   expect(consoleProblems.get(page)).toEqual([]);
 });
 
+test('the list sorts by the creation date from a group of dates, shows the date and keeps the choice after a reload', async ({ page }) => {
+  const stamp = Date.now().toString(36);
+  const dir = join(state().vault, 'lib.nvim', 'ROADMAP', 'tasks');
+  // The plan order (ties end by name) puts the older one first; the order by creation date the newer one.
+  for (const [slug, name, created] of [['a', 'older', '2020-01-01'], ['b', 'newer', '2020-06-01']]) {
+    writeFileSync(join(dir, `datesort-${stamp}-${slug}.md`), `---
+title: Datesort ${stamp} ${name}
+status: open
+prio: 2
+created: ${created}
+updated: ${created}
+---
+
+body
+`);
+  }
+  await pair(page);
+  await showList(page);
+  const box = page.getByRole('searchbox').first();
+  await box.fill(`Datesort ${stamp}`);
+  const rows = page.locator('button.row');
+  await expect(rows).toHaveCount(2);
+  await expect(rows.first().locator('.title')).toContainText('older');
+  await expect(rows.first().locator('[data-stamp]')).toHaveCount(0);
+
+  const sort = page.locator('select[data-sort]');
+  await expect(sort.locator('optgroup[label="Date"] option')).toHaveText([
+    'Due date',
+    'Newest created first',
+    'Oldest created first',
+    'Last changed',
+    'Longest unchanged',
+    'Next reminder',
+  ]);
+  await sort.selectOption({ label: 'Newest created first' });
+  await expect(sort).toHaveValue('created-desc');
+  await expect(rows.first().locator('.title')).toContainText('newer');
+  await expect(rows.first().locator('[data-stamp="created"]')).toHaveText('Created 2020-06-01');
+
+  await page.reload();
+  await expect(sort).toHaveValue('created-desc');
+  await box.fill(`Datesort ${stamp}`);
+  await expect(rows).toHaveCount(2);
+  await expect(rows.first().locator('.title')).toContainText('newer');
+
+  await sort.selectOption('default');
+  await box.fill('');
+  expect(consoleProblems.get(page)).toEqual([]);
+});
+
 test('the calendar shows a task on its due day; dragging sets the date, dragging to the list takes it away', async ({ page }) => {
   await watchViolations(page);
   await pair(page);

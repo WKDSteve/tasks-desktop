@@ -5,6 +5,7 @@
   import { markHidden } from '../lib/text';
   import { statusTags } from '../lib/statusTags';
   import { isDue, isOverdue } from '../lib/remind';
+  import type { StampKind } from '../lib/sort';
 
   let {
     task,
@@ -21,6 +22,7 @@
     crossTitle = '',
     drafted = 0,
     target,
+    stamp,
   }: {
     task: TaskEntry;
     lang: Lang;
@@ -40,6 +42,8 @@
     drafted?: number;
     /** What the row is for the context menu (a right click, the menu key, Shift+F10). */
     target?: ContextTarget;
+    /** The date the list is in the order of (lib/sort.ts `sortStamp`), shown so the order can be seen. */
+    stamp?: { kind: StampKind; date: string };
   } = $props();
 
   // A word this version does not know is shown as it is.
@@ -92,6 +96,8 @@
     {#if drafted > 0}<span class="tag draft" data-hint={translate(lang, 'mark.draft', { n: drafted })}><span aria-hidden="true">✎ {drafted}</span><span class="sr-only">{translate(lang, 'mark.draft', { n: drafted })}</span></span>{/if}
     {#if overdue}<span class="tag overdue" data-hint={translate(lang, 'overdue.hint', { date: task.due ?? '' })}><span aria-hidden="true">⚑ {task.due}</span><span class="sr-only">{translate(lang, 'mark.overdue', { date: task.due ?? '' })}</span></span>{/if}
     {#if due}<span class="tag due" data-hint={translate(lang, 'remind.due', { date: task.remind ?? '' })}><span aria-hidden="true">⏰ {task.remind}</span><span class="sr-only">{translate(lang, 'mark.due', { date: task.remind ?? '' })}</span></span>{/if}
+    <!-- The due date and the reminder are there already when they are late or due. -->
+    {#if stamp && !(stamp.kind === 'due' && overdue) && !(stamp.kind === 'remind' && due)}<span class="tag soft" data-stamp={stamp.kind}>{translate(lang, `sort.stamp.${stamp.kind}`, { date: stamp.date })}</span>{/if}
     <span class="tag" data-hint={tags.status.hint}>{tags.status.label}</span>
     {#if tags.state}<span class="tag soft" data-hint={tags.state.hint}>{tags.state.label}</span>{/if}
     <span class="tag soft" data-hint={hintOf(lang, 'hint', 'prio')}>{#if task.prio !== undefined}P{task.prio}{:else}<span aria-hidden="true">?</span><span class="sr-only">{translate(lang, 'mark.no_prio')}</span>{/if}</span>

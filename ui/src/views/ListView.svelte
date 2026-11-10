@@ -47,7 +47,7 @@
   import { badTag, parseTags } from '../lib/fields';
   import { classChange, isApplyKey, marksKeyOf, type MoveCheck } from '../lib/bulk';
   import { REMIND_CHOICES } from '../lib/remind';
-  import { parseSort, SORTS } from '../lib/sort';
+  import { parseSort, SORT_GROUPS, sortStamp } from '../lib/sort';
 
   let { app, searchBox = $bindable(null) }: { app: App; searchBox?: HTMLInputElement | null } =
     $props();
@@ -407,10 +407,14 @@
       resetLabel={t('multi.reset')}
       searchLabel={t('multi.search')}
     />
-    <label class="pick sort" data-hint={t('hint.ui.list.sort')}>
+    <label class="pick sort" data-hint={`${t('hint.ui.list.sort')} ${t(`sort.hint.${app.sort}` as Key)}`}>
       <span>{t('sort.label')}</span>
       <select data-sort value={app.sort} onchange={(e) => app.setSort(parseSort(e.currentTarget.value))}>
-        {#each SORTS as word (word)}<option value={word}>{t(`sort.${word}` as Key)}</option>{/each}
+        {#each SORT_GROUPS as g (g.group)}
+          <optgroup label={t(`sort.group.${g.group}` as Key)}>
+            {#each g.words as word (word)}<option value={word} title={t(`sort.hint.${word}` as Key)}>{t(`sort.${word}` as Key)}</option>{/each}
+          </optgroup>
+        {/each}
       </select>
     </label>
     <SizeToggle
@@ -755,6 +759,7 @@
         crossTitle={t('cross.mark', { n: app.crossAreas(task.id).length, areas: app.crossAreas(task.id).join(', ') })}
         drafted={Object.keys(app.draftOf(task.id)).length}
         target={taskTarget(task)}
+        stamp={sortStamp(task, app.sort)}
       />
     {:else}
       <p class="empty">{t('list.none')}</p>

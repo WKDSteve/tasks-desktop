@@ -8,7 +8,7 @@
   import { activeFilters, parseFilter } from '../lib/filter';
   import { floating } from '../lib/floating';
   import { translate, type Key } from '../lib/i18n';
-  import { SORTS } from '../lib/sort';
+  import { SORT_GROUPS } from '../lib/sort';
 
   let { app, open, onclose }: { app: App; open: boolean; onclose: () => void } = $props();
   const t = (key: Key, params: Record<string, string | number> = {}) => translate(app.lang, key, params);
@@ -75,8 +75,12 @@
         value={app.defaults.sort}
         onchange={(e) => app.setDefaults({ sort: parseDefaults(JSON.stringify({ sort: e.currentTarget.value })).sort })}
       >
-        {#each SORTS as word (word)}
-          <option value={word}>{t(`sort.${word}` as Key)}</option>
+        {#each SORT_GROUPS as g (g.group)}
+          <optgroup label={t(`sort.group.${g.group}` as Key)}>
+            {#each g.words as word (word)}
+              <option value={word} title={t(`sort.hint.${word}` as Key)}>{t(`sort.${word}` as Key)}</option>
+            {/each}
+          </optgroup>
         {/each}
       </select>
       <p class="line" data-testid="defaults-filter">
