@@ -7418,6 +7418,56 @@ test('the choice of the areas shows beside each how many tasks it keeps under th
   expect(consoleProblems.get(page)).toEqual([]);
 });
 
+test('Defaults: start view, order and filter are set in a dialog, hold after a reload, and are reset', async ({ page }) => {
+  await pair(page);
+  await showList(page);
+  const prefsOf = () => page.evaluate(() => ({ defaults: localStorage.getItem('tasks-desktop.defaults'), filter: localStorage.getItem('tasks-desktop.filter') }));
+  // A filter to take over: one status.
+  await page.getByRole('button', { name: /^Status/ }).click();
+  await page.getByRole('group', { name: 'Status' }).getByRole('checkbox', { name: /^open/ }).check();
+  await page.keyboard.press('Escape');
+
+  await page.getByRole('menuitem', { name: 'Options', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Defaults ...' }).click();
+  const dialog = page.getByTestId('defaults-dialog');
+  await expect(dialog).toBeVisible();
+  await expectAccessible(page, 'the defaults dialog');
+  await dialog.getByLabel('Open on').selectOption('plan');
+  await dialog.getByLabel('Order of the list').selectOption('roi');
+  await expect(dialog.getByTestId('defaults-filter')).toHaveText('Default filter: none (every task).');
+  await dialog.getByTestId('defaults-take-filter').click();
+  await expect(dialog.getByTestId('defaults-filter')).toHaveText('Default filter: 1 choices.');
+  await dialog.getByRole('button', { name: 'Close' }).click();
+  await expect(dialog).toBeHidden();
+  expect(JSON.parse((await prefsOf()).defaults ?? '{}')).toMatchObject({ startView: 'plan', sort: 'roi' });
+
+  // Another filter is used; opened again (an address without a view: one that names a view is a choice of its own and
+  // wins) the page starts on the plan, with the filter used last.
+  await page.getByRole('button', { name: /^Status/ }).click();
+  await page.getByRole('group', { name: 'Status' }).getByRole('checkbox', { name: /^open/ }).uncheck();
+  await page.keyboard.press('Escape');
+  await page.goto('/');
+  await expect(page.getByRole('menubar')).toBeVisible();
+  await page.getByRole('menuitem', { name: 'View', exact: true }).click();
+  await expect(page.getByRole('menuitemradio', { name: 'Plan', exact: true })).toHaveAttribute('aria-checked', 'true');
+  await page.keyboard.press('Escape');
+  expect((await prefsOf()).filter ?? '').not.toContain('"open"');
+
+  // Back to the defaults: the default filter is the one shown again.
+  await page.getByRole('menuitem', { name: 'Options', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Defaults ...' }).click();
+  await dialog.getByTestId('defaults-apply').click();
+  expect((await prefsOf()).filter ?? '').toContain('"open"');
+
+  // Everything reset, after a question.
+  await dialog.getByTestId('defaults-reset').click();
+  await dialog.getByTestId('defaults-reset-yes').click();
+  expect(JSON.parse((await prefsOf()).defaults ?? '{}')).toEqual({ startView: 'last', startWith: 'last', sort: 'default', filter: '' });
+  expect((await prefsOf()).filter ?? '').not.toContain('"open"');
+  await dialog.getByRole('button', { name: 'Close' }).click();
+  expect(consoleProblems.get(page)).toEqual([]);
+});
+
 test('the context menu copies a task, the marked ones it is opened on, and the tasks of a group, as Markdown, CSV or JSON', async ({
   page,
   context,

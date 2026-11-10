@@ -6462,3 +6462,85 @@ describe('App, attaching a screenshot', () => {
     expect(m.app.attached?.id).toBe('pub/created');
   });
 });
+
+describe('the defaults (dialog "Defaults ...")', () => {
+  const three = [task('pub/a'), task('pub/b', { status: 'doing' }), task('pub/c')];
+
+  it('without anything used last, the page starts with the default view, order and filter', async () => {
+    const defaults = { startView: 'board', startWith: 'last', sort: 'roi', filter: serializeFilter({ ...freshFilter(), statuses: ['doing'] }) };
+    const m = make({ token: 't', prefs: new Map([['tasks-desktop.defaults', JSON.stringify(defaults)]]) });
+    m.hub.doc = snapshot(three);
+    m.hub.orders.set('roi', ['pub/b', 'pub/a', 'pub/c']);
+    expect(m.app.view).toBe('board');
+    expect(m.app.sort).toBe('roi');
+    expect(m.app.filter.statuses).toEqual(['doing']);
+    await m.app.start(null);
+    await vi.waitFor(() => expect(m.app.shown.map((t) => t.id)).toEqual(['pub/b']));
+    m.app.stop();
+  });
+
+  it('what was used last wins at the start, unless the person starts with the defaults every time', () => {
+    const used = new Map([
+      ['tasks-desktop.sort', 'due'],
+      ['tasks-desktop.filter', serializeFilter({ ...freshFilter(), statuses: ['open'] })],
+      ['tasks-desktop.view', 'plan'],
+    ]);
+    const last = make({ token: 't', prefs: new Map([...used, ['tasks-desktop.defaults', JSON.stringify({ sort: 'roi' })]]) });
+    expect([last.app.view, last.app.sort, last.app.filter.statuses]).toEqual(['plan', 'due', ['open']]);
+    const always = make({
+      token: 't',
+      prefs: new Map([...used, ['tasks-desktop.defaults', JSON.stringify({ startWith: 'defaults', sort: 'roi', startView: 'today' })]]),
+    });
+    expect([always.app.view, always.app.sort, always.app.filter.statuses]).toEqual(['today', 'roi', []]);
+  });
+
+  it('takes the filter shown now as the default, keeps it, and goes back to it on request', async () => {
+    const m = make({ token: 't' });
+    m.hub.doc = snapshot(three);
+    await m.app.start(null);
+    m.app.filter = { ...freshFilter(), statuses: ['doing'] };
+    m.app.takeFilterAsDefault();
+    m.app.setDefaults({ sort: 'roi' });
+    expect(JSON.parse(m.prefs.get('tasks-desktop.defaults') ?? '{}')).toMatchObject({ sort: 'roi' });
+    m.app.filter = freshFilter();
+    m.app.applyDefaults();
+    expect(m.app.filter.statuses).toEqual(['doing']);
+    expect(m.app.sort).toBe('roi');
+    // Reloaded: the defaults are still there.
+    const again = make({ token: 't', prefs: m.prefs });
+    expect(again.app.defaults.sort).toBe('roi');
+    m.app.stop();
+  });
+
+  it('resets everything to the factory: defaults, switches, order and filter', async () => {
+    const m = make({ token: 't' });
+    m.hub.doc = snapshot(three);
+    await m.app.start(null);
+    m.app.setDefaults({ startView: 'board', sort: 'roi', filter: serializeFilter({ ...freshFilter(), statuses: ['doing'] }) });
+    m.app.setAreaCounts(false);
+    m.app.setShortAreas(false);
+    m.app.setSaveMode('manual');
+    m.app.filter = { ...freshFilter(), statuses: ['open'] };
+    m.app.resetToFactory();
+    expect(m.app.defaults).toEqual({ startView: 'last', startWith: 'last', sort: 'default', filter: '' });
+    expect([m.app.areaCountsShown, m.app.shortAreas, m.app.saveMode]).toEqual([true, true, 'auto']);
+    expect(m.app.filter.statuses).toEqual([]);
+    expect(m.app.sort).toBe('default');
+    m.app.stop();
+  });
+
+  it('does not take over a default filter made in another vault, but one of this vault', async () => {
+    const m = make({ token: 't' });
+    m.hub.doc = snapshot(three);
+    await m.app.start(null);
+    m.app.stop();
+    await vi.waitFor(() => expect(m.app.vaultList?.active).toBe('main'));
+    m.app.setDefaults({ filter: serializeFilter({ ...freshFilter(), statuses: ['doing'] }, 'native') });
+    m.app.filter = { ...freshFilter(), statuses: ['open'] };
+    m.app.applyDefaults();
+    expect(m.app.filter.statuses).toEqual([]);
+    m.app.setDefaults({ filter: serializeFilter({ ...freshFilter(), statuses: ['doing'] }, 'main') });
+    m.app.applyDefaults();
+    expect(m.app.filter.statuses).toEqual(['doing']);
+  });
+});

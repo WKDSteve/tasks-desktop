@@ -39,6 +39,7 @@
   import ConflictCenter from './views/ConflictCenter.svelte';
   import VaultsDialog from './views/VaultsDialog.svelte';
   import AboutDialog from './views/AboutDialog.svelte';
+  import DefaultsDialog from './views/DefaultsDialog.svelte';
   import ShortcutDialog from './views/ShortcutDialog.svelte';
   import UpdateDialog from './views/UpdateDialog.svelte';
   import Toast from './views/Toast.svelte';
@@ -53,6 +54,7 @@
   // The page opened from disk (the web variant): a shortcut can point to its file. Served pages have their own address.
   const fromDisk = location.protocol === 'file:';
   let shortcutOpen = $state(false);
+  let defaultsOpen = $state(false);
   let updateOpen = $state(false);
   // A view of the menu is a link to its place: the browser's context menu (and Shift+click) opens it in a new tab, which
   // takes the session of an open tab. A middle click, Ctrl+click or Ctrl+Enter opens it in a new tab from here, with
@@ -558,6 +560,12 @@
           },
           { kind: 'section', label: t('menu.sec.behaviour') },
           {
+            kind: 'action',
+            label: t('menu.defaults'),
+            hint: t('hint.item.menu.defaults'),
+            onselect: () => (defaultsOpen = true),
+          },
+          {
             kind: 'check',
             label: t('shortcuts.label'),
             hint: t('hint.item.shortcuts.label'),
@@ -849,6 +857,7 @@
   <!-- Outside the ready block: the Info dialog and its report are there when the engine is not (app.canAbout). -->
   <AboutDialog {app} />
   {#if fromDisk}<ShortcutDialog {app} open={shortcutOpen} onclose={() => (shortcutOpen = false)} />{/if}
+  <DefaultsDialog {app} open={defaultsOpen} onclose={() => (defaultsOpen = false)} />
   {#if fromDisk}<UpdateDialog {app} open={updateOpen} onclose={() => (updateOpen = false)} />{/if}
   <!-- While the float of a task is open the toast is drawn inside it: the float is modal, and the Undo out here could not
        be reached. -->

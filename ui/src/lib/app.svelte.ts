@@ -83,7 +83,8 @@ import {
   type GroupWords,
 } from './viewExport';
 import { chosenPlan, stagesOf } from './plan';
-import { applyOrder, orderOf, parseSort, type SortWord } from './sort';
+import { applyOrder, orderOf, type SortWord } from './sort';
+import { DEFAULTS_KEY, FACTORY_DEFAULTS, parseDefaults, serializeDefaults, startChoice, startView, type Defaults } from './defaults';
 import { fromEngineList, type EngineList } from './engineLists';
 import { DEFAULT_RANGES, rangesOf, type Ranges } from './fields';
 import { sameField, type FieldValue } from './drafts';
@@ -339,6 +340,8 @@ export class App {
    * a task (board, palette, menus, steps, notes) still write at once.
    */
   saveMode = $state<'auto' | 'manual'>('auto');
+  /** Where the page starts and what it shows without a choice (`lib/defaults.ts`, dialog "Defaults ..."). */
+  defaults = $state<Defaults>(FACTORY_DEFAULTS);
   /** The unsaved changes of the detail's fields per task id (`manual`): key -> value, `null` takes the key away. */
   drafts = $state<Record<string, Record<string, FieldValue>>>({});
   /**
@@ -692,30 +695,55 @@ export class App {
     this.graphRows = safe(() => env.prefs.getItem('tasks-desktop.graph-rows')) === 'phase' ? 'phase' : 'stage';
     this.graphOrder = parseGraphOrder(safe(() => env.prefs.getItem('tasks-desktop.graph-order')));
     this.tileSizes = parseSizes(safe(() => env.prefs.getItem('tasks-desktop.sizes')));
-    this.sort = parseSort(safe(() => env.prefs.getItem('tasks-desktop.sort')));
+    this.defaults = parseDefaults(safe(() => env.prefs.getItem(DEFAULTS_KEY)));
+    // The filter and the order used last, or the defaults where there are none (or when the person starts with them).
+    const start = startChoice(this.defaults, {
+      filter: safe(() => env.prefs.getItem('tasks-desktop.filter')) ?? null,
+      sort: safe(() => env.prefs.getItem('tasks-desktop.sort')) ?? null,
+    });
+    this.sort = start.sort;
     this.listMemory = parseListMemory(safe(() => env.prefs.getItem('tasks-desktop.lists')));
-    const remembered = safe(() => env.prefs.getItem('tasks-desktop.filter'));
+    const remembered = start.filter;
     this.#filter = parseFilter(remembered);
     this.#filterVault = filterVaultOf(remembered);
     this.frecency = parseFrecency(safe(() => env.prefs.getItem('tasks-desktop.frecency')));
     this.conflictsState.mode = parseConflictMode(safe(() => env.prefs.getItem('tasks-desktop.conflict-mode')));
     this.finishedPrefs = parsePrefs(safe(() => env.prefs.getItem('tasks-desktop.finished')));
-    // The page opens on the view it was left on.
-    const view = safe(() => env.prefs.getItem('tasks-desktop.view'));
-    this.view =
-      view === 'list' ||
-      view === 'board' ||
-      view === 'plan' ||
-      view === 'inbox' ||
-      view === 'abnahme' ||
-      view === 'cross' ||
-      view === 'calendar' ||
-      view === 'stats' ||
-      view === 'done' ||
-      view === 'views' ||
-      view === 'repos'
-        ? view
-        : 'today';
+    // The page opens on the view it was left on, or on the one the defaults name.
+    this.view = startView(this.defaults, safe(() => env.prefs.getItem('tasks-desktop.view')) ?? null);
+  }
+
+  /** Change the defaults; kept in this browser at once. */
+  setDefaults(patch: Partial<Defaults>): void {
+    this.defaults = { ...this.defaults, ...patch };
+    safe(() => this.env.prefs.setItem(DEFAULTS_KEY, serializeDefaults(this.defaults)));
+  }
+
+  /** The filter shown now becomes the default one, with the vault it was made in (the search words are not part). */
+  takeFilterAsDefault(): void {
+    this.setDefaults({ filter: serializeFilter(this.#filter, this.#filterVault) });
+  }
+
+  /**
+   * The filter and the order go back to the defaults. A default filter made in another vault is not taken over (its
+   * areas, tags and plans are not those of this one): the list shows everything then.
+   */
+  applyDefaults(): void {
+    const text = this.defaults.filter || null;
+    const vault = filterVaultOf(text);
+    const foreign = text !== null && typeof vault === 'string' && typeof this.#hubVault === 'string' && vault !== this.#hubVault;
+    this.filter = foreign ? freshFilter() : parseFilter(text);
+    this.scheduleTextSearch('', 0);
+    this.setSort(this.defaults.sort);
+  }
+
+  /** Everything of the dialog back as it came: the defaults, the switches beside them, and filter and order. */
+  resetToFactory(): void {
+    this.setDefaults(FACTORY_DEFAULTS);
+    this.setShortAreas(true);
+    this.setAreaCounts(true);
+    this.setSaveMode('auto');
+    this.applyDefaults();
   }
 
   // ── derived ───────────────────────────────────────────────────────────
