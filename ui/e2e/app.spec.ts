@@ -2535,6 +2535,65 @@ test('the capture dialog writes after, plan, phase, due and start into the file'
   rmSync(join(dir, file!));
 });
 
+test('a routine: the detail sets its interval and rhythm, finishing it names the next round, and Next task says it is later', async ({ page }) => {
+  await prepare(page);
+  await pair(page);
+  await showList(page);
+  const title = `Routine e2e ${Date.now()}`;
+  await capture(page, title, { keep: true });
+  const detail = taskFloat(page).locator('aside.detail');
+  const day = (d: Date): string =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const now = new Date();
+  const today = day(now);
+  const nextDue = day(new Date(now.getFullYear(), now.getMonth(), now.getDate() + 7));
+  const dir = join(state().vault, 'lib.nvim', 'ROADMAP', 'tasks');
+  const file = readdirSync(dir).find((name) => readFileSync(join(dir, name), 'utf8').includes(`title: ${title}`));
+  expect(file, 'the task file was written').toBeDefined();
+  const slug = file!.replace(/\.md$/, '');
+  const round = join(dir, `${slug}-${nextDue}.md`);
+  try {
+    // No routine yet: the interval is offered, where it counts from is not.
+    await expect(detail.locator('[data-field="repeat"]')).toHaveValue('');
+    await expect(detail.locator('[data-field="repeat_from"]')).toHaveCount(0);
+    await write(page, () => detail.locator('input[data-field="due"]').fill(today));
+    await write(page, async () => {
+      await detail.getByLabel('Repeats').fill('1w');
+      await detail.getByLabel('Repeats').press('Tab');
+    });
+    await expect.poll(() => readFileSync(join(dir, file!), 'utf8')).toMatch(/^repeat: 1w$/m);
+    await write(page, () => detail.getByLabel('Next round from').selectOption('due'));
+    await expect.poll(() => readFileSync(join(dir, file!), 'utf8')).toMatch(/^repeat_from: due$/m);
+    await expect(detail.locator('[data-field="repeat"]')).toHaveValue('1w');
+    await expect(detail.locator('[data-field="repeat_from"]')).toHaveValue('due');
+
+    // Finishing it says when the next round is due (a week after this round's due date: a fixed rhythm).
+    await detail.getByRole('button', { name: 'Done', exact: true }).click();
+    const done = page.getByRole('dialog', { name: 'Finish this task?' });
+    await expect(done.getByText(`A routine: the next round starts, due ${nextDue}.`)).toBeVisible();
+    // The float closes with the finished task: there is no detail left to wait for, only the answer.
+    const finished = nextAnswer(page);
+    await done.getByRole('button', { name: 'Finish', exact: true }).click();
+    await finished;
+    await expect(done).toHaveCount(0);
+    await expect.poll(() => existsSync(round)).toBe(true);
+    expect(readFileSync(round, 'utf8')).toMatch(new RegExp(`^start: ${nextDue}$`, 'm'));
+
+    // The next round is ready but not before its start day: the tile Next task says the engine left it for later.
+    await chooseView(page, 'View', 'Today');
+    await expect(page.locator('section[data-tile="next"] .later')).toHaveText(
+      /^Later: \d+ ready task\(s\) whose start day has not come yet\.$/,
+    );
+    expect(await violations(page)).toEqual([]);
+    expect(consoleProblems.get(page)).toEqual([]);
+  } finally {
+    // The next round would be offered by Next task to the other tests a week from now; the finished round stays in
+    // the backlog like any other finished task of the tests.
+    rmSync(round, { force: true });
+    rmSync(join(dir, file!), { force: true });
+  }
+});
+
 test('the capture dialog offers the acceptance lines of the choice and writes the ticked ones', async ({ page }) => {
   await pair(page);
   await closeFloat(page);

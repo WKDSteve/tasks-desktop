@@ -55,6 +55,9 @@
       {#if finishing.preview.closes_project}
         <li>{t('done.closes_project', { project: finishing.preview.closes_project })}</li>
       {/if}
+      {#if finishing.preview.next_round}
+        <li>{t('done.next_round', { due: finishing.preview.next_round.due })}</li>
+      {/if}
       {#if (finishing.preview.freed?.length ?? 0) > 0}
         <li>
           {t('done.freed', { n: finishing.preview.freed?.length ?? 0 })}:

@@ -4,7 +4,7 @@
   import { narrows, waitingForMe } from '../lib/filter';
   import { dueItems } from '../lib/remind';
   import { hintOf, labelOf, translate, type Key } from '../lib/i18n';
-  import { effortWords } from '../lib/next';
+  import { effortWords, laterWords } from '../lib/next';
   import { markHidden } from '../lib/text';
   import { tasksOf, type CountKey } from '../lib/counts';
   import CountPanel from './CountPanel.svelte';
@@ -307,6 +307,10 @@
           </p>
         {:else}
           <p class="muted">{t('state.loading')}</p>
+        {/if}
+        <!-- The engine's count of what it left out for now (a start day ahead, the next round of a routine). -->
+        {#if laterWords(app.lang, next?.later)}
+          <p class="muted later">{laterWords(app.lang, next?.later)}</p>
         {/if}
       </section>
     {/if}

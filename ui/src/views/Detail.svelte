@@ -6,6 +6,7 @@
   import { parseMarkdown } from 'appkit-ui/markdown';
   import { editableBody, hasHidden, markHidden, MAX_BODY_EDIT } from '../lib/text';
   import { REMIND_CHOICES } from '../lib/remind';
+  import { REPEAT_FROMS } from '../lib/next';
   import { shownTask } from '../lib/drafts';
   import { classChange as classChangeOf } from '../lib/bulk';
   import { copyText } from '../lib/exportDom';
@@ -541,6 +542,47 @@
             />
           </label>
         {/each}
+        {#if app.can('repeat') || shown.repeat || shown.repeat_from}
+          <!-- A routine: the engine judges the interval (`8w`) and refuses anything else with a reason; an empty field
+               ends the routine. Where the next round counts from is only asked of a routine (or shown to be taken
+               away where a file carries it without one). -->
+          <label>
+            <span data-hint={t('hint.field.repeat')}>{t('field.repeat')}</span>
+            <input
+              type="text"
+              value={shown.repeat ?? ''}
+              data-field="repeat"
+              placeholder="8w"
+              spellcheck="false"
+              autocomplete="off"
+              disabled={app.locked}
+              onchange={(e) => {
+                const value = e.currentTarget.value.trim();
+                if (value !== (shown.repeat ?? '')) void app.editField(shown.id, 'repeat', value === '' ? null : value);
+              }}
+            />
+          </label>
+          {#if shown.repeat || shown.repeat_from}
+            <label>
+              <span data-hint={t('hint.field.repeat_from')}>{t('field.repeat_from')}</span>
+              <select
+                value={shown.repeat_from ?? ''}
+                data-field="repeat_from"
+                disabled={app.locked}
+                onchange={(e) => {
+                  const value = e.currentTarget.value;
+                  if (value !== (shown.repeat_from ?? '')) void app.editField(shown.id, 'repeat_from', value === '' ? null : value);
+                }}
+              >
+                <!-- No word is the engine's default, `done`; a file that names it anyway shows it as it is. -->
+                <option value="">{t('repeat.from.default')}</option>
+                {#each REPEAT_FROMS.filter((from) => from !== 'done' || shown.repeat_from === 'done') as from (from)}
+                  <option value={from}>{t(`repeat.from.${from}`)}</option>
+                {/each}
+              </select>
+            </label>
+          {/if}
+        {/if}
         <label>
           <span data-hint={hintOf(app.lang, 'hint.field', 'severity')}>
             {t('field.severity')}{#if !severityApplies(shown.kind ?? '', cats) && !shown.severity} <small>({t('field.severity_only')})</small>{/if}

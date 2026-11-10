@@ -492,6 +492,13 @@ its tasks and their areas, the parked tasks without a reason, and those whose re
 ones parked without a reason). *Bring all back …* names the number and the areas first; only the confirmation sets
 every task of the reason to open, each on the version shown, in one request that the message takes back together.
 
+**Routines** (an engine with the capability `repeat`). A task may repeat every N days, weeks, months or years
+(`repeat: 8w`). The detail has the field *Repeats* (the engine judges the interval and refuses anything else in its
+words; an empty field ends the routine) and, for a routine, *Next round from*: the day the round is finished (the
+default) or its due date (a fixed rhythm). The finish dialog says when the next round is due (`next_round` of the
+engine's preview); finishing writes the next round as a new task that is not offered before its start day, and the
+tile *Next task* says how many ready tasks the engine left for later (`later` of `next`).
+
 The interface can create a task (`c`, or the Project menu), change status,
 priority, who, kind, effort, value and tags in the detail, tick a step of the plan section and add a dated line to the notes (the box of a step shows what the file says; a click asks the engine first), attach a screenshot to a task (*Attach screenshot* in the detail, or the box in the new-task form: the image on the clipboard of the machine the hub runs on, else its newest screenshot; the detail then shows the link to put into the text),
 change several marked

@@ -9,6 +9,7 @@ import { App, type Env } from '../lib/app.svelte';
 import { task } from '../lib/fixtures';
 import Capture from './Capture.svelte';
 import Detail from './Detail.svelte';
+import DoneDialog from './DoneDialog.svelte';
 import TaskDialog from './TaskDialog.svelte';
 
 /** A page that was not started; `web` makes it the web variant, as `main.web.ts` does. */
@@ -74,6 +75,44 @@ describe('the fields of the detail', () => {
     const out = detail(app);
     expect(out).toContain('✓</span> Erledigt</button>');
     expect(out).not.toContain('Erledigen');
+  });
+});
+
+describe('a routine in the detail', () => {
+  it('shows the interval and where the next round counts from', () => {
+    const app = page(false, ['repeat']);
+    app.tasks = [task('pub/a', { repeat: '8w', repeat_from: 'due' })];
+    const out = detail(app);
+    expect(out).toMatch(/<span[^>]*>Repeats<\/span>\s*<input type="text" value="8w"[^>]*data-field="repeat"/);
+    expect(out).toMatch(/<select[^>]*data-field="repeat_from"/);
+    expect(out).toMatch(/<option value="due"[^>]*selected[^>]*>its due date<\/option>/);
+    // The engine's default needs no word, and `done` is not offered beside it as a second way of saying it.
+    expect(out).toContain('the day it is finished (default)</option>');
+    expect(out).not.toContain('<option value="done"');
+  });
+
+  it('offers the interval to a task that is no routine yet, but not where it counts from', () => {
+    const out = detail(page(false, ['repeat']));
+    expect(out).toMatch(/<input type="text" value=""[^>]*data-field="repeat"/);
+    expect(out).not.toContain('data-field="repeat_from"');
+  });
+
+  it('is not offered where the engine has no routines, unless the file carries one', () => {
+    const app = page(false, ['attach']);
+    expect(detail(app)).not.toContain('data-field="repeat"');
+    app.tasks = [task('pub/a', { repeat: '2w', repeat_from: 'done' })];
+    const out = detail(app);
+    expect(out).toContain('data-field="repeat"');
+    expect(out).toMatch(/<option value="done"[^>]*selected[^>]*>the day it is finished<\/option>/);
+  });
+
+  it('says in the finish dialog when the next round is due', () => {
+    const app = page(false, ['repeat']);
+    app.finishing = { id: 'pub/a', preview: { kind: 'tasks.donepreview', id: 'pub/a', to: 'Backlog/TASKS', next_round: { due: '2027-01-05' } } as never };
+    const out = strip(render(DoneDialog, { props: { app } }).body);
+    expect(out).toContain('<li>A routine: the next round starts, due 2027-01-05.</li>');
+    app.finishing = { id: 'pub/a', preview: { kind: 'tasks.donepreview', id: 'pub/a', to: 'Backlog/TASKS' } as never };
+    expect(strip(render(DoneDialog, { props: { app } }).body)).not.toContain('next round');
   });
 });
 
