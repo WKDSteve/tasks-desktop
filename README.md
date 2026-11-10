@@ -210,12 +210,14 @@ no rights of its own: whoever can use this local port on the device can reach th
 On a phone, open the same link with `/m/` in front of the `#` (`http://127.0.0.1:PORT/m/#pair=<code>`): that is
 [tasks-mobile](https://github.com/WKDSteve/tasks-mobile), a page made for a phone that can be installed as an app
 (Chrome on Android: menu, *Install app*) and that is a share target for links and text from other apps. It lists the
-open tasks, creates one, sets a status, answers open questions and finishes a task after the engine said what that sets
-off; offline it keeps the last list (14 days at most) and queues what you create or change until the hub is reached
-again. It shows and keeps only areas of the class `public` or `internal`. The page is built from the commit
+open tasks (starting on *Today*: what the engine would take next, open questions, what is due, the counts), creates
+one (with a photo or a voice note if wanted, which become assets of the task once the engine made it), sets a status,
+answers open questions and finishes a task after the engine said what that sets off; offline it keeps the last list
+(14 days at most) and queues what you create or change until the hub is reached again. It shows and keeps only areas of the class `public` or `internal`. The page is built from the commit
 `mobile.lock` pins (`python tools/build-mobile.py`) and embedded in the program; its policy is the desktop page's plus
-its manifest, its service worker and the one Trusted Types policy it registers the worker with (see appkit's
-SECURITY.md). How to use it on a phone: [docs/USAGE.md of tasks-mobile](https://github.com/WKDSteve/tasks-mobile/blob/main/docs/USAGE.md).
+its manifest, its service worker and the one Trusted Types policy it registers the worker with, and for the voice
+note the microphone (`microphone=(self)`, `media-src 'self' blob:`), on `/m/` only; the desktop page keeps the
+microphone off (see appkit's SECURITY.md). How to use it on a phone: [docs/USAGE.md of tasks-mobile](https://github.com/WKDSteve/tasks-mobile/blob/main/docs/USAGE.md).
 A phone pairs **once**: it keeps a key of its own (made by the page, which cannot be read out of the phone) and signs
 in by itself on every start, also after the PC or the hub restarted. The hub keeps the paired phones in `devices.json`
 in its settings folder; on the PC:

@@ -1128,6 +1128,9 @@ pub(super) fn guard_rules() -> GuardRules {
     // The phone page (tasks-mobile) under /m/, with its manifest, its worker and the Trusted Types policy it
     // registers the worker with (tasks-mobile/src/lib/worker.ts).
     .with_installable_page("/m", MOBILE_WORKER_POLICY)
+    // The phone page records a voice note for a new task: only under /m/ the microphone is let on (and media from its
+    // own blobs, to hear the note before it is sent); the desktop page keeps it off.
+    .with_installable_microphone()
 }
 
 /// The Trusted Types policy of the phone page, named in tasks-mobile (`src/lib/worker.ts`).

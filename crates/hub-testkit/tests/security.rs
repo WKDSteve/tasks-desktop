@@ -18,6 +18,12 @@ async fn the_phone_page_has_its_own_policy_and_nothing_more() {
         hub_testkit::subjects::PHONE_WORKER_POLICY,
     )
     .await;
+    // The phone page records a voice note: the microphone is on there, and only there.
+    appkit_testkit::security::the_installable_page_may_record_and_nothing_else(
+        &hub_testkit::subjects::TasksWithPhonePage::new(),
+        hub_testkit::subjects::PHONE_PREFIX,
+    )
+    .await;
 }
 
 #[tokio::test]

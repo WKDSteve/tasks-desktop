@@ -9,7 +9,13 @@ import { devicesCommand, origin, pairingLink } from './hub';
 // vault of the tests, with the screen and touch of a phone. The page itself is tested in tasks-mobile on a synthetic
 // vault; here it is the way through this hub: the policy of /m/, pairing, the classes of areas.json, and a write.
 
-test.use({ ...devices['Pixel 7'], channel: 'chrome', locale: 'en-US' });
+test.use({
+  ...devices['Pixel 7'],
+  channel: 'chrome',
+  locale: 'en-US',
+  // A fake microphone (a tone) and no prompt for it: the voice note of the phone page is recorded for real.
+  launchOptions: { args: ['--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream'] },
+});
 
 interface State {
   vault: string;
@@ -97,6 +103,46 @@ test('the phone page pairs, shows only the classified areas and creates a task t
   // The worker is registered under the policy of /m/ and keeps no route of the hub.
   await page.waitForFunction(async () => (await navigator.serviceWorker.ready).active !== null);
   expect(problems).toEqual([]);
+});
+
+test('the phone captures a task with a photo and a voice note, and both land in the vault as its assets', async ({ browser }) => {
+  const { vault, config } = state();
+  // Chrome's fake microphone (a tone), granted without a prompt: the note is recorded for real, under the hub's policy.
+  const phone = await browser.newContext({ ...devices['Pixel 7'], locale: 'en-US', baseURL: origin(), permissions: ['microphone'] });
+  try {
+    const page = await phone.newPage();
+    const problems = watchConsole(page);
+    const response = await page.goto(pairingLink(config).replace('/#pair=', '/m/#pair='));
+    expect(response?.headers()['permissions-policy']).toContain('microphone=(self)');
+    expect(response?.headers()['content-security-policy']).toContain("media-src 'self' blob:");
+    await expect(page.getByTestId('connection')).toHaveAttribute('data-state', 'live');
+    await page.getByRole('button', { name: 'New', exact: true }).click();
+    await page.getByLabel('Title').fill('Phone files m003');
+    await page.getByLabel('Area').selectOption('lib.nvim');
+    const png = Buffer.from(
+      '89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d4944415478da63f8cfc0f01f0005000201a5ad6f0b0000000049454e44ae426082',
+      'hex',
+    );
+    await page.getByTestId('photo-input').setInputFiles({ name: 'IMG_0001.png', mimeType: 'image/png', buffer: png });
+    await page.getByTestId('voice-start').click();
+    await page.waitForTimeout(1200);
+    await page.getByTestId('voice-stop').click();
+    await expect(page.getByTestId('attachments').locator('li')).toHaveCount(2);
+    await page.getByRole('button', { name: 'Create' }).click();
+    await expect(page.getByTestId('notice')).toContainText('Created', { timeout: 15_000 });
+    const assets = join(vault, 'lib.nvim', 'ROADMAP', 'tasks', 'phone-files-m003', 'assets');
+    await expect.poll(() => (existsSync(assets) ? readdirSync(assets).sort() : []), { timeout: 15_000 }).toEqual([
+      expect.stringMatching(/^photo-.*\.png$/),
+      expect.stringMatching(/^voice-.*\.webm$/),
+    ]);
+    const photo = readdirSync(assets).find((f) => f.startsWith('photo-'))!;
+    expect(readFileSync(join(assets, photo)).equals(png)).toBe(true);
+    await page.getByRole('button', { name: /Waiting/ }).click();
+    await expect(page.getByText('Nothing waits.')).toBeVisible();
+    expect(problems).toEqual([]);
+  } finally {
+    await phone.close();
+  }
 });
 
 test('the desktop page keeps its policy, and /m without a slash is not the page', async ({ page }) => {
