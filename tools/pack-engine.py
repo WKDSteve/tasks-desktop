@@ -22,6 +22,8 @@ import struct
 import subprocess
 import sys
 import tempfile
+import time
+import urllib.error
 import urllib.request
 import zipfile
 from pathlib import Path
@@ -35,6 +37,30 @@ NVIM_BIN = {"nvim.exe", "lua51.dll"}
 # Annotations for the language server, never loaded.
 NVIM_NOT_NEEDED = "share/nvim/runtime/lua/vim/_meta/"
 TIMEOUT_S = 120
+# The waits before each new try of a download that failed in passing (a 504 of GitHub broke the rolling run 42469307447).
+RETRY_WAITS_S = (5, 15, 45)
+
+
+def passing(error):
+    """A failure that may be gone on the next try: the server was busy or the line broke, not a wrong address."""
+    if isinstance(error, urllib.error.HTTPError):
+        return error.code == 429 or error.code >= 500
+    return isinstance(error, (urllib.error.URLError, TimeoutError, ConnectionError))
+
+
+def fetch(url, open_url=urllib.request.urlopen, sleep=time.sleep, waits=RETRY_WAITS_S):
+    """The body at `url`; a failure in passing is tried again after each wait, any other ends at once."""
+    request = urllib.request.Request(url, headers={"User-Agent": "tasks-desktop-pack-engine"})
+    for attempt in range(len(waits) + 1):
+        try:
+            with open_url(request, timeout=TIMEOUT_S) as response:
+                return response.read()
+        except Exception as error:  # noqa: BLE001 - sorted by `passing`, everything else is raised again
+            if attempt == len(waits) or not passing(error):
+                raise
+            print(f"pack-engine: {url}: {error}; trying again in {waits[attempt]} s", file=sys.stderr)
+            sleep(waits[attempt])
+    raise AssertionError("unreachable")
 
 
 def read_pins(path):
@@ -56,9 +82,7 @@ def nvim_zip(pins, cache):
     if cached.is_file():
         data = cached.read_bytes()
     else:
-        request = urllib.request.Request(pins["url"], headers={"User-Agent": "tasks-desktop-pack-engine"})
-        with urllib.request.urlopen(request, timeout=TIMEOUT_S) as response:
-            data = response.read()
+        data = fetch(pins["url"])
     got = sha256_of(data)
     if got != pins["sha256"]:
         raise SystemExit(f"pack-engine: {pins['url']} has the sum {got}, tools/nvim.lock says {pins['sha256']}")
