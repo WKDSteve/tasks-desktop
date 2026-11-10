@@ -6529,6 +6529,18 @@ describe('the defaults (dialog "Defaults ...")', () => {
     m.app.stop();
   });
 
+  it('a default filter applied before the hub named its vault is judged by its own vault, not by the old filter', async () => {
+    const prefs = new Map([['tasks-desktop.filter', JSON.stringify({ areas: ['of-native'], vault: 'native' })]]);
+    const m = make({ token: 't', prefs });
+    m.app.setDefaults({ filter: serializeFilter({ ...freshFilter(), statuses: ['doing'] }, 'main') });
+    // Before the hub named its vault ("main"): the default filter takes the place of the one of "native".
+    m.app.applyDefaults();
+    expect(m.app.filter.statuses).toEqual(['doing']);
+    await m.app.loadVaults();
+    expect(m.app.vaultList?.active).toBe('main');
+    expect(m.app.filter.statuses).toEqual(['doing']);
+  });
+
   it('does not take over a default filter made in another vault, but one of this vault', async () => {
     const m = make({ token: 't' });
     m.hub.doc = snapshot(three);

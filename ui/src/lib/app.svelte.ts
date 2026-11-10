@@ -732,6 +732,9 @@ export class App {
     const text = this.defaults.filter || null;
     const vault = filterVaultOf(text);
     const foreign = text !== null && typeof vault === 'string' && typeof this.#hubVault === 'string' && vault !== this.#hubVault;
+    // The default filter is of its own vault, not of the one the filter shown before was made in: when the hub has not
+    // named its vault yet, `loadVaults` then judges it by the right one.
+    if (!foreign && text !== null) this.#filterVault = vault;
     this.filter = foreign ? freshFilter() : parseFilter(text);
     this.scheduleTextSearch('', 0);
     this.setSort(this.defaults.sort);
