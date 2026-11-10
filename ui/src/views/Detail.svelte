@@ -75,6 +75,8 @@
   const webLinks = $derived((task?.links ?? []).filter(isWebLink));
   const steps = $derived(detail.state === 'ok' ? (detail.doc.steps ?? []) : []);
   const questions = $derived(detail.state === 'ok' ? (detail.doc.questions ?? []) : []);
+  // A routine's finished rounds, newest first, as the engine found them in the Backlog (capability `rounds`).
+  const rounds = $derived(detail.state === 'ok' ? detail.doc.rounds : undefined);
 
   // The line for the notes: kept while the task stays selected, emptied only when the engine wrote it.
   let note = $state('');
@@ -82,6 +84,8 @@
   let newStep = $state('');
   // The reason for dropping the task: kept like the note, emptied only when the engine wrote it.
   let reason = $state('');
+  // Discarding a routine ends it: it is asked once more, with the interval, before anything is written.
+  let endingRoutine = $state(false);
 
   /** The link of the attached screenshot on the clipboard (the page may write it, never read it). */
   async function copyLink(link: string): Promise<void> {
@@ -105,6 +109,7 @@
     note = '';
     newStep = '';
     reason = '';
+    endingRoutine = false;
     moveTo = '';
     movePreview = null;
     editing = false;
@@ -142,9 +147,15 @@
       movePreview = null;
     }
   }
-  async function discard(): Promise<void> {
+  /** `endRoutine` comes from the question's own button only: Enter in the box asks, a second Enter does not answer. */
+  async function discard(endRoutine = false): Promise<void> {
     if (!task || detail.state !== 'ok' || reason.trim() === '') return;
-    if (await app.discard(task.id, reason, detail.doc.task.etag)) reason = '';
+    if (task.repeat && !endRoutine) {
+      endingRoutine = true;
+      return;
+    }
+    endingRoutine = false;
+    if (await app.discard(task.id, reason, detail.doc.task.etag, { endRoutine })) reason = '';
   }
   async function addStep(): Promise<void> {
     if (!task || detail.state !== 'ok' || newStep.trim() === '') return;
@@ -858,6 +869,26 @@
           >
         </div>
       {/if}
+      {#if rounds || (task.repeat && app.can('rounds'))}
+        <!-- The history of a routine: one line per finished round (when, which round, how it ended, with what). -->
+        <h3>{t('detail.rounds')}</h3>
+        {#if !rounds || rounds.length === 0}
+          <p class="muted">{t('rounds.none')}</p>
+        {:else}
+          <ul class="rounds">
+            {#each rounds as r (r.id)}
+              <!-- The separators are expressions: Svelte drops the blanks at the edges of an {#if}. -->
+              <li data-round={r.id}>
+                {r.done ? t('rounds.done', { date: r.done }) : t('rounds.undated')}{#if r.due}{' · '}{t('rounds.due', { date: r.due })}{/if}{#if r.status}{' · '}{t(
+                    `status.${r.status}` as Key,
+                  )}{/if}{#if r.commits && r.commits.length > 0}{' · '}<code>{r.commits.map(markHidden).join(', ')}</code
+                  >{:else if r.done_in}{' · '}<code>{markHidden(r.done_in)}</code>{/if}
+              </li>
+            {/each}
+          </ul>
+          {#if detail.doc.rounds_truncated}<p class="muted">{t('rounds.more')}</p>{/if}
+        {/if}
+      {/if}
       {#if questions.length > 0}
         <h3>{t('detail.questions')}</h3>
         <div class="questions">
@@ -1020,7 +1051,9 @@
       {#if app.can('append_note') && app.can('ops') && task.status !== 'done' && task.status !== 'parked'}
         <div class="note" role="group" aria-label={t('discard.label')}>
           <label>
-            <span>{t('discard.label')} <small>({t('discard.hint')})</small></span>
+            <span
+              >{t('discard.label')} <small>({t('discard.hint')}{#if task.repeat}; {t('discard.routine')}{/if})</small></span
+            >
             <input
               type="text"
               bind:value={reason}
@@ -1035,9 +1068,17 @@
               }}
             />
           </label>
-          <button type="button" disabled={app.locked || reason.trim() === ''} onclick={() => void discard()}
-            >{t('discard.button')}</button
-          >
+          {#if endingRoutine}
+            <span class="ask" role="alertdialog" aria-label={t('discard.routine.ask', { every: task.repeat ?? '' })}>
+              <span class="warn">{t('discard.routine.ask', { every: task.repeat ?? '' })}</span>
+              <button type="button" disabled={app.locked} onclick={() => void discard(true)}>{t('discard.routine.yes')}</button>
+              <button type="button" onclick={() => (endingRoutine = false)}>{t('discard.routine.no')}</button>
+            </span>
+          {:else}
+            <button type="button" disabled={app.locked || reason.trim() === ''} onclick={() => void discard()}
+              >{t('discard.button')}</button
+            >
+          {/if}
         </div>
       {/if}
     {/if}

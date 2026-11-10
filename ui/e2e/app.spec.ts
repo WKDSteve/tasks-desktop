@@ -2594,6 +2594,68 @@ test('a routine: the detail sets its interval and rhythm, finishing it names the
   }
 });
 
+test('a routine: its detail lists the finished rounds, and discarding it asks first that it ends the routine', async ({ page }) => {
+  await prepare(page);
+  await pair(page);
+  await showList(page);
+  const day = (offset: number): string => {
+    const d = new Date();
+    d.setDate(d.getDate() + offset);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  };
+  const today = day(0);
+  const stem = `routine-rounds-e2e-${Date.now()}`;
+  const id = `lib.nvim/${stem}-${today}`;
+  const current = join(state().vault, 'lib.nvim', 'ROADMAP', 'tasks', `${stem}-${today}.md`);
+  const backlog = join(state().vault, 'lib.nvim', 'Backlog', 'TASKS');
+  const finished = join(backlog, `${day(-6)}_${stem}.md`);
+  const front = (status: string, due: string, more = ''): string =>
+    `---\ntitle: Routine rounds e2e\nstatus: ${status}\nrepeat: 1w\ndue: ${due}\n${more}created: ${day(-7)}\nupdated: ${day(-7)}\n---\n\nA routine of the tests.\n`;
+  mkdirSync(backlog, { recursive: true });
+  // The round finished six days ago (as `done` leaves it in the Backlog), and the round that is open now.
+  writeFileSync(finished, front('done', day(-7), 'done_in: repo@abc1234\ncommits: [repo@abc1234, other@def5678]\n'));
+  writeFileSync(current, front('open', today));
+  try {
+    await expect(page.locator('button.row', { hasText: id })).toHaveCount(1, { timeout: WRITE_BUDGET });
+    await open(page, id);
+    const detail = taskFloat(page).locator('aside.detail');
+    // The history: the engine found the earlier round by the routine's stem, with its day, due date, end and commits.
+    await expect(detail.getByRole('heading', { name: 'Earlier rounds' })).toBeVisible();
+    await expect(detail.locator('li[data-round]')).toHaveCount(1);
+    await expect(detail.locator(`li[data-round="lib.nvim/${stem}"]`)).toHaveText(
+      `finished ${day(-6)} · due ${day(-7)} · done · repo@abc1234, other@def5678`,
+    );
+    await expect(detail.getByText('a routine: discarding it ends it, no further round comes')).toBeVisible();
+
+    // Discarding asks first: it ends the routine. Keeping it writes nothing.
+    await detail.locator('[data-field="reason"]').fill('no longer needed');
+    await detail.getByRole('button', { name: 'Discard', exact: true }).click();
+    const ask = detail.getByRole('alertdialog');
+    await expect(ask).toContainText('This task repeats (1w). Discarding it ends the routine: no further round comes.');
+    expect(await violations(page)).toEqual([]);
+    await ask.getByRole('button', { name: 'Keep it' }).click();
+    await expect(ask).toHaveCount(0);
+    expect(readFileSync(current, 'utf8')).toMatch(/^status: open$/m);
+    await expect(detail.locator('[data-field="reason"]')).toHaveValue('no longer needed');
+
+    // Enter in the box asks too, and a second Enter does not answer the question for the person.
+    await detail.locator('[data-field="reason"]').press('Enter');
+    await expect(ask).toBeVisible();
+    await detail.locator('[data-field="reason"]').press('Enter');
+    await expect(ask).toBeVisible();
+    expect(readFileSync(current, 'utf8')).toMatch(/^status: open$/m);
+
+    // Answered: the task is parked with the reason in its notes.
+    await write(page, () => ask.getByRole('button', { name: 'Discard and end the routine' }).click());
+    await expect.poll(() => readFileSync(current, 'utf8')).toMatch(/^status: parked$/m);
+    await expect.poll(() => readFileSync(current, 'utf8')).toContain('Discarded: no longer needed');
+    expect(consoleProblems.get(page)).toEqual([]);
+  } finally {
+    rmSync(current, { force: true });
+    rmSync(finished, { force: true });
+  }
+});
+
 test('the capture dialog offers the acceptance lines of the choice and writes the ticked ones', async ({ page }) => {
   await pair(page);
   await closeFloat(page);

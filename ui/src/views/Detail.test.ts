@@ -116,6 +116,54 @@ describe('a routine in the detail', () => {
   });
 });
 
+describe('the history and the end of a routine', () => {
+  const doc = (more: Record<string, unknown>) =>
+    ({ kind: 'tasks.task', task: task('pub/a', { repeat: '4w' }), body: '', body_truncated: false, steps: [], questions: [], ...more }) as never;
+
+  it('lists the finished rounds, newest first, with the day, the due date, how it ended and the commits', () => {
+    const app = page(false, ['repeat', 'rounds']);
+    app.tasks = [task('pub/a', { repeat: '4w' })];
+    app.detail = {
+      state: 'ok',
+      id: 'pub/a',
+      doc: doc({
+        rounds: [
+          { id: 'pub/a-2026-02-01', done: '2026-02-02', due: '2026-02-01', status: 'done', commits: ['repo@abc1234', 'other@def5678'] },
+          { id: 'pub/a', due: '2026-01-04', status: 'done', done_in: 'repo@0001111' },
+        ],
+      }),
+    };
+    const out = detail(app);
+    expect(out).toContain('<h3>Earlier rounds</h3>');
+    // Each part stands apart: a blank on both sides of the dot.
+    expect(out).toMatch(/<li data-round="pub\/a-2026-02-01"[^>]*>\s*finished 2026-02-02 · due 2026-02-01 · done · <code>repo@abc1234, other@def5678<\/code>/);
+    expect(out).toMatch(/<li data-round="pub\/a"[^>]*>\s*finished \(no date\) · due 2026-01-04 · done · <code>repo@0001111<\/code>/);
+    expect(out.indexOf('pub/a-2026-02-01')).toBeLessThan(out.indexOf('data-round="pub/a"'));
+    expect(out).not.toContain('Older rounds are not listed.');
+    app.detail = { state: 'ok', id: 'pub/a', doc: doc({ rounds: [{ id: 'pub/a' }], rounds_truncated: true }) };
+    expect(detail(app)).toContain('Older rounds are not listed.');
+  });
+
+  it('says that no round is finished yet, and shows no history for a task that is no routine', () => {
+    const app = page(false, ['repeat', 'rounds']);
+    app.tasks = [task('pub/a', { repeat: '4w' })];
+    app.detail = { state: 'ok', id: 'pub/a', doc: doc({ rounds: [] }) };
+    expect(detail(app)).toContain('No round of this routine has been finished yet.');
+    app.tasks = [task('pub/a')];
+    app.detail = { state: 'ok', id: 'pub/a', doc: doc({ task: task('pub/a') }) };
+    expect(detail(app)).not.toContain('Earlier rounds');
+  });
+
+  it('warns beside Discard that discarding a routine ends it', () => {
+    const app = page(false, ['append_note', 'ops']);
+    app.tasks = [task('pub/a', { repeat: '4w' })];
+    app.detail = { state: 'ok', id: 'pub/a', doc: doc({}) };
+    expect(detail(app)).toContain('a routine: discarding it ends it, no further round comes');
+    app.tasks = [task('pub/a')];
+    expect(detail(app)).not.toContain('discarding it ends it');
+  });
+});
+
 describe('the float of a task', () => {
   function peeking(view: 'list' | 'plan', more: Partial<Env> = {}): App {
     const app = page(false, null, more);

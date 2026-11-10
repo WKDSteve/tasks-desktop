@@ -3755,6 +3755,20 @@ describe('writing', () => {
       expect(app.toast?.kind).toBe('error');
     });
 
+    it('discards a routine only when the person said it ends the routine', async () => {
+      const { app, hub } = await ready([task('pub/r', { etag: 'e1', repeat: '4w' })]);
+      app.setLang('en');
+      // Without the answer nothing is written: discarding ends every round to come.
+      expect(await app.discard('pub/r', 'no longer needed', 'e1')).toBe(false);
+      expect(await app.discard('pub/r', 'no longer needed', 'e1', { endRoutine: false })).toBe(false);
+      expect(hub.sent).toHaveLength(0);
+      expect(await app.discard('pub/r', 'no longer needed', 'e1', { endRoutine: true })).toBe(true);
+      expect(hub.sent.map((r) => r.ops)).toEqual([
+        [{ op: 'set', id: 'pub/r', patch: { status: 'parked' }, if_match: 'e1' }],
+        [{ op: 'append_note', id: 'pub/r', text: 'Discarded: no longer needed' }],
+      ]);
+    });
+
     it('moves a task to another area with the version it was read from, follows it and takes it back', async () => {
       const { app, hub } = await ready([task('pub/a', { etag: 'e1' })]);
       app.select('pub/a');

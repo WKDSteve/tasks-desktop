@@ -1617,11 +1617,13 @@ export class App {
    * own for it, and `done` would count it as finished). Two requests, one after the other: a batch does not stop at the
    * operation that failed, so a status that was refused (the file changed) would still get its note. The line is judged
    * before anything is written: the engine takes at most 1000 characters, and a status written without its note would be
-   * half of it. Says whether both were written (the box is emptied only then).
+   * half of it. Says whether both were written (the box is emptied only then). A routine (`repeat`) ends with it: no
+   * further round comes, so it is only discarded with `endRoutine` (the person was asked); without, nothing is written.
    */
-  async discard(id: string, reason: string, etag?: string): Promise<boolean> {
+  async discard(id: string, reason: string, etag?: string, opts: { endRoutine?: boolean } = {}): Promise<boolean> {
     const text = reason.trim();
     if (text === '') return false;
+    if (this.tasks.find((t) => t.id === id)?.repeat && opts.endRoutine !== true) return false;
     const line = translate(this.lang, 'discard.note', { reason: text });
     if ([...line].length > NOTE_MAX) {
       this.say('error', 'discard.too_long', { n: NOTE_MAX });

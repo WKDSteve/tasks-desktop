@@ -498,6 +498,10 @@ words; an empty field ends the routine) and, for a routine, *Next round from*: t
 default) or its due date (a fixed rhythm). The finish dialog says when the next round is due (`next_round` of the
 engine's preview); finishing writes the next round as a new task that is not offered before its start day, and the
 tile *Next task* says how many ready tasks the engine left for later (`later` of `next`).
+With the capability `rounds` the detail of a routine lists its *Earlier rounds*, newest first: the day each was
+finished, its due date, how it ended and its commits (the engine finds them in the Backlog by the routine's name).
+Discarding a routine ends it, so no further round comes: the detail says so beside *Discard* and asks once more, with
+the interval, before anything is written.
 
 The interface can create a task (`c`, or the Project menu), change status,
 priority, who, kind, effort, value and tags in the detail, tick a step of the plan section and add a dated line to the notes (the box of a step shows what the file says; a click asks the engine first), attach a screenshot to a task (*Attach screenshot* in the detail, or the box in the new-task form: the image on the clipboard of the machine the hub runs on, else its newest screenshot; the detail then shows the link to put into the text),
