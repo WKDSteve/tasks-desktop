@@ -41,6 +41,13 @@ test('the phone page pairs, shows only the classified areas and creates a task t
   // Every area of the test vault has a class in areas.json (public or internal), so nothing is left out and the page
   // says no part is missing; an unclassified area is left out by the page (tested in tasks-mobile on its own vault).
   await expect(page.getByTestId('partial')).toHaveCount(0);
+  // The page starts on "Today": the counts are the engine's `by_status` of the snapshot, the picks its `next`.
+  await expect(page.getByTestId('today-counts').locator('[data-status="open"] dd')).toHaveText(/^\d+$/);
+  await expect(page.getByTestId('today-counts-part')).toHaveCount(0);
+  await expect(page.getByTestId('today-next').locator('[data-id]').first()).toBeVisible();
+  const picks = await page.getByTestId('today-next').locator('[data-id]').evaluateAll((els) => els.map((e) => e.getAttribute('data-id') ?? ''));
+  for (const id of picks) expect(['lib.nvim', 'cascade.nvim', 'ALL', 'migrate.nvim', 'nvim-config']).toContain(id.split('/')[0]);
+  await page.getByRole('button', { name: 'List', exact: true }).click();
   const ids = await page.getByTestId('task-list').locator('[data-id]').evaluateAll((els) => els.map((e) => e.getAttribute('data-id') ?? ''));
   expect(ids.length).toBeGreaterThan(0);
   for (const id of ids) expect(['lib.nvim', 'cascade.nvim', 'ALL', 'migrate.nvim', 'nvim-config']).toContain(id.split('/')[0]);
