@@ -619,6 +619,12 @@ export class App {
   planningProject = $state('');
 
   tasks = $state.raw<TaskEntry[]>([]);
+  /**
+   * The keys of the view on screen that has its own (the acceptance: `j`/`k` over its points, Space ticks): the view sets
+   * it while it is shown and takes it away when it goes. Called by the page's key handler after the keys every view has
+   * (dialogs, typing, the `g` chord); true when it took the key.
+   */
+  viewKeys: ((event: KeyboardEvent) => boolean) | null = null;
   snapshot = $state.raw<Snapshot | null>(null);
   /** The named lists of the engine (read only; the ones of the editor, built in, or from its configuration). */
   engineLists = $state.raw<EngineList[]>([]);
@@ -2452,6 +2458,14 @@ export class App {
     if (!this.readOnly || this.phase !== 'ready') return false;
     this.say('error', 'write.read_only');
     return true;
+  }
+
+  /**
+   * Whether a key that writes must be refused now: the page is read only, or a write is on its way (both say so in a
+   * toast). For a view that writes with its own keys (the acceptance), as the inbox keys do.
+   */
+  refusesKeyWrite(): boolean {
+    return this.refusedReadOnly() || this.refusedWhileSaving();
   }
 
   private refusedWhileSaving(): boolean {

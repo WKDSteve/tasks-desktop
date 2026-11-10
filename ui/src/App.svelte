@@ -187,6 +187,11 @@
         return;
       }
     }
+    // The acceptance: its own keys (j/k over the points, Space ticks the one under the cursor).
+    if (view === 'abnahme' && app.viewKeys?.(event)) {
+      event.preventDefault();
+      return;
+    }
     if (view === 'inbox' && event.key !== 'g' && event.key !== 'G') {
       if (triageKey(event.key, event.shiftKey)) {
         event.preventDefault();

@@ -2,7 +2,19 @@ import { describe, expect, it } from 'vitest';
 import type { TaskEntry } from './contract';
 import golden from './fixtures/sheet-block.golden.md?raw';
 import sums from './fixtures/sheet-block.SHA256?raw';
-import { abnahmeOf, allTicked, parseSheets, progress, rowsOf, tickItem, waiting } from './abnahme';
+import {
+  abnahmeOf,
+  allTicked,
+  groupOf,
+  parseAcceptance,
+  parseSheets,
+  progress,
+  rowsOf,
+  tickedOf,
+  tickItem,
+  troubleOf,
+  waiting,
+} from './abnahme';
 
 const BLOCK = [
   '<!-- testing:sheets:begin -->',
@@ -145,10 +157,105 @@ describe('the golden block of testing.nvim', () => {
 });
 
 describe('the tasks of the view', () => {
-  const t = (id: string, state?: string) => ({ id, ...(state ? { sheets: { state } } : {}) }) as unknown as TaskEntry;
+  type Counts = Partial<Record<'red' | 'stale' | 'never' | 'inbox' | 'manual' | 'green', number>>;
+  const ZERO = { red: 0, stale: 0, never: 0, inbox: 0, manual: 0, green: 0 };
+  /** A task with a block whose sheets are `counts` (the worst one is the state, as the engine reads it). */
+  const sheet = (id: string, counts: Counts, status = 'open') => {
+    const all = { ...ZERO, ...counts };
+    const state = (['red', 'stale', 'never', 'inbox', 'manual', 'green'] as const).find((s) => all[s] > 0) ?? 'unknown';
+    const total = Object.values(all).reduce((a, b) => a + b, 0);
+    return { id, status, tags: [], sheets: { state, total, counts: all } } as unknown as TaskEntry;
+  };
+  /** A task without a block. */
+  const plain = (id: string, tags: string[], status = 'open', actor?: string) =>
+    ({ id, status, tags, ...(actor ? { actor } : {}) }) as unknown as TaskEntry;
+  const ids = (tasks: readonly TaskEntry[]) => tasks.map((x) => x.id);
 
-  it('are those whose sheets wait for a person', () => {
-    expect(abnahmeOf([t('a', 'inbox'), t('b', 'red'), t('c'), t('d', 'manual'), t('e', 'green')]).map((x) => x.id)).toEqual(['a', 'd']);
+  it('with a sheet only: a waiting sheet makes the group (inbox before manual), red, green or none of them waits for nothing', () => {
+    const got = abnahmeOf([
+      sheet('a', { inbox: 1 }),
+      sheet('b', { red: 1 }),
+      sheet('d', { manual: 2 }),
+      sheet('e', { green: 3 }),
+      sheet('f', { inbox: 1, manual: 1 }),
+      sheet('g', {}),
+    ]);
+    expect([ids(got.inbox), ids(got.manual), ids(got.hand)]).toEqual([['a', 'f'], ['d'], []]);
+  });
+
+  it('by hand only: a live check without a block (needs-live-test), open, doing or a decision', () => {
+    const got = abnahmeOf([
+      plain('h1', ['needs-live-test']),
+      plain('h2', ['needs-live-test', 'other'], 'doing'),
+      plain('h3', ['needs-live-test'], 'decision'),
+      plain('x', ['other']),
+    ]);
+    expect([ids(got.inbox), ids(got.manual), ids(got.hand)]).toEqual([[], [], ['h1', 'h2', 'h3']]);
+    expect(groupOf(plain('h1', ['needs-live-test']))).toBe('hand');
+  });
+
+  it('mixed red and waiting: shown with its waiting sheet, and the red one is named', () => {
+    const mixed = sheet('m', { red: 1, inbox: 1 });
+    expect(mixed.sheets?.state).toBe('red');
+    expect(ids(abnahmeOf([mixed]).inbox)).toEqual(['m']);
+    expect(troubleOf(mixed)).toEqual({ red: 1, stale: 0, never: 0 });
+    expect(troubleOf(sheet('s', { stale: 1, manual: 1 }))).toEqual({ red: 0, stale: 1, never: 0 });
+    expect(troubleOf(sheet('a', { inbox: 1, green: 2 }))).toBeNull();
+    expect(troubleOf(plain('h', ['needs-live-test']))).toBeNull();
+  });
+
+  it('parked, blocked or done: waits for nothing, by hand or with a sheet waiting by hand', () => {
+    const got = abnahmeOf([
+      plain('p', ['needs-live-test'], 'parked'),
+      plain('b', ['needs-live-test'], 'blocked'),
+      plain('d', ['needs-live-test'], 'done'),
+    ]);
+    expect([ids(got.inbox), ids(got.manual), ids(got.hand)]).toEqual([[], [], []]);
+  });
+
+  it('actor me without the tag is not a live check, with or without boxes; with a block it is a sheet task', () => {
+    const got = abnahmeOf([plain('me1', [], 'open', 'me'), plain('me2', ['needs-user'], 'open', 'me')]);
+    expect([ids(got.inbox), ids(got.manual), ids(got.hand)]).toEqual([[], [], []]);
+    expect(groupOf(sheet('me3', { manual: 1 }))).toBe('manual');
+    // a live check that has a block is a sheet task, not one by hand
+    expect(groupOf({ ...sheet('t', { green: 1 }), tags: ['needs-live-test'] } as TaskEntry)).toBeNull();
+  });
+
+  it('the boxes of the acceptance section are the points of a task by hand', () => {
+    const text = [
+      '## Kontext',
+      '',
+      '- [ ] not acceptance',
+      '',
+      '## Akzeptanz',
+      '',
+      '- [ ] On a real account',
+      '- [x] On the Mac',
+      '  - [ ] nested, still a point',
+      '',
+      '```',
+      '- [ ] in a code block',
+      '```',
+      '### A sub heading stays inside',
+      '- [ ] after it\r',
+      '',
+      '## Notizen',
+      '',
+      '- [ ] not acceptance either',
+    ].join('\n');
+    const items = parseAcceptance(text);
+    expect(items.map((i) => [i.kind, i.text, i.checked, i.line])).toEqual([
+      ['acceptance', 'On a real account', false, 6],
+      ['acceptance', 'On the Mac', true, 7],
+      ['acceptance', 'nested, still a point', false, 8],
+      ['acceptance', 'after it', false, 14],
+    ]);
+    expect(tickedOf(items)).toEqual({ ticked: 1, total: 4 });
+    // a tick rewrites the one line, the CR it had kept
+    const ticked = tickItem(text, items[3]!, true)!;
+    expect(ticked.split('\n')[14]).toBe('- [x] after it\r');
+    expect(parseAcceptance('## Acceptance\n- [ ] english\n')).toHaveLength(1);
+    expect(parseAcceptance('No section\n- [ ] box\n')).toEqual([]);
   });
 
   it('show a snapshot as rows without the empty row after the last newline', () => {

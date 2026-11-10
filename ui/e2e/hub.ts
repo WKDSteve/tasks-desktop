@@ -160,6 +160,74 @@ const ABNAHME_TASK = [
   '',
 ].join('\n');
 
+/** A live check without a test sheet (the group "by hand" of the acceptance): its acceptance boxes are the points. */
+export const HAND_SLUG = 'abnahme-e2e-by-hand';
+const HAND_TASK = [
+  '---',
+  'title: Abnahme e2e by hand',
+  'status: open',
+  'kind: task',
+  'tags: [needs-live-test]',
+  'created: 2026-01-01',
+  'updated: 2026-01-01',
+  '---',
+  '',
+  'Check it on a real account.',
+  '',
+  '## Akzeptanz',
+  '',
+  '- [ ] Signed in on the real account',
+  '- [ ] The sync ran once',
+  '',
+  '## Notizen',
+  '',
+].join('\n');
+
+/** A live check by hand in another area, for the keys (and the filter of the area). */
+export const HAND_KEYS_SLUG = 'abnahme-e2e-cursor';
+const HAND_KEYS_TASK = [
+  '---',
+  'title: Abnahme e2e cursor',
+  'status: open',
+  'kind: task',
+  'tags: [needs-live-test]',
+  'created: 2026-01-01',
+  'updated: 2026-01-01',
+  '---',
+  '',
+  '## Akzeptanz',
+  '',
+  '- [ ] First cursor point',
+  '- [ ] Second cursor point',
+  '',
+].join('\n');
+
+/** A parked live check: it waits for nothing a person can do now and is not shown. */
+const HAND_PARKED_TASK = HAND_KEYS_TASK.replace('title: Abnahme e2e cursor', 'title: Abnahme e2e parked').replace('status: open', 'status: parked');
+
+/** A task with a red sheet and a waiting one: shown with its waiting point, the red sheet named, no finish offered. */
+export const MIXED_SLUG = 'abnahme-e2e-mixed';
+const MIXED_TASK = [
+  '---',
+  'title: Abnahme e2e mixed',
+  'status: open',
+  'kind: task',
+  'created: 2026-01-01',
+  'updated: 2026-01-01',
+  '---',
+  '',
+  '<!-- testing:sheets:begin -->',
+  '## Test sheets',
+  '',
+  '- **Mixed red sheet** (`mixed.red`, `ui.nvim/TESTS/sheets/mixed-red.sheet.lua`): red',
+  '- **Mixed waiting sheet** (`mixed.wait`, `ui.nvim/TESTS/sheets/mixed-wait.sheet.lua`): automated part green, waiting for your judgement',
+  '  - Judge:',
+  '    - [ ] The mixed point reads well',
+  '<!-- testing:sheets:states mixed.red=red mixed.wait=inbox -->',
+  '<!-- testing:sheets:end -->',
+  '',
+].join('\n');
+
 /** Is the binary the one of the current build of the interface? */
 export async function assertFreshBinary(): Promise<void> {
   const dist = join(repo, 'ui', 'dist', 'index.html');
@@ -211,6 +279,13 @@ export function prepareVault(): { root: string; vault: string; config: string } 
   // A live check whose test sheet is green and waits for a person (the acceptance view), and the snapshot it names, in
   // a folder of plugin checkouts beside the vault (`REPOS_DIR` of `env`).
   writeFileSync(join(tasks, `${ABNAHME_SLUG}.md`), ABNAHME_TASK);
+  // The other groups of the acceptance: live checks without a sheet (one in another area, one parked) and a task with
+  // a red and a waiting sheet.
+  writeFileSync(join(tasks, `${HAND_SLUG}.md`), HAND_TASK);
+  writeFileSync(join(tasks, `${MIXED_SLUG}.md`), MIXED_TASK);
+  const cascade = join(vault, 'cascade.nvim', 'ROADMAP', 'tasks');
+  writeFileSync(join(cascade, `${HAND_KEYS_SLUG}.md`), HAND_KEYS_TASK);
+  writeFileSync(join(cascade, 'abnahme-e2e-parked.md'), HAND_PARKED_TASK);
   const snaps = join(root, 'repos', 'ui.nvim', 'TESTS', '__snapshots__', 'sheets', 'abnahme.sheet');
   mkdirSync(snaps, { recursive: true });
   writeFileSync(join(snaps, 'float.80x24.snap'), ['ABNAHME-ROW-ONE', '+------+', '| ok   |', '+------+', ''].join('\n'));

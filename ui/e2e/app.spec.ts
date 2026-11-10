@@ -7,7 +7,7 @@ import type { Locator, Page, Route } from '@playwright/test';
 import { expect, isMachineFault, test } from './fixtures';
 import { expectAccessible, violations, watchViolations } from './a11y';
 import { STATE } from './global';
-import { ABNAHME_SLUG, origin, pairingLink, pickedFolder, removeFile } from './hub';
+import { ABNAHME_SLUG, HAND_KEYS_SLUG, HAND_SLUG, MIXED_SLUG, origin, pairingLink, pickedFolder, removeFile } from './hub';
 
 test.use({ locale: 'en-US' });
 
@@ -7763,6 +7763,164 @@ test('a tick the hub refuses leaves the box as the task says and writes nothing'
   await box.click();
   await expect(box).toBeChecked({ checked: was });
   expect(readFileSync(file, 'utf8')).toBe(before);
+});
+
+test('a live check without a sheet is in the group by hand: its acceptance boxes are ticked into the task, done is offered once all are, and a change in between is not written over', async ({
+  page,
+}) => {
+  test.slow();
+  await watchViolations(page);
+  await pair(page);
+  await showList(page);
+  await page.keyboard.press('g');
+  await page.keyboard.press('a');
+  const group = page.locator('section.group[data-group="hand"]');
+  const card = group.locator(`article.task[data-task="lib.nvim/${HAND_SLUG}"]`);
+  await expect(card).toBeVisible();
+  await expect(group.getByRole('heading', { level: 3 })).toContainText('By hand, without a test sheet');
+  // A parked live check waits for nothing a person can do now.
+  await expect(page.locator('article.task[data-task="cascade.nvim/abnahme-e2e-parked"]')).toHaveCount(0);
+  // The groups say how many they hold; the sheet task waits in the first one.
+  await expect(page.locator(`section.group[data-group="inbox"] article.task[data-task="lib.nvim/${ABNAHME_SLUG}"]`)).toBeVisible();
+  await expect(card.getByRole('status').first()).toContainText('0 of 2 ticked');
+  await expectAccessible(page, 'acceptance by hand');
+  const file = join(state().vault, 'lib.nvim', 'ROADMAP', 'tasks', `${HAND_SLUG}.md`);
+
+  // A tick is written into the task: the one line.
+  await card.getByLabel('Signed in on the real account').check();
+  await expect.poll(() => readFileSync(file, 'utf8')).toContain('- [x] Signed in on the real account');
+  expect(readFileSync(file, 'utf8')).toContain('- [ ] The sync ran once');
+  await expect(card.getByRole('status').first()).toContainText('1 of 2 ticked');
+  await expect(card.getByRole('button', { name: 'Finish the task ...' })).toHaveCount(0);
+
+  // The file changes and the page has not heard of it yet (the list is read late): the tick goes to the version it
+  // read, the engine refuses it, the page reads the task again and shows the box as the file has it.
+  await slow(page, '/api/tasks/snapshot', SLOW_WRITE, 1);
+  // A line of its own each run: the vault is shared, a run before this one left its line.
+  const elsewhere = `Changed elsewhere ${Date.now().toString(36)}.`;
+  writeFileSync(file, `${readFileSync(file, 'utf8')}${elsewhere}\n`);
+  await card.getByLabel('The sync ran once').check();
+  await expect(card.getByLabel('The sync ran once')).not.toBeChecked({ timeout: WRITE_BUDGET });
+  const after = readFileSync(file, 'utf8');
+  expect(after).toContain(elsewhere);
+  expect(after).toContain('- [ ] The sync ran once');
+
+  // Ticked again on the version now read: written, and every point ticked offers done (a dialog; nothing finished).
+  await card.getByLabel('The sync ran once').check();
+  await expect.poll(() => readFileSync(file, 'utf8'), { timeout: WRITE_BUDGET }).toContain('- [x] The sync ran once');
+  await expect(card.getByRole('status').first()).toContainText('2 of 2 ticked', { timeout: WRITE_BUDGET });
+  await card.getByRole('button', { name: 'Finish the task ...' }).click();
+  await expect(page.getByRole('dialog')).toBeVisible();
+  expect(readFileSync(file, 'utf8')).toContain('status: open');
+  await page.keyboard.press('Escape');
+  // Unticking takes the offer back.
+  await card.getByLabel('The sync ran once').uncheck();
+  await expect(card.getByRole('button', { name: 'Finish the task ...' })).toHaveCount(0, { timeout: WRITE_BUDGET });
+  await expect.poll(() => readFileSync(file, 'utf8'), { timeout: WRITE_BUDGET }).toContain('- [ ] The sync ran once');
+  // Back to how the task was found: the vault is shared with the other tests.
+  await expect(card.getByRole('status').first()).toContainText('1 of 2 ticked', { timeout: WRITE_BUDGET });
+  await card.getByLabel('Signed in on the real account').uncheck();
+  await expect.poll(() => readFileSync(file, 'utf8'), { timeout: WRITE_BUDGET }).toContain('- [ ] Signed in on the real account');
+});
+
+test('a task with a red and a waiting sheet shows its waiting point and names the red sheet, and done is not offered', async ({ page }) => {
+  await pair(page);
+  await showList(page);
+  await page.keyboard.press('g');
+  await page.keyboard.press('a');
+  const card = page.locator(`section.group[data-group="inbox"] article.task[data-task="lib.nvim/${MIXED_SLUG}"]`);
+  await expect(card).toBeVisible();
+  await expect(card.locator('[data-trouble]')).toContainText('red 1');
+  const file = join(state().vault, 'lib.nvim', 'ROADMAP', 'tasks', `${MIXED_SLUG}.md`);
+  const box = card.getByLabel('The mixed point reads well');
+  await box.check();
+  await expect.poll(() => readFileSync(file, 'utf8'), { timeout: WRITE_BUDGET }).toContain('    - [x] The mixed point reads well');
+  await expect(card.getByRole('status').first()).toContainText('1 of 1 ticked', { timeout: WRITE_BUDGET });
+  // Every point is ticked, but a sheet is red: no done.
+  await expect(card.getByRole('button', { name: 'Finish the task ...' })).toHaveCount(0);
+  await box.uncheck();
+  await expect.poll(() => readFileSync(file, 'utf8'), { timeout: WRITE_BUDGET }).toContain('    - [ ] The mixed point reads well');
+});
+
+test('the acceptance follows the filter of the areas, and its keys move over tasks and points and tick the one under the cursor, not while a write is on its way', async ({
+  page,
+}) => {
+  test.slow();
+  await pair(page);
+  await showList(page);
+  await page.getByRole('button', { name: /^Areas/ }).click();
+  await page.getByRole('group', { name: 'Areas' }).getByRole('checkbox', { name: /^cascade\.nvim( \(\d+\))?$/ }).check();
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('g');
+  await page.keyboard.press('a');
+  const card = page.locator(`article.task[data-task="cascade.nvim/${HAND_KEYS_SLUG}"]`);
+  await expect(card).toBeVisible();
+  // Only the area chosen: the live checks of lib.nvim are not here, and the groups count what is.
+  await expect(page.locator('article.task[data-task^="lib.nvim/"]')).toHaveCount(0);
+  await expect(page.locator('section.group[data-group="hand"] h3 .n')).toHaveText('(1)');
+  await expect(page.locator('section.group[data-group="inbox"] h3 .n')).toHaveText('(0)');
+  await expect(card.getByRole('status').first()).toContainText('0 of 2 ticked');
+  // The keys go to the page, not to a button that has the focus.
+  await page.locator('section.abnahme h2').click();
+  const file = join(state().vault, 'cascade.nvim', 'ROADMAP', 'tasks', `${HAND_KEYS_SLUG}.md`);
+  const first = card.locator('label', { hasText: 'First cursor point' });
+  const second = card.locator('label', { hasText: 'Second cursor point' });
+
+  await page.keyboard.press('j');
+  await expect(card.locator('header.thead')).toHaveAttribute('data-cursor', 'true');
+  await page.keyboard.press('j');
+  await expect(first).toHaveAttribute('data-cursor', 'true');
+  await page.keyboard.press(' ');
+  await expect.poll(() => readFileSync(file, 'utf8'), { timeout: WRITE_BUDGET }).toContain('- [x] First cursor point');
+  await expect(card.getByRole('status').first()).toContainText('1 of 2 ticked', { timeout: WRITE_BUDGET });
+
+  // A write on its way: Space is refused with the toast, and nothing more is written.
+  await page.keyboard.press('j');
+  await expect(second).toHaveAttribute('data-cursor', 'true');
+  const release = await holdNextWrite(page);
+  const answer = nextAnswer(page);
+  await page.keyboard.press(' ');
+  await expect.poll(() => readFileSync(file, 'utf8'), { timeout: WRITE_BUDGET }).toContain('- [x] Second cursor point');
+  await page.keyboard.press(' ');
+  await expect(page.getByRole('alert').getByText('Still saving - try again in a moment.')).toBeVisible();
+  release();
+  await answer;
+  await expect(card.getByRole('status').first()).toContainText('2 of 2 ticked', { timeout: WRITE_BUDGET });
+  expect(readFileSync(file, 'utf8')).toContain('- [x] Second cursor point');
+
+  // k goes back; Space unticks the point under the cursor.
+  await page.keyboard.press('k');
+  await expect(first).toHaveAttribute('data-cursor', 'true');
+  await page.keyboard.press(' ');
+  await expect.poll(() => readFileSync(file, 'utf8'), { timeout: WRITE_BUDGET }).toContain('- [ ] First cursor point');
+  await expect(card.getByRole('status').first()).toContainText('1 of 2 ticked', { timeout: WRITE_BUDGET });
+  await page.keyboard.press(' ');
+  await expect.poll(() => readFileSync(file, 'utf8'), { timeout: WRITE_BUDGET }).toContain('- [x] First cursor point');
+  // Back to how the task was found: the vault is shared with the other tests.
+  await expect(card.getByRole('status').first()).toContainText('2 of 2 ticked', { timeout: WRITE_BUDGET });
+  await page.keyboard.press('j');
+  await page.keyboard.press(' ');
+  await expect.poll(() => readFileSync(file, 'utf8'), { timeout: WRITE_BUDGET }).toContain('- [ ] Second cursor point');
+  await expect(card.getByRole('status').first()).toContainText('1 of 2 ticked', { timeout: WRITE_BUDGET });
+  await page.keyboard.press('k');
+  await page.keyboard.press(' ');
+  await expect.poll(() => readFileSync(file, 'utf8'), { timeout: WRITE_BUDGET }).toContain('- [ ] First cursor point');
+  await expect(card.getByRole('status').first()).toContainText('0 of 2 ticked', { timeout: WRITE_BUDGET });
+
+  // A box that has the focus is the cursor, and Space ticks it once (the box's own key, not the view's as well).
+  await card.getByLabel('Second cursor point').focus();
+  await expect(second).toHaveAttribute('data-cursor', 'true');
+  await page.keyboard.press(' ');
+  await expect.poll(() => readFileSync(file, 'utf8'), { timeout: WRITE_BUDGET }).toContain('- [x] Second cursor point');
+  await expect(card.getByRole('status').first()).toContainText('1 of 2 ticked', { timeout: WRITE_BUDGET });
+  await card.getByLabel('Second cursor point').uncheck();
+  await expect.poll(() => readFileSync(file, 'utf8'), { timeout: WRITE_BUDGET }).toContain('- [ ] Second cursor point');
+  // Space on a focused button presses the button: Open the task shows the task.
+  await card.getByRole('button', { name: 'Open the task' }).focus();
+  await page.keyboard.press(' ');
+  await expect(taskFloat(page)).toBeVisible();
+  expect(readFileSync(file, 'utf8')).toContain('- [ ] First cursor point');
+  await page.evaluate(() => localStorage.removeItem('tasks-desktop.filter'));
 });
 
 test('the statistics show what the engine counted as finished in the last 30 days, and the number opens that period', async ({ page }) => {
