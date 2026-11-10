@@ -18,6 +18,7 @@ import { WebEngine } from '../src/web/engine.ts';
 import { serveEmbeddedWasm, startWorker, WASM_URL } from '../src/web/worker.ts';
 import { bundle, checkout, gitFiles, readLock } from './engine-bundle.mjs';
 import { edgeFiles } from './edge-vault.mjs';
+import { nvimEnv } from './nvim-env.mjs';
 import { testDir } from './tmp.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -164,7 +165,7 @@ test('every case of shim-parity.lua answers as nvim does', { skip: NEEDS_NVIM },
   const dir = testDir(t, 'parity');
   const runner = join(dir, 'run.lua');
   writeFileSync(runner, 'io.stdout:write(dofile(arg[1]), "\\n")\n');
-  const nvim = parseCases(execFileSync('nvim', ['--headless', '-u', 'NONE', '-l', runner, join(here, 'shim-parity.lua')], { encoding: 'utf8' }));
+  const nvim = parseCases(execFileSync('nvim', ['--headless', '-u', 'NONE', '-l', runner, join(here, 'shim-parity.lua')], { encoding: 'utf8', env: nvimEnv(dir) }));
   const web = parseCases(await lua(PARITY));
   const differ = [...nvim.keys()].filter((name) => web.get(name) !== nvim.get(name));
   assert.deepEqual(differ, [], `cases that differ: ${differ.map((n) => `${n}: nvim ${nvim.get(n)?.slice(0, 120)} / web ${web.get(n)?.slice(0, 120)}`).join('; ')}`);
@@ -261,7 +262,7 @@ function nvimCaller(t, label, vault) {
     if (params) args.push(`--params=${params}`);
     args.push(`--vault=${vault(dir)}`);
     try {
-      return execFileSync('nvim', args, { encoding: 'utf8', maxBuffer: 256 * 1024 * 1024, env: { ...process.env, LIB_NVIM_DIR: libDir } });
+      return execFileSync('nvim', args, { encoding: 'utf8', maxBuffer: 256 * 1024 * 1024, env: nvimEnv(dir, { LIB_NVIM_DIR: libDir }) });
     } catch (err) {
       return String(err.stdout ?? err);
     }

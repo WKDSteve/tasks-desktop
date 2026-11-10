@@ -6,6 +6,7 @@ import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
 import { cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { withoutMachineVars } from '../web/nvim-env.mjs';
 import { removeTree, tempDir, tempRoot } from '../web/tmp.mjs';
 import { e2ePort } from './port.ts';
 
@@ -245,7 +246,8 @@ export function pickedFolder(config: string): string {
 
 export function env(config: string): NodeJS.ProcessEnv {
   return {
-    ...process.env,
+    // none of this machine's vault or setup (`TASKS_VAULT` would be the vault of a hub that has none configured)
+    ...withoutMachineVars(process.env),
     TASKS_DESKTOP_CONFIG_DIR: config,
     // The editor is not started in a test: the file it would open is written here.
     TASKS_DESKTOP_EDITOR_LOG: join(config, '..', 'editor.log'),

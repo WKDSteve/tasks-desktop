@@ -33,6 +33,9 @@ pnpm web:build && PLAYWRIGHT_BROWSERS_PATH="$PWD/node_modules/.cache/ms-playwrig
 - Ohne `TASKS_WEB_COMPARE=1` werden die Vergleiche mit nvim still übersprungen: eine Funktion, die der Shim
   (`ui/src/web/vim-shim.lua`) nicht kennt, fällt dann erst in `web:e2e` oder in der CI auf (so geschehen mit
   `uv.os_get_passwd` der Claims, `4a3220d`).
+- Ein nvim der Tests startet nur mit `nvimEnv` aus `ui/web/nvim-env.mjs` (Positivliste, `stdpath` im Testordner), der
+  Hub der e2e-Tests mit `withoutMachineVars`: sonst liest die Engine `TASKS_MARKER_DOCS`, `TASKS_VAULT` usw. dieser
+  Maschine mit (Vergleich rot, Pfade in Dokumenten).
 
 - Umgebung für Browser- und Engine-Tests: `TASKS_ENGINE_DIR=E:/repos/tasks.nvim`,
   `LIB_NVIM_DIR=E:/repos/lib.nvim`, `TASKS_DESKTOP_REQUIRE_ENGINE=1` (ohne das werden

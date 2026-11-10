@@ -9,6 +9,7 @@
 import { execFileSync } from 'node:child_process';
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { nvimEnv } from './nvim-env.mjs';
 import { removeTree, tempDir } from './tmp.mjs';
 
 const DUMP = `
@@ -58,7 +59,7 @@ function main() {
   try {
     const script = join(dir, 'dump.lua');
     writeFileSync(script, DUMP);
-    const text = execFileSync('nvim', ['--headless', '-u', 'NONE', '-l', script], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+    const text = execFileSync('nvim', ['--headless', '-u', 'NONE', '-l', script], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, env: nvimEnv(dir) });
     const pairs = text
       .split(/\r?\n/)
       .filter(Boolean)

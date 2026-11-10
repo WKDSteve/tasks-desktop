@@ -18,6 +18,7 @@ import { isDir } from '../src/web/engine.ts';
 import { WebEngine } from '../src/web/engine.ts';
 import { VaultMount } from '../src/web/vault-files.ts';
 import { bundle, checkout, gitFiles, readLock } from './engine-bundle.mjs';
+import { nvimEnv } from './nvim-env.mjs';
 import { testDir } from './tmp.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -90,7 +91,7 @@ test('every kind of write answers and writes as nvim does on the same commit', {
     if (params) args.push(`--params=${params}`);
     args.push(`--today=${TODAY}`, `--vault=${nvimVault}`);
     try {
-      return execFileSync('nvim', args, { encoding: 'utf8', env: { ...process.env, LIB_NVIM_DIR: libDir } });
+      return execFileSync('nvim', args, { encoding: 'utf8', env: nvimEnv(dir, { LIB_NVIM_DIR: libDir }) });
     } catch (err) {
       return String(err.stdout ?? err);
     }
