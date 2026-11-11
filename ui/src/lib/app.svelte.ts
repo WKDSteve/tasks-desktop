@@ -106,7 +106,7 @@ import {
   type NamedList,
 } from './lists';
 import { localToday } from './remind';
-import { defaultColumns, parseColumns, serializeColumns, type ListColumns } from './columns';
+import { COLUMN_KEYS, defaultColumns, parseColumns, serializeColumns, type ListColumns } from './columns';
 import { emptyFolds, foldOf, parseFolds, serializeFolds, type FoldMemory, type Folds, type FoldView } from './fold';
 import { parseSizes, serializeSizes, withSize, type Size, type Sizes } from './sizes';
 import { taskRoute, viewRoute } from './route';
@@ -778,7 +778,11 @@ export class App {
   layoutChanged(view: LayoutView): boolean {
     switch (view) {
       case 'list':
-        return JSON.stringify(this.listColumns) !== JSON.stringify(defaultColumns()) || this.tileSizes.list !== undefined;
+      {
+        // Column by column: the same widths in another order of the keys are no change.
+        const first = defaultColumns();
+        return COLUMN_KEYS.some((key) => this.listColumns[key] !== first[key]) || this.tileSizes.list !== undefined;
+      }
       case 'plan': {
         const sort = parseCompareSort(null);
         return (

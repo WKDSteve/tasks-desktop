@@ -6582,6 +6582,17 @@ describe('the defaults (dialog "Defaults ...")', () => {
     m.app.stop();
   });
 
+  it('counts the widths of the list as they came in any order of the keys', async () => {
+    const m = make({ token: 't' });
+    m.hub.doc = snapshot(three);
+    await m.app.start(null);
+    const first = m.app.listColumns;
+    const reversed = Object.fromEntries(Object.entries(first).reverse()) as typeof first;
+    m.app.setListColumns(reversed);
+    expect(m.app.layoutChanged('list')).toBe(false);
+    m.app.stop();
+  });
+
   it('resetting everything puts the layout of every view back too', async () => {
     const m = make({ token: 't' });
     m.hub.doc = snapshot(three);
