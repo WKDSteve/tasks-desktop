@@ -474,7 +474,8 @@ project or stage it does not know is refused in its words), and the message offe
 `inverse`, on the version the change left). A plan or the project that does not finish by itself (a plan without
 tasks, a project with only parked plans) is finished by hand (`plan_close`, `project_close`): the engine is asked
 first and the page says what would happen, or which tasks and plans still hold it open; there is no way back, and a
-project the last plan takes with it is named. The head of the page switches to another project. The plan wizard makes a project too (`project_new`), and a plan can be made in a project and one of
+project the last plan takes with it is named. The plan view offers the same for the plan chosen in it
+(*Finish the plan ...*), also for a plan that is in no project. The head of the page switches to another project. The plan wizard makes a project too (`project_new`), and a plan can be made in a project and one of
 its stages. The filter of the list has the field *Project*: the tasks of the project's plans and its own (the page
 reads which plan belongs to which project from the snapshot). A saved view groups by *Project* too (read only, like
 *Readiness*: a card is not dragged to another project; the group is named by the project's title, and a task stands in

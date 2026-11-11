@@ -8271,6 +8271,68 @@ test('a project: its page with goal, rollup, own tasks and the plans by stage, t
   }
 });
 
+test('the plan view finishes the chosen plan by hand, also one in no project; an open task holds a plan open', async ({ page }) => {
+  const { vault } = state();
+  // Two plans in no project (unique names: the tests share the vault): one without tasks, one with an open task.
+  const files = [
+    [join(vault, 'nvim-config', 'ROADMAP', 'plans', 'e2e-loneplan-e001.md'), `---\ntitle: Loneplan e001\nstatus: doing\nareas: [nvim-config]\nphase_order: []\ncreated: 2026-11-11\nupdated: 2026-11-11\n---\n\nA plan whose tasks are gone.\n`],
+    [join(vault, 'nvim-config', 'ROADMAP', 'plans', 'e2e-loneplan-h001.md'), `---\ntitle: Loneplan h001\nstatus: doing\nareas: [nvim-config]\nphase_order: []\ncreated: 2026-11-11\nupdated: 2026-11-11\n---\n\nA plan with an open task.\n`],
+    [join(vault, 'nvim-config', 'ROADMAP', 'tasks', 'e2e-lonetask-h001.md'), `---\ntitle: Lonetask h001\nstatus: open\nkind: task\nplan: nvim-config/e2e-loneplan-h001\ncreated: 2026-11-11\nupdated: 2026-11-11\n---\n\nHolds the plan open.\n`],
+  ] as const;
+  const kept = [join(vault, 'nvim-config', 'Backlog', 'README.md'), join(vault, 'nvim-config', 'ROADMAP', 'TASKS.md')].map(
+    (path) => [path, existsSync(path) ? readFileSync(path, 'utf8') : null] as const,
+  );
+  const finishedDir = join(vault, 'nvim-config', 'Backlog', 'FEATURES');
+  try {
+    for (const [path, text] of files) {
+      mkdirSync(join(path, '..'), { recursive: true });
+      writeFileSync(path, text);
+    }
+    await pair(page);
+    await chooseView(page, 'View', 'Plan');
+    const choice = page.getByRole('combobox', { name: 'Plan', exact: true });
+    // All plans: nothing to finish.
+    await expect(page.getByRole('button', { name: 'Finish the plan …' })).toHaveCount(0);
+
+    // The plan with an open task: the engine names it, no finish is offered.
+    await choice.selectOption('nvim-config/e2e-loneplan-h001');
+    await page.getByRole('button', { name: 'Finish the plan …' }).click();
+    let panel = page.getByRole('group', { name: 'Finish the plan …' });
+    await expect(panel).toContainText('Still open, so it cannot be finished:');
+    await expect(panel).toContainText('Lonetask h001');
+    await expect(panel.getByRole('button', { name: 'Finish', exact: true })).toHaveCount(0);
+    await panel.getByRole('button', { name: 'Cancel' }).click();
+    await expect(panel).toHaveCount(0);
+
+    // The plan without tasks: finished by hand, gone from the choice, its file in the Backlog.
+    await choice.selectOption('nvim-config/e2e-loneplan-e001');
+    await page.getByRole('button', { name: 'Finish the plan …' }).click();
+    panel = page.getByRole('group', { name: 'Finish the plan …' });
+    await expect(panel).toContainText('The plan Loneplan e001 will be finished');
+    expect(await violations(page)).toEqual([]);
+    const answer = nextAnswer(page);
+    await panel.getByRole('button', { name: 'Finish', exact: true }).click();
+    await answer;
+    await expect(panel).toHaveCount(0);
+    await expect(choice.locator('option[value="nvim-config/e2e-loneplan-e001"]')).toHaveCount(0);
+    await expect(choice).toHaveValue('');
+    expect(existsSync(files[0][0])).toBe(false);
+    expect(readdirSync(finishedDir).some((name) => name.endsWith('_e2e-loneplan-e001.md'))).toBe(true);
+    expect(consoleProblems.get(page) ?? []).toEqual([]);
+  } finally {
+    for (const [path] of files) rmSync(path, { force: true });
+    if (existsSync(finishedDir)) {
+      for (const name of readdirSync(finishedDir)) {
+        if (name.endsWith('_e2e-loneplan-e001.md')) rmSync(join(finishedDir, name), { force: true });
+      }
+    }
+    for (const [path, text] of kept) {
+      if (text === null) rmSync(path, { force: true });
+      else writeFileSync(path, text);
+    }
+  }
+});
+
 test('a view grouped by project: a task stands in the project of its plan or in its own, the group is named by the title of the project', async ({
   page,
 }) => {

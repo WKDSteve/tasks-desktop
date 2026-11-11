@@ -19,6 +19,7 @@
   import ExportMenu from './ExportMenu.svelte';
   import PlanGraph from './PlanGraph.svelte';
   import ProjectPage from './ProjectPage.svelte';
+  import ClosePanel from './ClosePanel.svelte';
   import { projectOfPlan } from '../lib/projects';
   import { allButtonFold, foldOf, withAll, withFold } from '../lib/fold';
 
@@ -76,6 +77,13 @@
   const path = $derived(snapshot?.plan.critical_path);
   const estimate = $derived(snapshot?.estimate);
   const titles = $derived(new Map(app.tasks.map((x) => [x.id, x.title] as const)));
+  // The chosen plan finished by hand: a plan without tasks (or with only finished ones) never finishes by itself, and a
+  // plan in no project has no project page to do it on.
+  const chosen = $derived(plans.find((p) => p.id === planId));
+  const canClose = $derived(chosen !== undefined && app.can('plan_close') && !app.readOnly);
+  let closing = $state('');
+  const closingShown = $derived(closing !== '' && closing === planId);
+  const names = $derived(new Map([...titles, ...plans.map((p) => [p.id, p.title] as const)]));
 
   // A chosen plan that is gone (a change of the vault) is dropped, so the select agrees.
   $effect(() => {
@@ -186,12 +194,20 @@
             >
           {/each}
         </div>
+        {#if canClose && chosen}
+          <button type="button" class="newplan" data-hint={t('hint.ui.plan.close')} aria-expanded={closingShown} onclick={() => (closing = chosen.id)}
+            >{t('plan.close')}</button
+          >
+        {/if}
         <button type="button" class="newplan" data-hint={t('hint.ui.plan.new')} disabled={!app.can('plan_new')} onclick={() => app.openPlanWizard()}>{t('plan.new.button')}</button>
         {#if app.can('project_new')}
           <button type="button" class="newplan" data-hint={t('hint.ui.project.new')} onclick={() => app.openPlanWizard('project')}>{t('project.new.button')}</button>
         {/if}
         <ExportMenu {app} />
       </div>
+      {#if closingShown && chosen}
+        <ClosePanel {app} kind="plan" id={chosen.id} title={chosen.title} {names} label={t('plan.close')} onclose={() => (closing = '')} />
+      {/if}
       {#if phases.length > 0}
         <p class="phases">
           <span class="label">{t('plan.phases')}</span>

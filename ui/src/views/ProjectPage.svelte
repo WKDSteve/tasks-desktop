@@ -7,7 +7,8 @@
   import { formatNumber, hintOf, labelOf, translate, type Key } from '../lib/i18n';
   import Info from 'appkit-ui/Info.svelte';
   import { markHidden } from '../lib/text';
-  import { projectPage, share, subtaskCount, type ClosePreview, type PlanCard } from '../lib/projects';
+  import { projectPage, share, subtaskCount, type PlanCard } from '../lib/projects';
+  import ClosePanel from './ClosePanel.svelte';
   import { PLAN_STATUSES } from '../lib/planwizard';
 
   let { app, projectId }: { app: App; projectId: string } = $props();
@@ -59,18 +60,12 @@
     return { done, total, pct: Math.round(share(done, card.open.length) * 100) };
   }
 
-  // Finishing by hand: the engine is asked first (a dry run), the panel says what happens or what holds it open.
-  type Closing = { kind: 'plan' | 'project'; id: string; title: string; preview: ClosePreview | null };
+  // Finishing by hand: the panel asks the engine first and says what happens or what holds it open (`ClosePanel`).
+  type Closing = { kind: 'plan' | 'project'; id: string; title: string };
   let closing = $state<Closing | null>(null);
   const names = $derived(new Map([...titles, ...plans.map((p) => [p.id, p.title] as const)]));
-  async function askClose(kind: 'plan' | 'project', id: string, title: string): Promise<void> {
-    closing = { kind, id, title, preview: null };
-    const preview = await app.previewClose(kind, id);
-    if (closing?.kind === kind && closing.id === id) closing = { ...closing, preview };
-  }
-  async function confirmClose(): Promise<void> {
-    if (!closing || closing.preview?.kind !== 'ok') return;
-    if (await app.closePlanFile(closing.kind, closing.id)) closing = null;
+  function askClose(kind: 'plan' | 'project', id: string, title: string): void {
+    closing = { kind, id, title };
   }
 
   let attachId = $state('');
@@ -81,28 +76,15 @@
 </script>
 
 {#snippet closePanel(c: Closing)}
-  <div class="close-panel" role="group" aria-label={c.kind === 'plan' ? t('project.close') : t('project.close_project')}>
-    {#if c.preview === null}
-      <p class="muted">{t('state.loading')}</p>
-    {:else if c.preview.kind === 'ok'}
-      <p>{t(c.kind === 'plan' ? 'project.close.will_plan' : 'project.close.will_project', { title: markHidden(c.title) })}</p>
-    {:else if c.preview.kind === 'holding'}
-      <p>{t('project.close.holding')}</p>
-      <ul class="holding">
-        {#each c.preview.ids as id (id)}<li>{markHidden(names.get(id) ?? id)} <code>{id}</code></li>{/each}
-      </ul>
-    {:else if c.preview.kind === 'refused'}
-      <p class="bad">{c.preview.message}</p>
-    {:else}
-      <p class="bad">{t('project.close.unknown')}</p>
-    {/if}
-    <div class="actions">
-      {#if c.preview?.kind === 'ok'}
-        <button type="button" class="primary" disabled={app.saving} onclick={() => void confirmClose()}>{t('project.close.confirm')}</button>
-      {/if}
-      <button type="button" onclick={() => (closing = null)}>{t('dialog.cancel')}</button>
-    </div>
-  </div>
+  <ClosePanel
+    {app}
+    kind={c.kind}
+    id={c.id}
+    title={c.title}
+    {names}
+    label={c.kind === 'plan' ? t('project.close') : t('project.close_project')}
+    onclose={() => (closing = null)}
+  />
 {/snippet}
 
 {#if !project || !page}
@@ -159,7 +141,7 @@
         <button type="button" onclick={() => app.openPlanWizard('plan', project.id)}>{t('project.new_plan')}</button>
       {/if}
       {#if app.can('project_close') && !app.readOnly}
-        <button type="button" data-hint={t('hint.ui.project.close')} onclick={() => void askClose('project', project.id, project.title)}
+        <button type="button" data-hint={t('hint.ui.project.close')} onclick={() => askClose('project', project.id, project.title)}
           >{t('project.close_project')}</button
         >
       {/if}
@@ -266,7 +248,7 @@
                       type="button"
                       class="link small"
                       data-hint={t('hint.ui.project.close')}
-                      onclick={() => void askClose('plan', card.plan.id, card.plan.title)}>{t('project.close')}</button
+                      onclick={() => askClose('plan', card.plan.id, card.plan.title)}>{t('project.close')}</button
                     >
                   {/if}
                 </div>
@@ -421,22 +403,6 @@
   .link:disabled {
     color: var(--muted);
     cursor: default;
-  }
-  .close-panel {
-    display: grid;
-    gap: 0.4rem;
-    border-top: 1px solid var(--border);
-    padding-top: 0.5rem;
-  }
-  .close-panel p {
-    margin: 0;
-  }
-  .holding {
-    margin: 0;
-    padding-left: 1.2rem;
-  }
-  .bad {
-    color: var(--bad);
   }
   .meta {
     display: flex;
