@@ -624,6 +624,21 @@ pub(super) async fn links(State(st): State<Arc<Shared>>, RawQuery(query): RawQue
     }
 }
 
+/// `GET /api/tasks/plan_compare`: the open plans side by side (tasks, effort, the rest of each plan's critical path, the
+/// pace of the last weeks). A read without parameters; every figure is the engine's.
+pub(super) async fn plan_compare(
+    State(st): State<Arc<Shared>>,
+    RawQuery(query): RawQuery,
+) -> Response {
+    if let Some(response) = no_query(query.as_deref()) {
+        return response;
+    }
+    match ask(&st, Calls::PlanCompare, None).await {
+        Ok(reply) => json_response(StatusCode::OK, reply.text, None),
+        Err(response) => response,
+    }
+}
+
 /// `GET /api/tasks/enums`: the ranges of the fields (status, kind, prio, value, effort, ...) as the engine names them in
 /// its `hello`, so that the page offers what the engine accepts and keeps no list of its own. A read without
 /// parameters; the engine alone says what the ranges are.

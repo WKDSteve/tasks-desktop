@@ -8333,6 +8333,81 @@ test('the plan view finishes the chosen plan by hand, also one in no project; an
   }
 });
 
+test('the plan view compares the open plans: the engine\'s figures, sorted by a column, and a click opens the plan', async ({ page }) => {
+  const { vault } = state();
+  const now = new Date();
+  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  // Two plans of different size (unique names: the tests share the vault): a001 has three open tasks (S, S, M: 2 days),
+  // one of them waiting on another, and one finished today; b001 one open task (L: 3 days) and nothing finished.
+  const plan = (slug: string, title: string) =>
+    [join(vault, 'nvim-config', 'ROADMAP', 'plans', `${slug}.md`), `---\ntitle: ${title}\nstatus: doing\nareas: [nvim-config]\nphase_order: [eins, zwei]\ncreated: 2026-11-11\nupdated: 2026-11-11\n---\n\nA plan to compare.\n`] as const;
+  const task = (slug: string, title: string, extra: string) =>
+    [join(vault, 'nvim-config', 'ROADMAP', 'tasks', `${slug}.md`), `---\ntitle: ${title}\nstatus: open\nkind: task\n${extra}\ncreated: 2026-11-11\nupdated: 2026-11-11\n---\n\nA task to compare.\n`] as const;
+  const files = [
+    plan('e2e-cmpplan-a001', 'Cmpplan a001'),
+    plan('e2e-cmpplan-b001', 'Cmpplan b001'),
+    task('e2e-cmptask-a001', 'Cmptask a001', 'effort: S\nplan: nvim-config/e2e-cmpplan-a001\nphase: eins'),
+    task('e2e-cmptask-a002', 'Cmptask a002', 'effort: S\nplan: nvim-config/e2e-cmpplan-a001\nphase: zwei\nblocked_by: [nvim-config/e2e-cmptask-a001]'),
+    task('e2e-cmptask-a003', 'Cmptask a003', 'effort: M\nplan: nvim-config/e2e-cmpplan-a001\nphase: zwei'),
+    task('e2e-cmptask-b001', 'Cmptask b001', 'effort: L\nplan: nvim-config/e2e-cmpplan-b001\nphase: zwei'),
+    [join(vault, 'nvim-config', 'Backlog', 'TASKS', `${today}_e2e-cmpdone-a001.md`), `---\ntitle: Cmpdone a001\nstatus: done\nkind: task\neffort: S\nplan: nvim-config/e2e-cmpplan-a001\ncreated: 2026-11-11\nupdated: 2026-11-11\n---\n\nFinished today.\n`],
+  ] as const;
+  try {
+    for (const [path, text] of files) {
+      mkdirSync(join(path, '..'), { recursive: true });
+      writeFileSync(path, text);
+    }
+    await pair(page);
+    await chooseView(page, 'View', 'Plan');
+    await page.getByRole('group', { name: 'Show the plan as' }).getByRole('button', { name: 'Compare' }).click();
+    const table = page.getByRole('table', { name: 'Plans compared' });
+    const a = table.locator('tr[data-plan="nvim-config/e2e-cmpplan-a001"]');
+    const b = table.locator('tr[data-plan="nvim-config/e2e-cmpplan-b001"]');
+    // The figures of the engine.
+    await expect(a.locator('[data-col="open"]')).toContainText('3 of 4');
+    await expect(a.locator('[data-col="open"]')).toContainText('1 held');
+    await expect(a.getByRole('meter')).toHaveAttribute('aria-valuenow', '1');
+    await expect(a.locator('[data-col="progress"]')).toContainText('25 %');
+    await expect(a.locator('[data-col="effort"]')).toContainText('2 d');
+    await expect(a.locator('[data-col="path"]')).toContainText('1 d');
+    await expect(a.locator('[data-col="forecast"]')).toContainText('3–12 weeks');
+    await expect(a.locator('[data-col="last_done"]')).toHaveText(today);
+    await expect(a.getByRole('rowheader')).toContainText('stage eins of 2');
+    await expect(b.locator('[data-col="effort"]')).toContainText('3 d');
+    await expect(b.locator('[data-col="forecast"]')).toHaveText('–');
+    // Sorted by the open effort, the largest first: b before a. A click on "Tasks open" sorts by it: a before b.
+    const order = async () => {
+      const ids = await table.locator('tbody tr').evaluateAll((rows) => rows.map((r) => r.getAttribute('data-plan')));
+      return ids.indexOf('nvim-config/e2e-cmpplan-a001') < ids.indexOf('nvim-config/e2e-cmpplan-b001') ? 'a-b' : 'b-a';
+    };
+    await expect(table.getByRole('columnheader', { name: /Effort open/ })).toHaveAttribute('aria-sort', 'descending');
+    expect(await order()).toBe('b-a');
+    await table.getByRole('button', { name: 'Tasks open' }).click();
+    await expect(table.getByRole('columnheader', { name: /Tasks open/ })).toHaveAttribute('aria-sort', 'descending');
+    expect(await order()).toBe('a-b');
+    await table.getByRole('button', { name: /Tasks open/ }).click();
+    await expect(table.getByRole('columnheader', { name: /Tasks open/ })).toHaveAttribute('aria-sort', 'ascending');
+    expect(await order()).toBe('b-a');
+    expect(await violations(page)).toEqual([]);
+    // axe in both colour schemes (the bars, the warnings, the sort marks).
+    for (const scheme of ['light', 'dark'] as const) {
+      await page.emulateMedia({ colorScheme: scheme });
+      await expectAccessible(page, `the comparison of plans (${scheme})`);
+    }
+    // The plan opens in the plan view, with its stages.
+    await a.getByRole('button', { name: 'Cmpplan a001' }).click();
+    await expect(page.getByRole('combobox', { name: 'Plan', exact: true })).toHaveValue('nvim-config/e2e-cmpplan-a001');
+    await expect(page.getByRole('group', { name: 'Show the plan as' }).getByRole('button', { name: 'Stages' })).toHaveAttribute('aria-pressed', 'true');
+    expect(consoleProblems.get(page) ?? []).toEqual([]);
+  } finally {
+    for (const [path] of files) rmSync(path, { force: true });
+    await page.evaluate(() => {
+      localStorage.removeItem('tasks-desktop.plan-display');
+      localStorage.removeItem('tasks-desktop.compare-sort');
+    });
+  }
+});
+
 test('a view grouped by project: a task stands in the project of its plan or in its own, the group is named by the title of the project', async ({
   page,
 }) => {

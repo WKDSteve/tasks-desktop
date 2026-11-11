@@ -20,6 +20,7 @@
   import PlanGraph from './PlanGraph.svelte';
   import ProjectPage from './ProjectPage.svelte';
   import ClosePanel from './ClosePanel.svelte';
+  import PlanCompare from './PlanCompare.svelte';
   import { projectOfPlan } from '../lib/projects';
   import { allButtonFold, foldOf, withAll, withFold } from '../lib/fold';
 
@@ -188,7 +189,7 @@
           </label>
         {/if}
         <div class="display" role="group" aria-label={t('plan.display')}>
-          {#each ['stages', 'graph'] as const as display (display)}
+          {#each ['stages', 'graph', 'compare'] as const as display (display)}
             <button type="button" aria-pressed={app.planDisplay === display} onclick={() => app.setPlanDisplay(display)}
               >{t(`plan.display.${display}`)}</button
             >
@@ -287,7 +288,9 @@
 
     <PlanFinished {app} {planId} />
 
-    {#if app.planDisplay === 'graph'}
+    {#if app.planDisplay === 'compare'}
+      <PlanCompare {app} />
+    {:else if app.planDisplay === 'graph'}
       {#if stages.length > 0}
         <PlanGraph {app} {stages} {critical} path={path?.path ?? []} {cycles} phaseOrder={plans.find((p) => p.id === planId)?.phase_order ?? []} planKey={planId} onopen={open} />
       {:else}

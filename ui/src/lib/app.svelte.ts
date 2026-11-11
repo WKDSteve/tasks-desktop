@@ -27,6 +27,7 @@ import type {
   Links,
   MovePlan,
   Next,
+  PlanCompare,
   Result,
   Snapshot,
   TaskDocument,
@@ -39,6 +40,10 @@ import { expandAreas, isAreaGroup, NO_AREA, type AreaGroupInfo } from './areaGro
 import type { Op } from './api';
 import { indexOfLinks, touchedAreas } from './cross';
 import { planProjects, projectOfTask, projectsOf, type ClosePreview, type Project } from './projects';
+import { parseCompareSort, serializeCompareSort, type CompareSort } from './planCompare';
+
+/** How the plan view draws: the stages or the graph of a plan, or the plans compared. */
+export type PlanDisplay = 'stages' | 'graph' | 'compare';
 import { parsePrefs, type Prefs as FinishedPrefs } from './finished';
 import { activeFilters, applyFilter, areaCounts, filterOfText, filterVaultOf, freshFilter, moveSelection, NONE as NO_VALUE, parseFilter, serializeFilter, type Filter } from './filter';
 import { chipLabel } from './filter-chips';
@@ -354,7 +359,9 @@ export class App {
   /** How far each stage of the plan and each column of the board is folded. */
   folds = $state<FoldMemory>(emptyFolds());
   /** How the plan is drawn: its stages as cards, or as a graph (the stages as rows, the dependencies as arrows). */
-  planDisplay = $state<'stages' | 'graph'>('stages');
+  planDisplay = $state<PlanDisplay>('stages');
+  /** How the comparison of plans is sorted (remembered). */
+  compareSort = $state<CompareSort>({ key: 'effort', desc: true });
   /** The rows of the plan graph: the stages of the engine, or the phases of the plan. */
   graphRows = $state<'stage' | 'phase'>('stage');
   /** The order of one's own inside the rows of the plan graph, per plan: shown only, kept in the prefs (D6). */
@@ -697,7 +704,9 @@ export class App {
     this.saveMode = safe(() => env.prefs.getItem('tasks-desktop.save-mode')) === 'manual' ? 'manual' : 'auto';
     this.listColumns = parseColumns(safe(() => env.prefs.getItem('tasks-desktop.list-columns')));
     this.folds = parseFolds(safe(() => env.prefs.getItem('tasks-desktop.folds')));
-    this.planDisplay = safe(() => env.prefs.getItem('tasks-desktop.plan-display')) === 'graph' ? 'graph' : 'stages';
+    const display = safe(() => env.prefs.getItem('tasks-desktop.plan-display'));
+    this.planDisplay = display === 'graph' || display === 'compare' ? display : 'stages';
+    this.compareSort = parseCompareSort(safe(() => env.prefs.getItem('tasks-desktop.compare-sort')) ?? null);
     this.graphRows = safe(() => env.prefs.getItem('tasks-desktop.graph-rows')) === 'phase' ? 'phase' : 'stage';
     this.graphOrder = parseGraphOrder(safe(() => env.prefs.getItem('tasks-desktop.graph-order')));
     this.tileSizes = parseSizes(safe(() => env.prefs.getItem('tasks-desktop.sizes')));
@@ -1099,6 +1108,11 @@ export class App {
   }
 
   /** The finished tasks of the Backlogs and their figures, for the view of them. */
+  /** The open plans side by side (`tasks.plan_compare`): every figure is the engine's. */
+  planCompare(signal?: AbortSignal): Promise<PlanCompare> {
+    return this.env.hub.planCompare(signal);
+  }
+
   finished(
     query: { area?: string; plan?: string; since?: string; until?: string; limit?: number; offset?: number },
     signal?: AbortSignal,
@@ -2809,10 +2823,16 @@ export class App {
     safe(() => this.env.prefs.setItem('tasks-desktop.list-columns', serializeColumns(columns)));
   }
 
-  /** Draw the plan as stages or as a graph, and remember the choice. */
-  setPlanDisplay(display: 'stages' | 'graph'): void {
+  /** Draw the plan as stages or as a graph, or compare the plans, and remember the choice. */
+  setPlanDisplay(display: PlanDisplay): void {
     this.planDisplay = display;
     safe(() => this.env.prefs.setItem('tasks-desktop.plan-display', display));
+  }
+
+  /** Sort the comparison of plans, and remember it. */
+  setCompareSort(sort: CompareSort): void {
+    this.compareSort = sort;
+    safe(() => this.env.prefs.setItem('tasks-desktop.compare-sort', serializeCompareSort(sort)));
   }
 
   /** Lay the rows of the plan graph by stage or by phase, and remember the choice. */

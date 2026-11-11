@@ -438,6 +438,13 @@ stages, the phase counts and the warnings narrow to it (the choice is kept when 
 is left), while the state counts, the estimate and the critical path stay those of the
 whole vault.
 
+The choice *Compare* of the Plan view (kept over a reload) lays the open plans side by side in a table: tasks open
+of all (and how many are held), progress, effort open with the range of the sizes and how many open tasks have no
+effort, the rest of each plan's own critical path, how many weeks the rest would take at the pace of the last four weeks
+(the best week and the average; none when nothing was finished in them) and the day a task of it was last finished.
+Every figure is the engine's `plan_compare` (rule WEB-13); the page only chooses the plans (all, those of a project, or
+some picked) and sorts them by a column (the choice is kept). A click on a plan opens it with its stages.
+
 The choice *Graph* of the Plan view (kept over a reload) draws the same tasks as a graph: the stages as rows, an arrow
 from each task to the one that waits for it (solid for `blocked_by`, dashed for `after`, thick on the critical path),
 the tasks of a cycle in a row of their own. The arrow keys walk the tasks; the dependencies stand once more as a table

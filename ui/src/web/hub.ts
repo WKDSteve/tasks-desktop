@@ -361,6 +361,7 @@ export function createWebHub(deps: HubDeps): WebHub {
         return passOn('waits', area === undefined ? {} : { area });
       }
       case 'links':
+      case 'plan_compare':
       case 'groupings':
       case 'views':
       case 'lists': {

@@ -62,7 +62,7 @@ fn start_with(
     })
 }
 
-const DATA_ROUTES: [&str; 15] = [
+const DATA_ROUTES: [&str; 16] = [
     "snapshot",
     "task",
     "next",
@@ -74,6 +74,7 @@ const DATA_ROUTES: [&str; 15] = [
     "views",
     "finished",
     "waits",
+    "plan_compare",
     "events",
     "ops",
     "repos",
@@ -146,6 +147,7 @@ impl Subject for Tasks {
             "views",
             "finished",
             "waits",
+            "plan_compare",
             "events",
             "ops",
             "repos",

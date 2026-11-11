@@ -479,6 +479,13 @@ A read like `done_preview`: the id must be `<area>/<slug>` and the direction `ne
 query is refused at the door. The tasks it names, the edges between them and the walk of the graph are the engine's; the
 page lists what it is given and reckons nothing. The answer holds at most 500 tasks, which the page draws in steps.
 
+## The plans compared (`GET /api/tasks/plan_compare`)
+
+A read without parameters like `links`: any query is refused at the door. It reads the open tasks and the Backlogs of
+the vault (the finished tasks of each plan and the day they were finished), as `finished` does, and returns figures only:
+counts, days, weeks, the day of the last finish, the ids and titles of the open plans. The page asks for it only while the
+comparison is shown, once per state of the vault, and reckons nothing of it.
+
 ## The estimate question (`POST /api/tasks/estimate`)
 
 A read that is a POST, because its question (a list of ids and some assumed efforts and values) is too long for a query.

@@ -107,12 +107,12 @@ test('a valid read passes its parameters to the engine and the document back unc
 });
 
 test('the reads without parameters ask the engine for the method of their name', async () => {
-  const h = hub({ links: '{"l":1}', groupings: '{"g":1}', views: '{"v":1}', lists: '{"s":1}' });
-  for (const name of ['links', 'groupings', 'views', 'lists']) {
+  const h = hub({ links: '{"l":1}', groupings: '{"g":1}', views: '{"v":1}', lists: '{"s":1}', plan_compare: '{"c":1}' });
+  for (const name of ['links', 'groupings', 'views', 'lists', 'plan_compare']) {
     const r = await h.get(name);
     assert.equal(r.status, 200, name);
   }
-  assert.deepEqual(h.calls.map((c) => c[0]), ['links', 'groupings', 'views', 'lists']);
+  assert.deepEqual(h.calls.map((c) => c[0]), ['links', 'groupings', 'views', 'lists', 'plan_compare']);
 });
 
 test('a refusal of the engine keeps its code and gets the status the Rust hub gives it', async () => {

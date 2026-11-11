@@ -11,6 +11,7 @@ import type {
   NamedLists,
   Next,
   Order,
+  PlanCompare,
   PlanFor,
   Result,
   Snapshot,
@@ -436,6 +437,11 @@ export class Hub extends HubClient<Snapshot> {
   waits(area?: string): Promise<Waits> {
     const query = area === undefined ? '' : `?area=${encodeURIComponent(area)}`;
     return this.json<Waits>(`/api/tasks/waits${query}`);
+  }
+
+  /** The open plans side by side (capability `plan_compare`): every figure is the engine's. */
+  planCompare(signal?: AbortSignal): Promise<PlanCompare> {
+    return this.json<PlanCompare>('/api/tasks/plan_compare', signal ? { signal } : undefined);
   }
 
   /** Where the areas hang together: the links between the open tasks of different areas. */
