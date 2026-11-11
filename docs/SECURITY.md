@@ -402,6 +402,12 @@ A session names one task (`{ "id" }`, a plain id and nothing else). The hub star
 vault that is read, one run at a time. Which sheets run, where they lie and whether they may run is decided behind that
 command (testing.nvim: its trust gate and the workstation). The page gets the exit code and the last 40 lines of the output.
 
+The run keeps the environment of the hub (a plugin's tests need `PATH`, the tool chains, `TESTING_*` and
+`NVIM_MACHINE_ROLE`, without which the workstation guard of testing.nvim would not know where it runs), except the
+engine's own variables: every `TASKS_*` the hub was started with (`TASKS_VAULT`, `TASKS_MARKER_DOCS`, ...) is taken
+out, and the vault, `LIB_NVIM_DIR` and the extra areas are set from the settings. A sheet's test never reads the real
+vault or the marker documents of this machine through them, as the hub's own engine process never gets them.
+
 ## The check over all vaults (`GET` and `POST /api/tasks/check_all`)
 
 A session starts one job: each vault of the settings in turn gets an engine of its own for its `check`, and the vault

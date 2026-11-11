@@ -53,7 +53,25 @@ impl SheetRunner for SystemSheetRunner {
     }
 }
 
-fn run_process(c: &SheetCommand, id: &str) -> Result<SheetRun, String> {
+/// Whether a variable of the hub's environment is the engine's own (`TASKS_VAULT`, `TASKS_MARKER_DOCS`,
+/// `TASKS_EXTRA_AREAS`, ...): a sheet run must not inherit it. Windows names are not case sensitive.
+fn is_engine_var(name: &std::ffi::OsStr) -> bool {
+    name.to_str()
+        .is_some_and(|n| n.len() > 6 && n[..6].eq_ignore_ascii_case("TASKS_"))
+}
+
+/// The process of a run. It keeps the environment of the hub: a sheet runs a plugin's tests through testing.nvim, which
+/// needs `PATH`, the tool chains, `TESTING_*` and `NVIM_MACHINE_ROLE` (without it the workstation guard would not know
+/// where it runs), so a list of what may pass would break runs or that guard. What it takes out is the engine's own
+/// variables as the hub was started with them (`inherited`: the names of the hub's environment): the vault, the marker
+/// documents and the extra areas of the run are those of the settings, set here, and a test of a sheet must never read
+/// the real vault or the marker documents of this machine. The engine process of the hub gets none of them either
+/// (`child_env` of appkit-hub).
+fn command_for(
+    c: &SheetCommand,
+    id: &str,
+    inherited: impl IntoIterator<Item = std::ffi::OsString>,
+) -> Command {
     let mut command = Command::new(&c.nvim);
     command
         .args(["--headless", "-u", "NONE", "-i", "NONE", "-n", "-l"])
@@ -64,6 +82,11 @@ fn run_process(c: &SheetCommand, id: &str) -> Result<SheetRun, String> {
         .env_remove("VIM")
         .env_remove("VIMRUNTIME")
         .stdin(std::process::Stdio::null());
+    for name in inherited {
+        if is_engine_var(&name) {
+            command.env_remove(name);
+        }
+    }
     if let Some(lib) = &c.lib_dir {
         command.env("LIB_NVIM_DIR", lib);
     }
@@ -76,6 +99,11 @@ fn run_process(c: &SheetCommand, id: &str) -> Result<SheetRun, String> {
         // CREATE_NO_WINDOW: no console window for a process the hub starts, as for its engine.
         command.creation_flags(0x0800_0000);
     }
+    command
+}
+
+fn run_process(c: &SheetCommand, id: &str) -> Result<SheetRun, String> {
+    let mut command = command_for(c, id, std::env::vars_os().map(|(name, _)| name));
     let out = command.output().map_err(|e| {
         eprintln!("sheet run of {id}: {e}");
         "the run could not be started".to_owned()
@@ -158,7 +186,64 @@ impl SheetRunJob {
 
 #[cfg(test)]
 mod tests {
-    use super::last_lines;
+    use super::{command_for, last_lines, SheetCommand};
+    use std::ffi::{OsStr, OsString};
+    use std::path::PathBuf;
+
+    fn sheet_command(extra_areas: &[&str]) -> SheetCommand {
+        SheetCommand {
+            nvim: PathBuf::from("nvim"),
+            script: PathBuf::from("tasks.lua"),
+            vault: PathBuf::from("vault"),
+            lib_dir: Some(PathBuf::from("lib")),
+            extra_areas: extra_areas.iter().map(|s| (*s).to_owned()).collect(),
+        }
+    }
+
+    /// What the command does with a variable: `Some(None)` removed, `Some(Some(v))` set, `None` left as inherited.
+    fn change<'a>(command: &'a std::process::Command, name: &str) -> Option<Option<&'a OsStr>> {
+        command
+            .get_envs()
+            .find(|(k, _)| k.eq_ignore_ascii_case(name))
+            .map(|(_, v)| v)
+    }
+
+    #[test]
+    fn a_run_never_inherits_the_engines_variables_of_the_hub_and_keeps_the_rest() {
+        let inherited = [
+            "TASKS_VAULT",
+            "TASKS_MARKER_DOCS",
+            "tasks_links",
+            "TASKS_EXTRA_AREAS",
+            "PATH",
+            "NVIM_MACHINE_ROLE",
+            "TESTING_TRUST_ROOTS",
+            "TASKS",
+        ]
+        .map(OsString::from);
+        let command = command_for(&sheet_command(&[]), "a/b", inherited.clone());
+        for name in [
+            "TASKS_VAULT",
+            "TASKS_MARKER_DOCS",
+            "tasks_links",
+            "TASKS_EXTRA_AREAS",
+        ] {
+            assert_eq!(change(&command, name), Some(None), "{name} is taken out");
+        }
+        for name in ["PATH", "NVIM_MACHINE_ROLE", "TESTING_TRUST_ROOTS", "TASKS"] {
+            assert_eq!(change(&command, name), None, "{name} is inherited as it is");
+        }
+        // what the settings say is set after the removal and wins
+        let command = command_for(&sheet_command(&["ALL", "x.nvim"]), "a/b", inherited);
+        assert_eq!(
+            change(&command, "TASKS_EXTRA_AREAS"),
+            Some(Some(OsStr::new("ALL,x.nvim")))
+        );
+        assert_eq!(
+            change(&command, "LIB_NVIM_DIR"),
+            Some(Some(OsStr::new("lib")))
+        );
+    }
 
     #[test]
     fn the_page_gets_the_end_of_the_output_as_plain_lines() {
