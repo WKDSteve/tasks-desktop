@@ -6616,6 +6616,17 @@ describe('the defaults (dialog "Defaults ...")', () => {
     expect(m.app.matchFilter(freshFilter()).claimant).toBeUndefined();
   });
 
+  it('counts the areas with the claim filter by the name of this browser', async () => {
+    const m = make({ token: 't' });
+    const claim = { by: 'me@pc', since: '2026-01-01T00:00:00Z', until: '2099-01-01T00:00:00Z', expired: false };
+    m.hub.doc = snapshot([task('lib.nvim/mine', { claim }), task('lib.nvim/free')]);
+    await m.app.start(null);
+    m.app.setClaimName('me@pc');
+    m.app.filter = { ...freshFilter(), claims: ['own'] };
+    expect(m.app.areaCounts.get('lib.nvim')).toBe(1);
+    m.app.stop();
+  });
+
   it('resetting everything puts the layout of every view back too', async () => {
     const m = make({ token: 't' });
     m.hub.doc = snapshot(three);

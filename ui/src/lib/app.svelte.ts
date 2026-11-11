@@ -3050,7 +3050,8 @@ export class App {
 
   /** For each area how many tasks the filter would keep with that area as its only one (the choice of the areas). */
   get areaCounts(): Map<string, number> {
-    const counts = areaCounts(this.tasks, this.filter, this.areaNames, this.today, this.crossIndex, this.quickWinSet, this.projectOf);
+    // with the name of this browser for the claim filter (the areas are set per area below, so no group is expanded)
+    const counts = areaCounts(this.tasks, { ...this.filter, claimant: this.claimName }, this.areaNames, this.today, this.crossIndex, this.quickWinSet, this.projectOf);
     // a group counts what it would keep as the only choice: its members' tasks
     for (const group of this.areaGroups) {
       if (counts.has(group.name)) continue;
