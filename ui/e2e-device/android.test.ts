@@ -17,11 +17,18 @@ describe('the phone of the device suite', () => {
     expect(isNetworkSerial('[fd7a:115c::1]:5555')).toBe(true);
     expect(isNetworkSerial('bd30fe6f')).toBe(false);
     expect(isNetworkSerial('emulator-5554')).toBe(false);
+    expect(isNetworkSerial('adb-bd30fe6f-Ab12Cd._adb-tls-connect._tcp')).toBe(true);
   });
 
   it('takes one phone on the cable and over the network as one device, by its USB entry, in either order', () => {
     expect(pickDevice(['bd30fe6f', '100.114.201.106:5555'], undefined, serialOf)).toEqual({ serial: 'bd30fe6f' });
     expect(pickDevice(['100.114.201.106:5555', 'bd30fe6f'], undefined, serialOf)).toEqual({ serial: 'bd30fe6f' });
+  });
+
+  it('takes the USB entry over the wireless debugging of Android 11+ as well', () => {
+    const wireless = 'adb-bd30fe6f-Ab12Cd._adb-tls-connect._tcp';
+    const of = (entry: string) => (entry === wireless ? 'FP5-1' : serialOf(entry));
+    expect(pickDevice([wireless, 'bd30fe6f'], undefined, of)).toEqual({ serial: 'bd30fe6f' });
   });
 
   it('takes the network entry when it is the only one (the cable is off)', () => {

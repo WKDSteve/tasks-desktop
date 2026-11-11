@@ -17,9 +17,12 @@ export function adb(serial: string | null, ...args: string[]): string {
   return execFileSync('adb', full, { encoding: 'utf8', timeout: 30_000 });
 }
 
-/** An entry of `adb devices` that is a phone over the network (`adb connect <ip>:<port>`, Tailscale), not over USB. */
+/**
+ * An entry of `adb devices` that is a phone over the network, not over USB: `adb connect <ip>:<port>` (Tailscale, also
+ * IPv6 in brackets) or the wireless debugging of Android 11+ (`adb-<serial>-<id>._adb-tls-connect._tcp`).
+ */
 export function isNetworkSerial(serial: string): boolean {
-  return /^[\d.]+:\d+$/.test(serial) || /^\[[0-9a-f:]+\]:\d+$/i.test(serial);
+  return serial.includes('._adb-tls-connect._tcp') || /^[\d.]+:\d+$/.test(serial) || /^\[[0-9a-f:]+\]:\d+$/i.test(serial);
 }
 
 /**
