@@ -15,7 +15,9 @@
   const t = (key: Key, params: Record<string, string | number> = {}) => translate(app.lang, key, params);
   const num = (n: number) => formatNumber(app.lang, n);
 
-  // Asked once per state of the vault while the comparison is shown; an older answer is never shown as the current one.
+  // Asked once per state of the vault while the comparison is shown; the answer of the last state stays drawn until the
+  // one of the new state is in (a write does not blank the table), and a question that is out when the state moves on
+  // is abandoned.
   let doc = $state<PlanCompare | null>(null);
   let failed = $state(false);
   const rev = $derived(app.snapshot?.rev ?? '');
