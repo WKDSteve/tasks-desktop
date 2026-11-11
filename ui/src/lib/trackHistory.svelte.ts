@@ -17,12 +17,16 @@ export function trackHistory(
   );
   const stopEffect = $effect.root(() => {
     $effect(() => {
-      // Only the place and its filter are watched; reading the list for it (a vanished task) happens untracked.
+      // Only the place and what it keeps are watched; reading the list for it (a vanished task) happens untracked.
       void app.view;
       void app.selectedId;
       void app.peeking;
       void app.solo;
       void app.filter;
+      void app.planChoice;
+      void app.sort;
+      void app.statsDim;
+      void app.statsSort;
       history.sync();
     });
   });

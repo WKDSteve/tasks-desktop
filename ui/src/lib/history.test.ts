@@ -51,6 +51,17 @@ function fakeApp(ids: string[]) {
     selectedId: null,
     peeking: false,
     filter: freshFilter(),
+    planChoice: '',
+    sort: 'default',
+    setSort(word) {
+      this.sort = word;
+    },
+    statsDim: 'status',
+    statsSort: 'count',
+    setStats(dim, sort) {
+      this.statsDim = dim;
+      this.statsSort = sort;
+    },
     get tasks() {
       return this.ids.map((id) => ({ id }));
     },
@@ -85,13 +96,16 @@ describe('isPlace', () => {
 });
 
 describe('installAppHistory', () => {
-  // The places as the tests before the filter wrote them: a filter with nothing on is left out.
+  // The places as the tests before the filter wrote them: what a place keeps is left out while it is as it came (a
+  // filter with nothing on, every plan, the plan's order, the statistics by status and count).
+  const AS_CAME: Partial<Place> = { filter: '{}', plan: '', sort: 'default', stats: 'status:count' };
   const places = (t: ReturnType<typeof tab>) =>
     t.entries.map((e) => {
       const state = (e as { state: Place } | null)?.state ?? null;
-      if (state === null || state.filter !== '{}') return state;
-      const { filter: _filter, ...rest } = state;
-      return rest;
+      if (state === null) return state;
+      const out: Record<string, unknown> = { ...state };
+      for (const [key, value] of Object.entries(AS_CAME)) if (out[key] === value) delete out[key];
+      return out as unknown as Place;
     });
 
   it('makes an entry per place, and Back and Forward bring the page there', () => {
@@ -433,5 +447,74 @@ describe('the filter of a place', () => {
     expect(back).toEqual(place);
     expect(placeRoute({ view: 'list', selectedId: null, filter: '{}' })).toEqual({ view: 'list' });
     expect(routePlace(readRoute('#view=list'))).toEqual({ view: 'list', selectedId: null });
+  });
+
+  const entry = (t: ReturnType<typeof tab>, at: number) => (t.entries[at] as { state: Place } | null)?.state ?? null;
+
+  it('keeps the plan, the order of the list and the statistics with their place: no entry of their own, Back sets them', () => {
+    const t = tab();
+    const c = clock();
+    const app = fakeApp([]);
+    app.view = 'plan';
+    const h = installAppHistory(app, t, undefined, c);
+    h.sync();
+    app.planChoice = 'a/p';
+    h.sync();
+    c.pass(FILTER_SETTLE_MS);
+    expect(t.entries.length).toBe(1);
+    expect(entry(t, 0)?.plan).toBe('a/p');
+    app.view = 'list';
+    h.sync();
+    app.setSort('roi');
+    h.sync();
+    c.pass(FILTER_SETTLE_MS);
+    app.view = 'stats';
+    h.sync();
+    app.setStats('kind', 'name');
+    h.sync();
+    c.pass(FILTER_SETTLE_MS);
+    expect(t.entries.length).toBe(3);
+    expect([entry(t, 1)?.sort, entry(t, 2)?.stats]).toEqual(['roi', 'kind:name']);
+    // Elsewhere the plan, the order and the field change; Back brings each place with its own.
+    app.planChoice = '';
+    app.setSort('default');
+    h.sync();
+    c.pass(FILTER_SETTLE_MS);
+    t.go(-1);
+    expect([app.view, app.sort]).toEqual(['list', 'roi']);
+    t.go(-1);
+    expect([app.view, app.planChoice]).toEqual(['plan', 'a/p']);
+    t.go(2);
+    expect([app.view, app.statsDim, app.statsSort, app.planChoice, app.sort]).toEqual(['stats', 'kind', 'name', '', 'default']);
+    h.sync();
+    c.pass(FILTER_SETTLE_MS);
+    expect(t.entries.length).toBe(3);
+  });
+
+  it('leaves the plan, the order and the statistics as they are for an older entry or a value it does not know', () => {
+    const t = tab();
+    const app = fakeApp([]);
+    app.planChoice = 'a/p';
+    app.setSort('roi');
+    app.setStats('kind', 'name');
+    const h = installAppHistory(app, t);
+    h.sync();
+    t.entries.push({ appkitNav: 1, state: { view: 'list', selectedId: null } });
+    t.go(1);
+    expect([app.planChoice, app.sort, app.statsDim, app.statsSort]).toEqual(['a/p', 'roi', 'kind', 'name']);
+    t.entries.push({ appkitNav: 1, state: { view: 'stats', selectedId: null, sort: 'by-mood', stats: 'colour:up' } });
+    t.go(1);
+    expect([app.view, app.sort, app.statsDim, app.statsSort]).toEqual(['stats', 'roi', 'kind', 'name']);
+    // The entry takes the state as it stands.
+    expect([entry(t, 2)?.sort, entry(t, 2)?.stats]).toEqual(['roi', 'kind:name']);
+    expect(isPlace({ view: 'plan', selectedId: null, plan: 3 })).toBe(false);
+  });
+
+  it('puts the plan and the order into the address, never the statistics, and leaves what a page shows without a word out', () => {
+    const place: Place = { view: 'plan', selectedId: null, plan: 'a/p', sort: 'roi', stats: 'kind:name' };
+    const route = placeRoute(place);
+    expect(Object.keys(route)).toEqual(['view', 'plan', 'sort']);
+    expect(routePlace(readRoute(routeHash(route)))).toEqual({ view: 'plan', selectedId: null, plan: 'a/p', sort: 'roi' });
+    expect(placeRoute({ view: 'plan', selectedId: null, plan: '', sort: 'default' })).toEqual({ view: 'plan' });
   });
 });

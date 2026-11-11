@@ -88,7 +88,7 @@ import {
   type GroupWords,
 } from './viewExport';
 import { chosenPlan, stagesOf } from './plan';
-import { applyOrder, orderOf, type SortWord } from './sort';
+import { applyOrder, orderOf, parseSort, type SortWord } from './sort';
 import { DEFAULTS_KEY, FACTORY_DEFAULTS, parseDefaults, serializeDefaults, startChoice, startView, type Defaults } from './defaults';
 import { fromEngineList, type EngineList } from './engineLists';
 import { DEFAULT_RANGES, rangesOf, type Ranges } from './fields';
@@ -3209,10 +3209,20 @@ export class App {
    * The address named a place (a reload, a copied address, a link opened in a new tab): the page opens on its view,
    * with its task open as soon as the list has it.
    */
-  openPlace(view: View, open: string | null, filter?: string): void {
+  openPlace(view: View, open: string | null, filter?: string, kept: { plan?: string; sort?: string } = {}): void {
     this.view = view;
     // The filter the address names (a link, a new tab, a reload); an address without one keeps the remembered filter.
     if (filter !== undefined) this.filter = filterOfText(filter);
+    // The plan and the order the address names, as for the filter; an order this page does not know is left out. The
+    // order is read from the engine once the list is there (`start`).
+    if (kept.plan !== undefined) this.planChoice = kept.plan;
+    if (kept.sort !== undefined) {
+      const word = parseSort(kept.sort);
+      if (word !== 'default' || kept.sort === 'default') {
+        this.sort = word;
+        safe(() => this.env.prefs.setItem('tasks-desktop.sort', word));
+      }
+    }
     this.#openRoute = open;
     if (open !== null && this.tasks.some((t) => t.id === open)) this.takeRoute();
   }

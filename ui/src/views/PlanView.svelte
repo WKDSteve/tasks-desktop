@@ -86,12 +86,13 @@
   const closingShown = $derived(closing !== '' && closing === planId);
   const names = $derived(new Map([...titles, ...plans.map((p) => [p.id, p.title] as const)]));
 
-  // A chosen plan that is gone (a change of the vault) is dropped, so the select agrees.
+  // A chosen plan that is gone (a change of the vault) is dropped, so the select agrees. Only once the vault is read: a
+  // plan named by the address (a link, Back) is chosen before the first snapshot, and no plan is gone from none.
   $effect(() => {
-    if (app.planChoice !== '' && planId === '') app.planChoice = '';
+    if (snapshot && app.planChoice !== '' && planId === '') app.planChoice = '';
   });
   $effect(() => {
-    if (app.projectChoice !== '' && !projects.some((p) => p.id === app.projectChoice)) app.projectChoice = '';
+    if (snapshot && app.projectChoice !== '' && !projects.some((p) => p.id === app.projectChoice)) app.projectChoice = '';
   });
 
   function open(id: string): void {

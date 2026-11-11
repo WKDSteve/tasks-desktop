@@ -283,6 +283,84 @@ test('the filter belongs to its place: typing writes no entry, Back and Forward 
   expect(problems).toEqual([]);
 });
 
+test('the plan, the order of the list and the field of the statistics belong to their place: no entry of their own, Back and Forward set them, a link carries plan and order', async ({ page, context }) => {
+  const problems = await pair(page);
+  const goTo = async (name: string) => {
+    await page.getByRole('menuitem', { name: 'View', exact: true }).click();
+    await page.getByRole('menuitemradio', { name, exact: true }).click();
+  };
+  const entries = () => page.evaluate(() => history.length);
+  const inAddress = (key: string) =>
+    page.evaluate((k) => {
+      const part = location.hash.slice(1).split('&').find((p) => p.startsWith(`${k}=`));
+      return part === undefined ? null : decodeURIComponent(part.slice(k.length + 1));
+    }, key);
+  const plan = page.getByRole('combobox', { name: 'Plan', exact: true });
+  const order = page.locator('select[data-sort]');
+  const cut = page.getByRole('group', { name: 'Cut up by' });
+
+  // The plan view with a plan: no entry of its own, the address names it.
+  await goTo('Plan');
+  const before = await entries();
+  await plan.selectOption('lib.nvim/the-plan');
+  await expect.poll(() => inAddress('plan')).toBe('lib.nvim/the-plan');
+  expect(await entries()).toBe(before);
+  // The list in another order, the statistics by kind.
+  await goTo('List');
+  await order.selectOption('roi');
+  await expect.poll(() => inAddress('sort')).toBe('roi');
+  await goTo('Statistics');
+  await cut.getByRole('button', { name: 'Kind' }).click();
+  await expect(cut.getByRole('button', { name: 'Kind' })).toHaveAttribute('aria-pressed', 'true');
+  // The field of the statistics is kept in the entry, not in the address.
+  await page.waitForTimeout(600);
+  expect(await inAddress('stats')).toBeNull();
+  // Elsewhere each changes again.
+  await goTo('Plan');
+  await plan.selectOption('');
+  await goTo('List');
+  await order.selectOption('default');
+  await goTo('Statistics');
+  await cut.getByRole('button', { name: 'Status' }).click();
+  await page.waitForTimeout(600);
+
+  // Back walks the places, each with its own.
+  await page.goBack();
+  await expect(order).toHaveValue('default');
+  await page.goBack();
+  await expect(plan).toHaveValue('');
+  await page.goBack();
+  await expect(cut.getByRole('button', { name: 'Kind' })).toHaveAttribute('aria-pressed', 'true');
+  await page.goBack();
+  await expect(order).toHaveValue('roi');
+  await page.goBack();
+  await expect(plan).toHaveValue('lib.nvim/the-plan');
+  // Forward too.
+  await page.goForward();
+  await expect(order).toHaveValue('roi');
+  await page.goForward();
+  await expect(cut.getByRole('button', { name: 'Kind' })).toHaveAttribute('aria-pressed', 'true');
+
+  // A link with plan and order: a new tab shows them (from the address: the order remembered in this browser is the
+  // plan's order meanwhile).
+  await page.goBack();
+  await page.evaluate(() => localStorage.setItem('tasks-desktop.sort', 'default'));
+  const tab = await context.newPage();
+  await tab.goto(page.url());
+  await expect(tab.locator('select[data-sort]')).toHaveValue('roi');
+  await tab.close();
+  await page.goBack();
+  const second = await context.newPage();
+  await second.goto(page.url());
+  await expect(second.getByRole('combobox', { name: 'Plan', exact: true })).toHaveValue('lib.nvim/the-plan');
+  await second.close();
+  await page.evaluate(() => {
+    localStorage.removeItem('tasks-desktop.sort');
+    localStorage.removeItem('tasks-desktop.stats');
+  });
+  expect(problems).toEqual([]);
+});
+
 test('eight windows of one tab are all live on one stream, and the next one takes over when its window closes', async ({ page, context }) => {
   test.setTimeout(120_000);
   const streams: string[] = [];

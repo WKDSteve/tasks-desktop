@@ -70,7 +70,10 @@ const env: Env = {
 };
 
 const state = new AppState(env);
-if (place !== null) state.openPlace(place.view, place.selectedId, place.filter);
+if (place !== null) state.openPlace(place.view, place.selectedId, place.filter, {
+    ...(place.plan !== undefined ? { plan: place.plan } : {}),
+    ...(place.sort !== undefined ? { sort: place.sort } : {}),
+  });
 if (routed !== null) state.openRoute(routed);
 if (channel) {
   shareSession({

@@ -6593,6 +6593,15 @@ describe('the defaults (dialog "Defaults ...")', () => {
     m.app.stop();
   });
 
+  it('opens on the plan and the order an address names, and leaves an order it does not know out', () => {
+    const m = make({ token: 't' });
+    m.app.openPlace('plan', null, undefined, { plan: 'a/p', sort: 'roi' });
+    expect([m.app.view, m.app.planChoice, m.app.sort]).toEqual(['plan', 'a/p', 'roi']);
+    expect(m.prefs.get('tasks-desktop.sort')).toBe('roi');
+    m.app.openPlace('list', null, undefined, { sort: 'by-mood' });
+    expect(m.app.sort).toBe('roi');
+  });
+
   it('resetting everything puts the layout of every view back too', async () => {
     const m = make({ token: 't' });
     m.hub.doc = snapshot(three);
