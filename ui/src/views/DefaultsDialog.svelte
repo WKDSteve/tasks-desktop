@@ -112,6 +112,14 @@
         />
         {t('menu.save_manual')}
       </label>
+      <label for="defaults-claim-name" data-hint={t('hint.defaults.claim_name')}>{t('defaults.claim_name')}</label>
+      <input
+        id="defaults-claim-name"
+        type="text"
+        value={app.claimName}
+        placeholder={t('defaults.claim_name.none')}
+        onchange={(e) => app.setClaimName(e.currentTarget.value)}
+      />
     </fieldset>
 
     <fieldset data-testid="defaults-layout">

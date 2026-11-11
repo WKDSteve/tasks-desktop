@@ -41,6 +41,7 @@ import type { Op } from './api';
 import { indexOfLinks, touchedAreas } from './cross';
 import { planProjects, projectOfTask, projectsOf, type ClosePreview, type Project } from './projects';
 import { parseCompareSort, serializeCompareSort, type CompareSort } from './planCompare';
+import { cleanClaimName } from './claims';
 
 /** How the plan view draws: the stages or the graph of a plan, or the plans compared. */
 export type PlanDisplay = 'stages' | 'graph' | 'compare';
@@ -364,6 +365,8 @@ export class App {
   folds = $state<FoldMemory>(emptyFolds());
   /** How the plan is drawn: its stages as cards, or as a graph (the stages as rows, the dependencies as arrows). */
   planDisplay = $state<PlanDisplay>('stages');
+  /** The name this browser reserves tasks under (lib/claims.ts): tells an own claim from one of somebody else. */
+  claimName = $state('');
   /** How the comparison of plans is sorted (remembered). */
   compareSort = $state<CompareSort>({ key: 'effort', desc: true });
   /** The rows of the plan graph: the stages of the engine, or the phases of the plan. */
@@ -711,6 +714,7 @@ export class App {
     const display = safe(() => env.prefs.getItem('tasks-desktop.plan-display'));
     this.planDisplay = display === 'graph' || display === 'compare' ? display : 'stages';
     this.compareSort = parseCompareSort(safe(() => env.prefs.getItem('tasks-desktop.compare-sort')) ?? null);
+    this.claimName = cleanClaimName(safe(() => env.prefs.getItem('tasks-desktop.claim-name')) ?? '');
     this.graphRows = safe(() => env.prefs.getItem('tasks-desktop.graph-rows')) === 'phase' ? 'phase' : 'stage';
     this.graphOrder = parseGraphOrder(safe(() => env.prefs.getItem('tasks-desktop.graph-order')));
     this.tileSizes = parseSizes(safe(() => env.prefs.getItem('tasks-desktop.sizes')));
@@ -881,7 +885,8 @@ export class App {
   /** `filter` as the list matches it: a chosen area group stands for its member areas (an area of that name wins). */
   matchFilter(filter: Filter): Filter {
     const areas = expandAreas(filter.areas, this.areaGroups, this.allAreaNames);
-    return areas === filter.areas ? filter : { ...filter, areas: [...areas] };
+    const named = filter.claims.length > 0 ? { claimant: this.claimName } : {};
+    return areas === filter.areas && filter.claims.length === 0 ? filter : { ...filter, areas: [...areas], ...named };
   }
 
   /** The areas the filter means, groups resolved: what a part of the page that reads the chosen areas compares with. */
@@ -2894,6 +2899,12 @@ export class App {
   setPlanDisplay(display: PlanDisplay): void {
     this.planDisplay = display;
     safe(() => this.env.prefs.setItem('tasks-desktop.plan-display', display));
+  }
+
+  /** The name this browser reserves tasks under (`''`: none, every valid claim is somebody else's), kept. */
+  setClaimName(text: string): void {
+    this.claimName = cleanClaimName(text);
+    safe(() => this.env.prefs.setItem('tasks-desktop.claim-name', this.claimName));
   }
 
   /** Sort the comparison of plans, and remember it. */

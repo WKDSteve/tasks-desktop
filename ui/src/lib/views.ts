@@ -127,7 +127,8 @@ export function selectOfFilter(filter: Filter, { projects = false }: { projects?
     filter.reminder !== '' ||
     filter.cross ||
     filter.quickWin ||
-    filter.overdue
+    filter.overdue ||
+    filter.claims.length > 0
   ) {
     dropped = true;
   }

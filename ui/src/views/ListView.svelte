@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { CLAIM_CLASSES, isClaimClass } from '../lib/claims';
   import { taskTarget } from '../lib/context';
   import type { App } from '../lib/app.svelte';
   import { hintOf, labelOf, translate, type Key } from '../lib/i18n';
@@ -520,6 +521,18 @@
         />
         <span>{t('filter.overdue')}</span>
       </label>
+      {#if app.can('claims') || app.filter.claims.length > 0}
+        <MultiSelect
+          label={t('filter.claim')}
+          hint={t('hint.filter.claim')}
+          options={CLAIM_CLASSES.map((c) => ({ value: c, label: t(`filter.claim.${c}` as Key) }))}
+          selected={app.filter.claims}
+          onchange={(claims) => (app.filter = { ...app.filter, claims: claims.filter(isClaimClass) })}
+          clearLabel={t('kit.select.clear', { label: t('filter.claim') })}
+          resetLabel={t('multi.reset')}
+          searchLabel={t('multi.search')}
+        />
+      {/if}
       {#if app.quickWinSet !== undefined || app.filter.quickWin}
         <label class="pick" data-hint={t('hint.quick_win')}>
           <input
@@ -760,6 +773,7 @@
         drafted={Object.keys(app.draftOf(task.id)).length}
         target={taskTarget(task)}
         stamp={sortStamp(task, app.sort)}
+        claimant={app.claimName}
       />
     {:else}
       <p class="empty">{t('list.none')}</p>

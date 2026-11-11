@@ -8441,6 +8441,68 @@ test('the plan view compares the open plans: the engine\'s figures, sorted by a 
   }
 });
 
+test('a claimed task carries a mark in the list, the board and the detail, and the filter keeps mine, others\' or none', async ({ page }) => {
+  const { vault } = state();
+  const until = '2099-01-01T00:00:00Z';
+  const task = (slug: string, title: string) =>
+    [join(vault, 'nvim-config', 'ROADMAP', 'tasks', `${slug}.md`), `---\ntitle: ${title}\nstatus: doing\nkind: task\ncreated: 2026-11-11\nupdated: 2026-11-11\n---\n\nA task somebody works on.\n`] as const;
+  const claim = (slug: string, by: string) =>
+    [join(vault, '.claims', 'nvim-config', `${slug}.json`), JSON.stringify({ by, since: '2026-11-11T08:00:00Z', until })] as const;
+  const files = [
+    task('e2e-claimed-m001', 'Claimed m001'),
+    task('e2e-claimed-t001', 'Claimed t001'),
+    claim('e2e-claimed-m001', 'e2e-me@pc'),
+    claim('e2e-claimed-t001', 'cdx:e2eother'),
+  ] as const;
+  try {
+    for (const [path, text] of files) {
+      mkdirSync(join(path, '..'), { recursive: true });
+      writeFileSync(path, text);
+    }
+    await pair(page);
+    // the name of this browser for claims, set in the defaults
+    await page.getByRole('menuitem', { name: 'Options', exact: true }).click();
+    await page.getByRole('menuitem', { name: 'Defaults ...' }).click();
+    const dialog = page.getByTestId('defaults-dialog');
+    await dialog.getByLabel('My name for claims').fill('e2e-me@pc');
+    await dialog.getByLabel('My name for claims').press('Tab');
+    await dialog.getByRole('button', { name: 'Close' }).click();
+    expect(await page.evaluate(() => localStorage.getItem('tasks-desktop.claim-name'))).toBe('e2e-me@pc');
+
+    await showList(page);
+    await page.getByRole('searchbox', { name: /search/i }).first().fill('Claimed');
+    const rowOf = (title: string) => page.locator('button.row', { hasText: title });
+    await expect(rowOf('Claimed m001').locator('[data-claim="own"]')).toHaveText(/mine/);
+    await expect(rowOf('Claimed t001').locator('[data-claim="foreign"]')).toHaveText(/cdx:e2eother/);
+    for (const scheme of ['light', 'dark'] as const) {
+      await page.emulateMedia({ colorScheme: scheme });
+      await expectAccessible(page, `the claim marks of the list (${scheme})`);
+    }
+    // the board marks the card the same way
+    await chooseView(page, 'View', 'Board');
+    await expect(page.locator('[data-claim="foreign"]', { hasText: 'cdx:e2eother' }).first()).toBeVisible();
+    await expect(page.locator('[data-claim="own"]').first()).toBeVisible();
+    await showList(page);
+    // the filter: somebody else's only (among the further filters)
+    await page.getByText('More filters', { exact: false }).first().click();
+    await page.getByRole('button', { name: /^Claimed/ }).click();
+    await page.getByRole('group', { name: 'Claimed' }).getByRole('checkbox', { name: /by somebody else/ }).check();
+    await page.keyboard.press('Escape');
+    await expect(rowOf('Claimed t001')).toHaveCount(1);
+    await expect(rowOf('Claimed m001')).toHaveCount(0);
+    // the detail says who and until when
+    await rowOf('Claimed t001').click();
+    await expect(page.getByTestId('detail-claim')).toContainText('cdx:e2eother until 2099-01-01T00:00:00Z');
+    expect(consoleProblems.get(page) ?? []).toEqual([]);
+  } finally {
+    for (const [path] of files) rmSync(path, { force: true });
+    await page.evaluate(() => {
+      localStorage.removeItem('tasks-desktop.claim-name');
+      localStorage.removeItem('tasks-desktop.filter');
+    });
+  }
+});
+
 test('a view grouped by project: a task stands in the project of its plan or in its own, the group is named by the title of the project', async ({
   page,
 }) => {

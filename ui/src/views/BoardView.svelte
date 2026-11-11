@@ -1,4 +1,5 @@
 <script lang="ts">
+  import ClaimTag from './ClaimTag.svelte';
   import { contextTarget } from 'appkit-ui/contextmenu';
   import { taskTarget } from '../lib/context';
   // The board: a column for each status, the cards in the order of the engine. A card is moved by dragging it (to
@@ -296,6 +297,7 @@
                     onpointercancel={(e) => grip(e, card.id, 'cancel')}>⠿</span
                   >
                   <span class="id">{card.id}</span>
+                  <ClaimTag task={card} lang={app.lang} me={app.claimName} />
                   {#if Object.keys(app.draftOf(card.id)).length > 0}
                     {@const n = Object.keys(app.draftOf(card.id)).length}
                     <span class="tag draft" data-hint={t('mark.draft', { n })}><span aria-hidden="true">✎ {n}</span><span class="sr-only">{t('mark.draft', { n })}</span></span>

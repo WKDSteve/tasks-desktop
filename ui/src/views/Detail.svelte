@@ -1,4 +1,5 @@
 <script lang="ts">
+  import ClaimTag from './ClaimTag.svelte';
   import { tick } from 'svelte';
   import type { App } from '../lib/app.svelte';
   import { formatNumber, hintOf, labelOf, translate, type Key } from '../lib/i18n';
@@ -754,6 +755,13 @@
     <dl>
       <dt>{t('prop.status')}</dt>
       <dd>{labelOf(app.lang, 'status', task.status)}</dd>
+      {#if task.claim && !task.claim.expired}
+        <dt>{t('prop.claim')}</dt>
+        <dd data-testid="detail-claim">
+          <ClaimTag {task} lang={app.lang} me={app.claimName} />
+          {t('claim.detail', { by: task.claim.by, until: task.claim.until })}
+        </dd>
+      {/if}
       <dt data-hint={hintOf(app.lang, 'hint.field', 'state')}>{t('prop.state')}</dt>
       <dd>{task.readiness ? labelOf(app.lang, 'state', task.readiness.state) : unknown}</dd>
       <dt>{t('prop.area')}</dt>

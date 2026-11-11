@@ -55,6 +55,8 @@ export function chipLabel(
       return t('filter.quick_win.on');
     case 'overdue':
       return t('filter.overdue.on');
+    case 'claim':
+      return `${t('filter.claim')}: ${t(`filter.claim.${item.value}` as Key)}`;
     case 'range': {
       const key = item.value as RangeKey;
       const r = filter.ranges[key];

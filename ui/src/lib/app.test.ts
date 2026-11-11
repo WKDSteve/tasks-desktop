@@ -6602,6 +6602,20 @@ describe('the defaults (dialog "Defaults ...")', () => {
     expect(m.app.sort).toBe('roi');
   });
 
+  it('keeps the name this browser claims under and matches the claim filter with it', () => {
+    const m = make({ token: 't' });
+    m.app.setClaimName('  me@pc ');
+    expect(m.app.claimName).toBe('me@pc');
+    expect(m.prefs.get('tasks-desktop.claim-name')).toBe('me@pc');
+    expect(make({ token: 't', prefs: m.prefs }).app.claimName).toBe('me@pc');
+    m.app.setClaimName('not a name');
+    expect(m.app.claimName).toBe('');
+    m.app.setClaimName('me@pc');
+    const filter = { ...freshFilter(), claims: ['own' as const] };
+    expect(m.app.matchFilter(filter).claimant).toBe('me@pc');
+    expect(m.app.matchFilter(freshFilter()).claimant).toBeUndefined();
+  });
+
   it('resetting everything puts the layout of every view back too', async () => {
     const m = make({ token: 't' });
     m.hub.doc = snapshot(three);

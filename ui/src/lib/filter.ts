@@ -1,6 +1,7 @@
 // Filtering the list. The UI never sorts: the order is the engine's `rank`
 // (plan order), and a filter only takes tasks out of it.
 
+import { claimClass, isClaimClass, type ClaimClass } from './claims';
 import { connectsAreas } from './cross';
 import { isDue, isOverdue, localToday } from './remind';
 import type { TaskEntry } from './contract';
@@ -73,6 +74,13 @@ export interface Filter {
   quickWin: boolean;
   /** Only the tasks past their `due` date (a parked task waits on purpose and is never late). */
   overdue: boolean;
+  /** Who works on the task now (lib/claims.ts): any of these classes; none chosen means every task. */
+  claims: ClaimClass[];
+  /**
+   * The name this browser reserves under, to tell an own claim from one of somebody else: set by the app when it
+   * matches (`App.matchFilter`), never kept with the filter.
+   */
+  claimant?: string;
 }
 
 export const emptyFilter: Filter = {
@@ -89,11 +97,12 @@ export const emptyFilter: Filter = {
   cross: false,
   quickWin: false,
   overdue: false,
+  claims: [],
 };
 
 /** A filter with nothing on, sharing no list or record with another (a state that is changed by copying, never in place). */
 export function freshFilter(): Filter {
-  return { ...emptyFilter, areas: [], statuses: [], actors: [], fields: {}, matchAll: [], ranges: {}, dates: {} };
+  return { ...emptyFilter, areas: [], statuses: [], actors: [], fields: {}, matchAll: [], ranges: {}, dates: {}, claims: [] };
 }
 
 /** Whether the chosen values of `key` must all be on a task. */
@@ -289,6 +298,7 @@ export function matches(
   if (filter.reminder === 'set' && task.remind === undefined) return false;
   if (filter.reminder === 'due' && !isDue(task.remind, today)) return false;
   if (filter.overdue && !(task.status !== 'parked' && isOverdue(task.due, today))) return false;
+  if (filter.claims.length > 0 && !filter.claims.includes(claimClass(task, filter.claimant ?? ''))) return false;
   if (filter.cross && !connectsAreas(touched?.get(task.id), filter.areas)) return false;
   if (filter.quickWin && !(quickWins?.has(task.id) ?? false)) return false;
   const query = filter.query.trim().toLowerCase();
@@ -368,6 +378,7 @@ export type ActiveKind =
   | 'cross'
   | 'quickWin'
   | 'overdue'
+  | 'claim'
   | 'range'
   | 'date';
 export interface ActiveFilter {
@@ -395,6 +406,7 @@ export function activeFilters(filter: Filter): ActiveFilter[] {
   if (filter.cross) out.push({ kind: 'cross', value: 'on' });
   if (filter.quickWin) out.push({ kind: 'quickWin', value: 'on' });
   if (filter.overdue) out.push({ kind: 'overdue', value: 'on' });
+  for (const value of filter.claims) out.push({ kind: 'claim', value });
   return out;
 }
 
@@ -429,6 +441,8 @@ export function without(filter: Filter, item: ActiveFilter): Filter {
       return { ...filter, quickWin: false };
     case 'overdue':
       return { ...filter, overdue: false };
+    case 'claim':
+      return { ...filter, claims: filter.claims.filter((v) => v !== item.value) };
     case 'range':
       return { ...filter, ranges: { ...filter.ranges, [item.value]: undefined } };
     case 'date':
@@ -491,6 +505,8 @@ export function filterVaultOf(text: string | null): string | null | undefined {
 export function filterText(filter: Filter): string {
   const out: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(filter)) {
+    // the name of this browser is the app's, not part of a filter that is kept or linked
+    if (key === 'claimant') continue;
     if (value === false || value === '') continue;
     if (Array.isArray(value) && value.length === 0) continue;
     if (typeof value === 'object' && value !== null && !Array.isArray(value) && Object.keys(value).length === 0) continue;
@@ -529,6 +545,7 @@ export function parseFilter(text: string | null): Filter {
   out.cross = o.cross === true;
   out.quickWin = o.quickWin === true;
   out.overdue = o.overdue === true;
+  out.claims = strings(o.claims).filter(isClaimClass);
   if (typeof o.updated === 'string' && (o.updated === '' || (UPDATED_WINDOWS as readonly string[]).includes(o.updated)))
     out.updated = o.updated as UpdatedWindow;
   if (typeof o.reminder === 'string' && (o.reminder === '' || (REMINDER_CHOICES as readonly string[]).includes(o.reminder)))

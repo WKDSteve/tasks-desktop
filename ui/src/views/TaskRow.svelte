@@ -1,4 +1,5 @@
 <script lang="ts">
+  import ClaimTag from './ClaimTag.svelte';
   import { contextTarget, type ContextTarget } from 'appkit-ui/contextmenu';
   import type { TaskEntry } from '../lib/contract';
   import { hintOf, translate, type Lang } from '../lib/i18n';
@@ -23,6 +24,7 @@
     drafted = 0,
     target,
     stamp,
+    claimant = '',
   }: {
     task: TaskEntry;
     lang: Lang;
@@ -44,6 +46,8 @@
     target?: ContextTarget;
     /** The date the list is in the order of (lib/sort.ts `sortStamp`), shown so the order can be seen. */
     stamp?: { kind: StampKind; date: string };
+    /** The name this browser reserves under (lib/claims.ts): tells an own claim from one of somebody else. */
+    claimant?: string;
   } = $props();
 
   // A word this version does not know is shown as it is.
@@ -94,6 +98,7 @@
     {#if flagged > 0}<span class="tag bad" data-hint={flagTitle}><span aria-hidden="true">⚑ {flagged}</span><span class="sr-only">{translate(lang, 'mark.flagged', { n: flagged })}</span></span>{/if}
     {#if crossAreas.length >= 2}<span class="tag soft" data-hint={crossTitle}><span aria-hidden="true">↔ {crossAreas.length}</span><span class="sr-only">{translate(lang, 'mark.cross', { n: crossAreas.length })}</span></span>{/if}
     {#if drafted > 0}<span class="tag draft" data-hint={translate(lang, 'mark.draft', { n: drafted })}><span aria-hidden="true">✎ {drafted}</span><span class="sr-only">{translate(lang, 'mark.draft', { n: drafted })}</span></span>{/if}
+    <ClaimTag {task} {lang} me={claimant} />
     {#if overdue}<span class="tag overdue" data-hint={translate(lang, 'overdue.hint', { date: task.due ?? '' })}><span aria-hidden="true">⚑ {task.due}</span><span class="sr-only">{translate(lang, 'mark.overdue', { date: task.due ?? '' })}</span></span>{/if}
     {#if due}<span class="tag due" data-hint={translate(lang, 'remind.due', { date: task.remind ?? '' })}><span aria-hidden="true">⏰ {task.remind}</span><span class="sr-only">{translate(lang, 'mark.due', { date: task.remind ?? '' })}</span></span>{/if}
     <!-- The due date and the reminder are there already when they are late or due. -->
