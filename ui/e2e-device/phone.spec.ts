@@ -142,6 +142,9 @@ test('pairs through a pairing link', async () => {
   page = await openPage(phone!, pairingLink(state().config).replace('/#pair=', '/m/#pair='));
   await expect(page.getByTestId('connection')).toHaveAttribute('data-state', 'live', { timeout: 15_000 });
   expect(new URL(page.url()).hash).toBe('');
+  // the page starts on Today (what to take next); the list is one tap away
+  await expect(page.getByRole('region', { name: 'Next' }).getByRole('button').first()).toBeVisible();
+  await page.getByRole('button', { name: 'List' }).click();
   await expect(page.getByTestId('task-list').locator('[data-id]').first()).toBeVisible();
 });
 
