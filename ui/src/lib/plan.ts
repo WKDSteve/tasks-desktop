@@ -55,6 +55,15 @@ export function chosenPlan(plans: readonly Snapshot['plans'][number][], choice: 
   return plans.some((p) => p.id === choice) ? choice : '';
 }
 
+/**
+ * Whether a choice (of a plan or a project) that the list `ids` does not hold is to be dropped: only when the list is
+ * the vault as the hub reads it now. Before the first snapshot there is no list, and a snapshot from the cache of this
+ * browser may be older than a plan a link names: the choice waits for the fresh one.
+ */
+export function dropsChoice(choice: string, ids: readonly string[], snapshot: { fresh: boolean } | null): boolean {
+  return snapshot !== null && snapshot.fresh && choice !== '' && !ids.includes(choice);
+}
+
 /** The ids of the critical path, for marking. */
 export function criticalIds(plan: Snapshot['plan'] | undefined): Set<string> {
   return new Set(plan?.critical_path.path ?? []);

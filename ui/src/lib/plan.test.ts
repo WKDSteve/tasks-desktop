@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { chosenPlan, criticalIds, firstTasks, phaseCounts, planEmptyKey, stagesOf, warningsOf } from './plan';
+import { chosenPlan, criticalIds, dropsChoice, firstTasks, phaseCounts, planEmptyKey, stagesOf, warningsOf } from './plan';
 import { task } from './fixtures';
 import type { Snapshot } from './contract';
 
@@ -122,5 +122,15 @@ describe('planEmptyKey', () => {
     expect(planEmptyKey(true, 0)).toBe('plan.empty');
     expect(planEmptyKey(false, 4)).toBe('plan.empty');
     expect(planEmptyKey(false, 0)).toBe('plan.empty');
+  });
+});
+
+describe('dropsChoice', () => {
+  it('drops a chosen plan that is gone only from a fresh snapshot, never before one or from the cache', () => {
+    expect(dropsChoice('a/p', ['a/q'], { fresh: true })).toBe(true);
+    expect(dropsChoice('a/p', ['a/p'], { fresh: true })).toBe(false);
+    expect(dropsChoice('a/p', [], null)).toBe(false);
+    expect(dropsChoice('a/p', ['a/q'], { fresh: false })).toBe(false);
+    expect(dropsChoice('', ['a/q'], { fresh: true })).toBe(false);
   });
 });

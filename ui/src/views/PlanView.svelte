@@ -8,7 +8,7 @@
   import Info from 'appkit-ui/Info.svelte';
   import { TIP_ID } from 'appkit-ui/tooltip';
   import { stagesLegend } from '../lib/legend';
-  import { chosenPlan, criticalIds, firstTasks, phaseCounts, planEmptyKey, stagesOf, warningsOf } from '../lib/plan';
+  import { chosenPlan, criticalIds, dropsChoice, firstTasks, phaseCounts, planEmptyKey, stagesOf, warningsOf } from '../lib/plan';
   import { markHidden } from '../lib/text';
   import { statusTags } from '../lib/statusTags';
   import { narrows } from '../lib/filter';
@@ -86,13 +86,14 @@
   const closingShown = $derived(closing !== '' && closing === planId);
   const names = $derived(new Map([...titles, ...plans.map((p) => [p.id, p.title] as const)]));
 
-  // A chosen plan that is gone (a change of the vault) is dropped, so the select agrees. Only once the vault is read: a
-  // plan named by the address (a link, Back) is chosen before the first snapshot, and no plan is gone from none.
+  // A chosen plan or project that is gone (a change of the vault) is dropped, so the select agrees: only once the vault
+  // is read as it is now (`dropsChoice`), not before the first snapshot nor from an older one of the cache.
+  const read = $derived(snapshot ? { fresh: app.cachedAt === null } : null);
   $effect(() => {
-    if (snapshot && app.planChoice !== '' && planId === '') app.planChoice = '';
+    if (dropsChoice(app.planChoice, plans.map((p) => p.id), read)) app.planChoice = '';
   });
   $effect(() => {
-    if (snapshot && app.projectChoice !== '' && !projects.some((p) => p.id === app.projectChoice)) app.projectChoice = '';
+    if (dropsChoice(app.projectChoice, projects.map((p) => p.id), read)) app.projectChoice = '';
   });
 
   function open(id: string): void {
