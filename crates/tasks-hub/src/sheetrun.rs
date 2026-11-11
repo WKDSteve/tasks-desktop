@@ -57,7 +57,8 @@ impl SheetRunner for SystemSheetRunner {
 /// `TASKS_EXTRA_AREAS`, ...): a sheet run must not inherit it. Windows names are not case sensitive.
 fn is_engine_var(name: &std::ffi::OsStr) -> bool {
     name.to_str()
-        .is_some_and(|n| n.len() > 6 && n[..6].eq_ignore_ascii_case("TASKS_"))
+        // by the bytes: a name may hold any character, and a cut inside one would panic
+        .is_some_and(|n| n.len() > 6 && n.as_bytes()[..6].eq_ignore_ascii_case(b"TASKS_"))
 }
 
 /// The process of a run. It keeps the environment of the hub: a sheet runs a plugin's tests through testing.nvim, which
@@ -219,6 +220,8 @@ mod tests {
             "NVIM_MACHINE_ROLE",
             "TESTING_TRUST_ROOTS",
             "TASKS",
+            "ABCDE\u{c4}X",
+            "TASKS\u{c4}",
         ]
         .map(OsString::from);
         let command = command_for(&sheet_command(&[]), "a/b", inherited.clone());
@@ -230,7 +233,14 @@ mod tests {
         ] {
             assert_eq!(change(&command, name), Some(None), "{name} is taken out");
         }
-        for name in ["PATH", "NVIM_MACHINE_ROLE", "TESTING_TRUST_ROOTS", "TASKS"] {
+        for name in [
+            "PATH",
+            "NVIM_MACHINE_ROLE",
+            "TESTING_TRUST_ROOTS",
+            "TASKS",
+            "ABCDE\u{c4}X",
+            "TASKS\u{c4}",
+        ] {
             assert_eq!(change(&command, name), None, "{name} is inherited as it is");
         }
         // what the settings say is set after the removal and wins
