@@ -120,7 +120,11 @@ export type View = 'today' | 'list' | 'board' | 'plan' | 'inbox' | 'abnahme' | '
 export type Theme = 'auto' | 'light' | 'dark';
 /** The blocks of the Today view that a person may hide. */
 export { ORDERED_TILES, TILES, type OrderedTile, type Tile } from './tiles-list';
-import type { OrderedTile, Tile } from './tiles-list';
+import { TILES as TODAY_TILES, type OrderedTile, type Tile } from './tiles-list';
+
+/** The views whose layout can be put back as it came (Defaults ...). */
+export const LAYOUT_VIEWS = ['list', 'plan', 'stats', 'today'] as const;
+export type LayoutView = (typeof LAYOUT_VIEWS)[number];
 
 /** What the last write did, in one line; `undo` is the way back, when there is one. */
 export interface Toast {
@@ -761,7 +765,66 @@ export class App {
     this.setShortAreas(true);
     this.setAreaCounts(true);
     this.setSaveMode('auto');
+    for (const view of LAYOUT_VIEWS) this.resetLayout(view);
     this.applyDefaults();
+  }
+
+  /**
+   * Whether the layout of a view is not as it came: what `resetLayout` would change. The list: the widths of its
+   * columns and the size of its block; the plan: stages or graph or comparison, the rows and the order of the graph, the
+   * sort of the comparison, the folded stages; the statistics: the field and the order; Today: the order, the hidden
+   * blocks and their sizes.
+   */
+  layoutChanged(view: LayoutView): boolean {
+    switch (view) {
+      case 'list':
+        return JSON.stringify(this.listColumns) !== JSON.stringify(defaultColumns()) || this.tileSizes.list !== undefined;
+      case 'plan': {
+        const sort = parseCompareSort(null);
+        return (
+          this.planDisplay !== 'stages' ||
+          this.graphRows !== 'stage' ||
+          Object.keys(this.graphOrder).length > 0 ||
+          this.compareSort.key !== sort.key ||
+          this.compareSort.desc !== sort.desc ||
+          Object.keys(this.folds.plan).length > 0
+        );
+      }
+      case 'stats': {
+        const stats = parseStatsPrefs(null);
+        return this.statsDim !== stats.dim || this.statsSort !== stats.sort;
+      }
+      case 'today':
+        return this.tileOrderChanged || this.hiddenTiles.length > 0 || TODAY_TILES.some((tile) => this.tileSizes[tile] !== undefined);
+    }
+  }
+
+  /** Put the layout of one view back as it came (`layoutChanged` says what that is). Nothing of the vault changes. */
+  resetLayout(view: LayoutView): void {
+    switch (view) {
+      case 'list':
+        this.setListColumns(defaultColumns());
+        this.setTileSize('list', null);
+        return;
+      case 'plan':
+        this.setPlanDisplay('stages');
+        this.setGraphRows('stage');
+        this.graphOrder = {};
+        safe(() => this.env.prefs.setItem('tasks-desktop.graph-order', '{}'));
+        this.setCompareSort(parseCompareSort(null));
+        this.setFolds('plan', {});
+        return;
+      case 'stats': {
+        const stats = parseStatsPrefs(null);
+        this.setStats(stats.dim, stats.sort);
+        return;
+      }
+      case 'today':
+        this.resetTileOrder();
+        this.showTiles();
+        for (const tile of TODAY_TILES) if (this.tileSizes[tile] !== undefined) this.setTileSize(tile, null);
+        return;
+    }
   }
 
   // ── derived ───────────────────────────────────────────────────────────

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ApiError, type Hub, type HubArea, type HubAreas, type OpsRequest, type VaultList } from './api';
-import { App, EXCHANGE_RETRIES, type Env } from './app.svelte';
+import { App, EXCHANGE_RETRIES, LAYOUT_VIEWS, type Env } from './app.svelte';
 import type { CachedList, ListStore } from './cache';
 import type { DonePreview, Groupings, Result, Snapshot, TaskDocument, TaskEntry, View, Views } from './contract';
 import { task } from './fixtures';
@@ -6540,6 +6540,56 @@ describe('the defaults (dialog "Defaults ...")', () => {
     expect([m.app.areaCountsShown, m.app.shortAreas, m.app.saveMode]).toEqual([true, true, 'auto']);
     expect(m.app.filter.statuses).toEqual([]);
     expect(m.app.sort).toBe('default');
+    m.app.stop();
+  });
+
+  it('puts the layout of one view back as it came and leaves the others; the memory goes with it', async () => {
+    const m = make({ token: 't' });
+    m.hub.doc = snapshot(three);
+    await m.app.start(null);
+    for (const view of LAYOUT_VIEWS) expect(m.app.layoutChanged(view), view).toBe(false);
+    // Each view moved away from its first layout.
+    m.app.setListColumns({ ...m.app.listColumns, meta: 300 });
+    m.app.setTileSize('list', { w: 400, h: 300 });
+    m.app.setPlanDisplay('compare');
+    m.app.setGraphRows('phase');
+    m.app.setGraphOrder('a/p', '1', ['a/x']);
+    m.app.setCompareSort({ key: 'title', desc: false });
+    m.app.setFolds('plan', { '1': 'folded' });
+    m.app.setStats('kind', m.app.statsSort === 'count' ? 'name' : 'count');
+    m.app.setTileSize('next', { w: 300, h: 200 });
+    for (const view of LAYOUT_VIEWS) expect(m.app.layoutChanged(view), view).toBe(true);
+    // The plan alone: the others stay as they are.
+    m.app.resetLayout('plan');
+    expect(m.app.layoutChanged('plan')).toBe(false);
+    expect([m.app.planDisplay, m.app.graphRows, m.app.graphOrder, m.app.compareSort, m.app.folds.plan]).toEqual([
+      'stages',
+      'stage',
+      {},
+      { key: 'effort', desc: true },
+      {},
+    ]);
+    expect(m.app.layoutChanged('list')).toBe(true);
+    expect(m.app.layoutChanged('stats')).toBe(true);
+    expect(m.app.layoutChanged('today')).toBe(true);
+    m.app.resetLayout('list');
+    m.app.resetLayout('stats');
+    m.app.resetLayout('today');
+    for (const view of LAYOUT_VIEWS) expect(m.app.layoutChanged(view), view).toBe(false);
+    // Reloaded from the memory: still as it came.
+    const again = make({ token: 't', prefs: m.prefs });
+    for (const view of LAYOUT_VIEWS) expect(again.app.layoutChanged(view), `${view} after a reload`).toBe(false);
+    m.app.stop();
+  });
+
+  it('resetting everything puts the layout of every view back too', async () => {
+    const m = make({ token: 't' });
+    m.hub.doc = snapshot(three);
+    await m.app.start(null);
+    m.app.setPlanDisplay('graph');
+    m.app.setTileSize('waiting', { w: 300, h: 200 });
+    m.app.resetToFactory();
+    expect([m.app.layoutChanged('plan'), m.app.layoutChanged('today')]).toEqual([false, false]);
     m.app.stop();
   });
 

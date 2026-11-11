@@ -7639,6 +7639,39 @@ test('Defaults: start view, order and filter are set in a dialog, hold after a r
   expect(consoleProblems.get(page)).toEqual([]);
 });
 
+test('Defaults: the layout of one view is reset in the dialog, the others stay, and it holds after a reload', async ({ page }) => {
+  await pair(page);
+  await chooseView(page, 'View', 'Plan');
+  const display = page.getByRole('group', { name: 'Show the plan as' });
+  await display.getByRole('button', { name: 'Graph' }).click();
+  await chooseView(page, 'View', 'Statistics');
+  const stats = { dim: 'kind', sort: 'count' };
+  await page.evaluate((s) => localStorage.setItem('tasks-desktop.stats', JSON.stringify(s)), stats);
+  await page.reload();
+  await expect(page.getByRole('menubar')).toBeVisible();
+
+  await page.getByRole('menuitem', { name: 'Options', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Defaults ...' }).click();
+  const dialog = page.getByTestId('defaults-dialog');
+  const layout = dialog.getByRole('group', { name: 'Layout of the views' });
+  await expect(layout.getByTestId('defaults-layout-list')).toHaveText('as it came');
+  await expect(layout.getByRole('button', { name: 'Reset the layout of Plan' })).toBeVisible();
+  await expect(layout.getByRole('button', { name: 'Reset the layout of Statistics' })).toBeVisible();
+  await expectAccessible(page, 'the layout of the views in the defaults dialog');
+  // The plan alone: the statistics keep their field.
+  await layout.getByRole('button', { name: 'Reset the layout of Plan' }).click();
+  await expect(layout.getByTestId('defaults-layout-plan')).toHaveText('as it came');
+  await expect(layout.getByRole('button', { name: 'Reset the layout of Statistics' })).toBeVisible();
+  await dialog.getByRole('button', { name: 'Close' }).click();
+  expect(await page.evaluate(() => localStorage.getItem('tasks-desktop.plan-display'))).toBe('stages');
+  expect(JSON.parse((await page.evaluate(() => localStorage.getItem('tasks-desktop.stats'))) ?? '{}')).toEqual(stats);
+  await page.reload();
+  await chooseView(page, 'View', 'Plan');
+  await expect(display.getByRole('button', { name: 'Stages' })).toHaveAttribute('aria-pressed', 'true');
+  await page.evaluate(() => localStorage.removeItem('tasks-desktop.stats'));
+  expect(consoleProblems.get(page) ?? []).toEqual([]);
+});
+
 test('the context menu copies a task, the marked ones it is opened on, and the tasks of a group, as Markdown, CSV or JSON', async ({
   page,
   context,

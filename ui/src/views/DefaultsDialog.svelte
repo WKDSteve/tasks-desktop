@@ -3,7 +3,7 @@
   // with the switches that stand until changed (counts in the choice of areas, short area names, saving fields with a
   // button). Everything is kept in this browser at once; nothing here writes to the vault.
   import { closeOnBackdrop } from 'appkit-ui/backdrop';
-  import type { App } from '../lib/app.svelte';
+  import { LAYOUT_VIEWS, type App } from '../lib/app.svelte';
   import { START_VIEWS, parseDefaults } from '../lib/defaults';
   import { activeFilters, parseFilter } from '../lib/filter';
   import { floating } from '../lib/floating';
@@ -114,6 +114,27 @@
       </label>
     </fieldset>
 
+    <fieldset data-testid="defaults-layout">
+      <legend>{t('defaults.sec.layout')}</legend>
+      <p class="muted">{t('defaults.layout.intro')}</p>
+      {#each LAYOUT_VIEWS as view (view)}
+        {@const changed = app.layoutChanged(view)}
+        <div class="row layout">
+          <span class="name">{t(`nav.${view}` as Key)}</span>
+          {#if changed}
+            <button
+              type="button"
+              aria-label={t('defaults.layout.reset_view', { view: t(`nav.${view}` as Key) })}
+              onclick={() => app.resetLayout(view)}
+              data-testid={`defaults-layout-${view}`}>{t('defaults.layout.reset')}</button
+            >
+          {:else}
+            <span class="muted" data-testid={`defaults-layout-${view}`}>{t('defaults.layout.as_came')}</span>
+          {/if}
+        </div>
+      {/each}
+    </fieldset>
+
     <div class="row">
       <button type="button" onclick={() => app.applyDefaults()} data-testid="defaults-apply">{t('defaults.apply')}</button>
       {#if confirmReset}
@@ -179,6 +200,9 @@
     flex-wrap: wrap;
     gap: 0.5rem;
     align-items: center;
+  }
+  .layout .name {
+    min-width: 8rem;
   }
   .actions {
     justify-content: flex-end;
