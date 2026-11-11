@@ -147,6 +147,8 @@
         return t('filter.quick_win.on');
       case 'overdue':
         return t('filter.overdue.on');
+      case 'claim':
+        return t('filter.claim');
     }
   }
   const shownMetrics = $derived(METRICS.filter((m) => prefs.metrics.includes(m)));

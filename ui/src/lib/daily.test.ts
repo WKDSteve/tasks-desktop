@@ -96,6 +96,13 @@ describe('the filter of the list on the tile', () => {
     expect(narrowFinished(doc(tagged), forFinished).doc.items.map((i) => i.id)).toEqual(['testing.nvim/b']);
   });
 
+  it('leaves the claim filter out for the finished tasks (a finished task has no claim) and says so', () => {
+    const { filter: forFinished, ignored } = finishedFilter({ ...freshFilter(), claims: ['own'] });
+    expect(ignored).toEqual([{ kind: 'claim' }]);
+    expect(forFinished.claims).toEqual([]);
+    expect(narrowFinished(doc(items), forFinished).doc.items).toHaveLength(items.length);
+  });
+
   it('says at least when more were finished than were read', () => {
     const { doc: narrowed, cut } = narrowFinished(doc(items, 700), finishedFilter({ ...freshFilter(), areas: ['lib.nvim'] }).filter);
     expect(cut).toBe(true);

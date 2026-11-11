@@ -202,7 +202,7 @@ const FINISHED_FIELDS: ReadonlySet<FieldKey> = new Set<FieldKey>(['kind', 'prio'
 
 /** A part of the filter that the finished tasks cannot be judged by: what the tile names as not taken for them. */
 export type IgnoredPart =
-  | { kind: 'status' | 'actor' | 'updated' | 'reminder' | 'cross' | 'quickWin' | 'overdue' }
+  | { kind: 'status' | 'actor' | 'updated' | 'reminder' | 'cross' | 'quickWin' | 'overdue' | 'claim' }
   | { kind: 'field'; key: FieldKey }
   | { kind: 'date'; key: DateKey };
 
@@ -210,7 +210,7 @@ export type IgnoredPart =
  * The filter of the list as it holds for the finished tasks: the areas, the text and the fields a finished entry
  * carries (kind, priority, effort, value, tags, plan, phase, and the ranges of the three ordered ones) as they are;
  * what it has no word for (its status is done, who did it, its dates, its project, the readiness, a reminder, whether
- * it connects areas, a quick win of the open ones) is left out and named in `ignored`.
+ * it connects areas, a quick win of the open ones, a claim: a finished task has none) is left out and named in `ignored`.
  */
 export function finishedFilter(filter: Filter): { filter: Filter; ignored: IgnoredPart[] } {
   const ignored: IgnoredPart[] = [];
@@ -232,6 +232,7 @@ export function finishedFilter(filter: Filter): { filter: Filter; ignored: Ignor
   if (filter.cross) ignored.push({ kind: 'cross' });
   if (filter.quickWin) ignored.push({ kind: 'quickWin' });
   if (filter.overdue) ignored.push({ kind: 'overdue' });
+  if (filter.claims.length > 0) ignored.push({ kind: 'claim' });
   return {
     filter: {
       ...filter,
@@ -245,6 +246,7 @@ export function finishedFilter(filter: Filter): { filter: Filter; ignored: Ignor
       cross: false,
       quickWin: false,
       overdue: false,
+      claims: [],
     },
     ignored,
   };
