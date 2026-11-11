@@ -92,8 +92,9 @@ pnpm web:build && PLAYWRIGHT_BROWSERS_PATH="$PWD/node_modules/.cache/ms-playwrig
   `pnpm e2e`). Voraussetzung: USB-Debugging an, `adb devices` zeigt das Gerät (mehrere: `ANDROID_SERIAL`). Ohne Gerät
   werden die Fälle übersprungen, mit Grund in der Ausgabe. Ohne Kabel geht es über Tailscale: einmal am Kabel
   `adb tcpip 5555` (gilt bis zum Neustart des Handys), dann `adb connect <Tailscale-IP>:5555`; `adb reverse` und der
-  DevTools-Socket laufen darüber wie über USB. Hängt das Kabel zusätzlich, sieht adb das Handy zweimal: dann
-  `ANDROID_SERIAL=<Tailscale-IP>:5555` (bzw. die USB-Seriennummer) setzen. Playwright geht über Chromes DevTools-Socket
+  DevTools-Socket laufen darüber wie über USB. Hängt das Kabel zusätzlich, listet adb das Handy zweimal; die Suite
+  erkennt das an derselben `ro.serialno` und nimmt den USB-Eintrag (`pickDevice` in `ui/e2e-device/android.ts`). Über
+  das Netz testen: Kabel ab oder `ANDROID_SERIAL=<Tailscale-IP>:5555`. Zwei verschiedene Handys brauchen weiter `ANDROID_SERIAL`. Playwright geht über Chromes DevTools-Socket
   (`adb forward ... localabstract:chrome_devtools_remote`, wie chrome://inspect; `_android.launchBrowser` hängt auf
   Geräten ohne Root), die Seite über `adb reverse` auf den Port des Laufs. Eingaben gehen nur an den eigenen Tab, nie
   auf den Bildschirm. Dazwischen sitzt ein CDP-Filter (`ui/e2e-device/cdp-filter.ts`): Playwright sieht nur die

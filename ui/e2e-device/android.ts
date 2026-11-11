@@ -17,9 +17,55 @@ export function adb(serial: string | null, ...args: string[]): string {
   return execFileSync('adb', full, { encoding: 'utf8', timeout: 30_000 });
 }
 
+/** An entry of `adb devices` that is a phone over the network (`adb connect <ip>:<port>`, Tailscale), not over USB. */
+export function isNetworkSerial(serial: string): boolean {
+  return /^[\d.]+:\d+$/.test(serial) || /^\[[0-9a-f:]+\]:\d+$/i.test(serial);
+}
+
 /**
- * The phone to test on: `ANDROID_SERIAL` when given, else the one device adb sees. No adb or no device is a reason to
- * skip (returned as text); two devices without `ANDROID_SERIAL` as well, so that the suite never picks one by chance.
+ * The phone to test on among the entries adb lists as ready: `ANDROID_SERIAL` when given, else the one phone. A phone on
+ * the cable and over the network at once is two entries of one phone (the same `ro.serialno`, asked with `serialOf`):
+ * it counts once, by its USB entry. Two phones without `ANDROID_SERIAL` are a reason to skip, so that the suite never
+ * picks one by chance.
+ */
+export function pickDevice(
+  ready: readonly string[],
+  wanted: string | undefined,
+  serialOf: (entry: string) => string | null,
+): { serial: string } | { skip: string } {
+  if (wanted)
+    return ready.includes(wanted) ? { serial: wanted } : { skip: `ANDROID_SERIAL ${wanted} is not connected` };
+  if (ready.length === 0)
+    return {
+      skip: 'no Android device with USB debugging is connected (adb devices)',
+    };
+  // one entry per phone: an entry whose serial number nobody can tell stays an entry of its own
+  const byPhone = new Map<string, string>();
+  for (const entry of ready) {
+    const phone = ready.length > 1 ? (serialOf(entry) ?? entry) : entry;
+    const kept = byPhone.get(phone);
+    if (kept === undefined || (isNetworkSerial(kept) && !isNetworkSerial(entry))) byPhone.set(phone, entry);
+  }
+  if (byPhone.size > 1)
+    return {
+      skip: `${byPhone.size} devices are connected: set ANDROID_SERIAL to the one to test on`,
+    };
+  return { serial: [...byPhone.values()][0]! };
+}
+
+/** The serial number of the phone behind an entry of `adb devices` (the same for its USB and its network entry). */
+function serialNumber(entry: string): string | null {
+  try {
+    const out = adb(entry, 'shell', 'getprop', 'ro.serialno').trim();
+    return out === '' ? null : out;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The phone to test on: `ANDROID_SERIAL` when given, else the one device adb sees (`pickDevice`). No adb or no device
+ * is a reason to skip (returned as text).
  */
 export function findDevice(env: Record<string, string | undefined>): { serial: string } | { skip: string } {
   let out: string;
@@ -36,18 +82,7 @@ export function findDevice(env: Record<string, string | undefined>): { serial: s
     .map((line) => line.trim().split(/\s+/))
     .filter(([serial, state]) => serial && state === 'device')
     .map(([serial]) => serial!);
-  const wanted = env['ANDROID_SERIAL'];
-  if (wanted)
-    return ready.includes(wanted) ? { serial: wanted } : { skip: `ANDROID_SERIAL ${wanted} is not connected` };
-  if (ready.length === 0)
-    return {
-      skip: 'no Android device with USB debugging is connected (adb devices)',
-    };
-  if (ready.length > 1)
-    return {
-      skip: `${ready.length} devices are connected: set ANDROID_SERIAL to the one to test on`,
-    };
-  return { serial: ready[0]! };
+  return pickDevice(ready, env['ANDROID_SERIAL'], serialNumber);
 }
 
 /** The window in front on the phone: its app (package) and its activity. */
