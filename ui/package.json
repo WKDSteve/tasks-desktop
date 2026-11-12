@@ -30,8 +30,8 @@
     "ws": "^8.22.1"
   },
   "dependencies": {
-    "appkit-ui": "github:WKDSteve/appkit#v0.46.0&path:ui-kit",
-    "appkit-web": "github:WKDSteve/appkit#v0.46.0&path:web-kit",
+    "appkit-ui": "github:WKDSteve/appkit#v0.47.0&path:ui-kit",
+    "appkit-web": "github:WKDSteve/appkit#v0.47.0&path:web-kit",
     "modern-screenshot": "4.7.0",
     "wasmoon": "1.16.0"
   }
