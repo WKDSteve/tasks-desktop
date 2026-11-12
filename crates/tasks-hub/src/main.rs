@@ -27,6 +27,9 @@ const USAGE: &str = "usage:
                                           (a phone: the same link with /m/ in front of the #)
   tasks-hub devices                       list the phones paired with a key of their own
   tasks-hub devices revoke <id>           revoke one: its sessions end, it has to pair again
+  tasks-hub devices level <id> read|create|change
+                                          what one may do (a new phone: change); its open
+                                          sessions follow at once
                                           (--launch also opens it in the default browser)
   tasks-hub usage [--days=14]             on how many of the last days the interface was
                                           opened (counts only, kept on this machine)
@@ -190,6 +193,11 @@ async fn run(args: Vec<String>) -> Result<(), String> {
         Some("devices") if args.len() == 1 => app::devices(app::DevicesCommand::List)
             .await
             .map(|text| println!("{text}")),
+        Some("devices") if args.len() == 4 && args[1] == "level" => {
+            app::devices(app::DevicesCommand::Level(args[2].clone(), args[3].clone()))
+                .await
+                .map(|text| println!("{text}"))
+        }
         Some("devices") if args.len() == 3 && args[1] == "revoke" => {
             app::devices(app::DevicesCommand::Revoke(args[2].clone()))
                 .await

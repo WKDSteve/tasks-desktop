@@ -56,6 +56,29 @@ impl AppSettings for TasksSettings {
 /// The settings file of the tasks hub.
 pub type FileConfig = appkit_hub::config::FileConfig<TasksSettings>;
 
+/// The variable that names this machine in the tailnet (`pc.example.ts.net`), for a phone through Tailscale Serve.
+pub const TAILNET_VAR: &str = "TASKS_DESKTOP_TAILNET";
+
+/// Is this a plain host name the guard takes as the tailnet name (appkit `with_tailnet_name`): lower-case labels of
+/// letters, digits and `-` (none at an end of a label), at least two, the last not all digits; no port, no scheme.
+#[must_use]
+pub fn valid_tailnet_name(name: &str) -> bool {
+    let labels: Vec<&str> = name.split('.').collect();
+    name.len() <= 253
+        && labels.len() >= 2
+        && labels.iter().all(|label| {
+            !label.is_empty()
+                && !label.starts_with('-')
+                && !label.ends_with('-')
+                && label
+                    .bytes()
+                    .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
+        })
+        && labels
+            .last()
+            .is_some_and(|tld| tld.bytes().any(|b| b.is_ascii_lowercase()))
+}
+
 /// The longest name of an area the hub accepts.
 const MAX_AREA_NAME: usize = 128;
 
@@ -125,6 +148,29 @@ mod tests {
     fn an_empty_variable_is_not_set() {
         let env = Env::from_pairs([("TASKS_VAULT", "")]);
         assert!(env.get("TASKS_VAULT").is_none());
+    }
+
+    #[test]
+    fn a_tailnet_name_is_a_plain_host_name() {
+        for good in ["pc.example.ts.net", "my-pc.tail1a2b.ts.net", "a.b"] {
+            assert!(valid_tailnet_name(good), "{good}");
+        }
+        for bad in [
+            "",
+            "pc",
+            "PC.example.ts.net",
+            "pc.example.ts.net:443",
+            "https://pc.example.ts.net",
+            "pc..ts.net",
+            "-pc.ts.net",
+            "pc-.ts.net",
+            "pc.ts.net.",
+            "10.0.0.1",
+            "pc_1.ts.net",
+            "pc.ts.net/m",
+        ] {
+            assert!(!valid_tailnet_name(bad), "{bad}");
+        }
     }
 
     #[test]

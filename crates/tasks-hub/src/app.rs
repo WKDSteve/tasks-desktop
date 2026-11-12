@@ -698,7 +698,11 @@ pub async fn serve(opts: ServeOptions) -> Result<(), String> {
     let upload_dir = dir.join("uploads");
     // The repo tiles of this device, beside config.json: read once, then held and written by the hub alone.
     let repos = Arc::new(crate::repos::Store::open(&dir));
+    // A phone through Tailscale Serve (`tailscale serve` forwards https://<name> to this loopback port): only when the
+    // person named the machine; a name that is not one stops the start here, said plainly.
+    let tailnet = tailnet_name(&env)?;
     let extras = || Extras {
+        tailnet: tailnet.clone(),
         attach_dirs: attach_dirs.clone(),
         upload_dir: Some(upload_dir.clone()),
         upload_engine: Some(Arc::clone(&upload_engine)),
@@ -826,7 +830,31 @@ fn running_port() -> Result<u16, String> {
         .port)
 }
 
-/// A pairing link for the running hub.
+/// The name of this machine in the tailnet (`TASKS_DESKTOP_TAILNET`), if the person set one.
+///
+/// # Errors
+///
+/// A name that is not a plain host name.
+pub fn tailnet_name(env: &Env) -> Result<Option<String>, String> {
+    let Some(value) = env.get(crate::config::TAILNET_VAR) else {
+        return Ok(None);
+    };
+    let name = value.to_string_lossy().trim().to_owned();
+    if name.is_empty() {
+        return Ok(None);
+    }
+    if crate::config::valid_tailnet_name(&name) {
+        Ok(Some(name))
+    } else {
+        Err(format!(
+            "{} must be the plain name of this machine in the tailnet, like pc.example.ts.net, not {name:?}",
+            crate::config::TAILNET_VAR
+        ))
+    }
+}
+
+/// A pairing link for the running hub; with a tailnet name (`TASKS_DESKTOP_TAILNET`) also the link of the phone page
+/// through Tailscale Serve (the same code: it is good once, for whichever link is opened first).
 ///
 /// # Errors
 ///
@@ -837,7 +865,20 @@ pub async fn open() -> Result<String, String> {
         return Err(format!("the hub refused the request (HTTP {status})"));
     }
     let code = doc["code"].as_str().ok_or("the hub sent no code")?;
-    Ok(format!("http://127.0.0.1:{}/#pair={code}", running_port()?))
+    let local = format!("http://127.0.0.1:{}/#pair={code}", running_port()?);
+    Ok(match tailnet_name(&Env::from_process())? {
+        Some(name) => format!(
+            "{local}
+phone through Tailscale: {}",
+            tailnet_link(&name, code)
+        ),
+        None => local,
+    })
+}
+
+/// The link of the phone page through Tailscale Serve.
+fn tailnet_link(name: &str, code: &str) -> String {
+    format!("https://{name}/m/#pair={code}")
 }
 
 /// What `tasks-hub devices ...` is asked to do.
@@ -847,6 +888,8 @@ pub enum DevicesCommand {
     List,
     /// Revoke one by its id.
     Revoke(String),
+    /// Set the level of one (`read`, `create`, `change`, `trigger`).
+    Level(String, String),
 }
 
 /// The paired devices (phones) as lines for the terminal, or what revoking one did.
@@ -863,12 +906,25 @@ pub async fn devices(command: DevicesCommand) -> Result<String, String> {
             }
             Ok(device_lines(&doc))
         }
-        DevicesCommand::Revoke(id) => {
-            if id.len() != 32 || !id.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f')) {
+        DevicesCommand::Level(id, level) => {
+            check_device_id(&id)?;
+            if appkit_hub::devices::Level::parse(&level).is_none() {
                 return Err(format!(
-                    "not a device id: {id} (tasks-hub devices lists them)"
+                    "not a level: {level} (read, create, change or trigger)"
                 ));
             }
+            let body = serde_json::json!({ "device": id, "level": level }).to_string();
+            let (status, doc) = control_post("/api/control/devices/level", &body).await?;
+            match (status, doc["set"].as_bool()) {
+                (200, Some(true)) => Ok(format!(
+                    "{id} is at {level} now, also in the sessions it has open"
+                )),
+                (200, _) => Err(format!("no device {id}")),
+                _ => Err(format!("the hub refused the request (HTTP {status})")),
+            }
+        }
+        DevicesCommand::Revoke(id) => {
+            check_device_id(&id)?;
             let body = serde_json::json!({ "device": id }).to_string();
             let (status, doc) = control_post("/api/control/devices/revoke", &body).await?;
             match (status, doc["revoked"].as_bool()) {
@@ -882,7 +938,18 @@ pub async fn devices(command: DevicesCommand) -> Result<String, String> {
     }
 }
 
-/// One line per device: id, name, when it was paired and last used (UTC days).
+/// A device id as the hub makes them (32 hex digits), before anything is sent.
+fn check_device_id(id: &str) -> Result<(), String> {
+    if id.len() == 32 && id.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f')) {
+        Ok(())
+    } else {
+        Err(format!(
+            "not a device id: {id} (tasks-hub devices lists them)"
+        ))
+    }
+}
+
+/// One line per device: id, name, level, when it was paired and last used (UTC days).
 fn device_lines(doc: &Value) -> String {
     let day = |v: &Value| {
         v.as_u64().map_or_else(
@@ -901,9 +968,10 @@ fn device_lines(doc: &Value) -> String {
     list.iter()
         .map(|d| {
             format!(
-                "{}  {}  paired {}  last used {}",
+                "{}  {}  {}  paired {}  last used {}",
                 d["id"].as_str().unwrap_or("?"),
                 d["name"].as_str().unwrap_or("?"),
+                d["level"].as_str().unwrap_or("?"),
                 day(&d["paired"]),
                 day(&d["last_used"]),
             )
@@ -1538,16 +1606,24 @@ mod device_tests {
     use super::*;
 
     #[test]
-    fn the_device_list_names_each_device_with_its_days_and_no_key() {
+    fn the_phone_link_through_tailscale_names_the_phone_page() {
+        assert_eq!(
+            tailnet_link("pc.example.ts.net", "0123"),
+            "https://pc.example.ts.net/m/#pair=0123"
+        );
+    }
+
+    #[test]
+    fn the_device_list_names_each_device_with_its_level_and_days_and_no_key() {
         let doc = serde_json::json!({ "devices": [
-            { "id": "a".repeat(32), "name": "Fairphone", "paired": 1_794_096_000u64, "last_used": null },
-            { "id": "b".repeat(32), "name": "Tablet", "paired": 0, "last_used": 86_400 },
+            { "id": "a".repeat(32), "name": "Fairphone", "level": "change", "paired": 1_794_096_000u64, "last_used": null },
+            { "id": "b".repeat(32), "name": "Tablet", "level": "read", "paired": 0, "last_used": 86_400 },
         ]});
         let text = device_lines(&doc);
         assert_eq!(
             text,
             format!(
-                "{}  Fairphone  paired 2026-11-08  last used never\n{}  Tablet  paired 1970-01-01  last used 1970-01-02",
+                "{}  Fairphone  change  paired 2026-11-08  last used never\n{}  Tablet  read  paired 1970-01-01  last used 1970-01-02",
                 "a".repeat(32),
                 "b".repeat(32)
             )

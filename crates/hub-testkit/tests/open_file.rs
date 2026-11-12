@@ -185,6 +185,7 @@ row two
             all_vaults: None,
             sheet_run: runs,
             repos: None,
+            tailnet: None,
         },
     )
     .await

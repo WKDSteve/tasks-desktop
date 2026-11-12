@@ -66,3 +66,12 @@ async fn a_hub_without_a_device_file_has_no_device_routes() {
     )
     .await;
 }
+
+#[tokio::test]
+async fn the_tailnet_takes_phones_only() {
+    appkit_testkit::security::the_tailnet_takes_devices_only(
+        &hub_testkit::subjects::TasksWithPhonePage::through_tailnet("pc.example.ts.net"),
+        "pc.example.ts.net",
+    )
+    .await;
+}

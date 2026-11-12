@@ -515,7 +515,11 @@ pub(super) async fn settle_write(st: &Shared, reply: &str) {
 /// operation (not all-or-nothing). A write that changed something is
 /// followed by a scan before the answer, so that the next read is the new
 /// state, and the open streams hear of it.
-pub(super) async fn ops(State(st): State<Arc<Shared>>, body: Bytes) -> Response {
+pub(super) async fn ops(
+    State(st): State<Arc<Shared>>,
+    caller: Option<axum::Extension<Caller>>,
+    body: Bytes,
+) -> Response {
     let request = match check_ops_request(&body).and_then(|r| {
         with_attach_dirs(r, &st.rt().attach_dirs).map_err(|why| format!("attach_no_folders:{why}"))
     }) {
@@ -538,6 +542,10 @@ pub(super) async fn ops(State(st): State<Arc<Shared>>, body: Bytes) -> Response 
             return error_body(StatusCode::BAD_REQUEST, "bad_request", &why);
         }
     };
+    // A device does only the operations released for it, at its level; a dry run too (it would tell what it may not do).
+    if let Some(refused) = device_refusal(&st, caller.as_deref(), &request) {
+        return refused;
+    }
     let dry_run = request.get("dry_run").and_then(serde_json::Value::as_bool) == Some(true);
     // A dry run changes nothing and was counted by the guard only: it costs the writes nothing.
     if !dry_run && !st.post_limit.allow() {
@@ -1146,6 +1154,71 @@ pub(super) fn guard_rules() -> GuardRules {
     // The phone page records a voice note for a new task: only under /m/ the microphone is let on (and media from its
     // own blobs, to hear the note before it is sent); the desktop page keeps it off.
     .with_installable_microphone()
+    // What a paired phone reaches (appkit `MOB-02`, fail closed): exactly the routes tasks-mobile asks, nothing the
+    // desktop page alone needs (the vaults, events, search, sheets, repos ...). `ops` is released at `create` and
+    // judges each operation itself (`device_op_level`).
+    .with_device_route(crate::IDENTITY.route("snapshot"), Level::Read)
+    .with_device_route(crate::IDENTITY.route("areas"), Level::Read)
+    .with_device_route(crate::IDENTITY.route("next"), Level::Read)
+    .with_device_route(crate::IDENTITY.route("task"), Level::Read)
+    .with_device_route(crate::IDENTITY.route("done_preview"), Level::Read)
+    .with_device_route(crate::IDENTITY.route("ops"), Level::Create)
+    .with_device_route(crate::IDENTITY.route("upload"), Level::Create)
+    // A new phone reads, creates and changes; it never triggers (the PC raises one device at a time, if ever).
+    .with_device_default_level(Level::Change)
+}
+
+/// The level a device needs for one operation of `ops`; `None`: the operation is not for devices at all. Only what
+/// tasks-mobile sends: a new task and the answer to a question create, a status and finishing a task change. The rest
+/// stays on the PC: `attach` reads the clipboard of this machine, the others (plans, projects, views, order, moving a
+/// task to another area, the text of a task) the phone page does not offer.
+pub(super) fn device_op_level(op: &str) -> Option<Level> {
+    match op {
+        "new" | "answer" => Some(Level::Create),
+        "set" | "done" => Some(Level::Change),
+        _ => None,
+    }
+}
+
+/// For a request of a device: refuse it when one of its operations is not for devices, or needs more than the level the
+/// device has now. `None` for the PC, and for a device that may do all of them.
+fn device_refusal(
+    st: &Shared,
+    caller: Option<&Caller>,
+    request: &serde_json::Value,
+) -> Option<Response> {
+    let Some(Caller::Device(id)) = caller else {
+        return None;
+    };
+    // The guard let the session through a moment ago; a device that is gone since gets nothing.
+    let has = st.devices.as_ref().and_then(|d| d.level_of(id));
+    let ops = request["ops"].as_array().map_or(&[][..], Vec::as_slice);
+    let mut needed = Level::Read;
+    for op in ops {
+        match op["op"].as_str().and_then(device_op_level) {
+            Some(level) => needed = needed.max(level),
+            None => {
+                return Some(error_body(
+                    StatusCode::FORBIDDEN,
+                    "not_for_devices",
+                    "this operation is not released for devices",
+                ))
+            }
+        }
+    }
+    match has {
+        Some(has) if has >= needed => None,
+        Some(_) => Some(error_body(
+            StatusCode::FORBIDDEN,
+            "level_too_low",
+            "this device may not do this; the PC can raise its level",
+        )),
+        None => Some(error_body(
+            StatusCode::UNAUTHORIZED,
+            "unauthorized",
+            "session required",
+        )),
+    }
 }
 
 /// The Trusted Types policy of the phone page, named in tasks-mobile (`src/lib/worker.ts`).

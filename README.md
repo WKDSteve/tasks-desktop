@@ -223,11 +223,35 @@ in by itself on every start, also after the PC or the hub restarted. The hub kee
 in its settings folder; on the PC:
 
 ```
-tasks-hub devices                  the paired phones: id, name, when paired, when last used
-tasks-hub devices revoke <id>      revoke one: its sessions end, it has to pair again
+tasks-hub devices                          the paired phones: id, name, level, when paired, when last used
+tasks-hub devices revoke <id>              revoke one: its sessions end, it has to pair again
+tasks-hub devices level <id> read|create|change
+                                           what one may do; its open sessions follow at once
 ```
 
 A lost phone: revoke it here (and, with a tunnel over Tailscale, remove it from the tailnet).
+
+A paired phone reaches only what the phone page asks (fail closed, appkit's `MOB-02`): the list (`snapshot`,
+`areas`, `next`), a task (`task`), what finishing it sets off (`done_preview`), the writes (`ops`) and its photos and
+voice notes (`upload`). Everything else, the choice of vault among it, answers a phone `403 not_for_devices`. Its
+level decides what it may write (`MOB-03`):
+
+| Level | The phone may |
+|---|---|
+| `read` | read the list and the tasks |
+| `create` | also create a task (with a photo or a voice note) and answer an open question |
+| `change` | also set a status and finish a task; **a newly paired phone starts here** |
+
+Of the operations of `ops` a phone sends only `new`, `answer` (create), `set` and `done` (change); any other (moving,
+ordering, plans, views, an image from the clipboard of the PC, ...) answers it `403 not_for_devices`, at any level.
+Nothing a phone may do starts something on the PC (`trigger`).
+
+**Through Tailscale**, without a tunnel: `tailscale serve --bg 17615` forwards `https://<pc>.<tailnet>.ts.net` to the
+hub (which still listens on loopback only). Tell the hub that name before it starts, in its environment:
+`TASKS_DESKTOP_TAILNET=<pc>.<tailnet>.ts.net` (a plain host name: lower case, no `https://`, no port; another value
+stops the start). The hub then also answers that host, but there only to paired phones: pairing a phone with a key
+works there, a plain pairing code does not, and neither does anything of the PC. `tasks-hub open` (with the same
+variable set) prints the link for the phone too: `https://<pc>.<tailnet>.ts.net/m/#pair=<code>`.
 
 ## The rolling build (the newest `main`, one click)
 

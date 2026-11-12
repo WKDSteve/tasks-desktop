@@ -40,9 +40,10 @@ use serde_json::json;
 use tokio::sync::{broadcast, mpsc};
 use tokio::task::JoinHandle;
 
+use appkit_hub::devices::Level;
 use appkit_hub::{
     bearer, error_body, etag_matches, json_response, no_query, not_modified, parse_query, single,
-    too_many, vault_request, vault_text, BuildRuntime, ServeParts,
+    too_many, vault_request, vault_text, BuildRuntime, Caller, ServeParts,
 };
 
 use crate::classes::{AreaPolicy, Shown};
@@ -127,6 +128,9 @@ pub struct Extras {
     pub snapshot_root: Option<std::path::PathBuf>,
     /// The repo tiles of this device (`repos.json` in the config folder); none: the routes say this hub keeps none.
     pub repos: Option<Arc<crate::repos::Store>>,
+    /// The name of this machine in the tailnet (`pc.example.ts.net`), for a phone that comes through Tailscale Serve;
+    /// none: only loopback. Needs the devices of `ServerConfig`.
+    pub tailnet: Option<String>,
 }
 
 /// Bind and serve, with a list of vaults the page may choose from.
@@ -150,7 +154,9 @@ pub async fn start_with(cfg: ServerConfig, extras: Extras) -> std::io::Result<Ru
         upload_engine,
         snapshot_root,
         repos,
+        tailnet,
     } = extras;
+    let guard_rules = device_rules(guard_rules(), cfg.devices.clone(), tailnet)?;
     if let Some(dir) = &upload_dir {
         self::upload::sweep_leftovers(dir);
     }
@@ -212,10 +218,7 @@ pub async fn start_with(cfg: ServerConfig, extras: Extras) -> std::io::Result<Ru
             app: APP_NAME,
             version: crate::VERSION,
             build_id: crate::BUILD,
-            guard_rules: match &cfg.devices {
-                Some(file) => guard_rules().with_devices(file.clone()),
-                None => guard_rules(),
-            },
+            guard_rules,
             ui: Arc::new(cfg.ui),
             runtime,
             build,
@@ -224,6 +227,30 @@ pub async fn start_with(cfg: ServerConfig, extras: Extras) -> std::io::Result<Ru
         app_routes,
     )
     .await
+}
+
+/// The rules of the guard with the devices this hub keeps and the tailnet name it answers to. A tailnet name without
+/// devices, or one that is not a plain host name, is a mistake of the settings: `InvalidInput`, the hub does not start.
+fn device_rules(
+    rules: GuardRules,
+    devices: Option<PathBuf>,
+    tailnet: Option<String>,
+) -> std::io::Result<GuardRules> {
+    let invalid = |why: String| std::io::Error::new(std::io::ErrorKind::InvalidInput, why);
+    let rules = match devices {
+        Some(file) => rules.with_devices(file),
+        None => rules,
+    };
+    match tailnet {
+        None => Ok(rules),
+        Some(_) if rules.devices_file().is_none() => Err(invalid(
+            "a tailnet name needs the paired devices of the hub".to_owned(),
+        )),
+        Some(name) if !crate::config::valid_tailnet_name(&name) => Err(invalid(format!(
+            "the tailnet name must be a plain host name like pc.example.ts.net, not {name:?}"
+        ))),
+        Some(name) => Ok(rules.with_tailnet_name(name)),
+    }
 }
 
 /// The routes of this app, under `/api/tasks/`. The page, `hello`, the pairing and the list of

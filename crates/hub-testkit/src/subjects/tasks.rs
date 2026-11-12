@@ -5,7 +5,7 @@ use std::sync::Arc;
 use appkit_core::identity::AppIdentity;
 use appkit_hub::{BoxFuture, RunningServer};
 use tasks_hub::classes::AreaPolicy;
-use tasks_hub::server::{start, ServerConfig};
+use tasks_hub::server::{start, start_with, Extras, ServerConfig};
 
 use appkit_testkit::subject::{StartConfig, Subject};
 
@@ -16,6 +16,7 @@ pub struct Tasks;
 /// devices kept in a scratch folder of its own (removed when the value is dropped).
 pub struct TasksWithPhonePage {
     dir: crate::scratch::Scratch,
+    tailnet: Option<String>,
 }
 
 impl TasksWithPhonePage {
@@ -23,6 +24,16 @@ impl TasksWithPhonePage {
     pub fn new() -> Self {
         Self {
             dir: crate::scratch::Scratch::new("phone-devices"),
+            tailnet: None,
+        }
+    }
+
+    /// The same hub, also reached through Tailscale Serve under `name` (`TASKS_DESKTOP_TAILNET`).
+    #[must_use]
+    pub fn through_tailnet(name: &str) -> Self {
+        Self {
+            tailnet: Some(name.to_owned()),
+            ..Self::new()
         }
     }
 }
@@ -37,27 +48,34 @@ impl Default for TasksWithPhonePage {
 pub const PHONE_PREFIX: &str = "/m";
 pub const PHONE_WORKER_POLICY: &str = "tasks-mobile-worker";
 
-fn start_with(
+fn start_phone_hub(
     cfg: StartConfig,
     ui: tasks_hub::ui::UiFiles,
     devices: Option<std::path::PathBuf>,
+    tailnet: Option<String>,
 ) -> BoxFuture<'static, std::io::Result<RunningServer>> {
     Box::pin(async move {
-        start(ServerConfig {
-            addr: cfg.addr,
-            limits: cfg.limits,
-            clock: cfg.clock,
-            pairing_ttl: cfg.pairing_ttl,
-            control_secret: cfg.control_secret,
-            instance: cfg.instance,
-            engine: None,
-            policy: Arc::new(AreaPolicy::default()),
-            usage: None,
-            ui,
-            devices,
-            watch: None,
-            status: cfg.status,
-        })
+        start_with(
+            ServerConfig {
+                addr: cfg.addr,
+                limits: cfg.limits,
+                clock: cfg.clock,
+                pairing_ttl: cfg.pairing_ttl,
+                control_secret: cfg.control_secret,
+                instance: cfg.instance,
+                engine: None,
+                policy: Arc::new(AreaPolicy::default()),
+                usage: None,
+                ui,
+                devices,
+                watch: None,
+                status: cfg.status,
+            },
+            Extras {
+                tailnet,
+                ..Extras::default()
+            },
+        )
         .await
     })
 }
@@ -87,7 +105,7 @@ impl Subject for TasksWithPhonePage {
     }
 
     fn start(&self, cfg: StartConfig) -> BoxFuture<'_, std::io::Result<RunningServer>> {
-        start_with(
+        start_phone_hub(
             cfg,
             tasks_hub::ui::UiFiles::from_static(&[
                 ("index.html", "text/html; charset=utf-8", b"<!doctype html>"),
@@ -100,6 +118,7 @@ impl Subject for TasksWithPhonePage {
                 ("m/manifest.webmanifest", "application/manifest+json", b"{}"),
             ]),
             Some(self.dir.join("devices.json")),
+            self.tailnet.clone(),
         )
     }
 
