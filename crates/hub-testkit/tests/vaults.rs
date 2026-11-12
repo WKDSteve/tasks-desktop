@@ -239,6 +239,7 @@ async fn rig(name: &str, with_admin: bool) -> Rig {
                 opener: None,
                 repos: None,
                 tailnet: None,
+                push: None,
             },
         )
         .await

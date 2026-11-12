@@ -7,6 +7,9 @@
 //! * `.fake-n`: the state of "the vault"; the snapshot, the bodies and a task follow it, a real
 //!   `ops` run moves it on; every snapshot is counted in `.fake-calls`;
 //! * `.fake-transient`: the next snapshot has a task with a passing problem (`duplicate-id`);
+//! * `.fake-status`: lines `<id>=<status>`, the status these tasks have in the snapshot;
+//! * `.fake-remind`: lines `<id>=<day>`, the reminder these tasks have in the snapshot;
+//! * `.fake-today`: the day `hello` says it is (`today`);
 //! * `.fake-bodies-page`: how many bodies one page holds;
 //! * `.fake-snapshot-ms`: a `snapshot` takes that long (an engine started slowly on a busy machine);
 //! * `.fake-task-ms`, `.fake-task-calls`: a `task` read takes that long, and every one is counted;
@@ -98,6 +101,22 @@ fn tasks_fill(call: &Call<'_>, doc: &mut Value) {
                     .collect();
                 if transient {
                     tasks[0]["problems"] = json!([{ "code": "duplicate-id", "msg": "x" }]);
+                }
+                // `.fake-remind`: lines `<id>=<day>`, the reminder of these tasks.
+                let reminders =
+                    std::fs::read_to_string(vault.join(".fake-remind")).unwrap_or_default();
+                for (id, day) in reminders.lines().filter_map(|l| l.split_once('=')) {
+                    for task in tasks.iter_mut().filter(|t| t["id"] == id.trim()) {
+                        task["remind"] = json!(day.trim());
+                    }
+                }
+                // `.fake-status`: lines `<id>=<status>`, the status of these tasks.
+                let statuses =
+                    std::fs::read_to_string(vault.join(".fake-status")).unwrap_or_default();
+                for (id, status) in statuses.lines().filter_map(|l| l.split_once('=')) {
+                    for task in tasks.iter_mut().filter(|t| t["id"] == id.trim()) {
+                        task["status"] = json!(status.trim());
+                    }
                 }
                 doc["digest"] = json!(format!("sha256:{n:016x}"));
                 doc["rev"] = json!(format!("rev:{n:06x}"));
@@ -200,6 +219,10 @@ fn tasks_fill(call: &Call<'_>, doc: &mut Value) {
             doc["notes"] = json!([]);
         }
         "hello" => {
+            // `.fake-today`: the day the engine says it is (`today`); without it the engine says none.
+            if let Ok(day) = std::fs::read_to_string(vault.join(".fake-today")) {
+                doc["today"] = json!(day.trim());
+            }
             doc["enums"] = json!({
                 "status": ["doing", "decision", "blocked", "open", "parked"],
                 "kind": ["feature", "task", "bug", "idea", "research"],

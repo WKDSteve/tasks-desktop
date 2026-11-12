@@ -82,6 +82,8 @@ pub(super) struct AppParts {
     pub(super) upload_engine: Option<UploadEngine>,
     pub(super) snapshot_root: Option<Arc<PathBuf>>,
     pub(super) repos: Option<Arc<crate::repos::Store>>,
+    /// Web Push to the paired phones; none: this hub sends none.
+    pub(super) push: Option<HubPush>,
 }
 
 impl VaultRuntime {
@@ -144,6 +146,16 @@ pub(super) fn build_runtime(
         }
         jobs.push(store::spawn_refresher(Arc::clone(&store), rx, refresh));
         hints = Some(tx);
+    }
+    // The notices of this vault, for the phones: only with an engine to read it.
+    if let (Some(push), Some(folder), Some(engine)) = (&app.push, &folder, &engine) {
+        jobs.push(self::push::spawn_notices(
+            push.clone(),
+            Arc::clone(engine),
+            Arc::clone(&store),
+            Arc::clone(&app.classes),
+            folder.display().to_string(),
+        ));
     }
     VaultRuntime {
         vault: folder,

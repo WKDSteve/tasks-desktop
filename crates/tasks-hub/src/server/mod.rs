@@ -59,6 +59,7 @@ use appkit_hub::streams::StreamCounter;
 mod answer;
 mod check;
 mod events;
+mod push;
 mod repos;
 mod routes;
 mod runtime;
@@ -66,6 +67,7 @@ mod settings;
 mod upload;
 mod vaults;
 
+pub use self::push::HubPush;
 pub use self::settings::{ServerConfig, WatchConfig};
 pub use self::vaults::VaultTarget;
 pub use appkit_hub::{
@@ -131,6 +133,9 @@ pub struct Extras {
     /// The name of this machine in the tailnet (`pc.example.ts.net`), for a phone that comes through Tailscale Serve;
     /// none: only loopback. Needs the devices of `ServerConfig`.
     pub tailnet: Option<String>,
+    /// Web Push to the paired phones (`remind`, `decision`); none: this hub sends none. Needs the devices of
+    /// `ServerConfig`.
+    pub push: Option<HubPush>,
 }
 
 /// Bind and serve, with a list of vaults the page may choose from.
@@ -155,8 +160,14 @@ pub async fn start_with(cfg: ServerConfig, extras: Extras) -> std::io::Result<Ru
         snapshot_root,
         repos,
         tailnet,
+        push,
     } = extras;
-    let guard_rules = device_rules(guard_rules(), cfg.devices.clone(), tailnet)?;
+    let guard_rules = device_rules(
+        guard_rules(),
+        cfg.devices.clone(),
+        tailnet,
+        push.as_ref().map(|p| Arc::clone(&p.push)),
+    )?;
     if let Some(dir) = &upload_dir {
         self::upload::sweep_leftovers(dir);
     }
@@ -176,6 +187,7 @@ pub async fn start_with(cfg: ServerConfig, extras: Extras) -> std::io::Result<Ru
         upload_dir: upload_dir.map(Arc::new),
         upload_engine,
         repos,
+        push,
         attach_dirs: Arc::new(
             attach_dirs
                 .iter()
@@ -229,17 +241,28 @@ pub async fn start_with(cfg: ServerConfig, extras: Extras) -> std::io::Result<Ru
     .await
 }
 
-/// The rules of the guard with the devices this hub keeps and the tailnet name it answers to. A tailnet name without
-/// devices, or one that is not a plain host name, is a mistake of the settings: `InvalidInput`, the hub does not start.
+/// The rules of the guard with the devices this hub keeps, the tailnet name it answers to and its push. A tailnet name
+/// or a push without devices, or a name that is not a plain host name, is a mistake of the settings: `InvalidInput`, the
+/// hub does not start.
 fn device_rules(
     rules: GuardRules,
     devices: Option<PathBuf>,
     tailnet: Option<String>,
+    push: Option<Arc<appkit_hub::push::Push>>,
 ) -> std::io::Result<GuardRules> {
     let invalid = |why: String| std::io::Error::new(std::io::ErrorKind::InvalidInput, why);
     let rules = match devices {
         Some(file) => rules.with_devices(file),
         None => rules,
+    };
+    let rules = match push {
+        None => rules,
+        Some(_) if rules.devices_file().is_none() => {
+            return Err(invalid(
+                "push needs the paired devices of the hub".to_owned(),
+            ))
+        }
+        Some(push) => rules.with_push(push),
     };
     match tailnet {
         None => Ok(rules),
@@ -455,6 +478,7 @@ mod tests {
                 login: None,
                 usage: None,
                 streams: Arc::new(StreamCounter::default()),
+                push: None,
                 snapshot_root: None,
                 attach_dirs: Arc::default(),
                 upload_dir: None,

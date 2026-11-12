@@ -21,7 +21,8 @@ path = "src/main.rs"
 [dependencies]
 flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
 appkit-core.workspace = true
-appkit-hub.workspace = true
+# Web Push to the paired phones (src/server/push.rs) goes out through the kit's HTTP client.
+appkit-hub = { workspace = true, features = ["push-net"] }
 axum = { version = "0.8", default-features = false, features = ["http1", "tokio", "json"] }
 futures-core = "0.3"
 # The stable line of notify; 9.0 is a release candidate (concept 7.1, 13.14).

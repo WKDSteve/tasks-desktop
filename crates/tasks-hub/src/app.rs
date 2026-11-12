@@ -701,8 +701,20 @@ pub async fn serve(opts: ServeOptions) -> Result<(), String> {
     // A phone through Tailscale Serve (`tailscale serve` forwards https://<name> to this loopback port): only when the
     // person named the machine; a name that is not one stops the start here, said plainly.
     let tailnet = tailnet_name(&env)?;
+    // Web Push to the paired phones: the key and the subscriptions beside the settings (push-key.json, push.json), and
+    // what was told (notices.json). A file that cannot be read stops the start, rather than a new key no phone knows.
+    let push = server::HubPush {
+        push: Arc::new(
+            appkit_hub::push::Push::open(&dir, Arc::new(appkit_hub::push_net::NetPush::new()?))
+                .map_err(|e| format!("push: {e}"))?,
+        ),
+        notices: Arc::new(crate::notices::Notices::open(Some(
+            dir.join("notices.json"),
+        ))),
+    };
     let extras = || Extras {
         tailnet: tailnet.clone(),
+        push: Some(push.clone()),
         attach_dirs: attach_dirs.clone(),
         upload_dir: Some(upload_dir.clone()),
         upload_engine: Some(Arc::clone(&upload_engine)),

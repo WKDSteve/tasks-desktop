@@ -254,6 +254,19 @@ stops the start). The hub then also answers that host, but there only to paired 
 works there, a plain pairing code does not, and neither does anything of the PC. `tasks-hub open` (with the same
 variable set) prints the link for the phone too: `https://<pc>.<tailnet>.ts.net/m/#pair=<code>`.
 
+**Notifications (Web Push).** A paired phone may ask to be told (the phone page offers it; the routes `/api/push/*`
+are released for phones at `read`, a session of the PC gets `403 device_required` there). The hub sends Web Push
+itself, through the push service of the phone's browser (no account anywhere): `decision` when a task starts to wait
+for your decision (once per change into the status, also after it left it and came back), and `remind` once a day for
+each task whose `remind:` day has come (that day or earlier; an open task, or a finished one that keeps a reminder),
+until the day is moved or taken away. The day is the engine's (`today` of its `hello`, the day of this PC); an engine
+that does not say it yet reminds of nothing. A notice carries only its
+kind and the id of the task, and only for an area of the class `public` or `internal`; for a private or unclassified
+area nothing goes out at all. The phone reads the rest over its paired way. The hub keeps its push key
+(`push-key.json`, secret), the subscriptions (`push.json`) and what it told (`notices.json`, so a restart tells
+nothing twice) in its settings folder; revoking a phone forgets its subscription. While a phone is subscribed, the
+hub looks at the vault every 5 minutes even when no page is open.
+
 ## The rolling build (the newest `main`, one click)
 
 After every green CI run on `main`, the workflow `rolling` builds the program of that commit for Windows
