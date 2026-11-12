@@ -37,6 +37,10 @@ export type Hello = Head & {
    */
   schemas: number[];
   /**
+   * The day the engine counts as today: the local day of its machine (a `due:` or `remind:` day has come when it is this day or earlier). Additive.
+   */
+  today?: string;
+  /**
    * What it can answer; show only what is listed.
    */
   capabilities: string[];
@@ -1081,6 +1085,7 @@ export interface NamedList {
     actor?: string;
     tag?: string;
     sheet?: string;
+    claimed?: string;
     stale?: string;
     plan?: string;
     phase?: string;
