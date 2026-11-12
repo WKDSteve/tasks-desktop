@@ -125,7 +125,8 @@ powershell -ExecutionPolicy Bypass -c "irm https://github.com/WKDSteve/tasks-des
 
 They download the program of that build, check it against its `SHA256SUMS` (a wrong or missing
 checksum installs nothing), and hand over to `tasks-hub install`, which replaces the program in one
-step and brings a running hub back. The installation that is there is found and replaced, never a
+step and brings a running hub back. It ends with the whole call that starts it (`start it: "...\bin\tasks-hub.exe"
+start --open`) and says whether that folder is on `PATH` (install does not add it there; the Start menu entry starts it too). The installation that is there is found and replaced, never a
 second one beside it: the script of `latest` run again updates to the newest rolling build, the
 script of a release run again repairs that release (to update, take the script of the newer
 release, or pass `-Version`/`-Rolling`). A pipe into `iex` takes no arguments; to pass them, run the
