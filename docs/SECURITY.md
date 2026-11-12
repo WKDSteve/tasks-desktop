@@ -678,7 +678,9 @@ platform backends are about twenty) and its policy is in the repository:
   (the folder `ui-kit` of the same repository, pinned by `ui/pnpm-lock.yaml`)
   must name the same tag and commit; a `link:` to a checkout fails the check.
 * A version that is younger than seven days is not taken
-  (`tools/check-lock-age.py`, also run in CI). Cargo has no setting for
+  (`tools/check-lock-age.py`, also run in CI; a `429` or `503` of crates.io
+  is waited out and asked again, known publication dates are kept in
+  `~/.cache/lock-age/crates-io.json` or `$LOCK_AGE_CACHE`). Cargo has no setting for
   this. A newer version is taken with `cargo update -p <crate> --precise
   <version>` once it is old enough, in a commit of its own with a look at
   the lockfile diff.
