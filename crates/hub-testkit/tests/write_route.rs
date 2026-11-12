@@ -736,6 +736,13 @@ async fn a_file_of_any_size_and_type_reaches_the_engine_and_is_gone_afterwards()
         format!("My-Report.pdf {}", body.len())
     );
     assert_eq!(leftovers(&r), 0, "the hub takes the file away");
+    // Not asked for `exact`: the engine gives a taken name a counter (the desktop page).
+    assert_eq!(
+        std::fs::read_to_string(r.vault.join(".fake-exact")).unwrap(),
+        "true null
+false null
+"
+    );
     assert!(
         doc.get("large_for_git").is_none(),
         "only from 100 MB on: {doc}"
@@ -776,4 +783,21 @@ async fn a_page_does_not_name_the_folder_of_an_upload_at_the_door_of_the_writes(
     let (status, doc) = post(&r, "/api/tasks/ops", request, JSON, true).await;
     assert_eq!(status, 400, "{doc}");
     assert!(!r.vault.join(".fake-upload").exists());
+}
+
+#[tokio::test]
+async fn an_upload_that_asks_for_exact_asks_the_engine_so_in_the_look_and_the_attach() {
+    let _one_at_a_time = ONE_AT_A_TIME.lock().await;
+    let r = rig("upload-exact").await;
+    let (status, doc) = upload(&r, "alpha.nvim/t1&exact=1", "a.pdf", "x").await;
+    assert_eq!(status, 200, "{doc}");
+    assert_eq!(
+        std::fs::read_to_string(r.vault.join(".fake-exact")).unwrap(),
+        "true true
+false true
+"
+    );
+    let (status, doc) = upload(&r, "alpha.nvim/t1&exact=yes", "a.pdf", "x").await;
+    assert_eq!(status, 400, "{doc}");
+    assert_eq!(doc["error"]["code"], "bad_query", "{doc}");
 }

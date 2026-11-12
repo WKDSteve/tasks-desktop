@@ -21,7 +21,8 @@
 //! * `.fake-attach-dirs`: written by an `ops` request that carries `attach_dirs` (the folders the hub
 //!   named), as JSON: what reached the engine;
 //! * `.fake-upload`: written by an `ops` request that carries `upload_dir`: the name of the asset, and the bytes of the
-//!   file the engine found in that folder.
+//!   file the engine found in that folder;
+//! * `.fake-exact`: a line per such request: whether it was a dry run, and the `exact` of its `attach`.
 
 use std::io::Write as _;
 use std::path::Path;
@@ -313,6 +314,14 @@ fn tasks_fill(call: &Call<'_>, doc: &mut Value) {
                 let file = Path::new(dir).join(op["upload"].as_str().unwrap_or(""));
                 let bytes = std::fs::read(file).map_or(0, |b| b.len());
                 let _ = std::fs::write(vault.join(".fake-upload"), format!("{name} {bytes}"));
+                // Each request's `exact` (dry run or not), one line each.
+                if let Ok(mut file) = std::fs::OpenOptions::new()
+                    .create(true)
+                    .append(true)
+                    .open(vault.join(".fake-exact"))
+                {
+                    let _ = writeln!(file, "{dry} {}", op["exact"]);
+                }
             }
             if let Some(dirs) = params.get("attach_dirs") {
                 let _ = std::fs::write(vault.join(".fake-attach-dirs"), dirs.to_string());

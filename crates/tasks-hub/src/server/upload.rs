@@ -220,15 +220,32 @@ async fn receive(dir: PathBuf, size: Option<u64>, body: Body) -> Result<(Incomin
     Ok((incoming, written))
 }
 
+/// The `attach` of an upload; `exact` only when asked (an engine before it would not know the key).
+fn attach_op(id: &str, upload: &str, name: &str, exact: bool) -> serde_json::Value {
+    let mut op =
+        json!({ "op": "attach", "id": id, "from": "upload", "upload": upload, "name": name });
+    if exact {
+        op["exact"] = json!(true);
+    }
+    op
+}
+
 pub(super) async fn upload(
     State(st): State<Arc<Shared>>,
     RawQuery(query): RawQuery,
     headers: HeaderMap,
     body: Body,
 ) -> Response {
-    let params = match parse_query(query.as_deref(), &["id"]) {
+    let params = match parse_query(query.as_deref(), &["id", "exact"]) {
         Ok(p) => p,
         Err(why) => return error_body(StatusCode::BAD_REQUEST, "bad_query", why),
+    };
+    // `exact=1`: a name the task already has is `exists`, not a second asset under a counter. Asked by a client that
+    // sends a file again when the answer was lost (the queue of the phone page); the desktop page keeps the counter.
+    let exact = match params.get("exact").map(String::as_str) {
+        None | Some("0") => false,
+        Some("1") => true,
+        Some(_) => return error_body(StatusCode::BAD_REQUEST, "bad_query", "exact is 0 or 1"),
     };
     let Some(id) = params.get("id").filter(|id| valid_task_id(id)).cloned() else {
         return error_body(
@@ -264,7 +281,7 @@ pub(super) async fn upload(
     // in a dry run, so the file need not be there yet.
     let look = json!({
         "dry_run": true,
-        "ops": [{ "op": "attach", "id": id, "from": "upload", "upload": "pending", "name": name }],
+        "ops": [attach_op(&id, "pending", &name, exact)],
         "upload_dir": dir.to_string_lossy(),
     });
     let refused = match ask(&st, Calls::Ops, Some(&look)).await {
@@ -298,7 +315,7 @@ pub(super) async fn upload(
         );
     };
     let request = json!({
-        "ops": [{ "op": "attach", "id": id, "from": "upload", "upload": file_name, "name": name }],
+        "ops": [attach_op(&id, file_name, &name, exact)],
         "upload_dir": dir.to_string_lossy(),
     });
     // A large file takes its time to copy, longer than the engine of the page may take for a question, and the page must
