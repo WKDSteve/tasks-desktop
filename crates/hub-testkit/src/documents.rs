@@ -10,6 +10,7 @@
 //! * `.fake-status`: lines `<id>=<status>`, the status these tasks have in the snapshot;
 //! * `.fake-remind`: lines `<id>=<day>`, the reminder these tasks have in the snapshot;
 //! * `.fake-today`: the day `hello` says it is (`today`);
+//! * `.fake-extra`: lines `<id>`, tasks of other areas in the snapshot;
 //! * `.fake-bodies-page`: how many bodies one page holds;
 //! * `.fake-snapshot-ms`: a `snapshot` takes that long (an engine started slowly on a busy machine);
 //! * `.fake-task-ms`, `.fake-task-calls`: a `task` read takes that long, and every one is counted;
@@ -102,6 +103,17 @@ fn tasks_fill(call: &Call<'_>, doc: &mut Value) {
                     .collect();
                 if transient {
                     tasks[0]["problems"] = json!([{ "code": "duplicate-id", "msg": "x" }]);
+                }
+                // `.fake-extra`: lines `<id>`, tasks of other areas ("Extra <id>", open).
+                let extra = std::fs::read_to_string(vault.join(".fake-extra")).unwrap_or_default();
+                for id in extra.lines().map(str::trim).filter(|l| l.contains('/')) {
+                    tasks.push(json!({
+                        "id": id,
+                        "area": id.split('/').next().unwrap_or(""),
+                        "title": format!("Extra {id}"),
+                        "status": "open",
+                        "problems": [],
+                    }));
                 }
                 // `.fake-remind`: lines `<id>=<day>`, the reminder of these tasks.
                 let reminders =

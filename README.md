@@ -234,8 +234,15 @@ A lost phone: revoke it here (and, with a tunnel over Tailscale, remove it from 
 
 A paired phone reaches only what the phone page asks (fail closed, appkit's `MOB-02`): the list (`snapshot`,
 `areas`, `next`), a task (`task`), what finishing it sets off (`done_preview`), the writes (`ops`) and its photos and
-voice notes (`upload`). Everything else, the choice of vault among it, answers a phone `403 not_for_devices`. Its
-level decides what it may write (`MOB-03`):
+voice notes (`upload`). Everything else, the choice of vault among it, answers a phone `403 not_for_devices`.
+
+The hub also cuts what these routes tell a phone (`MOB-02`, the hub cuts, never the phone): only the areas of the
+class `public` or `internal` in `areas.json`. A private area, or one without a class, is not there for a phone at
+all: not in the list, the areas or the proposals, not even as a name or in the counts; a task of it, its preview of
+finishing and every write or upload to it answer `404 not_found`, as a task that does not exist (a new task into such
+an area too). A task is given field by field from a fixed list (no file path, no reference to another task outside the
+released areas, no problem text); a plan or project only when every area of it is released. The PC gets everything as
+before. Its level decides what it may write (`MOB-03`):
 
 | Level | The phone may |
 |---|---|

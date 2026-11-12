@@ -9,7 +9,7 @@ use std::time::Duration;
 use appkit_core::authn::{ManualClock, Secret, CODE_BYTES, TOKEN_BYTES};
 use hub_testkit::scratch::Scratch;
 use serde_json::{json, Value};
-use tasks_hub::classes::AreaPolicy;
+use tasks_hub::classes::{AreaPolicy, Class, Entry};
 use tasks_hub::client;
 use tasks_hub::config::Env;
 use tasks_hub::engine::{CliEngine, CliEngineConfig, Engine};
@@ -18,6 +18,16 @@ use tasks_hub::server::{start_with, Extras, HubStatus, Limits, RunningServer, Se
 /// The public key of a test device: the base point of P-256 (private key 1), uncompressed. The hub needs a point on the
 /// curve to pair; this test never signs a login.
 const DEVICE_KEY: &str = "046b17d1f2e12c4247f8bce6e563a440f277037d812deb33a0f4a13945d898c2964fe342e2fe1a7f9b8ee7eb4a7c0f9e162bce33576b315ececbb6406837bf51f5";
+
+/// `alpha.nvim` is internal, `secret-area` private, `beta.nvim` has no class (unclassified).
+fn policy() -> AreaPolicy {
+    let entry = |class| Entry { class, repo: None };
+    AreaPolicy::new(std::collections::BTreeMap::from([
+        ("alpha.nvim".to_owned(), entry(Class::Internal)),
+        ("secret-area".to_owned(), entry(Class::Private)),
+    ]))
+    .unwrap()
+}
 
 /// The tests of this file each start a hub with an engine process; one after the other, as the write tests.
 static ONE_AT_A_TIME: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
@@ -35,6 +45,14 @@ impl Rig {
         let vault = dir.join("vault");
         std::fs::create_dir_all(vault.join("alpha.nvim").join("ROADMAP").join("tasks")).unwrap();
         std::fs::write(vault.join(".fake-n"), "2").unwrap();
+        // A private area beside the internal one: the phone is never told of it (MOB-02).
+        std::fs::write(
+            vault.join(".fake-extra"),
+            "secret-area/plan
+beta.nvim/loose
+",
+        )
+        .unwrap();
         let engine: Arc<dyn Engine> = Arc::new(CliEngine::new(CliEngineConfig {
             dialect: tasks_hub::engine::DIALECT,
             nvim: PathBuf::from(env!("CARGO_BIN_EXE_fake-nvim")),
@@ -66,7 +84,7 @@ impl Rig {
                     capabilities: Vec::new(),
                 },
                 engine: Some(engine),
-                policy: Arc::new(AreaPolicy::default()),
+                policy: Arc::new(policy()),
                 usage: None,
                 ui: tasks_hub::ui::UiFiles::none(),
                 watch: None,
@@ -381,4 +399,90 @@ async fn a_tailnet_name_needs_devices_and_a_plain_name() {
         .await
         .expect("a plain name with devices starts");
     server.shutdown().await;
+}
+
+#[tokio::test]
+async fn a_phone_is_told_nothing_of_an_area_that_is_not_released() {
+    let _one = ONE_AT_A_TIME.lock().await;
+    let r = Rig::new("classes").await;
+    let (_, phone) = r.phone().await;
+    let pc = r.pc().await;
+    let hidden = ["secret-area", "beta.nvim"];
+    let tells = |doc: &Value| {
+        let text = doc.to_string();
+        hidden.iter().find(|word| text.contains(*word)).copied()
+    };
+
+    // The list: the tasks and areas of alpha.nvim only, with counts of those; the PC sees all.
+    let (status, doc) = r.send("GET", "/api/tasks/snapshot", &phone, "").await;
+    assert_eq!(status, 200, "{doc}");
+    assert_eq!(tells(&doc), None, "{doc}");
+    let tasks = doc["tasks"].as_array().unwrap();
+    assert!(
+        !tasks.is_empty() && tasks.iter().all(|t| t["area"] == "alpha.nvim"),
+        "{doc}"
+    );
+    assert_eq!(doc["counts"]["listed"], tasks.len(), "{doc}");
+    let (status, doc) = r.send("GET", "/api/tasks/snapshot", &pc, "").await;
+    assert_eq!(status, 200, "{doc}");
+    assert!(doc.to_string().contains("secret-area/plan"), "{doc}");
+
+    let (status, doc) = r.send("GET", "/api/tasks/areas", &phone, "").await;
+    assert_eq!(status, 200, "{doc}");
+    assert_eq!(tells(&doc), None, "{doc}");
+    assert_eq!(doc["areas"][0]["name"], "alpha.nvim", "{doc}");
+    let (_, doc) = r.send("GET", "/api/tasks/areas", &pc, "").await;
+    assert!(doc.to_string().contains("secret-area"), "{doc}");
+
+    // A task of such an area is not there for the phone, read or written; the PC reads it.
+    for path in [
+        "/api/tasks/task?id=secret-area/plan",
+        "/api/tasks/task?id=beta.nvim/loose",
+        "/api/tasks/done_preview?id=secret-area/plan",
+        "/api/tasks/next?area=secret-area",
+    ] {
+        let (status, doc) = r.send("GET", path, &phone, "").await;
+        assert_eq!(
+            (status, doc["error"]["code"].clone()),
+            (404, json!("not_found")),
+            "{path}: {doc}"
+        );
+    }
+    let (status, doc) = r
+        .send("GET", "/api/tasks/task?id=secret-area/plan", &pc, "")
+        .await;
+    assert_eq!(status, 200, "{doc}");
+    let (status, doc) = r
+        .send("GET", "/api/tasks/task?id=alpha.nvim/t1", &phone, "")
+        .await;
+    assert_eq!(status, 200, "{doc}");
+    let (status, doc) = r.send("GET", "/api/tasks/next", &phone, "").await;
+    assert_eq!(status, 200, "{doc}");
+    assert_eq!(tells(&doc), None, "{doc}");
+
+    for op in [
+        json!({ "op": "set", "id": "secret-area/plan", "patch": { "status": "doing" } }),
+        json!({ "op": "done", "id": "beta.nvim/loose", "confirm": "x" }),
+        json!({ "op": "answer", "id": "secret-area/plan", "question": 1, "option": 1 }),
+        json!({ "op": "new", "area": "secret-area", "title": "From the phone" }),
+        json!({ "op": "new", "title": "No area" }),
+    ] {
+        let (status, doc) = r.op(&phone, &op).await;
+        assert_eq!(
+            (status, doc["error"]["code"].clone()),
+            (404, json!("not_found")),
+            "{op}: {doc}"
+        );
+    }
+    let new_task = json!({ "op": "new", "area": "alpha.nvim", "title": "From the phone" });
+    let (status, doc) = r.op(&phone, &new_task).await;
+    assert_eq!(status, 200, "{doc}");
+    let (status, doc) = r
+        .send("POST", "/api/tasks/upload?id=secret-area/plan", &phone, "x")
+        .await;
+    assert_eq!(
+        (status, doc["error"]["code"].clone()),
+        (404, json!("not_found")),
+        "{doc}"
+    );
 }

@@ -232,6 +232,7 @@ fn attach_op(id: &str, upload: &str, name: &str, exact: bool) -> serde_json::Val
 
 pub(super) async fn upload(
     State(st): State<Arc<Shared>>,
+    caller: Option<axum::Extension<Caller>>,
     RawQuery(query): RawQuery,
     headers: HeaderMap,
     body: Body,
@@ -255,6 +256,10 @@ pub(super) async fn upload(
         );
     };
     let rt = st.rt();
+    // A phone attaches only to a task of a released area (MOB-02); another is not there for it.
+    if is_device(caller.as_deref()) && !device_cut::released_id(&rt.classes, &id) {
+        return not_found();
+    }
     let Some(dir) = rt.upload_dir.as_deref().cloned() else {
         return error_body(
             StatusCode::NOT_FOUND,

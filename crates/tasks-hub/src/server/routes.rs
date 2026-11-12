@@ -10,6 +10,7 @@ use super::*;
 
 pub(super) async fn snapshot(
     State(st): State<Arc<Shared>>,
+    caller: Option<axum::Extension<Caller>>,
     RawQuery(query): RawQuery,
     headers: HeaderMap,
 ) -> Response {
@@ -24,6 +25,18 @@ pub(super) async fn snapshot(
         Ok(c) => c,
         Err(error) => return engine_failure(error),
     };
+    // A phone gets the released areas only (MOB-02), cut each time (the classes may have changed): no ETag, the PC's
+    // would name the whole vault.
+    if is_device(caller.as_deref()) {
+        return match serde_json::from_slice::<serde_json::Value>(&cached.text) {
+            Ok(doc) => json_response(
+                StatusCode::OK,
+                device_cut::snapshot(&rt.classes, &doc).to_string(),
+                None,
+            ),
+            Err(_) => engine_failed(),
+        };
+    }
     if let Some(etag) = &cached.etag {
         let seen = single(&headers, &header::IF_NONE_MATCH).ok().flatten();
         if seen.is_some_and(|h| etag_matches(&h, etag)) {
@@ -51,17 +64,52 @@ pub(super) fn valid_task_id(id: &str) -> bool {
         && plain(slug)
 }
 
-pub(super) async fn task(State(st): State<Arc<Shared>>, RawQuery(query): RawQuery) -> Response {
+pub(super) async fn task(
+    State(st): State<Arc<Shared>>,
+    caller: Option<axum::Extension<Caller>>,
+    RawQuery(query): RawQuery,
+) -> Response {
+    let device = is_device(caller.as_deref());
+    let rt = st.rt();
+    // Not even asked for a task a phone may not see: the engine's answer would tell whether it is there.
+    if device
+        && parse_query(query.as_deref(), &["id"])
+            .ok()
+            .and_then(|p| p.get("id").cloned())
+            .is_some_and(|id| !device_cut::released_id(&rt.classes, &id))
+    {
+        return not_found();
+    }
+    match task_document(&st, query.as_deref()).await {
+        Ok(text) if device => {
+            let cut = serde_json::from_str::<serde_json::Value>(&text)
+                .ok()
+                .and_then(|doc| device_cut::task(&rt.classes, &doc));
+            match cut {
+                Some(doc) => json_response(StatusCode::OK, doc.to_string(), None),
+                None => not_found(),
+            }
+        }
+        Ok(text) => json_response(StatusCode::OK, text, None),
+        Err(response) => response,
+    }
+}
+
+/// The document of `task?id=`, from the details the hub holds or from the engine; `Err`: the answer to send.
+// The error is the answer to send, as with `ask`: a response is large, and rare.
+#[allow(clippy::result_large_err)]
+async fn task_document(st: &Shared, query: Option<&str>) -> Result<String, Response> {
+    let query = query.map(str::to_owned);
     let params = match parse_query(query.as_deref(), &["id"]) {
         Ok(p) => p,
-        Err(why) => return error_body(StatusCode::BAD_REQUEST, "bad_query", why),
+        Err(why) => return Err(error_body(StatusCode::BAD_REQUEST, "bad_query", why)),
     };
     let Some(id) = params.get("id").filter(|id| valid_task_id(id)) else {
-        return error_body(
+        return Err(error_body(
             StatusCode::BAD_REQUEST,
             "bad_id",
             "id must be <area>/<slug>",
-        );
+        ));
     };
     // The state of the vault the answer is for: the held snapshot's, so a
     // repeated look at a task costs no engine question. A hub that holds no
@@ -72,10 +120,10 @@ pub(super) async fn task(State(st): State<Arc<Shared>>, RawQuery(query): RawQuer
     if let Some(rev) = &rev {
         let hit = rt.details.lock().ok().and_then(|mut d| d.get(rev, id));
         if let Some(doc) = hit {
-            return json_response(StatusCode::OK, doc, None);
+            return Ok(String::from_utf8_lossy(&doc).into_owned());
         }
     }
-    match ask(&st, Calls::Task, Some(&json!({ "id": id }))).await {
+    match ask(st, Calls::Task, Some(&json!({ "id": id }))).await {
         Ok(reply) => {
             // The document names its own `rev`, which is not the snapshot's
             // (it is made over the task and what it touches), so the state is
@@ -89,13 +137,35 @@ pub(super) async fn task(State(st): State<Arc<Shared>>, RawQuery(query): RawQuer
                     details.put(rev, id, Bytes::from(reply.text.clone()));
                 }
             }
-            json_response(StatusCode::OK, reply.text, None)
+            Ok(reply.text)
         }
-        Err(response) => response,
+        Err(response) => Err(response),
     }
 }
 
-pub(super) async fn next(State(st): State<Arc<Shared>>, RawQuery(query): RawQuery) -> Response {
+/// Does a paired device ask (not the PC)?
+pub(super) fn is_device(caller: Option<&Caller>) -> bool {
+    matches!(caller, Some(Caller::Device(_)))
+}
+
+/// What a phone is told of a task it may not see, or that is not there: the same.
+pub(super) fn not_found() -> Response {
+    error_body(StatusCode::NOT_FOUND, "not_found", "no such task")
+}
+
+fn engine_failed() -> Response {
+    error_body(
+        StatusCode::BAD_GATEWAY,
+        "engine_failed",
+        "the engine could not answer",
+    )
+}
+
+pub(super) async fn next(
+    State(st): State<Arc<Shared>>,
+    caller: Option<axum::Extension<Caller>>,
+    RawQuery(query): RawQuery,
+) -> Response {
     let params = match parse_query(query.as_deref(), &["n", "actor", "area"]) {
         Ok(p) => p,
         Err(why) => return error_body(StatusCode::BAD_REQUEST, "bad_query", why),
@@ -118,8 +188,26 @@ pub(super) async fn next(State(st): State<Arc<Shared>>, RawQuery(query): RawQuer
         }
         request.insert("area".to_owned(), json!(area));
     }
+    // A phone asks only for an area it may see.
+    if is_device(caller.as_deref())
+        && params
+            .get("area")
+            .is_some_and(|area| !device_cut::released(&st.rt().classes, area))
+    {
+        return not_found();
+    }
     let request = serde_json::Value::Object(request);
     match ask(&st, Calls::Next, Some(&request)).await {
+        Ok(reply) if is_device(caller.as_deref()) => {
+            match serde_json::from_str::<serde_json::Value>(&reply.text) {
+                Ok(doc) => json_response(
+                    StatusCode::OK,
+                    device_cut::next(&st.rt().classes, &doc).to_string(),
+                    None,
+                ),
+                Err(_) => engine_failed(),
+            }
+        }
         Ok(reply) => json_response(StatusCode::OK, reply.text, None),
         Err(response) => response,
     }
@@ -174,7 +262,12 @@ fn about_problem(error: &EngineError) -> &'static str {
 /// The areas, each with the class it is shown with. An area the file does
 /// not name is `unclassified`; so the list tells a person what still needs
 /// a decision.
-pub(super) async fn areas(State(st): State<Arc<Shared>>, RawQuery(query): RawQuery) -> Response {
+pub(super) async fn areas(
+    State(st): State<Arc<Shared>>,
+    caller: Option<axum::Extension<Caller>>,
+    RawQuery(query): RawQuery,
+) -> Response {
+    let device = is_device(caller.as_deref());
     if let Some(response) = no_query(query.as_deref()) {
         return response;
     }
@@ -198,6 +291,10 @@ pub(super) async fn areas(State(st): State<Arc<Shared>>, RawQuery(query): RawQue
             continue;
         };
         let shown = classes.shown(name);
+        // A phone is told only of the released areas, not even the names of the others (MOB-02).
+        if device && !matches!(shown, Shown::Public | Shown::Internal) {
+            continue;
+        }
         match shown {
             Shown::Unclassified => unclassified.push(name.to_owned()),
             Shown::Private => private.push(name.to_owned()),
@@ -570,6 +667,7 @@ pub(super) async fn ops(
 /// the token that `done` needs for exactly that version of the file.
 pub(super) async fn done_preview(
     State(st): State<Arc<Shared>>,
+    caller: Option<axum::Extension<Caller>>,
     RawQuery(query): RawQuery,
 ) -> Response {
     let params = match parse_query(query.as_deref(), &["id"]) {
@@ -583,7 +681,29 @@ pub(super) async fn done_preview(
             "id must be <area>/<slug>",
         );
     };
+    let rt = st.rt();
+    let device = is_device(caller.as_deref());
+    // Not even asked: the engine's answer would tell whether the task is there.
+    if device && !device_cut::released_id(&rt.classes, id) {
+        return not_found();
+    }
     match ask(&st, Calls::DonePreview, Some(&json!({ "id": id }))).await {
+        Ok(reply) if device => {
+            // The plans the phone may know are the ones of its snapshot.
+            let plans = rt
+                .store
+                .latest()
+                .and_then(|c| serde_json::from_slice::<serde_json::Value>(&c.text).ok())
+                .map(|snap| device_cut::released_plans(&rt.classes, &snap))
+                .unwrap_or_default();
+            let cut = serde_json::from_str::<serde_json::Value>(&reply.text)
+                .ok()
+                .and_then(|doc| device_cut::done_preview(&rt.classes, &doc, &plans));
+            match cut {
+                Some(doc) => json_response(StatusCode::OK, doc.to_string(), None),
+                None => not_found(),
+            }
+        }
         Ok(reply) => json_response(StatusCode::OK, reply.text, None),
         Err(response) => response,
     }
@@ -1204,6 +1324,11 @@ fn device_refusal(
                     "this operation is not released for devices",
                 ))
             }
+        }
+        // A task, or a new task's area, the phone may not see is not there for it (MOB-02).
+        if !device_cut::op_area(op).is_some_and(|area| device_cut::released(&st.rt().classes, area))
+        {
+            return Some(not_found());
         }
     }
     match has {
