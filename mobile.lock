@@ -2,4 +2,4 @@
 # tools/build-mobile.py into ui/dist-mobile/, and build.rs embeds it; CI and the release builds do the same.
 # A new commit of tasks-mobile is taken by changing `commit` here.
 repo   = https://github.com/WKDSteve/tasks-mobile
-commit = 41c5b98508bf36a1f190a4ad0fddbb5af7abb658
+commit = 5c35956d639be622f6e9aca56801a5d572ca2c43
