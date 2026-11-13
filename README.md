@@ -2,6 +2,8 @@
 
 # tasks-desktop
 
+[![wkd](https://img.shields.io/badge/wkd-family-c6ff3d)](https://wkdsteve.github.io/wkd/apps/tasks-desktop/)
+
 A local web UI and desktop app for [tasks.nvim](https://github.com/WKDSteve/tasks.nvim):
 see the vault at a glance, create and move tasks, plans and a dashboard,
 in the browser first and later as a small native app.
