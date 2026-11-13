@@ -112,6 +112,11 @@ test('the phone captures a task with a photo and a voice note, and both land in 
   try {
     const page = await phone.newPage();
     const problems = watchConsole(page);
+    // The page asks for the exact name of each file (`exact=1`): a taken name is `exists`, the file already arrived.
+    const uploads: string[] = [];
+    page.on('request', (r) => {
+      if (r.url().includes('/api/tasks/upload')) uploads.push(r.url());
+    });
     const response = await page.goto(pairingLink(config).replace('/#pair=', '/m/#pair='));
     expect(response?.headers()['permissions-policy']).toContain('microphone=(self)');
     expect(response?.headers()['content-security-policy']).toContain("media-src 'self' blob:");
@@ -137,6 +142,8 @@ test('the phone captures a task with a photo and a voice note, and both land in 
     ]);
     const photo = readdirSync(assets).find((f) => f.startsWith('photo-'))!;
     expect(readFileSync(join(assets, photo)).equals(png)).toBe(true);
+    expect(uploads).toHaveLength(2);
+    for (const url of uploads) expect(new URL(url).searchParams.get('exact')).toBe('1');
     await page.getByRole('button', { name: /Waiting/ }).click();
     await expect(page.getByText('Nothing waits.')).toBeVisible();
     expect(problems).toEqual([]);
