@@ -26,6 +26,30 @@ pub struct TasksSettings {
     /// system.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub attach_dirs: Vec<PathBuf>,
+    /// The Web Push reminders of a day for the paired phones.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reminders: Option<RemindersSettings>,
+}
+
+/// `reminders` of `config.json`.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct RemindersSettings {
+    /// The time of day (`HH:MM`, the engine's, which is the person's) the one notice of the day's reminders goes out
+    /// from; unset: `08:00`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub send_at: Option<String>,
+}
+
+impl TasksSettings {
+    /// The time of day the reminders of a day go out from.
+    #[must_use]
+    pub fn send_at(&self) -> &str {
+        self.reminders
+            .as_ref()
+            .and_then(|r| r.send_at.as_deref())
+            .unwrap_or(crate::notices::DEFAULT_SEND_AT)
+    }
 }
 
 /// The most folders `attach_dirs` may name (the engine's limit too).
@@ -48,6 +72,13 @@ impl AppSettings for TasksSettings {
                     dir.display()
                 ));
             }
+        }
+        if let Some(at) = self.reminders.as_ref().and_then(|r| r.send_at.as_deref())
+            && !crate::notices::valid_time(at)
+        {
+            return Err(format!(
+                "reminders.send_at: {at:.20?} is not a time of day HH:MM (00:00 to 23:59)"
+            ));
         }
         Ok(())
     }
@@ -253,6 +284,30 @@ mod tests {
             shots(&vec![here; MAX_ATTACH_DIRS + 1]).validate().is_err(),
             "more folders than the engine takes"
         );
+    }
+
+    #[test]
+    fn the_hour_of_the_reminders_is_a_time_of_day_and_eight_without_one() {
+        let at = |send_at: Option<&str>| FileConfig {
+            app: TasksSettings {
+                reminders: Some(RemindersSettings {
+                    send_at: send_at.map(str::to_owned),
+                }),
+                ..TasksSettings::default()
+            },
+            ..FileConfig::default()
+        };
+        assert_eq!(TasksSettings::default().send_at(), "08:00");
+        assert_eq!(at(None).app.send_at(), "08:00");
+        assert_eq!(at(Some("06:45")).app.send_at(), "06:45");
+        assert!(at(Some("06:45")).validate().is_ok());
+        for bad in ["6:45", "25:00", "08:00:00", "morning"] {
+            assert!(at(Some(bad)).validate().is_err(), "{bad}");
+        }
+        let dir = temp_config("send-at", br#"{"reminders":{"send_at":"19:15"}}"#);
+        assert_eq!(load_file(&dir).unwrap().app.send_at(), "19:15");
+        let dir = temp_config("send-at-bad", br#"{"reminders":{"send_at":"7"}}"#);
+        assert!(matches!(load_file(&dir), Err(ConfigError::Invalid(..))));
     }
 
     /// A config folder holding `config.json` with `bytes`; it is removed when the value drops.

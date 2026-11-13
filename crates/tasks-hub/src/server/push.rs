@@ -77,7 +77,7 @@ pub(super) async fn look(
     parts: &HubPush,
     engine: &dyn Engine,
     store: &SnapshotStore,
-    classes: &AreaPolicy,
+    classes: &Arc<AreaPolicy>,
     vault: &str,
 ) {
     let wanted = parts.push.has_subscribers(DECISION) || parts.push.has_subscribers(REMIND);
@@ -90,18 +90,23 @@ pub(super) async fn look(
     let Ok(cached) = store.current().await else {
         return;
     };
-    // The day is the engine's (`hello.today`, the person's day, asked each time: the snapshot is held across midnight);
-    // an engine that does not say it reminds of nothing.
-    let today = if parts.push.has_subscribers(REMIND) {
-        engine_today(engine).await
+    // The day and the time of day are the engine's (`hello.today`, `hello.time`: the person's, asked each time, the
+    // snapshot is held across midnight); an engine that does not say them reminds of nothing.
+    let now = if parts.push.has_subscribers(REMIND) {
+        engine_now(engine).await
     } else {
         None
     };
     let notices = Arc::clone(&parts.notices);
     let owned = vault.to_owned();
+    let policy = Arc::clone(classes);
     let found = tokio::task::spawn_blocking(move || {
         let doc = serde_json::from_slice::<serde_json::Value>(&cached.text).ok()?;
-        Some(notices.observe(&owned, &doc, today.as_deref()))
+        let released = |area: &str| data_class(policy.shown(area)).released_for_device();
+        let now = now
+            .as_ref()
+            .map(|(day, time)| (day.as_str(), time.as_str()));
+        Some(notices.observe(&owned, &doc, now, &released))
     })
     .await
     .ok()
@@ -114,14 +119,23 @@ pub(super) async fn look(
         if !parts.push.has_subscribers(notice.kind) {
             continue;
         }
-        let class = data_class(classes.shown(&notice.area));
-        if !class.released_for_device() {
-            continue;
-        }
+        // A decision names its task, and only of a released area; the reminder of a day names none (its areas were
+        // weighed when it was found).
+        let item = match &notice.id {
+            Some(id) => {
+                let class = data_class(classes.shown(&notice.area));
+                if !class.released_for_device() {
+                    continue;
+                }
+                Some((id.clone(), class))
+            }
+            None => None,
+        };
         let push = Arc::clone(&parts.push);
         let n = notice.clone();
         sending.spawn(async move {
-            let sent = push.notify(n.kind, Some((&n.id, class)), false).await;
+            let item = item.as_ref().map(|(id, class)| (id.as_str(), *class));
+            let sent = push.notify(n.kind, item, false).await;
             (n, sent)
         });
         pending.push(notice);
@@ -159,11 +173,13 @@ pub(super) async fn look(
     }
 }
 
-/// The day of the engine (`today` of `tasks.hello`, YYYY-MM-DD), if it says one.
-pub(super) async fn engine_today(engine: &dyn Engine) -> Option<String> {
+/// The day and the time of day of the engine (`today`, YYYY-MM-DD, and `time`, HH:MM, of `tasks.hello`), if it says
+/// both.
+pub(super) async fn engine_now(engine: &dyn Engine) -> Option<(String, String)> {
     let reply = engine.call(crate::engine::Calls::Hello, None).await.ok()?;
     let doc: serde_json::Value = serde_json::from_str(&reply.text).ok()?;
     let day = doc["today"].as_str()?;
+    let time = doc["time"].as_str()?;
     let plain = day.len() == 10
         && day.bytes().enumerate().all(|(i, b)| {
             if i == 4 || i == 7 {
@@ -172,5 +188,5 @@ pub(super) async fn engine_today(engine: &dyn Engine) -> Option<String> {
                 b.is_ascii_digit()
             }
         });
-    plain.then(|| day.to_owned())
+    (plain && crate::notices::valid_time(time)).then(|| (day.to_owned(), time.to_owned()))
 }

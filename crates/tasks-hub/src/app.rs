@@ -675,6 +675,7 @@ pub async fn serve(opts: ServeOptions) -> Result<(), String> {
         .clone()
         .and_then(|nvim| crate::bundle::editor_nvim(nvim, &env));
     let attach_dirs = file.app.attach_dirs.clone();
+    let send_at = file.app.send_at().to_owned();
     let config_vaults = Arc::new(ConfigVaults::new(dir.clone(), env.clone(), file));
     let all_vaults = Arc::new(crate::allvaults::AllVaultsCheck::new(
         Arc::clone(&config_vaults) as Arc<dyn crate::allvaults::VaultEngines>,
@@ -708,9 +709,9 @@ pub async fn serve(opts: ServeOptions) -> Result<(), String> {
             appkit_hub::push::Push::open(&dir, Arc::new(appkit_hub::push_net::NetPush::new()?))
                 .map_err(|e| format!("push: {e}"))?,
         ),
-        notices: Arc::new(crate::notices::Notices::open(Some(
-            dir.join("notices.json"),
-        ))),
+        notices: Arc::new(
+            crate::notices::Notices::open(Some(dir.join("notices.json"))).with_send_at(&send_at),
+        ),
     };
     let extras = || Extras {
         tailnet: tailnet.clone(),

@@ -424,6 +424,7 @@ async fn nothing_goes_out_for_a_private_area() {
     r.read().await;
     std::fs::write(r.vault.join(".fake-remind"), "alpha.nvim/t2=2026-11-10").unwrap();
     std::fs::write(r.vault.join(".fake-today"), "2026-11-12").unwrap();
+    std::fs::write(r.vault.join(".fake-time"), "09:00").unwrap();
     r.set_status("alpha.nvim/t1", "decision").await;
     // The check that the job ran: the task of the internal area beside it, waiting in the same look, is told; of the
     // private one, neither its decision nor its reminder.
@@ -468,12 +469,12 @@ async fn a_notice_no_push_service_took_is_told_again() {
 }
 
 #[tokio::test]
-async fn a_reminder_whose_day_has_come_is_told_once_on_the_day_the_engine_says() {
+async fn the_reminders_of_a_day_are_one_notice_from_eight_on_the_engine_s_clock() {
     let _one = ONE_AT_A_TIME.lock().await;
     let r = Rig::new("remind", Class::Internal).await;
     std::fs::write(
         r.vault.join(".fake-remind"),
-        "alpha.nvim/t1=2026-11-10\nalpha.nvim/t2=2026-11-13",
+        "alpha.nvim/t1=2026-11-10\nalpha.nvim/t2=2026-11-12",
     )
     .unwrap();
     r.push
@@ -482,20 +483,57 @@ async fn a_reminder_whose_day_has_come_is_told_once_on_the_day_the_engine_says()
             subscription("https://push.example.com/d1", &["remind"]),
         )
         .unwrap();
-    // An engine that does not say its day reminds of nothing.
+    // An engine that does not say its day and time reminds of nothing.
     r.read().await;
     r.set_status("alpha.nvim/t0", "doing").await;
     tokio::time::sleep(Duration::from_millis(800)).await;
     assert!(r.sent().is_empty(), "{:?}", r.sent());
-    // On 2026-11-12: t1 (its day has passed), once, whatever else changes.
+    // On 2026-11-12 before 08:00: nothing yet.
     std::fs::write(r.vault.join(".fake-today"), "2026-11-12").unwrap();
+    std::fs::write(r.vault.join(".fake-time"), "07:59").unwrap();
     r.set_status("alpha.nvim/t0", "open").await;
-    assert_eq!(r.wait_for(1).await, 1, "{:?}", r.sent());
+    tokio::time::sleep(Duration::from_millis(800)).await;
+    assert!(r.sent().is_empty(), "{:?}", r.sent());
+    // From 08:00 on: one notice for both reminders, without an id (the phone opens Today), once.
+    std::fs::write(r.vault.join(".fake-time"), "08:00").unwrap();
     r.set_status("alpha.nvim/t0", "doing").await;
+    assert_eq!(r.wait_for(1).await, 1, "{:?}", r.sent());
+    assert_eq!(r.said(), [json!({ "kind": "remind", "id": null })]);
+    std::fs::write(r.vault.join(".fake-time"), "13:00").unwrap();
+    r.set_status("alpha.nvim/t0", "open").await;
     tokio::time::sleep(Duration::from_millis(800)).await;
     assert_eq!(r.sent().len(), 1, "{:?}", r.sent());
-    // The next day: t1 again and t2, its day.
+    // The next day, from the hour on: again one.
     std::fs::write(r.vault.join(".fake-today"), "2026-11-13").unwrap();
+    std::fs::write(r.vault.join(".fake-time"), "08:30").unwrap();
+    r.set_status("alpha.nvim/t0", "doing").await;
+    assert_eq!(r.wait_for(2).await, 2, "{:?}", r.sent());
+}
+
+#[tokio::test]
+async fn a_day_whose_reminders_are_private_tells_nothing() {
+    let _one = ONE_AT_A_TIME.lock().await;
+    let r = Rig::new("remind-private", Class::Private).await;
+    std::fs::write(r.vault.join(".fake-remind"), "alpha.nvim/t1=2026-11-10").unwrap();
+    std::fs::write(r.vault.join(".fake-today"), "2026-11-12").unwrap();
+    std::fs::write(r.vault.join(".fake-time"), "09:00").unwrap();
+    r.push
+        .subscribe(
+            "d1",
+            subscription("https://push.example.com/d1", &["remind"]),
+        )
+        .unwrap();
+    r.read().await;
+    r.set_status("alpha.nvim/t0", "doing").await;
+    tokio::time::sleep(Duration::from_millis(800)).await;
+    assert!(r.sent().is_empty(), "{:?}", r.sent());
+    // The check that the job ran: a reminder of the internal area beside it is told.
+    std::fs::write(
+        r.vault.join(".fake-remind"),
+        "alpha.nvim/t1=2026-11-10\nopen.nvim/o1=2026-11-12",
+    )
+    .unwrap();
     r.set_status("alpha.nvim/t0", "open").await;
-    assert_eq!(r.wait_for(3).await, 3, "{:?}", r.sent());
+    assert_eq!(r.wait_for(1).await, 1, "{:?}", r.sent());
+    assert_eq!(r.said(), [json!({ "kind": "remind", "id": null })]);
 }

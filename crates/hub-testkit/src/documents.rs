@@ -9,7 +9,7 @@
 //! * `.fake-transient`: the next snapshot has a task with a passing problem (`duplicate-id`);
 //! * `.fake-status`: lines `<id>=<status>`, the status these tasks have in the snapshot;
 //! * `.fake-remind`: lines `<id>=<day>`, the reminder these tasks have in the snapshot;
-//! * `.fake-today`: the day `hello` says it is (`today`);
+//! * `.fake-today`: the day `hello` says it is (`today`); `.fake-time`: the time of day it says (`time`);
 //! * `.fake-extra`: lines `<id>`, tasks of other areas in the snapshot;
 //! * `.fake-bodies-page`: how many bodies one page holds;
 //! * `.fake-snapshot-ms`: a `snapshot` takes that long (an engine started slowly on a busy machine);
@@ -235,6 +235,10 @@ fn tasks_fill(call: &Call<'_>, doc: &mut Value) {
             // `.fake-today`: the day the engine says it is (`today`); without it the engine says none.
             if let Ok(day) = std::fs::read_to_string(vault.join(".fake-today")) {
                 doc["today"] = json!(day.trim());
+            }
+            // `.fake-time`: the time of day it says (`time`, HH:MM).
+            if let Ok(time) = std::fs::read_to_string(vault.join(".fake-time")) {
+                doc["time"] = json!(time.trim());
             }
             doc["enums"] = json!({
                 "status": ["doing", "decision", "blocked", "open", "parked"],

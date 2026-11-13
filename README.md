@@ -267,12 +267,15 @@ variable set) prints the link for the phone too: `https://<pc>.<tailnet>.ts.net/
 **Notifications (Web Push).** A paired phone may ask to be told (the phone page offers it; the routes `/api/push/*`
 are released for phones at `read`, a session of the PC gets `403 device_required` there). The hub sends Web Push
 itself, through the push service of the phone's browser (no account anywhere): `decision` when a task starts to wait
-for your decision (once per change into the status, also after it left it and came back), and `remind` once a day for
-each task whose `remind:` day has come (that day or earlier; an open task, or a finished one that keeps a reminder),
-until the day is moved or taken away. The day is the engine's (`today` of its `hello`, the day of this PC); an engine
-that does not say it yet reminds of nothing. A notice carries only its
-kind and the id of the task, and only for an area of the class `public` or `internal`; for a private or unclassified
-area nothing goes out at all. The phone reads the rest over its paired way. The hub keeps its push key
+for your decision (once per change into the status, also after it left it and came back), and `remind` once a day,
+one notice for all reminders (a tap opens *Today*), from 08:00 on when a task has a `remind:` day that has come (that
+day or earlier; an open task, or a finished one that keeps a reminder), until its day is moved or taken away. The hour
+is a setting of the hub, in `config.json`: `"reminders": { "send_at": "07:30" }` (`HH:MM`, 00:00 to 23:59; another
+value stops the start, said plainly); a hub that is off at that hour sends it when it is back the same day. Day and
+time are the engine's (`today` and `time` of its `hello`, the clock of this PC); an engine that does not say them
+reminds of nothing. A decision carries only its kind and the id of the task, a reminder only its kind; both only for
+an area of the class `public` or `internal`: for a private or unclassified area nothing goes out at all, and a day
+whose reminders are all of such areas sends none. The phone reads the rest over its paired way. The hub keeps its push key
 (`push-key.json`, secret), the subscriptions (`push.json`) and what it told (`notices.json`, per vault, so a restart
 or a change of vault tells nothing twice) in its settings folder; revoking a phone forgets its subscription. A notice
 no push service took (refused or unanswered for every phone) is told again on the next look. What waits for a
