@@ -966,3 +966,57 @@ fn start_works_in_a_config_folder_with_a_non_ascii_name() {
     assert!(config.join("hub.log").is_file());
     let _ = command(&config).arg("stop").output();
 }
+
+/// `phone export` as a program (the debug build too: its engine calls once overflowed the main thread's stack): the file
+/// holds the released areas only; a private area and one without a class are not in it, not even by name.
+#[test]
+fn phone_export_writes_the_released_areas_only() {
+    let config = temp_dir("phone-export");
+    std::fs::write(
+        config.join("areas.json"),
+        r#"{"schema":1,"areas":{"cascade.nvim":{"class":"internal"},"lib.nvim":{"class":"private"}}}"#,
+    )
+    .unwrap();
+    let target = config.join("export.json");
+    let out = command(&config)
+        .args(["phone", "export"])
+        .arg(&target)
+        .output()
+        .unwrap();
+    if !out.status.success()
+        && String::from_utf8_lossy(&out.stderr).contains("not ready")
+        && std::env::var_os("TASKS_DESKTOP_REQUIRE_ENGINE").is_none()
+    {
+        eprintln!("skipped: no engine on this machine");
+        return;
+    }
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let text = std::fs::read_to_string(&target).unwrap();
+    let doc: Value = serde_json::from_str(&text).unwrap();
+    assert_eq!(doc["kind"], "tasks.phone_export");
+    assert_eq!(doc["classes_asked"], true);
+    assert_eq!(
+        doc["areas"],
+        serde_json::json!([{ "name": "cascade.nvim", "data_class": "internal" }])
+    );
+    assert!(!doc["snapshot"]["tasks"].as_array().unwrap().is_empty());
+    for hidden in ["lib.nvim", "nvim-config", "\"ALL"] {
+        assert!(!text.contains(hidden), "{hidden} in the export");
+    }
+    assert!(!config.join("export.json.part").exists());
+
+    // Nothing released: nothing written.
+    std::fs::write(config.join("areas.json"), r#"{"schema":1,"areas":{}}"#).unwrap();
+    let empty = config.join("empty.json");
+    let out = command(&config)
+        .args(["phone", "export"])
+        .arg(&empty)
+        .output()
+        .unwrap();
+    assert!(!out.status.success());
+    assert!(!empty.exists());
+}

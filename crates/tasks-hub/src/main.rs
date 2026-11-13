@@ -31,7 +31,10 @@ const USAGE: &str = "usage:
                                           what one may do (a new phone: change); its open
                                           sessions follow at once
                                           (--launch also opens it in the default browser)
-  tasks-hub usage [--days=14]             on how many of the last days the interface was
+  tasks-hub phone export <file>           write what a paired phone is given (public and
+                                          internal areas only) as a file the phone opens,
+                                          read only (no running hub needed)
+  tasks-hub usage [--days=14]            on how many of the last days the interface was
                                           opened (counts only, kept on this machine)
   tasks-hub areas propose [--private=a,b] [--write]
                                           propose a data class for every area (written, with
@@ -118,6 +121,20 @@ fn wait_for_enter() {
         let _ = std::io::stderr().flush();
         let _ = std::io::stdin().lock().lines().next();
     }
+}
+
+/// `phone export <file>`, run as a task of the runtime: its worker threads have a larger stack than the main thread of
+/// Windows (1 MB), which the engine calls of the export overflow in a debug build. `run` holds only the handle.
+fn phone_export(
+    file: &str,
+) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), String>> + Send>> {
+    let file = std::path::PathBuf::from(file);
+    let task = tokio::spawn(async move { app::phone_export(&file).await });
+    Box::pin(async move {
+        task.await
+            .map_err(|e| format!("the export stopped: {e}"))?
+            .map(|text| println!("{text}"))
+    })
 }
 
 /// The verb the arguments name. Apart from `main` so that its future lives on the heap: the main thread of
@@ -207,6 +224,7 @@ async fn run(args: Vec<String>) -> Result<(), String> {
             Ok(days) => app::usage(days).map(|text| print!("{text}")),
             Err(e) => Err(e),
         },
+        Some("phone") if args.len() == 3 && args[1] == "export" => phone_export(&args[2]).await,
         Some("areas") => match parse_areas(&args[1..]) {
             Ok(command) => app::areas(command).await.map(|text| print!("{text}")),
             Err(e) => Err(e),

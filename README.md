@@ -290,6 +290,14 @@ decision while no phone is subscribed is not told later. If `notices.json` canno
 console and still sends; only after a restart might such a notice come twice. While a phone is subscribed, the hub
 looks at the vault every 5 minutes even when no page is open.
 
+**A file instead of a connection** (the third way, read only). `tasks-hub phone export <file>` asks the engine
+directly (no running hub needed) and writes what a paired phone would be given, cut the same way (`MOB-02`): the
+snapshot and the proposals of `next`, of the areas of the class `public` or `internal` only, as one JSON document
+(`"kind": "tasks.phone_export"`, `"classes_asked": true`, `exported_at` in UTC, and `areas` with the `data_class` of each, as `/api/tasks/areas` names it).
+Copy it to the phone however you like (a synced folder, a cable, a cloned repository); the phone page opens it and shows
+it with the time of the file. Creating or changing a task still needs the hub. With no area released at all, nothing is
+written.
+
 ## The rolling build (the newest `main`, one click)
 
 After every green CI run on `main`, the workflow `rolling` builds the program of that commit for Windows

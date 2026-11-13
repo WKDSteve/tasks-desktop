@@ -15,7 +15,7 @@ use crate::classes::{self, AreaPolicy, Classes};
 use crate::client;
 use crate::config::{self, Env, FileConfig};
 use crate::discovery::discover;
-use crate::engine::{cli_config_from_setup, probe, Calls, CliEngine, Engine};
+use crate::engine::{cli_config_from_setup, probe, Calls, CliEngine, Engine, Method};
 use crate::server::{
     self, BoxFuture, Extras, HubStatus, Limits, ServerConfig, VaultAdmin, VaultInfo, VaultList,
     VaultTarget, WatchConfig, APP_NAME, DEFAULT_PORT,
@@ -1079,6 +1079,86 @@ pub fn launch(url: &str) -> Result<(), String> {
         .and_then(|(port, _)| port.parse::<u16>().ok())
         .ok_or("the link has no port: not opened")?;
     appkit_hub::browser::open(url, &[port])
+}
+
+/// One document of the engine.
+async fn engine_doc(
+    engine: &dyn Engine,
+    call: Method,
+    params: Option<&Value>,
+) -> Result<Value, String> {
+    let reply = engine.call(call, params).await.map_err(|e| e.to_string())?;
+    serde_json::from_str(&reply.text).map_err(|e| e.to_string())
+}
+
+/// Now in UTC as `YYYY-MM-DDTHH:MM:SSZ`.
+fn utc_now() -> String {
+    let secs = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs());
+    let (y, m, d) = crate::usage::civil_from_days(i64::try_from(secs / 86_400).unwrap_or(0));
+    let rest = secs % 86_400;
+    format!(
+        "{y:04}-{m:02}-{d:02}T{:02}:{:02}:{:02}Z",
+        rest / 3600,
+        rest % 3600 / 60,
+        rest % 60
+    )
+}
+
+/// `tasks-hub phone export <file>`: write what a paired phone would be given (the released areas only, MOB-02) as a
+/// `tasks.phone_export` the phone opens as a file, read only. Asks the engine directly, as `areas` does; a running hub
+/// is not needed. The file is written whole or not at all (a temporary file next to it, then renamed).
+///
+/// # Errors
+///
+/// No engine, an engine that fails, no data class at all, or a file that cannot be written.
+pub async fn phone_export(target: &Path) -> Result<String, String> {
+    let env = Env::from_process();
+    let dir = app_dir(&env)?;
+    let file = config::load_file(&dir).map_err(|e| e.to_string())?;
+    let state = engine_state(&file.effective(), &env).await;
+    let Some(engine) = state.engine else {
+        return Err(format!(
+            "the engine is not ready: {}",
+            state.note.unwrap_or_default()
+        ));
+    };
+    let policy = Classes::load(&dir)
+        .map_err(|e| e.to_string())?
+        .for_vault(file.active_name());
+    let snapshot = engine_doc(engine.as_ref(), Calls::Snapshot, None).await?;
+    let next = engine_doc(
+        engine.as_ref(),
+        Calls::Next,
+        Some(&serde_json::json!({ "n": 10 })),
+    )
+    .await?;
+    let doc = server::device_cut::phone_export(&policy, &snapshot, &next, &utc_now());
+    let areas = doc["areas"].as_array().map_or(0, Vec::len);
+    if areas == 0 {
+        return Err(
+            "no area is released for a phone (public or internal): nothing written; see tasks-hub areas propose"
+                .to_owned(),
+        );
+    }
+    let text = serde_json::to_string_pretty(&doc).map_err(|e| e.to_string())?;
+    let name = target
+        .file_name()
+        .ok_or_else(|| format!("not a file name: {}", target.display()))?;
+    let mut temp_name = name.to_os_string();
+    temp_name.push(".part");
+    let temp = target.with_file_name(temp_name);
+    std::fs::write(&temp, text).map_err(|e| format!("{}: {e}", temp.display()))?;
+    std::fs::rename(&temp, target).map_err(|e| {
+        let _ = std::fs::remove_file(&temp);
+        format!("{}: {e}", target.display())
+    })?;
+    let tasks = doc["snapshot"]["tasks"].as_array().map_or(0, Vec::len);
+    Ok(format!(
+        "written: {} ({tasks} tasks in {areas} released areas; private and unclassified areas are left out)",
+        target.display()
+    ))
 }
 
 /// A text for the person at the terminal. `Check` fails when an area has

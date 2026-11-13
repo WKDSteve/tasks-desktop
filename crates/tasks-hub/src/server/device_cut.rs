@@ -478,6 +478,52 @@ pub(crate) fn op_area(op: &Value) -> Option<&str> {
     }
 }
 
+/// The kind of the file `tasks-hub phone export` writes (the third way to a phone: a file it opens, read only).
+pub(crate) const PHONE_EXPORT_KIND: &str = "tasks.phone_export";
+
+/// The most proposals of `tasks.next` an export holds: the pick and two alternatives, as a phone asks by default.
+const EXPORT_PICKS: usize = 3;
+
+/// `tasks.phone_export`: what a paired phone would be given (`snapshot` and `next`, cut as for a device, MOB-02), as one
+/// document for a file. `classes_asked: true` says the hub cut it by the data classes; `areas` names each area it holds
+/// with its class as `data_class`, as `/api/tasks/areas` does (only `public` and `internal`), so the phone can refuse a
+/// file that holds anything else (fail closed). `exported_at` is when it was written (UTC, `YYYY-MM-DDTHH:MM:SSZ`); the documents keep the time the engine wrote them.
+pub(crate) fn phone_export(
+    classes: &AreaPolicy,
+    snapshot_doc: &Value,
+    next_doc: &Value,
+    exported_at: &str,
+) -> Value {
+    let snap = snapshot(classes, snapshot_doc);
+    let mut next_cut = next(classes, next_doc);
+    let mut picks = next_picks(&next_cut);
+    picks.truncate(EXPORT_PICKS);
+    set_picks(&mut next_cut, picks);
+    let areas: Vec<Value> = snap["areas"]
+        .as_array()
+        .map_or(&[][..], Vec::as_slice)
+        .iter()
+        .filter_map(|a| a["name"].as_str())
+        .filter_map(|name| {
+            let class = match classes.shown(name) {
+                Shown::Public => "public",
+                Shown::Internal => "internal",
+                Shown::Private | Shown::Unclassified => return None,
+            };
+            Some(serde_json::json!({ "name": name, "data_class": class }))
+        })
+        .collect();
+    serde_json::json!({
+        "kind": PHONE_EXPORT_KIND,
+        "schema": 1,
+        "classes_asked": true,
+        "exported_at": exported_at,
+        "areas": areas,
+        "snapshot": snap,
+        "next": next_cut,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -657,6 +703,38 @@ mod tests {
         assert_eq!(cut["results"][0]["plans_closed"], json!(["open/p"]));
         assert!(cut.get("rev").is_none() && cut["results"][0].get("file").is_none());
         assert_eq!(cut["client_op_id"], "c");
+    }
+
+    #[test]
+    fn a_phone_export_holds_no_private_or_unclassified_area() {
+        let c = classes();
+        let snap = json!({ "kind": "tasks.snapshot", "schema": 1, "rev": "rev:1",
+            "areas": [{ "name": "open", "open": 1 }, { "name": "pub", "open": 1 },
+                      { "name": "secret", "open": 1 }, { "name": "nameless", "open": 1 }],
+            "tasks": [
+                { "id": "open/a", "area": "open", "title": "A", "status": "open" },
+                { "id": "pub/b", "area": "pub", "title": "B", "status": "open" },
+                { "id": "secret/a", "area": "secret", "title": "Hidden", "status": "open" },
+                { "id": "nameless/a", "area": "nameless", "title": "Unclassified", "status": "open" },
+            ] });
+        let next_doc = json!({ "kind": "tasks.next", "task": { "id": "secret/a", "title": "Hidden" },
+            "alternatives": [{ "id": "open/a" }, { "id": "pub/b" }, { "id": "open/c" }, { "id": "open/d" }],
+            "cdx": [] });
+        let doc = phone_export(&c, &snap, &next_doc, "2026-11-13T10:00:00Z");
+        let text = doc.to_string();
+        for word in ["secret", "Hidden", "nameless", "Unclassified", "private"] {
+            assert!(!text.contains(word), "{word} in {text}");
+        }
+        assert_eq!(doc["kind"], PHONE_EXPORT_KIND);
+        assert_eq!(doc["classes_asked"], true);
+        assert_eq!(doc["exported_at"], "2026-11-13T10:00:00Z");
+        assert_eq!(
+            doc["areas"],
+            json!([{ "name": "open", "data_class": "internal" }, { "name": "pub", "data_class": "public" }])
+        );
+        assert_eq!(doc["snapshot"]["tasks"].as_array().unwrap().len(), 2);
+        assert_eq!(doc["next"]["task"]["id"], "open/a");
+        assert_eq!(doc["next"]["alternatives"].as_array().unwrap().len(), 2);
     }
 
     #[test]
