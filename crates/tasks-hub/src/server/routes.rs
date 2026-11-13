@@ -617,20 +617,8 @@ pub(super) async fn ops(
     caller: Option<axum::Extension<Caller>>,
     body: Bytes,
 ) -> Response {
-    let request = match check_ops_request(&body).and_then(|r| {
-        with_attach_dirs(r, &st.rt().attach_dirs).map_err(|why| format!("attach_no_folders:{why}"))
-    }) {
+    let request = match check_ops_request(&body) {
         Ok(r) => r,
-        Err(why) if why.starts_with("attach_no_folders:") => {
-            if !st.post_limit.allow() {
-                return too_many();
-            }
-            return error_body(
-                StatusCode::BAD_REQUEST,
-                "attach_no_folders",
-                &why["attach_no_folders:".len()..],
-            );
-        }
         Err(why) => {
             // A request that is not one still counts as a mutation.
             if !st.post_limit.allow() {
@@ -639,10 +627,21 @@ pub(super) async fn ops(
             return error_body(StatusCode::BAD_REQUEST, "bad_request", &why);
         }
     };
-    // A device does only the operations released for it, at its level; a dry run too (it would tell what it may not do).
+    // A device does only the operations released for it, at its level; a dry run too (it would tell what it may not
+    // do). Before anything of the PC is looked at: the settings of the PC (its screenshot folders) are none of its
+    // business.
     if let Some(refused) = device_refusal(&st, caller.as_deref(), &request) {
         return refused;
     }
+    let request = match with_attach_dirs(request, &st.rt().attach_dirs) {
+        Ok(r) => r,
+        Err(why) => {
+            if !st.post_limit.allow() {
+                return too_many();
+            }
+            return error_body(StatusCode::BAD_REQUEST, "attach_no_folders", &why);
+        }
+    };
     let dry_run = request.get("dry_run").and_then(serde_json::Value::as_bool) == Some(true);
     // A dry run changes nothing and was counted by the guard only: it costs the writes nothing.
     if !dry_run && !st.post_limit.allow() {
@@ -1276,14 +1275,15 @@ pub(super) fn guard_rules() -> GuardRules {
     .with_installable_microphone()
     // What a paired phone reaches (appkit `MOB-02`, fail closed): exactly the routes tasks-mobile asks, nothing the
     // desktop page alone needs (the vaults, events, search, sheets, repos ...). `ops` is released at `create` and
-    // judges each operation itself (`device_op_level`).
+    // judges each operation and its fields itself (`device_op_level`, `device_op_fields`). `upload` adds a file to a
+    // task that is there, which changes it: `change`.
     .with_device_route(crate::IDENTITY.route("snapshot"), Level::Read)
     .with_device_route(crate::IDENTITY.route("areas"), Level::Read)
     .with_device_route(crate::IDENTITY.route("next"), Level::Read)
     .with_device_route(crate::IDENTITY.route("task"), Level::Read)
     .with_device_route(crate::IDENTITY.route("done_preview"), Level::Read)
     .with_device_route(crate::IDENTITY.route("ops"), Level::Create)
-    .with_device_route(crate::IDENTITY.route("upload"), Level::Create)
+    .with_device_route(crate::IDENTITY.route("upload"), Level::Change)
     // A new phone reads, creates and changes; it never triggers (the PC raises one device at a time, if ever).
     .with_device_default_level(Level::Change)
 }
@@ -1300,8 +1300,50 @@ pub(super) fn device_op_level(op: &str) -> Option<Level> {
     }
 }
 
-/// For a request of a device: refuse it when one of its operations is not for devices, or needs more than the level the
-/// device has now. `None` for the PC, and for a device that may do all of them.
+/// The fields a device may send in one operation: exactly what tasks-mobile sends (`src/lib/types.ts`). An operation the
+/// phone may do is no way to the rest: no title, order, plan, project or reminder through `set`, no `force` that breaks
+/// another's claim, no `by` that acts for someone else.
+pub(super) fn device_op_fields(op: &str) -> &'static [&'static str] {
+    match op {
+        "new" => &["op", "area", "title", "body"],
+        "set" => &["op", "id", "patch", "if_match"],
+        "answer" => &["op", "id", "question", "option", "if_match"],
+        "done" => &["op", "id", "confirm"],
+        _ => &[],
+    }
+}
+
+/// What a device may set through `set`: the status, nothing else.
+pub(super) const DEVICE_PATCH_FIELDS: [&str; 1] = ["status"];
+
+/// Whether one operation of a device holds only the fields released for it (`device_op_fields`, `DEVICE_PATCH_FIELDS`).
+pub(super) fn device_op_shape(op: &serde_json::Value) -> bool {
+    let Some(map) = op.as_object() else {
+        return false;
+    };
+    let name = map
+        .get("op")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("");
+    let fields = device_op_fields(name);
+    if !map.keys().all(|k| fields.contains(&k.as_str())) {
+        return false;
+    }
+    if name != "set" {
+        return true;
+    }
+    map.get("patch")
+        .and_then(serde_json::Value::as_object)
+        .is_some_and(|patch| {
+            !patch.is_empty()
+                && patch
+                    .keys()
+                    .all(|k| DEVICE_PATCH_FIELDS.contains(&k.as_str()))
+        })
+}
+
+/// For a request of a device: refuse it when one of its operations, or one of their fields, is not for devices, or
+/// needs more than the level the device has now. `None` for the PC, and for a device that may do all of them.
 fn device_refusal(
     st: &Shared,
     caller: Option<&Caller>,
@@ -1316,12 +1358,12 @@ fn device_refusal(
     let mut needed = Level::Read;
     for op in ops {
         match op["op"].as_str().and_then(device_op_level) {
-            Some(level) => needed = needed.max(level),
-            None => {
+            Some(level) if device_op_shape(op) => needed = needed.max(level),
+            _ => {
                 return Some(error_body(
                     StatusCode::FORBIDDEN,
                     "not_for_devices",
-                    "this operation is not released for devices",
+                    "this operation, or one of its fields, is not released for devices",
                 ))
             }
         }

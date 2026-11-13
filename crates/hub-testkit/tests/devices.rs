@@ -35,12 +35,18 @@ static ONE_AT_A_TIME: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(())
 struct Rig {
     server: RunningServer,
     control: String,
+    /// The tailnet name the hub was told, if any.
+    tailnet: Option<String>,
     // Last: the folder is removed after the server, which has the vault open.
     _dir: Scratch,
 }
 
 impl Rig {
     async fn new(name: &str) -> Self {
+        Self::with_tailnet(name, None).await
+    }
+
+    async fn with_tailnet(name: &str, tailnet: Option<&str>) -> Self {
         let dir = Scratch::new(&format!("devices-{name}"));
         let vault = dir.join("vault");
         std::fs::create_dir_all(vault.join("alpha.nvim").join("ROADMAP").join("tasks")).unwrap();
@@ -91,6 +97,7 @@ beta.nvim/loose
             },
             Extras {
                 upload_dir: Some(dir.join("uploads")),
+                tailnet: tailnet.map(str::to_owned),
                 ..Extras::default()
             },
         )
@@ -99,8 +106,60 @@ beta.nvim/loose
         Self {
             server,
             control: control.to_hex(),
+            tailnet: tailnet.map(str::to_owned),
             _dir: dir,
         }
+    }
+
+    /// A request through the tailnet (`tailscale serve`): the `Host` is the tailnet name, the origin its `https` form.
+    async fn through_tailnet(
+        &self,
+        method: &str,
+        path: &str,
+        token: &str,
+        body: &str,
+    ) -> (u16, Value) {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let host = self.tailnet.as_deref().expect("a hub with a tailnet name");
+        let mut text = format!(
+            "{method} {path} HTTP/1.1\r\nHost: {host}\r\nAuthorization: Bearer {token}\r\nConnection: close\r\n"
+        );
+        if method != "GET" {
+            text.push_str(&format!(
+                "Origin: https://{host}\r\nContent-Type: application/json\r\nContent-Length: {}\r\n",
+                body.len()
+            ));
+        }
+        text.push_str("\r\n");
+        text.push_str(body);
+        let mut stream = tokio::net::TcpStream::connect(self.server.addr())
+            .await
+            .unwrap();
+        stream.write_all(text.as_bytes()).await.unwrap();
+        let mut reply = Vec::new();
+        stream.read_to_end(&mut reply).await.unwrap();
+        let reply = String::from_utf8_lossy(&reply).into_owned();
+        let (head, rest) = reply.split_once("\r\n\r\n").expect("a head");
+        let status = head.split(' ').nth(1).unwrap().parse().unwrap();
+        let chunked = head
+            .to_ascii_lowercase()
+            .contains("transfer-encoding: chunked");
+        let body = if chunked {
+            let mut out = String::new();
+            let mut rest = rest;
+            while let Some((size, tail)) = rest.split_once("\r\n") {
+                let size = usize::from_str_radix(size.trim(), 16).unwrap_or(0);
+                if size == 0 {
+                    break;
+                }
+                out.push_str(&tail[..size]);
+                rest = &tail[size + 2..];
+            }
+            out
+        } else {
+            rest.to_owned()
+        };
+        (status, serde_json::from_str(&body).unwrap_or(Value::Null))
     }
 
     fn origin(&self) -> String {
@@ -325,6 +384,11 @@ async fn ops_takes_from_a_phone_only_what_the_phone_page_sends_at_its_level() {
     let mixed = json!({ "ops": [phone_ops()[0].0, phone_ops()[2].0] }).to_string();
     let (status, doc) = r.send("POST", "/api/tasks/ops", &phone, &mixed).await;
     assert!(refused(status, &doc, "level_too_low"), "{status} {doc}");
+    // An upload adds a file to a task that is there: that changes it, more than `create` may.
+    let (status, doc) = r
+        .send("POST", "/api/tasks/upload?id=alpha.nvim/t1", &phone, "{}")
+        .await;
+    assert!(refused(status, &doc, "level_too_low"), "{status} {doc}");
 
     // At `read`, the guard keeps it from `ops` and `upload`; it still reads.
     r.set_level(&device, "read").await;
@@ -485,4 +549,110 @@ async fn a_phone_is_told_nothing_of_an_area_that_is_not_released() {
         (404, json!("not_found")),
         "{doc}"
     );
+}
+
+#[tokio::test]
+async fn an_operation_of_a_phone_holds_only_the_fields_the_phone_page_sends() {
+    let _one = ONE_AT_A_TIME.lock().await;
+    let r = Rig::new("fields").await;
+    let (device, phone) = r.phone().await;
+    // At the highest level too: a field is no way past the level.
+    r.set_level(&device, "trigger").await;
+    let id = "alpha.nvim/t1";
+    let status_only = json!({ "status": "doing" });
+    let refused_ops = [
+        // `set` sets the status, nothing else.
+        json!({ "op": "set", "id": id, "patch": { "title": "renamed" } }),
+        json!({ "op": "set", "id": id, "patch": { "status": "doing", "title": "renamed" } }),
+        json!({ "op": "set", "id": id, "patch": { "order": 1 } }),
+        json!({ "op": "set", "id": id, "patch": { "plan": "other" } }),
+        json!({ "op": "set", "id": id, "patch": { "project": "other" } }),
+        json!({ "op": "set", "id": id, "patch": { "phase": "two" } }),
+        json!({ "op": "set", "id": id, "patch": { "after": "alpha.nvim/t2" } }),
+        json!({ "op": "set", "id": id, "patch": { "blocked_by": ["alpha.nvim/t2"] } }),
+        json!({ "op": "set", "id": id, "patch": { "actor": "someone" } }),
+        json!({ "op": "set", "id": id, "patch": { "remind": "2026-01-01" } }),
+        json!({ "op": "set", "id": id, "patch": { "due": "2026-01-01" } }),
+        json!({ "op": "set", "id": id, "patch": {} }),
+        json!({ "op": "set", "id": id, "patch": "doing" }),
+        json!({ "op": "set", "id": id }),
+        // No claim of another is broken, nobody else acts.
+        json!({ "op": "set", "id": id, "patch": status_only, "force": true }),
+        json!({ "op": "set", "id": id, "patch": status_only, "by": "someone" }),
+        json!({ "op": "done", "id": id, "confirm": "x", "force": true }),
+        json!({ "op": "done", "id": id, "confirm": "x", "by": "someone" }),
+        json!({ "op": "answer", "id": id, "question": 1, "option": 1, "by": "someone" }),
+        // A new task is an area, a title and a text.
+        json!({ "op": "new", "area": "alpha.nvim", "title": "N", "plan": "p" }),
+        json!({ "op": "new", "area": "alpha.nvim", "title": "N", "status": "doing" }),
+        json!({ "op": "new", "area": "alpha.nvim", "title": "N", "by": "someone" }),
+    ];
+    for op in &refused_ops {
+        let (status, doc) = r.op(&phone, op).await;
+        assert!(
+            refused(status, &doc, "not_for_devices"),
+            "{op}: {status} {doc}"
+        );
+    }
+    // What the phone page sends gets through, with its `if_match` and a text.
+    for op in [
+        json!({ "op": "set", "id": id, "patch": status_only, "if_match": "e1" }),
+        json!({ "op": "new", "area": "alpha.nvim", "title": "N", "body": "b" }),
+        json!({ "op": "answer", "id": id, "question": 1, "option": 1, "if_match": "e1" }),
+    ] {
+        let (status, doc) = r.op(&phone, &op).await;
+        assert_eq!(status, 200, "{op}: {doc}");
+    }
+    // A screenshot of the PC is refused as not for devices, before the hub's folders are looked at: the phone learns
+    // nothing of the settings of the PC (this hub has none).
+    let latest = json!({ "op": "attach", "id": id, "from": "latest" });
+    let (status, doc) = r.op(&phone, &latest).await;
+    assert!(refused(status, &doc, "not_for_devices"), "{status} {doc}");
+    // The PC is held to none of it.
+    let pc = r.pc().await;
+    let (status, doc) = r.op(&pc, &refused_ops[0]).await;
+    assert_eq!(status, 200, "{doc}");
+    let (status, doc) = r.op(&pc, &latest).await;
+    assert_eq!(doc["error"]["code"], "attach_no_folders", "{status} {doc}");
+}
+
+#[tokio::test]
+async fn through_the_tailnet_a_phone_gets_the_same_routes_and_the_same_cut() {
+    let _one = ONE_AT_A_TIME.lock().await;
+    let r = Rig::with_tailnet("tailnet", Some("pc.example.ts.net")).await;
+    let (_, phone) = r.phone().await;
+
+    let (status, doc) = r
+        .through_tailnet("GET", "/api/tasks/snapshot", &phone, "")
+        .await;
+    assert_eq!(status, 200, "{doc}");
+    assert!(!doc["tasks"].as_array().unwrap().is_empty(), "{doc}");
+    let text = doc.to_string();
+    assert!(
+        !text.contains("secret-area") && !text.contains("beta.nvim"),
+        "{doc}"
+    );
+    let (status, doc) = r
+        .through_tailnet("GET", "/api/tasks/task?id=secret-area/plan", &phone, "")
+        .await;
+    assert_eq!(status, 404, "{doc}");
+    assert_eq!(doc["error"]["code"], "not_found", "{doc}");
+    let (status, doc) = r.through_tailnet("GET", "/api/vaults", &phone, "").await;
+    assert!(refused(status, &doc, "not_for_devices"), "{status} {doc}");
+    let set = json!({ "ops": [{ "op": "set", "id": "alpha.nvim/t1", "patch": { "title": "x" } }] })
+        .to_string();
+    let (status, doc) = r
+        .through_tailnet("POST", "/api/tasks/ops", &phone, &set)
+        .await;
+    assert!(refused(status, &doc, "not_for_devices"), "{status} {doc}");
+
+    // A session of the PC is not let in there at all; on loopback it still reads everything.
+    let pc = r.pc().await;
+    let (status, doc) = r
+        .through_tailnet("GET", "/api/tasks/snapshot", &pc, "")
+        .await;
+    assert_eq!(status, 403, "{doc}");
+    let (status, doc) = r.send("GET", "/api/tasks/snapshot", &pc, "").await;
+    assert_eq!(status, 200, "{doc}");
+    assert!(doc.to_string().contains("secret-area"), "{doc}");
 }
