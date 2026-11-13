@@ -40,6 +40,15 @@ pub(super) fn spawn_notices(
 ) -> JoinHandle<()> {
     let mut changes = store.subscribe_quiet();
     tokio::spawn(async move {
+        // What was told is kept per vault, by its one name: the same folder by another spelling is the same vault.
+        let vault = {
+            let path = vault.clone();
+            tokio::task::spawn_blocking(move || std::fs::canonicalize(&path).ok())
+                .await
+                .ok()
+                .flatten()
+                .map_or(vault, |p| p.display().to_string())
+        };
         let mut tick = tokio::time::interval(LOOK_EVERY);
         tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
         loop {
@@ -56,8 +65,14 @@ pub(super) fn spawn_notices(
     })
 }
 
-/// One look: the snapshot (a fresh one only while a phone waits for a notice: nobody else makes the engine scan),
-/// the notices it gives, and the ones that go out.
+/// How long the notices of one look may take to go out, together: each push service gets `SEND_TIMEOUT`, the phones of
+/// one notice are told one after the other (appkit `Push::notify`), the notices of one look side by side.
+pub(super) const SEND_DEADLINE: Duration = Duration::from_secs(45);
+
+/// One look. While no phone waits for a notice the snapshot is not even read (nobody else makes the engine scan, and
+/// a parse of a large vault is not free): the decisions are forgotten, so a phone that subscribes later is not told
+/// the past. Otherwise a fresh snapshot, the notices it gives (parsed and kept off the async workers), and the ones
+/// that go out, side by side within one deadline. A notice that reached no phone is taken back, to be told again.
 pub(super) async fn look(
     parts: &HubPush,
     engine: &dyn Engine,
@@ -66,26 +81,36 @@ pub(super) async fn look(
     vault: &str,
 ) {
     let wanted = parts.push.has_subscribers(DECISION) || parts.push.has_subscribers(REMIND);
-    let cached = if wanted {
-        store.current().await.ok()
-    } else {
-        store.latest()
-    };
-    let Some(cached) = cached else {
+    if !wanted {
+        let notices = Arc::clone(&parts.notices);
+        let vault = vault.to_owned();
+        let _ = tokio::task::spawn_blocking(move || notices.forget_decisions(&vault)).await;
+        return;
+    }
+    let Ok(cached) = store.current().await else {
         return;
     };
-    let Ok(doc) = serde_json::from_slice::<serde_json::Value>(&cached.text) else {
-        return;
-    };
-    // What is seen is kept as told also when nobody listens: a phone that subscribes later is not told the past. The day
-    // is the engine's (`hello.today`, the person's day, asked each time: the snapshot is held across midnight); an engine
-    // that does not say it reminds of nothing.
+    // The day is the engine's (`hello.today`, the person's day, asked each time: the snapshot is held across midnight);
+    // an engine that does not say it reminds of nothing.
     let today = if parts.push.has_subscribers(REMIND) {
         engine_today(engine).await
     } else {
         None
     };
-    for notice in parts.notices.observe(vault, &doc, today.as_deref()) {
+    let notices = Arc::clone(&parts.notices);
+    let owned = vault.to_owned();
+    let found = tokio::task::spawn_blocking(move || {
+        let doc = serde_json::from_slice::<serde_json::Value>(&cached.text).ok()?;
+        Some(notices.observe(&owned, &doc, today.as_deref()))
+    })
+    .await
+    .ok()
+    .flatten()
+    .unwrap_or_default();
+
+    let mut sending = tokio::task::JoinSet::new();
+    let mut pending = Vec::new();
+    for notice in found {
         if !parts.push.has_subscribers(notice.kind) {
             continue;
         }
@@ -93,10 +118,44 @@ pub(super) async fn look(
         if !class.released_for_device() {
             continue;
         }
-        parts
-            .push
-            .notify(notice.kind, Some((&notice.id, class)), false)
-            .await;
+        let push = Arc::clone(&parts.push);
+        let n = notice.clone();
+        sending.spawn(async move {
+            let sent = push.notify(n.kind, Some((&n.id, class)), false).await;
+            (n, sent)
+        });
+        pending.push(notice);
+    }
+    let deadline = tokio::time::sleep(SEND_DEADLINE);
+    tokio::pin!(deadline);
+    let mut unsent = Vec::new();
+    loop {
+        tokio::select! {
+            joined = sending.join_next() => match joined {
+                None => break,
+                Some(Ok((notice, sent))) => {
+                    pending.retain(|p| *p != notice);
+                    // Refused or unanswered by every push service, taken by none: not told.
+                    if sent.delivered == 0 && sent.failed > 0 {
+                        unsent.push(notice);
+                    }
+                }
+                // A send that ended without an answer stays pending: not told.
+                Some(Err(_)) => {}
+            },
+            () = &mut deadline => {
+                sending.abort_all();
+                break;
+            }
+        }
+    }
+    // What did not end in time is not known to have arrived: told again on the next look (a phone may then see it
+    // twice, rather than never).
+    unsent.extend(pending);
+    if !unsent.is_empty() {
+        let notices = Arc::clone(&parts.notices);
+        let vault = vault.to_owned();
+        let _ = tokio::task::spawn_blocking(move || notices.unsent(&vault, &unsent)).await;
     }
 }
 

@@ -273,9 +273,12 @@ until the day is moved or taken away. The day is the engine's (`today` of its `h
 that does not say it yet reminds of nothing. A notice carries only its
 kind and the id of the task, and only for an area of the class `public` or `internal`; for a private or unclassified
 area nothing goes out at all. The phone reads the rest over its paired way. The hub keeps its push key
-(`push-key.json`, secret), the subscriptions (`push.json`) and what it told (`notices.json`, so a restart tells
-nothing twice) in its settings folder; revoking a phone forgets its subscription. While a phone is subscribed, the
-hub looks at the vault every 5 minutes even when no page is open.
+(`push-key.json`, secret), the subscriptions (`push.json`) and what it told (`notices.json`, per vault, so a restart
+or a change of vault tells nothing twice) in its settings folder; revoking a phone forgets its subscription. A notice
+no push service took (refused or unanswered for every phone) is told again on the next look. What waits for a
+decision while no phone is subscribed is not told later. If `notices.json` cannot be written, the hub says so on its
+console and still sends; only after a restart might such a notice come twice. While a phone is subscribed, the hub
+looks at the vault every 5 minutes even when no page is open.
 
 ## The rolling build (the newest `main`, one click)
 

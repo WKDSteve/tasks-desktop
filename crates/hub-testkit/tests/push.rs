@@ -28,17 +28,72 @@ static ONE_AT_A_TIME: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(())
 /// The base point of P-256, uncompressed: a valid public key of a device.
 const DEVICE_KEY: &str = "046b17d1f2e12c4247f8bce6e563a440f277037d812deb33a0f4a13945d898c2964fe342e2fe1a7f9b8ee7eb4a7c0f9e162bce33576b315ececbb6406837bf51f5";
 
-/// A push service that takes everything and keeps the endpoints it was sent to.
-#[derive(Default)]
+/// A push service that keeps what it was sent (the endpoint and the sealed body) and answers `answer` (201: taken).
 struct Counting {
-    sent: Mutex<Vec<String>>,
+    sent: Mutex<Vec<(String, Vec<u8>)>>,
+    answer: std::sync::atomic::AtomicU16,
+}
+
+impl Default for Counting {
+    fn default() -> Self {
+        Self {
+            sent: Mutex::new(Vec::new()),
+            answer: std::sync::atomic::AtomicU16::new(201),
+        }
+    }
 }
 
 impl PushTransport for Counting {
     fn send(&self, request: PushRequest) -> BoxFuture<'_, Option<u16>> {
-        self.sent.lock().unwrap().push(request.endpoint);
-        Box::pin(async { Some(201) })
+        self.sent
+            .lock()
+            .unwrap()
+            .push((request.endpoint, request.body));
+        let answer = self.answer.load(std::sync::atomic::Ordering::SeqCst);
+        Box::pin(async move { Some(answer) })
     }
+}
+
+/// The secret of `DEVICE_KEY` (the base point: private key 1) and the `auth` of `subscription`.
+const AUTH: [u8; 16] = [7u8; 16];
+
+/// What a phone reads from a sealed body (RFC 8291, one record), as tasks-mobile's worker does.
+fn open_body(body: &[u8]) -> Value {
+    use aes_gcm::aead::{Aead, KeyInit};
+    use hkdf::Hkdf;
+    use sha2::Sha256;
+    let mut one = [0u8; 32];
+    one[31] = 1;
+    let secret = p256::SecretKey::from_slice(&one).unwrap();
+    let ua_public = hex(DEVICE_KEY);
+    let salt = &body[..16];
+    assert_eq!(body[20], 65, "the key of the hub follows");
+    let as_public = &body[21..86];
+    let shared = p256::ecdh::diffie_hellman(
+        secret.to_nonzero_scalar(),
+        p256::PublicKey::from_sec1_bytes(as_public)
+            .unwrap()
+            .as_affine(),
+    );
+    let mut info = b"WebPush: info\0".to_vec();
+    info.extend_from_slice(&ua_public);
+    info.extend_from_slice(as_public);
+    let mut ikm = [0u8; 32];
+    Hkdf::<Sha256>::new(Some(&AUTH), shared.raw_secret_bytes())
+        .expand(&info, &mut ikm)
+        .unwrap();
+    let prk = Hkdf::<Sha256>::new(Some(salt), &ikm);
+    let (mut cek, mut nonce) = ([0u8; 16], [0u8; 12]);
+    prk.expand(b"Content-Encoding: aes128gcm\0", &mut cek)
+        .unwrap();
+    prk.expand(b"Content-Encoding: nonce\0", &mut nonce)
+        .unwrap();
+    let mut plain = aes_gcm::Aes128Gcm::new_from_slice(&cek)
+        .unwrap()
+        .decrypt((&nonce).into(), &body[86..])
+        .unwrap();
+    assert_eq!(plain.pop(), Some(2), "one record, the last");
+    serde_json::from_slice(&plain).unwrap()
 }
 
 fn hex(text: &str) -> Vec<u8> {
@@ -59,11 +114,13 @@ struct Rig {
 }
 
 impl Rig {
+    /// A hub whose `alpha.nvim` has `class`; `open.nvim` (one task, `open.nvim/o1`) is always `internal`.
     async fn new(name: &str, class: Class) -> Self {
         let dir = Scratch::new(&format!("push-{name}"));
         let vault = dir.join("vault");
         std::fs::create_dir_all(vault.join("alpha.nvim").join("ROADMAP").join("tasks")).unwrap();
         std::fs::write(vault.join(".fake-n"), "2").unwrap();
+        std::fs::write(vault.join(".fake-extra"), "open.nvim/o1").unwrap();
         let engine: Arc<dyn Engine> = Arc::new(CliEngine::new(CliEngineConfig {
             dialect: tasks_hub::engine::DIALECT,
             nvim: PathBuf::from(env!("CARGO_BIN_EXE_fake-nvim")),
@@ -78,10 +135,16 @@ impl Rig {
         }));
         let service = Arc::new(Counting::default());
         let push = Arc::new(Push::open(&dir.join("settings"), service.clone()).unwrap());
-        let policy = AreaPolicy::new(std::collections::BTreeMap::from([(
-            "alpha.nvim".to_owned(),
-            Entry { class, repo: None },
-        )]))
+        let policy = AreaPolicy::new(std::collections::BTreeMap::from([
+            ("alpha.nvim".to_owned(), Entry { class, repo: None }),
+            (
+                "open.nvim".to_owned(),
+                Entry {
+                    class: Class::Internal,
+                    repo: None,
+                },
+            ),
+        ]))
         .unwrap();
         let control = Secret::generate(TOKEN_BYTES).unwrap();
         let server = start_with(
@@ -246,8 +309,26 @@ impl Rig {
         assert_eq!(doc["results"][0]["outcome"], "changed", "{doc}");
     }
 
+    /// The endpoints told, in order.
     fn sent(&self) -> Vec<String> {
-        self.service.sent.lock().unwrap().clone()
+        self.service
+            .sent
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|(endpoint, _)| endpoint.clone())
+            .collect()
+    }
+
+    /// What each notice said, as the phone reads it.
+    fn said(&self) -> Vec<Value> {
+        self.service
+            .sent
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|(_, body)| open_body(body))
+            .collect()
     }
 
     /// Wait until `n` notices went out, or a while; the count then.
@@ -266,7 +347,7 @@ fn subscription(endpoint: &str, kinds: &[&str]) -> Subscription {
     Subscription {
         endpoint: endpoint.to_owned(),
         p256dh: b64url(&hex(DEVICE_KEY)),
-        auth: b64url(&[7u8; 16]),
+        auth: b64url(&AUTH),
         kinds: kinds.iter().map(|k| (*k).to_owned()).collect(),
     }
 }
@@ -314,6 +395,12 @@ async fn a_task_that_starts_to_wait_for_a_decision_is_told_once_to_the_phones_th
     r.set_status("alpha.nvim/t1", "decision").await;
     assert_eq!(r.wait_for(1).await, 1, "{:?}", r.sent());
     assert_eq!(r.sent(), ["https://push.example.com/d1"]);
+    // The kind and the id, nothing more: no title, no area name of its own, no text (the phone reads those over its
+    // paired way).
+    assert_eq!(
+        r.said(),
+        [json!({ "kind": "decision", "id": "alpha.nvim/t1" })]
+    );
     // Another change of the vault: the task still waits, nothing more is told.
     r.set_status("alpha.nvim/t2", "doing").await;
     tokio::time::sleep(Duration::from_millis(800)).await;
@@ -335,9 +422,49 @@ async fn nothing_goes_out_for_a_private_area() {
         )
         .unwrap();
     r.read().await;
+    std::fs::write(r.vault.join(".fake-remind"), "alpha.nvim/t2=2026-11-10").unwrap();
+    std::fs::write(r.vault.join(".fake-today"), "2026-11-12").unwrap();
     r.set_status("alpha.nvim/t1", "decision").await;
-    tokio::time::sleep(Duration::from_millis(1500)).await;
-    assert!(r.sent().is_empty(), "{:?}", r.sent());
+    // The check that the job ran: the task of the internal area beside it, waiting in the same look, is told; of the
+    // private one, neither its decision nor its reminder.
+    r.set_status("open.nvim/o1", "decision").await;
+    assert_eq!(r.wait_for(1).await, 1, "{:?}", r.sent());
+    tokio::time::sleep(Duration::from_millis(800)).await;
+    assert_eq!(
+        r.said(),
+        [json!({ "kind": "decision", "id": "open.nvim/o1" })]
+    );
+}
+
+#[tokio::test]
+async fn a_notice_no_push_service_took_is_told_again() {
+    let _one = ONE_AT_A_TIME.lock().await;
+    let r = Rig::new("unsent", Class::Internal).await;
+    r.push
+        .subscribe(
+            "d1",
+            subscription("https://push.example.com/d1", &["decision"]),
+        )
+        .unwrap();
+    r.read().await;
+    r.service
+        .answer
+        .store(500, std::sync::atomic::Ordering::SeqCst);
+    r.set_status("alpha.nvim/t1", "decision").await;
+    assert_eq!(r.wait_for(1).await, 1, "{:?}", r.sent());
+    // The push service is back: the next look tells it again, and then no more.
+    r.service
+        .answer
+        .store(201, std::sync::atomic::Ordering::SeqCst);
+    r.set_status("alpha.nvim/t2", "doing").await;
+    assert_eq!(r.wait_for(2).await, 2, "{:?}", r.sent());
+    r.set_status("alpha.nvim/t2", "open").await;
+    tokio::time::sleep(Duration::from_millis(800)).await;
+    assert_eq!(r.sent().len(), 2, "{:?}", r.sent());
+    assert_eq!(
+        r.said()[1],
+        json!({ "kind": "decision", "id": "alpha.nvim/t1" })
+    );
 }
 
 #[tokio::test]
