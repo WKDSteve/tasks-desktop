@@ -680,7 +680,8 @@ platform backends are about twenty) and its policy is in the repository:
 * A version that is younger than seven days is not taken
   (`tools/check-lock-age.py`, also run in CI; a `429` or `503` of crates.io
   is waited out and asked again, known publication dates are kept in
-  `target/lock-age-cache.json` of the workspace or `$LOCK_AGE_CACHE`, never
+  `target/lock-age-cache.json` of the workspace, on a runner in
+  `$RUNNER_WORKSPACE` beside the checkout, or `$LOCK_AGE_CACHE`, never
   `~/.cache`, which every job on a self-hosted runner could write). Cargo has no setting for
   this. A newer version is taken with `cargo update -p <crate> --precise
   <version>` once it is old enough, in a commit of its own with a look at
