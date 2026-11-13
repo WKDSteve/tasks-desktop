@@ -701,3 +701,20 @@ this machine only) and its name, and the groups with their titles and tiles. The
 through the tab *Repos*); a file that cannot be used does not stop the hub: the tab is empty and says why, and the
 first change keeps the old file as `repos.json.invalid` beside the new one. At most 200 repos, 50 groups, 80
 characters for a name or a title, 256 KiB.
+
+<!-- connections:begin (written by the app-icons tool of the workshop; change integrations.json there, not this block) -->
+## Connections
+
+![tasks-desktop: what it uses and what uses it](assets/graphs/tasks-desktop.png)
+
+**Uses**
+
+- [appkit](https://github.com/WKDSteve/appkit): tasks-desktop is built on appkit: guard, pairing and install (`appkit-core`, `appkit-hub`), the page kit (`appkit-ui`, `appkit-web`) and the phone side (`appkit-mobile`). ([picture](assets/graphs/pair/tasks-desktop--appkit.png))
+- [tasks-mobile](https://github.com/WKDSteve/tasks-mobile): The hub of tasks-desktop serves the phone page of tasks-mobile under `/m/`; `mobile.lock` pins the commit that is built into it. ([picture](assets/graphs/pair/tasks-desktop--tasks-mobile.png))
+- [tasks-web](https://github.com/WKDSteve/tasks-web): The web workflow of tasks-desktop builds the page as one HTML file, tests it and publishes it to the repository tasks-web. ([picture](assets/graphs/pair/tasks-desktop--tasks-web.png))
+- [tasks.nvim](https://github.com/WKDSteve/tasks.nvim): tasks-desktop runs tasks.nvim as its engine, pinned in `engine.lock`: the engine is the only writer, the app shows and sends operations. ([picture](assets/graphs/pair/tasks-desktop--tasks.nvim.png))
+
+**Used by**
+
+- [hub-desktop](https://github.com/WKDSteve/hub-desktop): hub-desktop shows tasks-desktop as a tile and starts it, native or as a web app. ([picture](assets/graphs/pair/hub-desktop--tasks-desktop.png))
+<!-- connections:end -->
