@@ -243,8 +243,13 @@ class `public` or `internal` in `areas.json`. A private area, or one without a c
 all: not in the list, the areas or the proposals, not even as a name or in the counts; a task of it, its preview of
 finishing and every write or upload to it answer `404 not_found`, as a task that does not exist (a new task into such
 an area too). A task is given field by field from a fixed list (no file path, no reference to another task outside the
-released areas, no problem text); a plan or project only when every area of it is released. The PC gets everything as
-before. Its level decides what it may write (`MOB-03`):
+released areas, no problem text); a plan or project only when its own area and every area it holds are released, its
+target and project only when the phone may know them. What a write or an upload answers is cut the same way: the
+outcome, the ids of released areas, the plans and projects it closed that the phone may know, an error by its code
+(not its text, no notes, no files). No document tells the `rev` or `digest` of the whole vault (they move with a
+change in a private area too); the snapshot has a `rev` of its own, over what the phone is given. The proposals of
+`next` are those of released areas: when the engine's pick over the vault is elsewhere, the hub asks per released area.
+The PC gets everything as before. Its level decides what it may write (`MOB-03`):
 
 | Level | The phone may |
 |---|---|

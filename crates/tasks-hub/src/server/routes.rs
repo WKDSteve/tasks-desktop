@@ -143,9 +143,32 @@ async fn task_document(st: &Shared, query: Option<&str>) -> Result<String, Respo
     }
 }
 
-/// Does a paired device ask (not the PC)?
+/// Does a paired device ask (not the PC)? A request the guard named no caller for is one: every route that answers a
+/// device sits behind a session, so `None` is not expected, and the narrower answer is the safe one (fail closed).
 pub(super) fn is_device(caller: Option<&Caller>) -> bool {
-    matches!(caller, Some(Caller::Device(_)))
+    !matches!(caller, Some(Caller::Pc))
+}
+
+/// The ids of the plans and projects a phone may know, from the snapshot the hub holds.
+pub(super) fn device_plans(st: &Shared) -> Vec<String> {
+    let rt = st.rt();
+    rt.store
+        .latest()
+        .and_then(|c| serde_json::from_slice::<serde_json::Value>(&c.text).ok())
+        .map(|snap| device_cut::released_plans(&rt.classes, &snap))
+        .unwrap_or_default()
+}
+
+/// What a write answers a phone: `tasks.result` cut (`device_cut::result`), with the plans it may know.
+pub(super) fn device_result(st: &Shared, text: &str, plans: &[String]) -> Response {
+    match serde_json::from_str::<serde_json::Value>(text) {
+        Ok(doc) => json_response(
+            StatusCode::OK,
+            device_cut::result(&st.rt().classes, &doc, plans).to_string(),
+            None,
+        ),
+        Err(_) => engine_failed(),
+    }
 }
 
 /// What a phone is told of a task it may not see, or that is not there: the same.
@@ -171,10 +194,12 @@ pub(super) async fn next(
         Err(why) => return error_body(StatusCode::BAD_REQUEST, "bad_query", why),
     };
     let mut request = serde_json::Map::new();
+    let mut asked_n = None;
     if let Some(n) = params.get("n") {
         match n.parse::<u8>() {
             Ok(n) if n <= 10 => {
                 request.insert("n".to_owned(), json!(n));
+                asked_n = Some(n);
             }
             _ => return error_body(StatusCode::BAD_REQUEST, "bad_query", "n is 0 to 10"),
         }
@@ -196,21 +221,79 @@ pub(super) async fn next(
     {
         return not_found();
     }
+    if is_device(caller.as_deref()) {
+        return device_next(&st, request, asked_n).await;
+    }
     let request = serde_json::Value::Object(request);
     match ask(&st, Calls::Next, Some(&request)).await {
-        Ok(reply) if is_device(caller.as_deref()) => {
-            match serde_json::from_str::<serde_json::Value>(&reply.text) {
-                Ok(doc) => json_response(
-                    StatusCode::OK,
-                    device_cut::next(&st.rt().classes, &doc).to_string(),
-                    None,
-                ),
-                Err(_) => engine_failed(),
-            }
-        }
         Ok(reply) => json_response(StatusCode::OK, reply.text, None),
         Err(response) => response,
     }
+}
+
+/// How many alternatives the engine proposes when it is not told (`tasks.next`).
+const NEXT_DEFAULT_N: usize = 2;
+/// The most alternatives the engine proposes (`tasks.next`).
+const NEXT_MAX_N: u8 = 10;
+
+/// `next` for a phone. The engine picks over the whole vault, and what it picks in an area the phone may not see is cut
+/// away: so it is asked for the most, and when the cut holds fewer than asked, each released area is asked in turn
+/// (in the order of the snapshot) until there are enough. The pick of the vault leads; the cut is shortened to what was
+/// asked.
+async fn device_next(
+    st: &Shared,
+    mut request: serde_json::Map<String, serde_json::Value>,
+    asked_n: Option<u8>,
+) -> Response {
+    let wanted = 1 + asked_n.map_or(NEXT_DEFAULT_N, usize::from);
+    let scoped = request.contains_key("area");
+    request.insert("n".to_owned(), json!(NEXT_MAX_N));
+    let rt = st.rt();
+    let mut cut = match ask_as(st, true, Calls::Next, Some(&json!(request))).await {
+        Ok(reply) => match serde_json::from_str::<serde_json::Value>(&reply.text) {
+            Ok(doc) => device_cut::next(&rt.classes, &doc),
+            Err(_) => return engine_failed(),
+        },
+        Err(response) => return response,
+    };
+    let mut picks = device_cut::next_picks(&cut);
+    if picks.len() < wanted && !scoped {
+        let areas: Vec<String> = rt
+            .store
+            .latest()
+            .and_then(|c| serde_json::from_slice::<serde_json::Value>(&c.text).ok())
+            .map(|snap| {
+                snap["areas"]
+                    .as_array()
+                    .map_or(&[][..], Vec::as_slice)
+                    .iter()
+                    .filter_map(|a| a["name"].as_str())
+                    .filter(|name| device_cut::released(&rt.classes, name))
+                    .map(str::to_owned)
+                    .collect()
+            })
+            .unwrap_or_default();
+        for area in areas {
+            if picks.len() >= wanted {
+                break;
+            }
+            request.insert("area".to_owned(), json!(area));
+            let Ok(reply) = ask_as(st, true, Calls::Next, Some(&json!(request))).await else {
+                continue;
+            };
+            let Ok(doc) = serde_json::from_str::<serde_json::Value>(&reply.text) else {
+                continue;
+            };
+            for pick in device_cut::next_picks(&device_cut::next(&rt.classes, &doc)) {
+                if !picks.iter().any(|p| p["id"] == pick["id"]) {
+                    picks.push(pick);
+                }
+            }
+        }
+    }
+    picks.truncate(wanted);
+    device_cut::set_picks(&mut cut, picks);
+    json_response(StatusCode::OK, cut.to_string(), None)
 }
 
 /// `GET /api/tasks/about`: what this build is and which engine it runs (versions and commits, the
@@ -647,7 +730,14 @@ pub(super) async fn ops(
     if !dry_run && !st.post_limit.allow() {
         return too_many();
     }
-    let reply = match ask(&st, Calls::Ops, Some(&request)).await {
+    let device = is_device(caller.as_deref());
+    // The plans a phone may know, before the write (a plan it closes is one of them).
+    let plans = if device {
+        device_plans(&st)
+    } else {
+        Vec::new()
+    };
+    let reply = match ask_as(&st, device, Calls::Ops, Some(&request)).await {
         Ok(reply) => reply,
         Err(response) => {
             // A write that ended without an answer may have been carried out:
@@ -658,6 +748,9 @@ pub(super) async fn ops(
     };
     if !dry_run {
         settle_write(&st, &reply.text).await;
+    }
+    if device {
+        return device_result(&st, &reply.text, &plans);
     }
     json_response(StatusCode::OK, reply.text, None)
 }
@@ -1349,8 +1442,17 @@ fn device_refusal(
     caller: Option<&Caller>,
     request: &serde_json::Value,
 ) -> Option<Response> {
-    let Some(Caller::Device(id)) = caller else {
-        return None;
+    let id = match caller {
+        Some(Caller::Pc) => return None,
+        Some(Caller::Device(id)) => id,
+        // No caller: no session (`is_device`), nothing is done.
+        None => {
+            return Some(error_body(
+                StatusCode::UNAUTHORIZED,
+                "unauthorized",
+                "session required",
+            ))
+        }
     };
     // The guard let the session through a moment ago; a device that is gone since gets nothing.
     let has = st.devices.as_ref().and_then(|d| d.level_of(id));

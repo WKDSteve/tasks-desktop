@@ -29,6 +29,8 @@ futures-core = "0.3"
 notify = { version = "8.2", default-features = false }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+# The `rev` of a phone's snapshot, a hash over what it is given (src/server/device_cut.rs): the version appkit-hub brings.
+sha2 = "0.11"
 tokio = { version = "1", default-features = false, features = ["sync", "rt", "rt-multi-thread", "net", "time", "macros", "io-util", "signal"] }
 
 [dev-dependencies]

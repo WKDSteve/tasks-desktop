@@ -85,6 +85,37 @@ pub(super) fn engine_failure(error: EngineError) -> Response {
     }
 }
 
+/// For a phone: the engine's refusal keeps its code, not its text (it may name a task, a plan or an area the phone may
+/// not know, MOB-02).
+pub(super) fn quiet_for_device(error: EngineError) -> EngineError {
+    match error {
+        EngineError::Refused(mut r) => {
+            r.message.clear();
+            EngineError::Refused(r)
+        }
+        other => other,
+    }
+}
+
+/// `ask`, for a phone (`device`) with the engine's refusals told by their code alone (`quiet_for_device`).
+// The error is the answer to send, as everywhere in this file: a response is large, and rare.
+#[allow(clippy::result_large_err)]
+pub(super) async fn ask_as(
+    st: &Shared,
+    device: bool,
+    method: Method,
+    params: Option<&serde_json::Value>,
+) -> Result<crate::engine::Reply, Response> {
+    let rt = st.rt();
+    let Some(engine) = &rt.engine else {
+        return Err(engine_unavailable(st));
+    };
+    engine
+        .call(method, params)
+        .await
+        .map_err(|e| engine_failure(if device { quiet_for_device(e) } else { e }))
+}
+
 // The error is the answer to send, as everywhere in this file: a response is large, and rare.
 #[allow(clippy::result_large_err)]
 pub(super) async fn ask(

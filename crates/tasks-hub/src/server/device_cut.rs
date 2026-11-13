@@ -6,6 +6,10 @@
 //! The cut keeps what it names, not what it does not know: a task is copied field by field from a list of fields that
 //! carry nothing of another task (no path, no reference, no problem text), and a list of ids keeps only the ids of
 //! released areas. A new field of the engine reaches a phone only once it is named here.
+//!
+//! No document tells the state of the whole vault: its `rev` and `digest` move with every change, also in an area the
+//! phone may not see. A snapshot gets a `rev` of its own, made over what the phone is given (`device_rev`); the other
+//! documents get none.
 
 use serde_json::{Map, Value};
 
@@ -64,16 +68,16 @@ const TASK_FIELDS: &[&str] = &[
 /// The fields of a task entry that name other tasks: only the released ones stay.
 const TASK_ID_LISTS: &[&str] = &["blocked_by", "after"];
 
-/// The fields of the head of a document (who wrote it, when, for which state).
-const HEAD_FIELDS: &[&str] = &[
-    "kind",
-    "schema",
-    "plugin",
-    "engine",
-    "generated_at",
-    "rev",
-    "digest",
-];
+/// The fields of the head of a document (who wrote it, when). Not its `rev` and `digest`: those are of the whole vault.
+const HEAD_FIELDS: &[&str] = &["kind", "schema", "plugin", "engine", "generated_at"];
+
+/// A `rev` for a phone: a hash over what it is given, so it moves only with that (`sha256:` and 32 hex digits).
+fn device_rev(doc: &Value) -> String {
+    use sha2::{Digest, Sha256};
+    let hash = Sha256::digest(doc.to_string().as_bytes());
+    let hex: String = hash[..16].iter().map(|b| format!("{b:02x}")).collect();
+    format!("sha256:{hex}")
+}
 
 fn copy(from: &Value, fields: &[&str]) -> Map<String, Value> {
     let mut out = Map::new();
@@ -109,24 +113,59 @@ pub(crate) fn task_entry(classes: &AreaPolicy, task: &Value) -> Option<Value> {
             out.insert((*field).to_owned(), ids(classes, list));
         }
     }
-    // The plan and the project of a task are kept when every area they hold is released (see `plans`).
+    // The plan and the project of a task are not in `TASK_FIELDS`: a task of a released area may belong to a plan of a
+    // private one, whose name would tell of it. A phone sees the plans of the snapshot (`plans`), not which task is in
+    // which.
     Some(Value::Object(out))
 }
 
-/// The plans (or projects) a phone is given: those whose every area is released (what is made of several areas has the
-/// class of the highest of them), with their own fields only.
-fn plans(classes: &AreaPolicy, list: &Value, fields: &[&str]) -> Vec<Value> {
+/// Is this plan (or project) one a phone may know: its own area (the area of its id, where its file is) and every area
+/// it holds released (what is made of several areas has the class of the highest of them).
+fn released_plan(classes: &AreaPolicy, plan: &Value) -> bool {
+    let areas = plan["areas"].as_array().map_or(&[][..], Vec::as_slice);
+    plan["id"]
+        .as_str()
+        .is_some_and(|id| released_id(classes, id))
+        && !areas.is_empty()
+        && areas
+            .iter()
+            .all(|a| a.as_str().is_some_and(|a| released(classes, a)))
+}
+
+/// The plans (or projects) a phone is given, with their own fields only. What a plan names outside itself stays only
+/// when the phone may know it too: its target (a task) when that task is of a released area, its project when that
+/// project is given too (`projects`); otherwise the field is left out.
+fn plans(classes: &AreaPolicy, list: &Value, projects: &[String]) -> Vec<Value> {
     list.as_array()
         .map_or(&[][..], Vec::as_slice)
         .iter()
-        .filter(|plan| {
-            let areas = plan["areas"].as_array().map_or(&[][..], Vec::as_slice);
-            !areas.is_empty()
-                && areas
-                    .iter()
-                    .all(|a| a.as_str().is_some_and(|a| released(classes, a)))
+        .filter(|plan| released_plan(classes, plan))
+        .map(|plan| {
+            let mut out = copy(plan, PLAN_FIELDS);
+            if out
+                .get("target")
+                .is_some_and(|t| !t.as_str().is_some_and(|t| released_id(classes, t)))
+            {
+                out.remove("target");
+            }
+            if out
+                .get("project")
+                .is_some_and(|p| !p.as_str().is_some_and(|p| projects.iter().any(|k| k == p)))
+            {
+                out.remove("project");
+            }
+            Value::Object(out)
         })
-        .map(|plan| Value::Object(copy(plan, fields)))
+        .collect()
+}
+
+/// The ids of the plans (or projects) of `list` a phone may know.
+fn plan_ids(classes: &AreaPolicy, list: &Value) -> Vec<String> {
+    list.as_array()
+        .map_or(&[][..], Vec::as_slice)
+        .iter()
+        .filter(|plan| released_plan(classes, plan))
+        .filter_map(|plan| plan["id"].as_str().map(str::to_owned))
         .collect()
 }
 
@@ -207,17 +246,21 @@ pub(crate) fn snapshot(classes: &AreaPolicy, doc: &Value) -> Value {
             .collect();
         out.insert("area_groups".to_owned(), Value::Array(kept));
     }
+    let projects = plan_ids(classes, &doc["projects"]);
     out.insert(
         "plans".to_owned(),
-        Value::Array(plans(classes, &doc["plans"], PLAN_FIELDS)),
+        Value::Array(plans(classes, &doc["plans"], &projects)),
     );
+    // A project names no project; its `project` field, if any, is dropped as one not given.
     out.insert(
         "projects".to_owned(),
-        Value::Array(plans(classes, &doc["projects"], PLAN_FIELDS)),
+        Value::Array(plans(classes, &doc["projects"], &[])),
     );
     out.insert("areas".to_owned(), Value::Array(areas));
     out.insert("unlisted".to_owned(), Value::Array(unlisted));
     out.insert("tasks".to_owned(), Value::Array(tasks));
+    let rev = device_rev(&Value::Object(out.clone()));
+    out.insert("rev".to_owned(), Value::from(rev));
     Value::Object(out)
 }
 
@@ -259,6 +302,31 @@ pub(crate) fn next(classes: &AreaPolicy, doc: &Value) -> Value {
     Value::Object(out)
 }
 
+/// The proposals of a cut `tasks.next`, in order: its pick, then its alternatives.
+pub(crate) fn next_picks(cut: &Value) -> Vec<Value> {
+    std::iter::once(&cut["task"])
+        .filter(|t| t.is_object())
+        .chain(
+            cut["alternatives"]
+                .as_array()
+                .map_or(&[][..], Vec::as_slice),
+        )
+        .cloned()
+        .collect()
+}
+
+/// Put `picks` into a cut `tasks.next`: the first leads, the rest are the alternatives.
+pub(crate) fn set_picks(cut: &mut Value, mut picks: Vec<Value>) {
+    let Some(map) = cut.as_object_mut() else {
+        return;
+    };
+    map.remove("task");
+    if !picks.is_empty() {
+        map.insert("task".to_owned(), picks.remove(0));
+    }
+    map.insert("alternatives".to_owned(), Value::Array(picks));
+}
+
 /// `tasks.task` for a phone, or `None` (the hub answers `not_found`) when the task is not of a released area.
 pub(crate) fn task(classes: &AreaPolicy, doc: &Value) -> Option<Value> {
     let entry = task_entry(classes, &doc["task"])?;
@@ -270,8 +338,6 @@ pub(crate) fn task(classes: &AreaPolicy, doc: &Value) -> Option<Value> {
             "plugin",
             "engine",
             "generated_at",
-            "rev",
-            "digest",
             "body",
             "body_truncated",
             "steps",
@@ -302,7 +368,6 @@ pub(crate) fn done_preview(
             "plugin",
             "engine",
             "generated_at",
-            "digest",
             "id",
             "already",
             "area",
@@ -329,13 +394,80 @@ pub(crate) fn done_preview(
     Some(Value::Object(out))
 }
 
-/// The ids of the plans and projects a phone is given in `snapshot` (every area released).
+/// The ids of the plans and projects a phone is given in `snapshot`.
 pub(crate) fn released_plans(classes: &AreaPolicy, snapshot: &Value) -> Vec<String> {
-    plans(classes, &snapshot["plans"], &["id"])
+    plan_ids(classes, &snapshot["plans"])
         .into_iter()
-        .chain(plans(classes, &snapshot["projects"], &["id"]))
-        .filter_map(|p| p["id"].as_str().map(str::to_owned))
+        .chain(plan_ids(classes, &snapshot["projects"]))
         .collect()
+}
+
+/// The fields of one entry of `tasks.result` a phone is given: what became of its operation. Not the files, the notes
+/// (paths of documents), the index, the text of an error (it may name what the phone may not know).
+const RESULT_FIELDS: &[&str] = &[
+    "n",
+    "op",
+    "ok",
+    "outcome",
+    "etag_before",
+    "etag_after",
+    "to",
+    "steps_ticked",
+];
+
+/// `tasks.result` (of `ops`, of an upload) for a phone: each entry with its own fields, the ids it names only of
+/// released areas, the plans and projects it closed only when the phone may know them (`released_plans`), an error as
+/// its code alone.
+pub(crate) fn result(classes: &AreaPolicy, doc: &Value, released_plans: &[String]) -> Value {
+    let mut out = copy(doc, HEAD_FIELDS);
+    for field in ["client_op_id", "dry_run", "ok"] {
+        if let Some(value) = doc.get(field) {
+            out.insert(field.to_owned(), value.clone());
+        }
+    }
+    let entries: Vec<Value> = doc["results"]
+        .as_array()
+        .map_or(&[][..], Vec::as_slice)
+        .iter()
+        .map(|entry| {
+            let mut e = copy(entry, RESULT_FIELDS);
+            if let Some(id) = entry["id"].as_str().filter(|id| released_id(classes, id)) {
+                e.insert("id".to_owned(), Value::from(id));
+            }
+            e.insert(
+                "changed_ids".to_owned(),
+                ids(classes, &entry["changed_ids"]),
+            );
+            for field in ["plans_closed", "projects_closed"] {
+                if let Some(list) = entry[field].as_array() {
+                    let kept: Vec<Value> = list
+                        .iter()
+                        .filter(|p| {
+                            p.as_str()
+                                .is_some_and(|p| released_plans.iter().any(|k| k == p))
+                        })
+                        .cloned()
+                        .collect();
+                    e.insert(field.to_owned(), Value::Array(kept));
+                }
+            }
+            // Undoing a change of the phone's own task: the operation as the engine gives it, for a released task.
+            if entry["inverse"]["id"]
+                .as_str()
+                .is_some_and(|id| released_id(classes, id))
+            {
+                e.insert("inverse".to_owned(), entry["inverse"].clone());
+            }
+            if let Some(error) = entry["error"].as_object() {
+                let mut kept = copy(&Value::Object(error.clone()), &["code", "retryable"]);
+                kept.insert("message".to_owned(), Value::from(""));
+                e.insert("error".to_owned(), Value::Object(kept));
+            }
+            Value::Object(e)
+        })
+        .collect();
+    out.insert("results".to_owned(), Value::Array(entries));
+    Value::Object(out)
 }
 
 /// The area an operation of `ops` touches: the area of its task, or the area a new task goes to.
@@ -398,15 +530,15 @@ mod tests {
             "unlisted": [{ "id": "secret/u", "status": "done", "code": "done-in-roadmap" }],
             "plan": { "critical_path": { "path": ["secret/a"] }, "warnings": [{ "code": "x", "msg": "secret/a" }] },
             "plans": [
-                { "id": "p-open", "title": "Open plan", "areas": ["open"], "phase_order": [], "valid": true },
-                { "id": "p-mixed", "title": "Mixed plan", "areas": ["open", "secret"], "phase_order": [], "valid": true },
+                { "id": "open/p-open", "title": "Open plan", "areas": ["open"], "phase_order": [], "valid": true },
+                { "id": "open/p-mixed", "title": "Mixed plan", "areas": ["open", "secret"], "phase_order": [], "valid": true },
             ],
             "projects": [],
             "tasks": [
                 { "id": "open/a", "area": "open", "slug": "a", "title": "A", "status": "open",
                   "blocked_by": ["secret/a", "open/b"], "after": [], "refs": ["secret/a"],
                   "file": "E:/vault/open/ROADMAP/tasks/a.md", "problems": [{ "code": "x", "msg": "secret/a" }],
-                  "plan": "p-mixed", "tags": [], "category": [] },
+                  "plan": "open/p-mixed", "tags": [], "category": [] },
                 { "id": "secret/a", "area": "secret", "slug": "a", "title": "Hidden title", "status": "doing" },
                 { "id": "nameless/a", "area": "nameless", "slug": "a", "title": "Unclassified title", "status": "open" },
             ],
@@ -436,10 +568,13 @@ mod tests {
             cut["counts"],
             json!({ "listed": 1, "unlisted": 0, "by_status": { "open": 1 } })
         );
-        assert_eq!(cut["plans"][0]["id"], "p-open");
+        assert_eq!(cut["plans"][0]["id"], "open/p-open");
         assert_eq!(cut["reminders"].as_array().unwrap().len(), 1);
         assert_eq!(cut["kind"], "tasks.snapshot");
-        assert_eq!(cut["rev"], "rev:000001");
+        // Not the vault's `rev`: one of its own, over what the phone is given; no `digest`.
+        let rev = cut["rev"].as_str().unwrap();
+        assert!(rev.starts_with("sha256:") && rev.len() == 39, "{rev}");
+        assert!(cut.get("digest").is_none());
     }
 
     #[test]
@@ -475,10 +610,10 @@ mod tests {
             json!({ "kind": "tasks.donepreview", "id": "secret/a", "to": "x", "confirm": "c" });
         assert!(done_preview(&c, &preview, &[]).is_none());
         let preview = json!({ "kind": "tasks.donepreview", "id": "open/a", "to": "x", "confirm": "c",
-            "freed": ["secret/b", "open/b"], "closes_plan": "p-mixed", "plan": "p-open" });
-        let cut = done_preview(&c, &preview, &["p-open".to_owned()]).unwrap();
+            "freed": ["secret/b", "open/b"], "closes_plan": "open/p-mixed", "plan": "open/p-open" });
+        let cut = done_preview(&c, &preview, &["open/p-open".to_owned()]).unwrap();
         assert_eq!(cut["freed"], json!(["open/b"]));
-        assert_eq!(cut["plan"], "p-open");
+        assert_eq!(cut["plan"], "open/p-open");
         assert!(cut.get("closes_plan").is_none());
         assert_eq!(cut["confirm"], "c");
     }
@@ -494,5 +629,43 @@ mod tests {
             Some("secret")
         );
         assert_eq!(op_area(&json!({ "op": "set" })), None);
+    }
+
+    #[test]
+    fn the_rev_of_a_phone_moves_only_with_what_it_is_given() {
+        let c = classes();
+        let doc = |hidden: &str, shown: &str| {
+            json!({ "kind": "tasks.snapshot", "rev": format!("rev:{hidden}{shown}"), "tasks": [
+                { "id": "secret/a", "area": "secret", "title": hidden, "status": "open" },
+                { "id": "open/a", "area": "open", "title": shown, "status": "open" },
+            ]})
+        };
+        let rev = |d: &Value| snapshot(&c, d)["rev"].as_str().unwrap().to_owned();
+        assert_eq!(rev(&doc("one", "x")), rev(&doc("two", "x")));
+        assert_ne!(rev(&doc("one", "x")), rev(&doc("one", "y")));
+    }
+
+    #[test]
+    fn a_result_keeps_its_own_fields_and_ids_of_released_areas() {
+        let c = classes();
+        let doc = json!({ "kind": "tasks.result", "rev": "r", "digest": "d", "ok": true, "dry_run": false,
+            "client_op_id": "c", "results": [{ "n": 1, "op": "done", "id": "open/a", "ok": true, "outcome": "done",
+            "changed_ids": ["open/a", "secret/b"], "plans_closed": ["open/p", "secret/q"], "notes": ["x"],
+            "file": "open/a.md", "error": { "code": "conflict", "message": "secret/b", "retryable": false } }] });
+        let cut = result(&c, &doc, &["open/p".to_owned()]);
+        assert!(!cut.to_string().contains("secret"), "{cut}");
+        assert_eq!(cut["results"][0]["plans_closed"], json!(["open/p"]));
+        assert!(cut.get("rev").is_none() && cut["results"][0].get("file").is_none());
+        assert_eq!(cut["client_op_id"], "c");
+    }
+
+    #[test]
+    fn a_request_without_a_caller_is_taken_as_a_device() {
+        use super::super::Caller;
+        assert!(super::super::routes::is_device(None));
+        assert!(super::super::routes::is_device(Some(&Caller::Device(
+            "d".into()
+        ))));
+        assert!(!super::super::routes::is_device(Some(&Caller::Pc)));
     }
 }

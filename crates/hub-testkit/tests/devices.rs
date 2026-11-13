@@ -656,3 +656,227 @@ async fn through_the_tailnet_a_phone_gets_the_same_routes_and_the_same_cut() {
     assert_eq!(status, 200, "{doc}");
     assert!(doc.to_string().contains("secret-area"), "{doc}");
 }
+
+/// A plan of a private area (`secret-area/umzug`) that holds only the internal area, a released plan that names a
+/// private target and project, a released plan that names released ones; and the areas of the vault.
+fn plans_of_the_vault() -> Value {
+    json!({
+        "areas": [{ "name": "secret-area" }, { "name": "beta.nvim" }, { "name": "alpha.nvim" }],
+        "plans": [
+            { "id": "secret-area/umzug", "title": "Umzug", "areas": ["alpha.nvim"],
+              "target": "secret-area/kuendigung", "project": "secret-area/scheidung" },
+            { "id": "alpha.nvim/open-plan", "title": "Open", "areas": ["alpha.nvim"],
+              "target": "secret-area/kuendigung", "project": "secret-area/scheidung" },
+            { "id": "alpha.nvim/good", "title": "Good", "areas": ["alpha.nvim"],
+              "target": "alpha.nvim/t1", "project": "alpha.nvim/proj" },
+        ],
+        "projects": [
+            { "id": "secret-area/scheidung", "title": "Scheidung", "areas": ["alpha.nvim"] },
+            { "id": "alpha.nvim/proj", "title": "Proj", "areas": ["alpha.nvim"] },
+        ],
+    })
+}
+
+/// Words of what the phone may not know, in any document it is given.
+fn tells_secret(doc: &Value) -> Option<&'static str> {
+    let text = doc.to_string();
+    [
+        "secret-area",
+        "umzug",
+        "Umzug",
+        "scheidung",
+        "kuendigung",
+        "beta.nvim",
+        "E:/",
+    ]
+    .into_iter()
+    .find(|word| text.contains(word))
+}
+
+impl Rig {
+    /// Put `merge` into the answers of `method` of the fake engine.
+    fn merge(&self, method: &str, merge: &Value) {
+        std::fs::write(
+            self._dir
+                .join("vault")
+                .join(format!(".fake-merge-{method}.json")),
+            merge.to_string(),
+        )
+        .unwrap();
+    }
+}
+
+#[tokio::test]
+async fn a_plan_is_given_to_a_phone_only_with_what_it_names_released() {
+    let _one = ONE_AT_A_TIME.lock().await;
+    let r = Rig::new("plans").await;
+    r.merge("snapshot", &plans_of_the_vault());
+    let (_, phone) = r.phone().await;
+    let pc = r.pc().await;
+
+    let (status, doc) = r.send("GET", "/api/tasks/snapshot", &phone, "").await;
+    assert_eq!(status, 200, "{doc}");
+    assert_eq!(tells_secret(&doc), None, "{doc}");
+    let plans: Vec<&str> = doc["plans"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|p| p["id"].as_str().unwrap())
+        .collect();
+    // A plan whose file is in a private area is not there, whatever areas it holds.
+    assert_eq!(plans, ["alpha.nvim/open-plan", "alpha.nvim/good"], "{doc}");
+    // A target or a project the phone may not know is left out of the plan; released ones stay.
+    assert!(doc["plans"][0].get("target").is_none(), "{doc}");
+    assert!(doc["plans"][0].get("project").is_none(), "{doc}");
+    assert_eq!(doc["plans"][1]["target"], "alpha.nvim/t1", "{doc}");
+    assert_eq!(doc["plans"][1]["project"], "alpha.nvim/proj", "{doc}");
+    assert_eq!(doc["projects"].as_array().unwrap().len(), 1, "{doc}");
+    // The state of the whole vault is not told: a `rev` of its own, no `digest`.
+    let (_, full) = r.send("GET", "/api/tasks/snapshot", &pc, "").await;
+    assert!(full.to_string().contains("secret-area/umzug"), "{full}");
+    assert!(doc.get("digest").is_none(), "{doc}");
+    let rev = doc["rev"].as_str().unwrap();
+    assert!(rev.starts_with("sha256:") && rev != full["rev"], "{rev}");
+    let (_, task) = r
+        .send("GET", "/api/tasks/task?id=alpha.nvim/t1", &phone, "")
+        .await;
+    assert!(
+        task.get("rev").is_none() && task.get("digest").is_none(),
+        "{task}"
+    );
+
+    // What finishing a task closes is told only of a plan or project the phone may know.
+    r.merge(
+        "done_preview",
+        &json!({ "plan": "secret-area/umzug", "closes_plan": "secret-area/umzug",
+                 "closes_project": "secret-area/scheidung", "digest": "sha256:vault" }),
+    );
+    let path = "/api/tasks/done_preview?id=alpha.nvim/t1";
+    let (status, doc) = r.send("GET", path, &phone, "").await;
+    assert_eq!(status, 200, "{doc}");
+    assert_eq!(tells_secret(&doc), None, "{doc}");
+    assert!(
+        doc.get("closes_plan").is_none() && doc.get("digest").is_none(),
+        "{doc}"
+    );
+    r.merge(
+        "done_preview",
+        &json!({ "closes_plan": "alpha.nvim/good", "closes_project": "alpha.nvim/proj" }),
+    );
+    let (_, doc) = r.send("GET", path, &phone, "").await;
+    assert_eq!(doc["closes_plan"], "alpha.nvim/good", "{doc}");
+    assert_eq!(doc["closes_project"], "alpha.nvim/proj", "{doc}");
+}
+
+#[tokio::test]
+async fn a_write_tells_a_phone_only_what_it_may_know() {
+    let _one = ONE_AT_A_TIME.lock().await;
+    let r = Rig::new("results").await;
+    r.merge("snapshot", &plans_of_the_vault());
+    r.merge(
+        "ops",
+        &json!({ "each_result": {
+            "plans_closed": ["secret-area/umzug", "alpha.nvim/good"],
+            "projects_closed": ["secret-area/scheidung", "alpha.nvim/proj"],
+            "changed_ids": ["alpha.nvim/t2", "secret-area/kuendigung"],
+            "notes": ["E:/vault/secret-area/umzug-notes.md"],
+            "file": "secret-area/ROADMAP/tasks/kuendigung.md",
+            "index": { "action": "written" },
+            "inverse": { "op": "set", "id": "secret-area/kuendigung", "patch": { "status": "open" } },
+            "error": { "code": "conflict", "message": "secret-area/kuendigung changed", "retryable": true },
+        }}),
+    );
+    let (_, phone) = r.phone().await;
+    let pc = r.pc().await;
+    // The plans the phone may know come from the snapshot the hub holds.
+    let (status, _) = r.send("GET", "/api/tasks/snapshot", &phone, "").await;
+    assert_eq!(status, 200);
+
+    let done = json!({ "op": "done", "id": "alpha.nvim/t2", "confirm": "x" });
+    let (status, doc) = r.op(&phone, &done).await;
+    assert_eq!(status, 200, "{doc}");
+    assert_eq!(tells_secret(&doc), None, "{doc}");
+    let entry = &doc["results"][0];
+    assert_eq!(entry["id"], "alpha.nvim/t2", "{doc}");
+    assert_eq!(entry["plans_closed"], json!(["alpha.nvim/good"]), "{doc}");
+    assert_eq!(
+        entry["projects_closed"],
+        json!(["alpha.nvim/proj"]),
+        "{doc}"
+    );
+    assert_eq!(entry["changed_ids"], json!(["alpha.nvim/t2"]), "{doc}");
+    assert_eq!(
+        entry["error"],
+        json!({ "code": "conflict", "message": "", "retryable": true })
+    );
+    for field in ["notes", "file", "index", "inverse"] {
+        assert!(entry.get(field).is_none(), "{field}: {doc}");
+    }
+    assert!(doc.get("digest").is_none(), "{doc}");
+    // The PC is told everything.
+    let (_, doc) = r.op(&pc, &done).await;
+    assert!(doc.to_string().contains("secret-area/umzug"), "{doc}");
+
+    // An upload answers in the same words.
+    let origin = r.origin();
+    let auth = format!("Bearer {phone}");
+    let reply = client::request(
+        r.server.addr().port(),
+        "POST",
+        "/api/tasks/upload?id=alpha.nvim/t2&exact=1",
+        &[
+            ("Authorization", auth.as_str()),
+            ("Origin", origin.as_str()),
+            ("Content-Type", "application/octet-stream"),
+            ("X-Upload-Name", "photo.png"),
+        ],
+        "png",
+    )
+    .await
+    .unwrap();
+    assert_eq!(reply.status, 200, "{}", reply.body);
+    let doc: Value = serde_json::from_str(&reply.body).unwrap();
+    assert_eq!(tells_secret(&doc), None, "{doc}");
+    assert_eq!(
+        doc["results"][0]["changed_ids"],
+        json!(["alpha.nvim/t2"]),
+        "{doc}"
+    );
+}
+
+#[tokio::test]
+async fn a_phone_is_proposed_tasks_of_released_areas_when_the_vault_picks_others() {
+    let _one = ONE_AT_A_TIME.lock().await;
+    let r = Rig::new("next").await;
+    r.merge("snapshot", &plans_of_the_vault());
+    // The engine's pick over the vault is all of areas the phone may not see; asked per area, alpha.nvim has two.
+    let brief = |id: &str| json!({ "id": id, "title": format!("Title {id}"), "status": "open" });
+    r.merge(
+        "next",
+        &json!({ "by_area": {
+            "": { "task": brief("secret-area/a"), "alternatives": [brief("beta.nvim/b"), brief("secret-area/c")] },
+            "alpha.nvim": { "task": brief("alpha.nvim/t1"), "alternatives": [brief("alpha.nvim/t2"), brief("alpha.nvim/t0")] },
+        }}),
+    );
+    let (_, phone) = r.phone().await;
+    let (status, _) = r.send("GET", "/api/tasks/snapshot", &phone, "").await;
+    assert_eq!(status, 200);
+
+    let (status, doc) = r.send("GET", "/api/tasks/next?n=1", &phone, "").await;
+    assert_eq!(status, 200, "{doc}");
+    assert_eq!(tells_secret(&doc), None, "{doc}");
+    assert_eq!(doc["task"]["id"], "alpha.nvim/t1", "{doc}");
+    // Shortened to what was asked: the pick and one alternative.
+    assert_eq!(
+        doc["alternatives"],
+        json!([brief("alpha.nvim/t2")]),
+        "{doc}"
+    );
+    // Without `n`, the engine's default: the pick and two alternatives.
+    let (_, doc) = r.send("GET", "/api/tasks/next", &phone, "").await;
+    assert_eq!(doc["alternatives"].as_array().unwrap().len(), 2, "{doc}");
+    // The PC gets the engine's pick as it is.
+    let pc = r.pc().await;
+    let (_, doc) = r.send("GET", "/api/tasks/next?n=1", &pc, "").await;
+    assert_eq!(doc["task"]["id"], "secret-area/a", "{doc}");
+}

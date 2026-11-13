@@ -256,8 +256,9 @@ pub(super) async fn upload(
         );
     };
     let rt = st.rt();
+    let device = is_device(caller.as_deref());
     // A phone attaches only to a task of a released area (MOB-02); another is not there for it.
-    if is_device(caller.as_deref()) && !device_cut::released_id(&rt.classes, &id) {
+    if device && !device_cut::released_id(&rt.classes, &id) {
         return not_found();
     }
     let Some(dir) = rt.upload_dir.as_deref().cloned() else {
@@ -289,7 +290,7 @@ pub(super) async fn upload(
         "ops": [attach_op(&id, "pending", &name, exact)],
         "upload_dir": dir.to_string_lossy(),
     });
-    let refused = match ask(&st, Calls::Ops, Some(&look)).await {
+    let refused = match ask_as(&st, device, Calls::Ops, Some(&look)).await {
         Ok(reply) => {
             let doc = serde_json::from_str::<serde_json::Value>(&reply.text).ok();
             let good = doc.is_some_and(|d| d["results"][0]["ok"] == serde_json::Value::Bool(true));
@@ -298,6 +299,9 @@ pub(super) async fn upload(
         Err(response) => return response,
     };
     if let Some(text) = refused {
+        if device {
+            return device_result(&st, &text, &[]);
+        }
         return json_response(StatusCode::OK, text, None);
     }
     let (incoming, written) = match receive(dir.clone(), size, body).await {
@@ -330,7 +334,7 @@ pub(super) async fn upload(
             Ok(engine) => engine
                 .call(Calls::Ops, Some(&request))
                 .await
-                .map_err(engine_failure),
+                .map_err(|e| engine_failure(if device { quiet_for_device(e) } else { e })),
             Err(why) => {
                 eprintln!("upload: {why}");
                 Err(error_body(
@@ -340,7 +344,7 @@ pub(super) async fn upload(
                 ))
             }
         },
-        None => ask(&st, Calls::Ops, Some(&request)).await,
+        None => ask_as(&st, device, Calls::Ops, Some(&request)).await,
     };
     let reply = match answered {
         Ok(reply) => reply,
@@ -351,6 +355,10 @@ pub(super) async fn upload(
     };
     drop(incoming);
     settle_write(&st, &reply.text).await;
+    // A phone is told what became of its file, in the words of `tasks.result` it may know (MOB-02).
+    if device {
+        return device_result(&st, &reply.text, &[]);
+    }
     let large_for_git = written >= LARGE_FOR_GIT
         && rt
             .vault

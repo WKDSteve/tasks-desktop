@@ -11,6 +11,7 @@
 //! * `.fake-remind`: lines `<id>=<day>`, the reminder these tasks have in the snapshot;
 //! * `.fake-today`: the day `hello` says it is (`today`); `.fake-time`: the time of day it says (`time`);
 //! * `.fake-extra`: lines `<id>`, tasks of other areas in the snapshot;
+//! * `.fake-merge-<method>.json`: keys put into the answer of that method (see the end of `tasks_fill`);
 //! * `.fake-bodies-page`: how many bodies one page holds;
 //! * `.fake-snapshot-ms`: a `snapshot` takes that long (an engine started slowly on a busy machine);
 //! * `.fake-task-ms`, `.fake-task-calls`: a `task` read takes that long, and every one is counted;
@@ -393,5 +394,34 @@ fn tasks_fill(call: &Call<'_>, doc: &mut Value) {
             }
         }
         _ => {}
+    }
+    // `.fake-merge-<method>.json`: an object whose keys are put into the answer of that method; `each_result` is put
+    // into every entry of `results` (ops), `by_area` holds per area (`""`: the whole vault) what `next` answers.
+    if let Some(merge) =
+        std::fs::read_to_string(vault.join(format!(".fake-merge-{}.json", call.method)))
+            .ok()
+            .and_then(|t| serde_json::from_str::<Value>(&t).ok())
+            .and_then(|v| v.as_object().cloned())
+    {
+        for (key, value) in merge {
+            match key.as_str() {
+                "each_result" => {
+                    if let Some(entries) = doc["results"].as_array_mut() {
+                        for entry in entries {
+                            for (k, v) in value.as_object().into_iter().flatten() {
+                                entry[k] = v.clone();
+                            }
+                        }
+                    }
+                }
+                "by_area" => {
+                    let area = params.get("area").and_then(Value::as_str).unwrap_or("");
+                    for (k, v) in value[area].as_object().into_iter().flatten() {
+                        doc[k] = v.clone();
+                    }
+                }
+                _ => doc[key] = value,
+            }
+        }
     }
 }
