@@ -8373,14 +8373,14 @@ test('the plan view compares the open plans: the engine\'s figures, sorted by a 
   // Two plans of different size (unique names: the tests share the vault): a001 has three open tasks (S, S, M: 2 days),
   // one of them waiting on another, and one finished today; b001 one open task (L: 3 days) and nothing finished.
   // a001 names a second area, has a target with a due day that has passed (the forecast ends after it) and is doing;
-  // b001 is planning and names one area.
+  // b001 is planning and names no area: it is one of its own area (nvim-config), which the choice by area offers.
   const plan = (slug: string, title: string, head = 'status: doing\nareas: [nvim-config]') =>
     [join(vault, 'nvim-config', 'ROADMAP', 'plans', `${slug}.md`), `---\ntitle: ${title}\n${head}\nphase_order: [eins, zwei]\ncreated: 2026-11-11\nupdated: 2026-11-11\n---\n\nA plan to compare.\n`] as const;
   const task = (slug: string, title: string, extra: string) =>
     [join(vault, 'nvim-config', 'ROADMAP', 'tasks', `${slug}.md`), `---\ntitle: ${title}\nstatus: open\nkind: task\n${extra}\ncreated: 2026-11-11\nupdated: 2026-11-11\n---\n\nA task to compare.\n`] as const;
   const files = [
     plan('e2e-cmpplan-a001', 'Cmpplan a001', 'status: doing\nareas: [nvim-config, lib.nvim]\ntarget: nvim-config/e2e-cmptask-a003'),
-    plan('e2e-cmpplan-b001', 'Cmpplan b001', 'status: planning\nareas: [nvim-config]'),
+    plan('e2e-cmpplan-b001', 'Cmpplan b001', 'status: planning'),
     task('e2e-cmptask-a001', 'Cmptask a001', 'effort: S\nvalue: 5\nprio: 2\nplan: nvim-config/e2e-cmpplan-a001\nphase: eins'),
     task('e2e-cmptask-a002', 'Cmptask a002', 'effort: S\nvalue: 2\nprio: 3\nplan: nvim-config/e2e-cmpplan-a001\nphase: zwei\nblocked_by: [nvim-config/e2e-cmptask-a001]'),
     task('e2e-cmptask-a003', 'Cmptask a003', 'effort: M\ndue: 2026-01-05\nplan: nvim-config/e2e-cmpplan-a001\nphase: zwei'),
@@ -8440,7 +8440,8 @@ test('the plan view compares the open plans: the engine\'s figures, sorted by a 
     // the keyboard, and taking it away brings every plan back.
     const section = page.getByRole('region', { name: 'Plans compared' });
     const choose = async (label: string, option: string) => {
-      const button = section.getByRole('button', { name: label, exact: false }).first();
+      // From the start of the name: "Plans" is also a word of the hint button of the section.
+      const button = section.getByRole('button', { name: new RegExp(`^${label}`) }).first();
       await button.focus();
       await page.keyboard.press('Enter');
       await section.getByRole('group', { name: label }).getByRole('checkbox', { name: option, exact: true }).click();
@@ -8456,6 +8457,19 @@ test('the plan view compares the open plans: the engine\'s figures, sorted by a 
     await expect(b).toHaveCount(0);
     await choose('Areas', 'lib.nvim');
     await expect(b).toBeVisible();
+    // A plan that names no area is found by its own area, beside the one that names it.
+    await choose('Areas', 'nvim-config');
+    await expect(a).toBeVisible();
+    await expect(b).toBeVisible();
+    await choose('Areas', 'nvim-config');
+    // A plan chosen by name does not survive another choice by status: the table shows the plans of that status.
+    await choose('Plans', 'Cmpplan a001');
+    await expect(b).toHaveCount(0);
+    await choose('Status', 'planning');
+    await expect(b).toBeVisible();
+    await expect(a).toHaveCount(0);
+    await choose('Status', 'planning');
+    await expect(a).toBeVisible();
     expect(await violations(page)).toEqual([]);
     // axe in both colour schemes (the bars, the warnings, the sort marks).
     for (const scheme of ['light', 'dark'] as const) {

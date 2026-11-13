@@ -51,7 +51,9 @@
   let project = $state('');
   let chosen = $state<string[]>([]);
   // By area and by status: a further choice, of this visit (like the plans chosen by name). An area or a status that
-  // no plan has any more is dropped from the choice, so it cannot hide every row unseen.
+  // no plan has any more is dropped from the choice, so it cannot hide every row unseen. Changing either empties the
+  // plans chosen by name, as changing the project does: a plan chosen before could lie outside the new choice and
+  // leave an empty table with nothing on screen saying why.
   let areas = $state<string[]>([]);
   let statuses = $state<string[]>([]);
   const all = $derived(doc?.plans ?? []);
@@ -113,7 +115,10 @@
           hint={t('hint.compare.areas')}
           options={areaOptions.map((a) => ({ value: a, label: a }))}
           selected={filter.areas}
-          onchange={(next) => (areas = next)}
+          onchange={(next) => {
+            areas = next;
+            chosen = [];
+          }}
           clearLabel={t('kit.select.clear', { label: t('nav.areas') })}
           resetLabel={t('multi.reset')}
           searchLabel={t('multi.search')}
@@ -125,7 +130,10 @@
           hint={t('hint.compare.status')}
           options={statusOptions.map((s) => ({ value: s, label: statusLabel(s) }))}
           selected={filter.statuses}
-          onchange={(next) => (statuses = next)}
+          onchange={(next) => {
+            statuses = next;
+            chosen = [];
+          }}
           clearLabel={t('kit.select.clear', { label: t('list.filter.status') })}
           resetLabel={t('multi.reset')}
           searchLabel={t('multi.search')}
