@@ -8372,17 +8372,19 @@ test('the plan view compares the open plans: the engine\'s figures, sorted by a 
   const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
   // Two plans of different size (unique names: the tests share the vault): a001 has three open tasks (S, S, M: 2 days),
   // one of them waiting on another, and one finished today; b001 one open task (L: 3 days) and nothing finished.
-  const plan = (slug: string, title: string) =>
-    [join(vault, 'nvim-config', 'ROADMAP', 'plans', `${slug}.md`), `---\ntitle: ${title}\nstatus: doing\nareas: [nvim-config]\nphase_order: [eins, zwei]\ncreated: 2026-11-11\nupdated: 2026-11-11\n---\n\nA plan to compare.\n`] as const;
+  // a001 names a second area, has a target with a due day that has passed (the forecast ends after it) and is doing;
+  // b001 is planning and names one area.
+  const plan = (slug: string, title: string, head = 'status: doing\nareas: [nvim-config]') =>
+    [join(vault, 'nvim-config', 'ROADMAP', 'plans', `${slug}.md`), `---\ntitle: ${title}\n${head}\nphase_order: [eins, zwei]\ncreated: 2026-11-11\nupdated: 2026-11-11\n---\n\nA plan to compare.\n`] as const;
   const task = (slug: string, title: string, extra: string) =>
     [join(vault, 'nvim-config', 'ROADMAP', 'tasks', `${slug}.md`), `---\ntitle: ${title}\nstatus: open\nkind: task\n${extra}\ncreated: 2026-11-11\nupdated: 2026-11-11\n---\n\nA task to compare.\n`] as const;
   const files = [
-    plan('e2e-cmpplan-a001', 'Cmpplan a001'),
-    plan('e2e-cmpplan-b001', 'Cmpplan b001'),
-    task('e2e-cmptask-a001', 'Cmptask a001', 'effort: S\nplan: nvim-config/e2e-cmpplan-a001\nphase: eins'),
-    task('e2e-cmptask-a002', 'Cmptask a002', 'effort: S\nplan: nvim-config/e2e-cmpplan-a001\nphase: zwei\nblocked_by: [nvim-config/e2e-cmptask-a001]'),
-    task('e2e-cmptask-a003', 'Cmptask a003', 'effort: M\nplan: nvim-config/e2e-cmpplan-a001\nphase: zwei'),
-    task('e2e-cmptask-b001', 'Cmptask b001', 'effort: L\nplan: nvim-config/e2e-cmpplan-b001\nphase: zwei'),
+    plan('e2e-cmpplan-a001', 'Cmpplan a001', 'status: doing\nareas: [nvim-config, lib.nvim]\ntarget: nvim-config/e2e-cmptask-a003'),
+    plan('e2e-cmpplan-b001', 'Cmpplan b001', 'status: planning\nareas: [nvim-config]'),
+    task('e2e-cmptask-a001', 'Cmptask a001', 'effort: S\nvalue: 5\nprio: 2\nplan: nvim-config/e2e-cmpplan-a001\nphase: eins'),
+    task('e2e-cmptask-a002', 'Cmptask a002', 'effort: S\nvalue: 2\nprio: 3\nplan: nvim-config/e2e-cmpplan-a001\nphase: zwei\nblocked_by: [nvim-config/e2e-cmptask-a001]'),
+    task('e2e-cmptask-a003', 'Cmptask a003', 'effort: M\ndue: 2026-01-05\nplan: nvim-config/e2e-cmpplan-a001\nphase: zwei'),
+    task('e2e-cmptask-b001', 'Cmptask b001', 'effort: L\nprio: 1\nplan: nvim-config/e2e-cmpplan-b001\nphase: zwei'),
     [join(vault, 'nvim-config', 'Backlog', 'TASKS', `${today}_e2e-cmpdone-a001.md`), `---\ntitle: Cmpdone a001\nstatus: done\nkind: task\neffort: S\nplan: nvim-config/e2e-cmpplan-a001\ncreated: 2026-11-11\nupdated: 2026-11-11\n---\n\nFinished today.\n`],
   ] as const;
   try {
@@ -8408,6 +8410,15 @@ test('the plan view compares the open plans: the engine\'s figures, sorted by a 
     await expect(a.getByRole('rowheader')).toContainText('stage eins of 2');
     await expect(b.locator('[data-col="effort"]')).toContainText('3 d');
     await expect(b.locator('[data-col="forecast"]')).toHaveText('–');
+    // Value and prio of the open tasks; the due day of the target against the slow end of the forecast.
+    await expect(a.locator('[data-col="value"]')).toContainText('⌀ 3.5');
+    await expect(a.locator('[data-col="value"]')).toContainText('sum 7');
+    await expect(a.locator('[data-col="value"]')).toContainText('1 without value');
+    await expect(a.locator('[data-col="prio"]')).toHaveText('2');
+    await expect(a.locator('[data-col="forecast"] [data-late]')).toHaveText('ends after the due day 2026-01-05');
+    await expect(b.locator('[data-col="value"]')).toContainText('–');
+    await expect(b.locator('[data-col="prio"]')).toHaveText('1');
+    await expect(b.locator('[data-late]')).toHaveCount(0);
     // Sorted by the open effort, the largest first: b before a. A click on "Tasks open" sorts by it: a before b.
     const order = async () => {
       const ids = await table.locator('tbody tr').evaluateAll((rows) => rows.map((r) => r.getAttribute('data-plan')));
@@ -8421,6 +8432,30 @@ test('the plan view compares the open plans: the engine\'s figures, sorted by a 
     await table.getByRole('button', { name: /Tasks open/ }).click();
     await expect(table.getByRole('columnheader', { name: /Tasks open/ })).toHaveAttribute('aria-sort', 'ascending');
     expect(await order()).toBe('b-a');
+    // The best prio first on the first click (1 is best): b before a.
+    await table.getByRole('button', { name: 'Best prio' }).click();
+    await expect(table.getByRole('columnheader', { name: /Best prio/ })).toHaveAttribute('aria-sort', 'ascending');
+    expect(await order()).toBe('b-a');
+    // By status: only the plans that are planning; by area: only those that name lib.nvim. The choice is reached with
+    // the keyboard, and taking it away brings every plan back.
+    const section = page.getByRole('region', { name: 'Plans compared' });
+    const choose = async (label: string, option: string) => {
+      const button = section.getByRole('button', { name: label, exact: false }).first();
+      await button.focus();
+      await page.keyboard.press('Enter');
+      await section.getByRole('group', { name: label }).getByRole('checkbox', { name: option, exact: true }).click();
+      await page.keyboard.press('Escape');
+    };
+    await choose('Status', 'planning');
+    await expect(b).toBeVisible();
+    await expect(a).toHaveCount(0);
+    await choose('Status', 'planning');
+    await expect(a).toBeVisible();
+    await choose('Areas', 'lib.nvim');
+    await expect(a).toBeVisible();
+    await expect(b).toHaveCount(0);
+    await choose('Areas', 'lib.nvim');
+    await expect(b).toBeVisible();
     expect(await violations(page)).toEqual([]);
     // axe in both colour schemes (the bars, the warnings, the sort marks).
     for (const scheme of ['light', 'dark'] as const) {

@@ -1,6 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import type { PlanCompareRow } from './contract';
-import { nextSort, parseCompareSort, pickRows, serializeCompareSort, sortRows, widest } from './planCompare';
+import {
+  areasOf,
+  nextSort,
+  parseCompareSort,
+  pickRows,
+  serializeCompareSort,
+  sortRows,
+  statusesOf,
+  widest,
+} from './planCompare';
 
 /** A row as the engine gives it, with the figures a case sets. */
 function row(id: string, over: Partial<PlanCompareRow> & { open?: number; days?: number; high?: number } = {}): PlanCompareRow {
@@ -57,6 +66,40 @@ describe('the comparison of plans', () => {
     expect(ids(pickRows(rows, 'a/proj', []))).toEqual(['a/big', 'a/mid']);
     expect(ids(pickRows(rows, '', ['a/small', 'a/gone']))).toEqual(['a/small']);
     expect(ids(pickRows(rows, 'a/proj', ['a/small']))).toEqual([]);
+  });
+
+  it('sorts by the average value, the largest first, and by the best prio, 1 first; a plan without one comes last', () => {
+    const worth = [
+      row('a/low', { value: { sum: 4, avg: 2, without: 0 }, prio: 3 }),
+      row('a/bare', { value: { sum: 0, without: 2 } }),
+      row('a/high', { value: { sum: 9, avg: 4.5, without: 1 }, prio: 1 }),
+      row('a/old'),
+    ];
+    expect(ids(sortRows(worth, { key: 'value', desc: true }))).toEqual(['a/high', 'a/low', 'a/bare', 'a/old']);
+    expect(ids(sortRows(worth, { key: 'value', desc: false }))).toEqual(['a/low', 'a/high', 'a/bare', 'a/old']);
+    expect(nextSort({ key: 'effort', desc: true }, 'prio')).toEqual({ key: 'prio', desc: false });
+    expect(ids(sortRows(worth, { key: 'prio', desc: false }))).toEqual(['a/high', 'a/low', 'a/bare', 'a/old']);
+    expect(parseCompareSort('value:desc')).toEqual({ key: 'value', desc: true });
+  });
+
+  it('picks the plans of the chosen areas and statuses; a row of an older engine names no area and matches none', () => {
+    const plans = [
+      row('a/one', { areas: ['a', 'b'], status: 'doing' }),
+      row('b/two', { areas: ['b'], status: 'planning', project: 'a/proj' }),
+      row('c/three', { areas: ['c'], status: 'parked' }),
+      row('d/old', { status: 'doing' }),
+    ];
+    const none = { areas: [], statuses: [] };
+    expect(ids(pickRows(plans, '', [], none))).toEqual(ids(plans));
+    expect(ids(pickRows(plans, '', [], { areas: ['b'], statuses: [] }))).toEqual(['a/one', 'b/two']);
+    expect(ids(pickRows(plans, '', [], { areas: ['a', 'c'], statuses: [] }))).toEqual(['a/one', 'c/three']);
+    expect(ids(pickRows(plans, '', [], { areas: [], statuses: ['doing'] }))).toEqual(['a/one', 'd/old']);
+    expect(ids(pickRows(plans, '', [], { areas: ['b'], statuses: ['planning', 'parked'] }))).toEqual(['b/two']);
+    expect(ids(pickRows(plans, 'a/proj', [], { areas: ['b'], statuses: [] }))).toEqual(['b/two']);
+    expect(ids(pickRows(plans, '', ['a/one'], { areas: ['c'], statuses: [] }))).toEqual([]);
+    expect(areasOf(plans)).toEqual(['a', 'b', 'c']);
+    expect(statusesOf(plans)).toEqual(['planning', 'doing', 'parked']);
+    expect(statusesOf([row('x/y', { status: 'odd' }), row('x/z', { status: 'doing' }), row('x/n')])).toEqual(['doing', 'odd']);
   });
 
   it('measures the bars against the largest open effort', () => {

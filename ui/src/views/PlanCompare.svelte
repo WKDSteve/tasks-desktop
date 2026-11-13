@@ -9,7 +9,16 @@
   import { markHidden } from '../lib/text';
   import Info from 'appkit-ui/Info.svelte';
   import MultiSelect from 'appkit-ui/MultiSelect.svelte';
-  import { COMPARE_KEYS, nextSort, pickRows, sortRows, widest, type CompareKey } from '../lib/planCompare';
+  import {
+    areasOf,
+    COMPARE_KEYS,
+    nextSort,
+    pickRows,
+    sortRows,
+    statusesOf,
+    widest,
+    type CompareKey,
+  } from '../lib/planCompare';
 
   let { app }: { app: App } = $props();
   const t = (key: Key, params: Record<string, string | number> = {}) => translate(app.lang, key, params);
@@ -41,12 +50,26 @@
   const projects = $derived(app.projects);
   let project = $state('');
   let chosen = $state<string[]>([]);
+  // By area and by status: a further choice, of this visit (like the plans chosen by name). An area or a status that
+  // no plan has any more is dropped from the choice, so it cannot hide every row unseen.
+  let areas = $state<string[]>([]);
+  let statuses = $state<string[]>([]);
   const all = $derived(doc?.plans ?? []);
-  const rows = $derived(sortRows(pickRows(all, project, chosen), app.compareSort));
+  const areaOptions = $derived(areasOf(all));
+  const statusOptions = $derived(statusesOf(all));
+  const filter = $derived({
+    areas: areas.filter((a) => areaOptions.includes(a)),
+    statuses: statuses.filter((s) => statusOptions.includes(s)),
+  });
+  const rows = $derived(sortRows(pickRows(all, project, chosen, filter), app.compareSort));
   const full = $derived(widest(rows));
   const planOptions = $derived(
-    pickRows(all, project, []).map((r) => ({ value: r.id, label: r.title })),
+    pickRows(all, project, [], filter).map((r) => ({ value: r.id, label: r.title })),
   );
+  function statusLabel(status: string): string {
+    const key = `plan.status.${status}`;
+    return status === 'planning' || status === 'doing' || status === 'parked' ? t(key as Key) : status;
+  }
 
   function sortBy(key: CompareKey): void {
     app.setCompareSort(nextSort(app.compareSort, key));
@@ -59,7 +82,7 @@
     app.setPlanDisplay('stages');
     app.openPlan(id);
   }
-  const NUMERIC: ReadonlySet<CompareKey> = new Set(['open', 'progress', 'effort', 'path', 'forecast']);
+  const NUMERIC: ReadonlySet<CompareKey> = new Set(['open', 'progress', 'effort', 'path', 'forecast', 'value', 'prio']);
 </script>
 
 <section class="card compare" aria-labelledby="compare-title">
@@ -83,6 +106,30 @@
             {#each projects as p (p.id)}<option value={p.id}>{markHidden(p.title)}</option>{/each}
           </select>
         </label>
+      {/if}
+      {#if areaOptions.length > 1}
+        <MultiSelect
+          label={t('nav.areas')}
+          hint={t('hint.compare.areas')}
+          options={areaOptions.map((a) => ({ value: a, label: a }))}
+          selected={filter.areas}
+          onchange={(next) => (areas = next)}
+          clearLabel={t('kit.select.clear', { label: t('nav.areas') })}
+          resetLabel={t('multi.reset')}
+          searchLabel={t('multi.search')}
+        />
+      {/if}
+      {#if statusOptions.length > 1}
+        <MultiSelect
+          label={t('list.filter.status')}
+          hint={t('hint.compare.status')}
+          options={statusOptions.map((s) => ({ value: s, label: statusLabel(s) }))}
+          selected={filter.statuses}
+          onchange={(next) => (statuses = next)}
+          clearLabel={t('kit.select.clear', { label: t('list.filter.status') })}
+          resetLabel={t('multi.reset')}
+          searchLabel={t('multi.search')}
+        />
       {/if}
       <MultiSelect
         label={t('compare.plans')}
@@ -171,6 +218,27 @@
                   {:else}
                     <span class="muted">–</span>
                   {/if}
+                  {#if r.target_due}
+                    {#if r.forecast_late}
+                      <span class="warn small" data-late>{t('compare.late', { date: r.target_due })}</span>
+                    {:else}
+                      <span class="muted small">{t('compare.due', { date: r.target_due })}</span>
+                    {/if}
+                  {/if}
+                </td>
+                <td class="num" data-col="value">
+                  {#if r.value?.avg !== undefined}
+                    {t('compare.value', { avg: num(r.value.avg) })}
+                    <span class="muted small">{t('compare.value_sum', { sum: r.value.sum })}</span>
+                  {:else}
+                    <span class="muted">–</span>
+                  {/if}
+                  {#if r.value && r.value.without > 0}
+                    <span class="warn small">{t('compare.value_without', { n: r.value.without })}</span>
+                  {/if}
+                </td>
+                <td class="num" data-col="prio">
+                  {#if r.prio !== undefined}{r.prio}{:else}<span class="muted">–</span>{/if}
                 </td>
                 <td data-col="last_done">{r.last_done ?? '–'}</td>
               </tr>
