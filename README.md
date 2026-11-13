@@ -235,8 +235,8 @@ tasks-hub devices level <id> read|create|change
 A lost phone: revoke it here (and, with a tunnel over Tailscale, remove it from the tailnet).
 
 A paired phone reaches only what the phone page asks (fail closed, appkit's `MOB-02`): the list (`snapshot`,
-`areas`, `next`), a task (`task`), what finishing it sets off (`done_preview`), the writes (`ops`) and its photos and
-voice notes (`upload`). Everything else, the choice of vault among it, answers a phone `403 not_for_devices`.
+`areas`, `next`), a task (`task`), what finishing it sets off (`done_preview`), the writes (`ops`), its photos and
+voice notes (`upload`) and its own level (`device`: what it may do now, so the page offers only that). Everything else, the choice of vault among it, answers a phone `403 not_for_devices`.
 
 The hub also cuts what these routes tell a phone (`MOB-02`, the hub cuts, never the phone): only the areas of the
 class `public` or `internal` in `areas.json`. A private area, or one without a class, is not there for a phone at

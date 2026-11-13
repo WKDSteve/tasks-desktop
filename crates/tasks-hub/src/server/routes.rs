@@ -46,6 +46,35 @@ pub(super) async fn snapshot(
     json_response(StatusCode::OK, cached.text.clone(), cached.etag.as_deref())
 }
 
+/// `GET /api/tasks/device`: the level this device has now (`read`, `create`, `change`, `trigger`), read at each call
+/// (the PC may change it at any time, `tasks-hub devices level`). The phone page offers only what it allows; the hub
+/// still judges every request (`device_refusal`, the guard). A session of the PC is no device: `403 device_required`.
+pub(super) async fn device(
+    State(st): State<Arc<Shared>>,
+    caller: Option<axum::Extension<Caller>>,
+    RawQuery(query): RawQuery,
+) -> Response {
+    if let Some(response) = no_query(query.as_deref()) {
+        return response;
+    }
+    let Some(Caller::Device(id)) = caller.as_deref() else {
+        return error_body(
+            StatusCode::FORBIDDEN,
+            "device_required",
+            "only a paired device has a level",
+        );
+    };
+    // The guard let the session through a moment ago; a device revoked since has no level.
+    match st.devices.as_ref().and_then(|d| d.level_of(id)) {
+        Some(level) => json_response(
+            StatusCode::OK,
+            json!({ "kind": "tasks.device", "schema": 1, "level": level.word() }).to_string(),
+            None,
+        ),
+        None => error_body(StatusCode::UNAUTHORIZED, "unauthorized", "session required"),
+    }
+}
+
 /// `<area>/<slug>`: two plain names. The engine says whether the task is
 /// there; this only keeps anything else from ever reaching it.
 pub(super) fn valid_task_id(id: &str) -> bool {
@@ -1375,6 +1404,8 @@ pub(super) fn guard_rules() -> GuardRules {
     .with_device_route(crate::IDENTITY.route("next"), Level::Read)
     .with_device_route(crate::IDENTITY.route("task"), Level::Read)
     .with_device_route(crate::IDENTITY.route("done_preview"), Level::Read)
+    // What this device may do now, so the phone page offers only that (the hub still judges every request).
+    .with_device_route(crate::IDENTITY.route("device"), Level::Read)
     .with_device_route(crate::IDENTITY.route("ops"), Level::Create)
     .with_device_route(crate::IDENTITY.route("upload"), Level::Change)
     // A new phone reads, creates and changes; it never triggers (the PC raises one device at a time, if ever).

@@ -285,6 +285,7 @@ async fn a_phone_reaches_the_routes_of_the_phone_page_and_nothing_else() {
         "/api/tasks/next?n=10",
         "/api/tasks/task?id=alpha.nvim/t1",
         "/api/tasks/done_preview?id=alpha.nvim/t1",
+        "/api/tasks/device",
     ] {
         let (status, doc) = r.send("GET", path, &phone, "").await;
         assert_eq!(status, 200, "{path}: {doc}");
@@ -879,4 +880,28 @@ async fn a_phone_is_proposed_tasks_of_released_areas_when_the_vault_picks_others
     let pc = r.pc().await;
     let (_, doc) = r.send("GET", "/api/tasks/next?n=1", &pc, "").await;
     assert_eq!(doc["task"]["id"], "secret-area/a", "{doc}");
+}
+
+#[tokio::test]
+async fn a_phone_is_told_its_level_as_it_is_now() {
+    let _one = ONE_AT_A_TIME.lock().await;
+    let r = Rig::new("level").await;
+    let (device, phone) = r.phone().await;
+
+    let (status, doc) = r.send("GET", "/api/tasks/device", &phone, "").await;
+    assert_eq!(status, 200, "{doc}");
+    assert_eq!(doc["kind"], "tasks.device");
+    assert_eq!(doc["level"], "change", "{doc}");
+    // The PC lowers it: the same session is told at once.
+    for level in ["read", "create", "trigger"] {
+        r.set_level(&device, level).await;
+        let (_, doc) = r.send("GET", "/api/tasks/device", &phone, "").await;
+        assert_eq!(doc["level"], level, "{doc}");
+    }
+    // No question to ask it, and the PC has no level.
+    let (status, _) = r.send("GET", "/api/tasks/device?x=1", &phone, "").await;
+    assert_eq!(status, 400);
+    let pc = r.pc().await;
+    let (status, doc) = r.send("GET", "/api/tasks/device", &pc, "").await;
+    assert!(refused(status, &doc, "device_required"), "{status} {doc}");
 }

@@ -292,6 +292,7 @@ fn app_routes(core: &Arc<Shared>) -> Router<Arc<Shared>> {
         .route(&r("search"), get(search_route))
         .route(&r("rescan"), post(rescan))
         .route(&r("done_preview"), get(done_preview))
+        .route(&r("device"), get(device))
         .route(&r("sheet_snap"), get(sheet_snap))
         .route(&r("finished"), get(finished))
         .route(&r("waits"), get(waits))
