@@ -34,6 +34,10 @@ const USAGE: &str = "usage:
   tasks-hub phone export <file>           write what a paired phone is given (public and
                                           internal areas only) as a file the phone opens,
                                           read only (no running hub needed)
+  tasks-hub testing link <link>           pair this hub with the testing hub (the link of
+                                          `testing-hub phone pair --tunnel`), so a phone can
+                                          start the test sheets of a task there
+  tasks-hub testing unlink                forget that pairing here
   tasks-hub usage [--days=14]            on how many of the last days the interface was
                                           opened (counts only, kept on this machine)
   tasks-hub areas propose [--private=a,b] [--write]
@@ -137,6 +141,19 @@ fn phone_export(
     })
 }
 
+/// `testing link <link>`, a task of the runtime like the export (the pairing goes over the network).
+fn testing_link(
+    text: &str,
+) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), String>> + Send>> {
+    let text = text.to_owned();
+    let task = tokio::spawn(async move { app::testing_link(&text).await });
+    Box::pin(async move {
+        task.await
+            .map_err(|e| format!("the pairing stopped: {e}"))?
+            .map(|text| println!("{text}"))
+    })
+}
+
 /// The verb the arguments name. Apart from `main` so that its future lives on the heap: the main thread of
 /// Windows has 1 MB of stack, and the future of all the verbs together is too big for it in a debug build.
 async fn run(args: Vec<String>) -> Result<(), String> {
@@ -225,6 +242,10 @@ async fn run(args: Vec<String>) -> Result<(), String> {
             Err(e) => Err(e),
         },
         Some("phone") if args.len() == 3 && args[1] == "export" => phone_export(&args[2]).await,
+        Some("testing") if args.len() == 3 && args[1] == "link" => testing_link(&args[2]).await,
+        Some("testing") if args.len() == 2 && args[1] == "unlink" => {
+            app::testing_unlink().map(|text| println!("{text}"))
+        }
         Some("areas") => match parse_areas(&args[1..]) {
             Ok(command) => app::areas(command).await.map(|text| print!("{text}")),
             Err(e) => Err(e),

@@ -15,6 +15,7 @@ pub(super) struct VaultRuntime {
     pub(super) login: Option<Arc<dyn crate::loginentry::LoginEntry>>,
     pub(super) all_vaults: Option<Arc<crate::allvaults::AllVaultsCheck>>,
     pub(super) sheet_run: Option<Arc<crate::sheetrun::SheetRunJob>>,
+    pub(super) testing: Option<Arc<crate::testing_link::TestingLink>>,
     /// How often the interface is used (counts per day), if kept.
     pub(super) usage: Option<Arc<UsageLog>>,
     /// The event streams that are open, by session token.
@@ -75,6 +76,7 @@ pub(super) struct AppParts {
     pub(super) login: Option<Arc<dyn crate::loginentry::LoginEntry>>,
     pub(super) all_vaults: Option<Arc<crate::allvaults::AllVaultsCheck>>,
     pub(super) sheet_run: Option<Arc<crate::sheetrun::SheetRunJob>>,
+    pub(super) testing: Option<Arc<crate::testing_link::TestingLink>>,
     pub(super) usage: Option<Arc<UsageLog>>,
     pub(super) streams: Arc<StreamCounter>,
     pub(super) attach_dirs: Arc<Vec<String>>,
@@ -165,6 +167,7 @@ pub(super) fn build_runtime(
         login: app.login.clone(),
         all_vaults: app.all_vaults.clone(),
         sheet_run: app.sheet_run.clone(),
+        testing: app.testing.clone(),
         usage: app.usage.clone(),
         streams: Arc::clone(&app.streams),
         attach_dirs: Arc::clone(&app.attach_dirs),

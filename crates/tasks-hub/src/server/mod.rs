@@ -65,6 +65,7 @@ mod repos;
 mod routes;
 mod runtime;
 mod settings;
+mod testing;
 mod upload;
 mod vaults;
 
@@ -115,6 +116,9 @@ pub struct Extras {
     pub opener: Option<Arc<dyn FileOpener>>,
     /// The run of the test sheets of a task; none: the route says this hub has none.
     pub sheet_run: Option<Arc<crate::sheetrun::SheetRunJob>>,
+    /// The pairing of this hub with the testing hub (`tasks-hub testing link`), for a phone that starts the test
+    /// sheets of a task there; none: the routes say this hub has none.
+    pub testing: Option<Arc<crate::testing_link::TestingLink>>,
     /// The check over all vaults; none: the route says this hub has none.
     pub all_vaults: Option<Arc<crate::allvaults::AllVaultsCheck>>,
     /// The entry that starts the hub at login; none: the page offers no switch.
@@ -153,6 +157,7 @@ pub async fn start_with(cfg: ServerConfig, extras: Extras) -> std::io::Result<Ru
         vaults,
         opener,
         sheet_run,
+        testing,
         all_vaults,
         login,
         attach_dirs,
@@ -180,6 +185,7 @@ pub async fn start_with(cfg: ServerConfig, extras: Extras) -> std::io::Result<Ru
         classes: cfg.policy,
         opener,
         sheet_run,
+        testing,
         all_vaults,
         login,
         usage: cfg.usage,
@@ -293,6 +299,9 @@ fn app_routes(core: &Arc<Shared>) -> Router<Arc<Shared>> {
         .route(&r("rescan"), post(rescan))
         .route(&r("done_preview"), get(done_preview))
         .route(&r("device"), get(device))
+        .route(&r("testing_sheets"), get(testing::testing_sheets))
+        .route(&r("testing_run"), get(testing::testing_run))
+        .route(&r("testing_start"), post(testing::testing_start))
         .route(&r("sheet_snap"), get(sheet_snap))
         .route(&r("finished"), get(finished))
         .route(&r("waits"), get(waits))
@@ -476,6 +485,7 @@ mod tests {
                 classes: Arc::new(AreaPolicy::default()),
                 opener: None,
                 sheet_run: None,
+                testing: None,
                 all_vaults: None,
                 login: None,
                 usage: None,

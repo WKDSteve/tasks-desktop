@@ -28,6 +28,8 @@ tokio = { version = "1", default-features = false, features = ["rt-multi-thread"
 tempfile = "3"
 
 [dev-dependencies]
+# The pairing of the tasks hub with another hub of the kit (tests/testing_link.rs): its routes and pairing link.
+appkit-mobile.workspace = true
 # What the hub sent to a phone is read as a phone reads it (RFC 8291, tests/push.rs): the versions appkit-hub brings.
 p256 = { version = "0.14", default-features = false, features = ["ecdh", "std"] }
 hkdf = "0.13"

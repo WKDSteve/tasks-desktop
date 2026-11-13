@@ -25,6 +25,7 @@ pub mod setup;
 pub mod sheetrun;
 pub mod snapshots;
 pub mod store;
+pub mod testing_link;
 pub mod ui;
 pub mod watch;
 

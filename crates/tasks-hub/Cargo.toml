@@ -23,6 +23,12 @@ flate2 = { version = "1", default-features = false, features = ["rust_backend"] 
 appkit-core.workspace = true
 # Web Push to the paired phones (src/server/push.rs) goes out through the kit's HTTP client.
 appkit-hub = { workspace = true, features = ["push-net"] }
+# The tasks hub as a paired device of the testing hub (src/testing_link.rs): the kit's client of a device, with its
+# pairing link, its kept pairing and the confirmation of a trigger.
+appkit-mobile.workspace = true
+# The two keys of that pairing, kept in the settings folder: the versions appkit already brings.
+p256 = { version = "0.14", default-features = false, features = ["ecdsa", "std"] }
+getrandom = "0.4"
 axum = { version = "0.8", default-features = false, features = ["http1", "tokio", "json"] }
 futures-core = "0.3"
 # The stable line of notify; 9.0 is a release candidate (concept 7.1, 13.14).

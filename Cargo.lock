@@ -79,6 +79,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "appkit-mobile"
+version = "0.0.0"
+source = "git+https://github.com/WKDSteve/appkit?tag=v0.47.0#22039af47757bb4ba69770600fc647cd304d3b30"
+dependencies = [
+ "getrandom 0.4.3",
+ "p256",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tokio",
+]
+
+[[package]]
 name = "appkit-scratch"
 version = "0.0.0"
 source = "git+https://github.com/WKDSteve/appkit?tag=v0.47.0#22039af47757bb4ba69770600fc647cd304d3b30"
@@ -661,6 +675,7 @@ dependencies = [
  "aes-gcm",
  "appkit-core",
  "appkit-hub",
+ "appkit-mobile",
  "appkit-testkit",
  "hkdf",
  "p256",
@@ -1192,7 +1207,7 @@ dependencies = [
  "once_cell",
  "socket2",
  "tracing",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -1588,11 +1603,14 @@ version = "0.0.0"
 dependencies = [
  "appkit-core",
  "appkit-hub",
+ "appkit-mobile",
  "axum",
  "flate2",
  "futures-core",
+ "getrandom 0.4.3",
  "hub-testkit",
  "notify",
+ "p256",
  "serde",
  "serde_json",
  "sha2",

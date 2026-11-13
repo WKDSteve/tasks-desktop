@@ -905,3 +905,95 @@ async fn a_phone_is_told_its_level_as_it_is_now() {
     let (status, doc) = r.send("GET", "/api/tasks/device", &pc, "").await;
     assert!(refused(status, &doc, "device_required"), "{status} {doc}");
 }
+
+#[tokio::test]
+async fn the_test_sheets_of_a_task_are_asked_at_the_level_they_need_and_only_of_released_areas() {
+    let _one = ONE_AT_A_TIME.lock().await;
+    let r = Rig::new("testing").await;
+    let (device, phone) = r.phone().await;
+    let start = |id: &str| json!({ "id": id }).to_string();
+    let is = |status: u16, doc: &Value, want: u16, code: &str| {
+        status == want && doc["error"]["code"] == code
+    };
+
+    // Reading is `read`; this hub has no way to the testing hub, which the route says (not the guard).
+    let (status, doc) = r
+        .send(
+            "GET",
+            "/api/tasks/testing_sheets?id=alpha.nvim/t1",
+            &phone,
+            "",
+        )
+        .await;
+    assert!(
+        is(status, &doc, 404, "testing_unavailable"),
+        "{status} {doc}"
+    );
+    let (status, doc) = r.send("GET", "/api/tasks/testing_run", &phone, "").await;
+    assert!(
+        is(status, &doc, 404, "testing_unavailable"),
+        "{status} {doc}"
+    );
+
+    // A task of an area that is not released: not there for a phone, before anything else is asked.
+    for id in ["secret-area/plan", "beta.nvim/loose"] {
+        let (status, doc) = r
+            .send(
+                "GET",
+                &format!("/api/tasks/testing_sheets?id={id}"),
+                &phone,
+                "",
+            )
+            .await;
+        assert!(is(status, &doc, 404, "not_found"), "{id}: {status} {doc}");
+    }
+
+    // Starting is `trigger`: a phone at `change` is refused by the guard.
+    let (status, doc) = r
+        .send(
+            "POST",
+            "/api/tasks/testing_start",
+            &phone,
+            &start("alpha.nvim/t1"),
+        )
+        .await;
+    assert!(refused(status, &doc, "level_too_low"), "{status} {doc}");
+    // At `trigger`, it needs the confirmation of that very request on the phone.
+    r.set_level(&device, "trigger").await;
+    let (status, doc) = r
+        .send(
+            "POST",
+            "/api/tasks/testing_start",
+            &phone,
+            &start("alpha.nvim/t1"),
+        )
+        .await;
+    assert!(refused(status, &doc, "confirm_required"), "{status} {doc}");
+
+    // The PC reaches the route itself: a body of another shape, an id that is none.
+    let pc = r.pc().await;
+    for body in [
+        r#"{"id":"alpha.nvim/t1","force":true}"#,
+        r#"{"task":"alpha.nvim/t1"}"#,
+        "[]",
+    ] {
+        let (status, doc) = r.send("POST", "/api/tasks/testing_start", &pc, body).await;
+        assert!(is(status, &doc, 400, "bad_body"), "{body}: {status} {doc}");
+    }
+    let (status, doc) = r
+        .send("POST", "/api/tasks/testing_start", &pc, &start("../x"))
+        .await;
+    assert!(is(status, &doc, 400, "bad_id"), "{status} {doc}");
+    let (status, doc) = r
+        .send(
+            "POST",
+            "/api/tasks/testing_start",
+            &pc,
+            &start("alpha.nvim/t1"),
+        )
+        .await;
+    assert!(
+        is(status, &doc, 404, "testing_unavailable"),
+        "{status} {doc}"
+    );
+}

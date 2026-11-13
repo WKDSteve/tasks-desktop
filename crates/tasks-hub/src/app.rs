@@ -681,6 +681,7 @@ pub async fn serve(opts: ServeOptions) -> Result<(), String> {
         Arc::clone(&config_vaults) as Arc<dyn crate::allvaults::VaultEngines>,
     ));
     let for_sheets = Arc::clone(&config_vaults);
+    let testing = Arc::new(crate::testing_link::TestingLink::new(dir.clone()));
     let sheet_run = Arc::new(crate::sheetrun::SheetRunJob::new(Arc::new(
         crate::sheetrun::SystemSheetRunner {
             command: Arc::new(move || {
@@ -728,6 +729,7 @@ pub async fn serve(opts: ServeOptions) -> Result<(), String> {
         login: Some(Arc::new(crate::loginentry::SystemLoginEntry)),
         all_vaults: Some(Arc::clone(&all_vaults)),
         sheet_run: Some(Arc::clone(&sheet_run)),
+        testing: Some(Arc::clone(&testing)),
         repos: Some(Arc::clone(&repos)),
     };
     let running = match server::start_with(make_cfg(want), extras()).await {
@@ -1079,6 +1081,26 @@ pub fn launch(url: &str) -> Result<(), String> {
         .and_then(|(port, _)| port.parse::<u16>().ok())
         .ok_or("the link has no port: not opened")?;
     appkit_hub::browser::open(url, &[port])
+}
+
+/// `tasks-hub testing link <link>`: pair this hub with the testing hub (`crate::testing_link::pair`).
+///
+/// # Errors
+///
+/// No config folder, not a pairing link, or the testing hub refused.
+pub async fn testing_link(text: &str) -> Result<String, String> {
+    let dir = app_dir(&Env::from_process())?;
+    crate::testing_link::pair(&dir, text).await
+}
+
+/// `tasks-hub testing unlink`: forget the pairing with the testing hub here.
+///
+/// # Errors
+///
+/// No config folder, or a file of the pairing cannot be removed.
+pub fn testing_unlink() -> Result<String, String> {
+    let dir = app_dir(&Env::from_process())?;
+    crate::testing_link::unlink(&dir)
 }
 
 /// One document of the engine.

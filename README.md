@@ -290,6 +290,24 @@ decision while no phone is subscribed is not told later. If `notices.json` canno
 console and still sends; only after a restart might such a notice come twice. While a phone is subscribed, the hub
 looks at the vault every 5 minutes even when no page is open.
 
+**The test sheets of a task, from the phone** (through this hub; the testing hub runs them). Once, on the PC:
+
+```
+testing-hub phone pair --tunnel             prints a one-time pairing link of the testing hub
+tasks-hub testing link "<that link>"        pairs this hub with it, with two keys of its own
+testing-hub phone level <id> trigger        lets it start runs there (the id `testing link` printed)
+tasks-hub devices level <phone> trigger     lets that phone ask this hub for a run
+```
+
+This hub reads no secret of the testing hub: it pairs like a phone does and keeps its own keys
+(`testing-link-keys.json`, secret, and `testing-link.json` in its settings folder; `tasks-hub testing unlink` forgets
+them, then revoke it there too). A phone then sees which sheets name a task (`testing_sheets`, `read`), starts them
+(`testing_start`, `trigger`, with the confirmation of that very request on the phone, which this hub checks before it
+confirms the one request to the testing hub with its own key) and follows the run (`testing_run`, `read`; a run that
+is not of a task the phone may see is told as `other`). A task of an area that is not released is not there for it.
+A phone paired before it had a confirmation key pairs again to start a run. A running hub takes a new pairing at the
+next request; after `unlink`, restart it.
+
 **A file instead of a connection** (the third way, read only). `tasks-hub phone export <file>` asks the engine
 directly (no running hub needed) and writes what a paired phone would be given, cut the same way (`MOB-02`): the
 snapshot and the proposals of `next`, of the areas of the class `public` or `internal` only, as one JSON document

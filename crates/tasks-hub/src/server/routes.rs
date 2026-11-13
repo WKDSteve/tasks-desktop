@@ -1406,6 +1406,11 @@ pub(super) fn guard_rules() -> GuardRules {
     .with_device_route(crate::IDENTITY.route("done_preview"), Level::Read)
     // What this device may do now, so the phone page offers only that (the hub still judges every request).
     .with_device_route(crate::IDENTITY.route("device"), Level::Read)
+    // The test sheets of a task, run by the testing hub (`server/testing.rs`): reading what there is and where a run
+    // stands is `read`; starting one is `trigger`, with the phone's confirmation of that very request.
+    .with_device_route(crate::IDENTITY.route("testing_sheets"), Level::Read)
+    .with_device_route(crate::IDENTITY.route("testing_run"), Level::Read)
+    .with_device_route(crate::IDENTITY.route("testing_start"), Level::Trigger)
     .with_device_route(crate::IDENTITY.route("ops"), Level::Create)
     .with_device_route(crate::IDENTITY.route("upload"), Level::Change)
     // A new phone reads, creates and changes; it never triggers (the PC raises one device at a time, if ever).
