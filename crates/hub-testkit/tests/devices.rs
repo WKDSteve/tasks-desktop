@@ -916,7 +916,7 @@ async fn the_test_sheets_of_a_task_are_asked_at_the_level_they_need_and_only_of_
         status == want && doc["error"]["code"] == code
     };
 
-    // Reading is `read`; this hub has no way to the testing hub, which the route says (not the guard).
+    // Reading is `read`; this hub has no way to the testing hub.
     let (status, doc) = r
         .send(
             "GET",
@@ -925,10 +925,10 @@ async fn the_test_sheets_of_a_task_are_asked_at_the_level_they_need_and_only_of_
             "",
         )
         .await;
-    assert!(
-        is(status, &doc, 404, "testing_unavailable"),
-        "{status} {doc}"
-    );
+    // No way to the testing hub is the usual case, not an error: no sheets, and `linked` says why.
+    assert_eq!(status, 200, "{doc}");
+    assert_eq!(doc["linked"], false, "{doc}");
+    assert_eq!(doc["sheets"], json!([]), "{doc}");
     let (status, doc) = r.send("GET", "/api/tasks/testing_run", &phone, "").await;
     assert!(
         is(status, &doc, 404, "testing_unavailable"),

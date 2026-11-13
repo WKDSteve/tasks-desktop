@@ -142,12 +142,31 @@ pub(super) async fn testing_sheets(
         Ok(id) => id,
         Err(response) => return response,
     };
+    // No way to the testing hub, or no repo of the fleet for the area, is the usual case of most tasks, not an error:
+    // no sheets (`linked` says which), so a page asks without a failed request for every task it opens.
+    let none = |linked: bool| {
+        json_response(
+            StatusCode::OK,
+            json!({ "kind": "tasks.testing_sheets", "schema": 1, "id": id, "linked": linked, "sheets": [] })
+                .to_string(),
+            None,
+        )
+    };
     let (link, target) = match link(&st).await {
         Ok(l) => l,
+        Err(response)
+            if matches!(
+                response.status(),
+                StatusCode::NOT_FOUND | StatusCode::CONFLICT
+            ) =>
+        {
+            return none(false);
+        }
         Err(response) => return response,
     };
     let path = format!("{}?task={}", target.sheets_path, query_id(&id));
     let doc = match link.fetch(Method::Get, &path, &[], None).await {
+        Ok(r) if r.status == 404 => return none(true),
         Ok(r) => match answer(&r) {
             Ok(doc) => doc,
             Err(response) => return response,
@@ -165,7 +184,7 @@ pub(super) async fn testing_sheets(
         .collect();
     json_response(
         StatusCode::OK,
-        json!({ "kind": "tasks.testing_sheets", "schema": 1, "id": id, "sheets": sheets })
+        json!({ "kind": "tasks.testing_sheets", "schema": 1, "id": id, "linked": true, "sheets": sheets })
             .to_string(),
         None,
     )
