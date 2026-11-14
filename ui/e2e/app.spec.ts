@@ -9412,9 +9412,16 @@ for (const scheme of ['light', 'dark'] as const) {
     };
 
     // Hits in the text: a band per hit and the area's name before the title.
-    await page.getByPlaceholder('Search id and title').fill(word);
     const hits = page.locator('section.hits li');
-    await expect(hits).toHaveCount(2, { timeout: 15_000 });
+    // The hub reads the texts of new files a moment after the files came: the search is typed again until it has them.
+    const search = async (): Promise<void> => {
+      await expect(async () => {
+        await page.getByPlaceholder('Search id and title').fill('');
+        await page.getByPlaceholder('Search id and title').fill(word);
+        await expect(hits).toHaveCount(2, { timeout: 2_000 });
+      }).toPass({ timeout: 20_000 });
+    };
+    await search();
     await expect(page.locator('section.hits li.banded')).toHaveCount(2);
     twoColours(await colours(hits, async (el) => (await el.locator('.area').getAttribute('data-area')) ?? ''));
     await expect(hits.first().locator('.area')).toContainText(/nvim/);
@@ -9429,7 +9436,11 @@ for (const scheme of ['light', 'dark'] as const) {
     const done = finished.locator('ul.plain li[data-area]');
     await expect(done.first()).toBeVisible();
     await expect(finished.locator('li.banded')).toHaveCount(await done.count());
-    twoColours(await colours(done, async (el) => (await el.getAttribute('data-area')) ?? ''));
+    // The fixture finished tasks in both of its areas; other tests may add more areas, each with its own colour.
+    const doneAreas = await colours(done, async (el) => (await el.getAttribute('data-area')) ?? '');
+    expect(doneAreas.has('cascade.nvim') && doneAreas.has('lib.nvim')).toBe(true);
+    for (const set of doneAreas.values()) expect(set.size).toBe(1);
+    expect(doneAreas.get('cascade.nvim')).not.toEqual(doneAreas.get('lib.nvim'));
     await expectAccessible(page, `finished tasks with bands (${scheme})`);
     // One area alone: no band.
     await page.getByRole('button', { name: /^Areas/ }).click();
@@ -9458,8 +9469,7 @@ for (const scheme of ['light', 'dark'] as const) {
     await toggleOption(page, 'Separate areas in lists');
     await expect(inbox.locator('.banded')).toHaveCount(0);
     await showList(page);
-    await page.getByPlaceholder('Search id and title').fill(word);
-    await expect(hits).toHaveCount(2, { timeout: 15_000 });
+    await search();
     await expect(page.locator('section.hits .banded, section.hits .area')).toHaveCount(0);
     await page.getByPlaceholder('Search id and title').fill('');
     await toggleOption(page, 'Separate areas in lists');
@@ -9468,7 +9478,7 @@ for (const scheme of ['light', 'dark'] as const) {
 }
 
 for (const scheme of ['light', 'dark'] as const) {
-  test(`tasks are marked in the board, the plan, the inbox and a view (${scheme}): x and Ctrl or Shift with a click, one marking for all, copied together`, async ({ page, context }) => {
+  test(`tasks are marked in the board, the plan, the inbox and a view (${scheme}): x and Shift with a click, one marking for all, copied together`, async ({ page, context }) => {
     test.slow();
     await page.emulateMedia({ colorScheme: scheme });
     await context.grantPermissions(['clipboard-read', 'clipboard-write']);
@@ -9488,9 +9498,10 @@ for (const scheme of ['light', 'dark'] as const) {
     };
     const menu = page.getByRole('menu', { name: 'Context menu' });
     const note = page.locator('[data-marks-note]');
-    const mod = process.platform === 'darwin' ? 'Meta' : 'Control';
+    const tabs = (): number => context.pages().length;
+    const opened = tabs();
 
-    // The board: a plain click opens the task, Ctrl+click marks instead; x marks the selected card.
+    // The board: Shift+click marks instead of opening; with nothing marked yet it marks that card alone.
     const board = page.getByRole('group', { name: 'Board' });
     await goByKey(page, 'b', board);
     const cards = board.locator('.card');
@@ -9498,27 +9509,32 @@ for (const scheme of ['light', 'dark'] as const) {
     const idOf = async (card: Locator): Promise<string> => (await card.getAttribute('data-card')) ?? '';
     const a = await idOf(cards.nth(0));
     const c = await idOf(cards.nth(2));
-    await expect(note).toBeHidden();
-    await cards.nth(0).click({ modifiers: [mod] });
+    await expect(note.getByRole('status')).toHaveText('');
+    await cards.nth(0).click({ modifiers: ['Shift'] });
     await expect(taskFloat(page)).toHaveCount(0);
     await expect(cards.nth(0)).toHaveClass(/marked/);
     await expect(note.getByRole('status')).toHaveText('1 marked');
-    // The mark has a word for a screen reader, not only a frame.
+    // The mark has a word for a screen reader, not only a colour.
     await expect(cards.nth(0).locator('.sr-only', { hasText: 'Marked:' })).toHaveCount(1);
-    // Shift+click: from the card marked last to this one, along the board.
+    // Shift+click again: from the card marked last to this one, along the board.
     await cards.nth(2).click({ modifiers: ['Shift'] });
     await expect(board.locator('.card.marked')).toHaveCount(3);
     await expect(note.getByRole('status')).toHaveText('3 marked');
     await expectAccessible(page, `the board with marked cards (${scheme})`);
-    // Ctrl+click on a marked card takes its mark; x marks the selected card (a plain click selects it).
-    await cards.nth(1).click({ modifiers: [mod] });
-    await expect(board.locator('.card.marked')).toHaveCount(2);
-    await cards.nth(1).click();
-    await closeFloat(page);
+    // x flips the mark of the selected card (a plain click selects and opens it); marked and selected shows both.
+    await selectCard(page, cards.nth(1));
     await page.locator('main').focus();
     await page.keyboard.press('x');
-    await expect(board.locator('.card.marked')).toHaveCount(3);
+    await expect(board.locator('.card.marked')).toHaveCount(2);
+    const both = await cards.nth(0).evaluate((el) => getComputedStyle(el).boxShadow);
     await page.keyboard.press('x');
+    await expect(board.locator('.card.marked')).toHaveCount(3);
+    expect(await cards.nth(1).evaluate((el) => getComputedStyle(el).boxShadow)).not.toBe(both);
+    await page.keyboard.press('x');
+    await expect(board.locator('.card.marked')).toHaveCount(2);
+    // Ctrl+click opens the card in a new tab, as a link does, and marks nothing.
+    const [tab] = await Promise.all([context.waitForEvent('page'), cards.nth(1).click({ modifiers: ['ControlOrMeta'] })]);
+    await tab.close();
     await expect(board.locator('.card.marked')).toHaveCount(2);
     // The context menu on a marked card works on the marked ones, and offers no status of one task.
     await cards.nth(0).click({ button: 'right' });
@@ -9537,27 +9553,30 @@ for (const scheme of ['light', 'dark'] as const) {
     await expect(page.getByRole('heading', { level: 1, name: 'List' })).toBeVisible();
     await expect(page.locator('.bulk')).toContainText('2 marked');
     await expect(page.locator('.rows').getByRole('checkbox', { checked: true })).toHaveCount(2);
-    // Ctrl+click marks in the list as well.
-    const rows = page.locator('.rows button.row');
-    const third = (await rows.nth(5).locator('.id').textContent()) ?? '';
-    await rows.nth(5).click({ modifiers: [mod] });
+    // Shift+click marks in the list as well (a row that is not marked yet: from the last marked to it).
+    const free = page.locator('.rows .line').filter({ has: page.getByRole('checkbox', { checked: false }) }).last();
+    await free.locator('button.row').click({ modifiers: ['Shift'] });
     await expect(taskFloat(page)).toHaveCount(0);
-    await expect(page.locator('.bulk')).toContainText('3 marked');
+    const inList = await page.locator('.rows').getByRole('checkbox', { checked: true }).count();
+    expect(inList).toBeGreaterThan(2);
 
-    // The plan: the same three are marked there; a filter that hides a marked task takes its mark.
-    await goByKey(page, 'p', page.getByRole('region', { name: 'Stages' }));
+    // The plan: the strip counts the marks this plan draws, and says how many are elsewhere.
     const stages = page.getByRole('region', { name: 'Stages' });
-    await expect(stages.locator('li.marked')).toHaveCount(3);
-    await expect(note.getByRole('status')).toHaveText('3 marked');
+    await goByKey(page, 'p', stages);
+    const drawnHere = await stages.locator('li.marked').count();
+    await expect(note.getByRole('status')).toHaveText(drawnHere === inList ? `${inList} marked` : `${drawnHere} marked here, ${inList - drawnHere} in other views`);
     await expectAccessible(page, `the plan with marked tasks (${scheme})`);
-    await stages.locator(`li[data-id="${third}"] button.link`).click({ modifiers: [mod] });
-    await expect(stages.locator('li.marked')).toHaveCount(2);
-    await expect(taskFloat(page)).toHaveCount(0);
     // Escape clears the marks (and the selection only after them).
     await page.locator('main').focus();
     await page.keyboard.press('Escape');
     await expect(stages.locator('li.marked')).toHaveCount(0);
-    await expect(note).toBeHidden();
+    await expect(note.getByRole('status')).toHaveText('');
+    // A plan task is marked with Shift+click like the rest.
+    await stages.locator('li button.link').first().click({ modifiers: ['Shift'] });
+    await expect(stages.locator('li.marked')).toHaveCount(1);
+    await expect(taskFloat(page)).toHaveCount(0);
+    await page.locator('main').focus();
+    await page.keyboard.press('Escape');
 
     // The inbox: x marks the selected row, Shift+click the range; the context menu copies them.
     const inbox = page.locator('section.inbox');
@@ -9574,7 +9593,6 @@ for (const scheme of ['light', 'dark'] as const) {
     await inRows.nth(1).click({ button: 'right' });
     await menu.getByRole('menuitem', { name: 'Copy as JSON' }).click();
     await expect.poll(copiedIds).toEqual(inIds);
-    // A key of the inbox still writes one task only: the marks are for copying and the list.
     await note.getByRole('button', { name: 'Clear marks' }).click();
     await expect(inbox.locator('button.row.marked')).toHaveCount(0);
     await expect(page.locator('main')).toBeFocused();
@@ -9588,8 +9606,8 @@ for (const scheme of ['light', 'dark'] as const) {
     await page.keyboard.press('Enter');
     const items = page.locator('[data-view-item]');
     await expect(items.nth(1)).toBeVisible();
-    await items.nth(0).click({ modifiers: [mod] });
-    await items.nth(1).click({ modifiers: [mod] });
+    await items.nth(0).click({ modifiers: ['Shift'] });
+    await items.nth(1).click({ modifiers: ['Shift'] });
     await expect(page.locator('[data-view-item].marked')).toHaveCount(2);
     await expect(taskFloat(page)).toHaveCount(0);
     await expect(note.getByRole('status')).toHaveText('2 marked');
@@ -9601,6 +9619,8 @@ for (const scheme of ['light', 'dark'] as const) {
     await page.locator('main').focus();
     await page.keyboard.press('Escape');
     await expect(page.locator('[data-view-item].marked')).toHaveCount(0);
+    // No tab was opened but the one Ctrl+click asked for (closed again).
+    expect(tabs()).toBe(opened);
     expect(consoleProblems.get(page)).toEqual([]);
   });
 }

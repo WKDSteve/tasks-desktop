@@ -820,8 +820,9 @@
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  /* A marked entry (x, Ctrl+click, Shift+click): a frame in the accent colour. */
+  /* A marked entry (x, Shift+click): its border and ground in the accent colour; the bar of the selection stays. */
   .item.marked {
-    box-shadow: inset 0 0 0 2px var(--accent);
+    border-color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 12%, var(--surface));
   }
 </style>

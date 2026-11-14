@@ -30,11 +30,11 @@ describe('shownMarkIds', () => {
 describe('markGesture', () => {
   const setup = () => {
     const [first, second] = page(['a/1', 'a/2']) as [HTMLElement, HTMLElement];
-    const marked: { id: string; ctrl: boolean; shift: boolean; order: readonly string[] }[] = [];
+    const marked: { id: string; shift: boolean; order: readonly string[] }[] = [];
     let opened = 0;
     const action = markGesture(second, {
       markClick: (event, id, order) => {
-        marked.push({ id, ctrl: event.ctrlKey || event.metaKey, shift: event.shiftKey, order });
+        marked.push({ id, shift: event.shiftKey, order });
         return true;
       },
     });
@@ -43,67 +43,76 @@ describe('markGesture', () => {
     return { first, second, marked, opened: () => opened, action };
   };
   const mouse = (type: string, init: MouseEventInit = {}) => new MouseEvent(type, { bubbles: true, cancelable: true, button: 0, ...init });
+  /** Press and release on `el` with `init`. */
+  const press = (el: HTMLElement, init: MouseEventInit = {}) => {
+    el.dispatchEvent(mouse('mousedown', init));
+    el.dispatchEvent(mouse('mouseup', init));
+  };
 
-  it('leaves a plain click alone', () => {
+  it('leaves a plain click alone, and a click with Ctrl or Cmd (that one opens a new tab)', () => {
     const { second, marked, opened } = setup();
-    second.dispatchEvent(mouse('mouseup'));
+    press(second);
     second.dispatchEvent(mouse('click'));
+    press(second, { ctrlKey: true });
+    second.dispatchEvent(mouse('click', { ctrlKey: true }));
+    second.dispatchEvent(mouse('click', { metaKey: true }));
+    second.dispatchEvent(mouse('click', { shiftKey: true, ctrlKey: true }));
     expect(marked).toEqual([]);
-    expect(opened()).toBe(1);
+    expect(opened()).toBe(4);
   });
 
-  it('marks when the button is released with Ctrl, also when no click follows (a card that can be dragged)', () => {
+  it('marks when the button is released with Shift, also when no click follows (a card that can be dragged)', () => {
     const { second, marked, opened } = setup();
-    second.dispatchEvent(mouse('mouseup', { ctrlKey: true }));
-    expect(marked).toEqual([{ id: 'a/2', ctrl: true, shift: false, order: ['a/1', 'a/2'] }]);
+    press(second, { shiftKey: true });
+    expect(marked).toEqual([{ id: 'a/2', shift: true, order: ['a/1', 'a/2'] }]);
     expect(opened()).toBe(0);
-  });
-
-  it('opens the task on a plain click that follows a Ctrl release at once (no click came for that one)', () => {
-    const { second, marked, opened } = setup();
-    second.dispatchEvent(mouse('mouseup', { ctrlKey: true }));
-    second.dispatchEvent(mouse('mouseup'));
-    second.dispatchEvent(mouse('click'));
-    expect(marked).toHaveLength(1);
-    expect(opened()).toBe(1);
   });
 
   it('marks once and opens nothing when the click of the gesture does come', () => {
     const { second, marked, opened } = setup();
-    second.dispatchEvent(mouse('mouseup', { shiftKey: true }));
+    press(second, { shiftKey: true });
     const click = mouse('click', { shiftKey: true });
     second.dispatchEvent(click);
     expect(marked).toHaveLength(1);
-    expect(marked[0]?.shift).toBe(true);
     expect(opened()).toBe(0);
     expect(click.defaultPrevented).toBe(true);
-    // The next plain click is a click again.
+    // The next plain click is a click again, also at once.
+    press(second);
     second.dispatchEvent(mouse('click'));
     expect(opened()).toBe(1);
   });
 
-  it('marks on a click with a modifier that had no release before it, and takes Cmd for Ctrl', () => {
+  it('marks nothing for a release whose press was elsewhere (a press on another row, a drag that ended here)', () => {
+    const { first, second, marked } = setup();
+    first.dispatchEvent(mouse('mousedown', { shiftKey: true }));
+    second.dispatchEvent(mouse('mouseup', { shiftKey: true }));
+    expect(marked).toEqual([]);
+  });
+
+  it('marks on a click with Shift that had no release before it (a script, a key)', () => {
     const { second, marked, opened } = setup();
-    second.dispatchEvent(mouse('click', { metaKey: true }));
-    expect(marked).toEqual([{ id: 'a/2', ctrl: true, shift: false, order: ['a/1', 'a/2'] }]);
+    second.dispatchEvent(mouse('click', { shiftKey: true }));
+    expect(marked).toHaveLength(1);
     expect(opened()).toBe(0);
   });
 
-  it('takes no other button, and nothing on the grip of a card', () => {
-    const { second, marked } = setup();
-    second.dispatchEvent(mouse('mouseup', { ctrlKey: true, button: 2 }));
+  it('takes no other button, and nothing on the grip of a card: neither the release nor the click', () => {
+    const { second, marked, opened } = setup();
+    press(second, { shiftKey: true, button: 2 });
     const grip = document.createElement('span');
     grip.className = 'grip';
     second.append(grip);
-    grip.dispatchEvent(mouse('mouseup', { ctrlKey: true }));
+    press(grip, { shiftKey: true });
+    grip.dispatchEvent(mouse('click', { shiftKey: true }));
     expect(marked).toEqual([]);
+    expect(opened()).toBe(1);
   });
 
   it('lets go of the element when it is destroyed', () => {
     const { second, marked, opened, action } = setup();
     action.destroy();
-    second.dispatchEvent(mouse('mouseup', { ctrlKey: true }));
-    second.dispatchEvent(mouse('click', { ctrlKey: true }));
+    press(second, { shiftKey: true });
+    second.dispatchEvent(mouse('click', { shiftKey: true }));
     expect(marked).toEqual([]);
     expect(opened()).toBe(1);
   });

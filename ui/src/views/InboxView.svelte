@@ -304,8 +304,8 @@
   .row.banded {
     border-left: 3px solid var(--band);
   }
-  /* A marked row (x, Ctrl+click, Shift+click): a frame in the accent colour. */
+  /* A marked row (x, Shift+click): its ground in the accent colour; the bar of the selected row stays. */
   .row.marked {
-    box-shadow: inset 0 0 0 2px var(--accent);
+    background: color-mix(in srgb, var(--accent) 12%, var(--surface));
   }
 </style>

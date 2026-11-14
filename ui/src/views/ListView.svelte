@@ -161,6 +161,13 @@
   const extraOn = $derived(extraCount(app.filter) + (app.showFinished && app.can('finished') ? 1 : 0));
   const shown = $derived(app.listed);
 
+  // A mark that the filter hides is not changed behind the person's back: in the list the marks follow what it shows
+  // (a mark made in a saved view of a task the filter hides goes here, and the person is told: `keepMarksShown`).
+  $effect(() => {
+    void shown;
+    untrack(() => app.keepMarksShown());
+  });
+
 
   // The bulk bar changes what is chosen in it, all at once, when the button is pressed (a select alone never writes).
   // `effort` and `remind` are '' (keep), '-' (take away) or a value; the tags are typed.

@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { onMount, tick, untrack } from 'svelte';
+  import { onMount, tick } from 'svelte';
+  import { shownMarkIds } from './lib/markDom';
   import type { App, View } from './lib/app.svelte';
   import { logo } from './lib/logo';
   import { matches } from 'appkit-ui/keymap';
@@ -238,7 +239,7 @@
         // In every view that marks (the list, the board, the plan, the inbox, a saved view): the selected task.
         if (view !== null && app.marking && app.selectedId !== null && !event.repeat) {
           const id = app.selectedId;
-          if (app.markable.some((t) => t.id === id)) app.toggleMark(id);
+          if (app.draws(id)) app.toggleMark(id);
         }
         break;
       case 'e':
@@ -687,12 +688,30 @@
   const contextRegistry = $derived(createContextRegistry(app));
   // The marked tasks of the view that is shown (the list, the board, the plan, the inbox, a saved view); read when the
   // menu opens.
-  const markedTargets = () => (app.marking ? app.tasks.filter((x) => app.marks.includes(x.id)).map(taskTarget) : []);
-  // A mark that the view does not show is not changed behind the person's back: the marks follow what is shown, in
-  // whatever view (a filter that hides a task, another saved view).
+  const markedTargets = () => {
+    const here = new Set(app.marksHere);
+    return app.tasks.filter((x) => here.has(x.id)).map(taskTarget);
+  };
+  // What the view draws now (`App.drawn`): read from the main area whenever a task comes or goes there, once a frame.
+  let mainArea: HTMLElement | undefined = $state();
   $effect(() => {
-    void app.markable;
-    untrack(() => app.keepMarksShown());
+    const root = mainArea;
+    if (!root) return;
+    let frame = 0;
+    const read = (): void => {
+      frame = 0;
+      app.drawn = new Set(shownMarkIds(root.ownerDocument));
+    };
+    const observer = new MutationObserver(() => {
+      if (frame === 0) frame = requestAnimationFrame(read);
+    });
+    observer.observe(root, { childList: true, subtree: true, attributes: true, attributeFilter: ['data-mark-id'] });
+    read();
+    return () => {
+      observer.disconnect();
+      if (frame !== 0) cancelAnimationFrame(frame);
+      app.drawn = null;
+    };
   });
   // The context menu is built at once (the browser's menu is replaced or not before the event is over), so the fields
   // of the engine for "open as a view" are read when the page is ready, not at the first right click.
@@ -747,7 +766,7 @@
     {/if}
   </header>
 
-  <main tabindex="-1" use:contextTarget={viewTarget(app.view)}>
+  <main tabindex="-1" bind:this={mainArea} use:contextTarget={viewTarget(app.view)}>
     <!-- The data is somebody else's text: one task that breaks a view must
          not take the whole page with it. -->
     <svelte:boundary>

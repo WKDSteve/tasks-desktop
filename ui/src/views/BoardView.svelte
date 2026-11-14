@@ -562,8 +562,10 @@
     padding: 0.3rem;
     cursor: pointer;
   }
-  /* A marked card (x, Ctrl+click, Shift+click): a frame in the accent colour, beside the word a screen reader gets. */
+  /* A marked card (x, Shift+click): its border and ground in the accent colour, beside the word a screen reader gets;
+     the bar of the selected card stays its own, so a card can show both. */
   .card.marked {
-    box-shadow: inset 0 0 0 2px var(--accent);
+    border-color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 12%, var(--surface));
   }
 </style>

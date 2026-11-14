@@ -618,9 +618,8 @@
     border-color: var(--accent);
     color: var(--accent);
   }
-  /* A marked task of a stage (x, Ctrl+click, Shift+click). */
+  /* A marked task of a stage (x, Shift+click): its ground in the accent colour. */
   li.marked {
-    box-shadow: inset 3px 0 0 var(--accent);
-    background: var(--surface-2);
+    background: color-mix(in srgb, var(--accent) 12%, var(--surface));
   }
 </style>

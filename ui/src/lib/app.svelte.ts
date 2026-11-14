@@ -1911,30 +1911,41 @@ export class App {
   }
 
   /**
-   * The tasks the view that is shown can mark: what the filter keeps, or the tasks of the open saved view (a view
-   * has a selection of its own, which the filter of the list does not narrow).
+   * The tasks the view that is shown draws now, as the page reads them (App.svelte watches the main area: every
+   * element of a task names it in `data-mark-id`): rows of a folded area, a folded column or stage, another plan, a
+   * closed cell are not among them. `null` where nobody reads the page (the tests of the state): then all count.
    */
-  get markable(): readonly TaskEntry[] {
-    const open = this.view === 'views' ? this.viewsState.open : null;
-    return open ? this.tasksOfView(open) : this.shown;
+  drawn = $state.raw<ReadonlySet<string> | null>(null);
+
+  /** Whether the view that is shown draws `id` now (see `drawn`). */
+  draws(id: string): boolean {
+    return this.drawn === null || this.drawn.has(id);
   }
 
   /**
-   * A click on a task with Ctrl (or Cmd) or Shift marks instead of opening, as in a file explorer: Ctrl flips the mark
-   * of that task, Shift marks from the task marked last (else the selected one) to this one, along `order` (what the
-   * view shows, in its order). True when the click was a mark: the caller then opens nothing.
+   * The marked tasks the view that is shown draws: what Export, the context menu and the strip of the marks work on.
+   * A mark of a task the view does not draw stays (one marking for all views), but nothing here changes or takes it.
+   */
+  get marksHere(): string[] {
+    if (!this.marking) return [];
+    return this.drawn === null ? this.marks : this.marks.filter((id) => this.drawn?.has(id));
+  }
+
+  /**
+   * A click on a task with Shift marks instead of opening: from the task marked last (else the selected one) to this
+   * one, along `order` (what the view shows, in its order); with neither, this task alone. (Ctrl+click opens the task
+   * in a new tab, as a link does: lib/taskApart.ts.) True when the click was a mark: the caller then opens nothing.
    */
   markClick(event: { ctrlKey: boolean; metaKey: boolean; shiftKey: boolean }, id: string, order: readonly string[]): boolean {
-    if (!event.ctrlKey && !event.metaKey && !event.shiftKey) return false;
-    if (!this.marking || !this.markable.some((t) => t.id === id)) return true;
-    if (event.shiftKey) {
-      const from = [this.#markAnchor, this.selectedId].find((x): x is string => x !== null && order.includes(x)) ?? id;
+    if (!event.shiftKey || event.ctrlKey || event.metaKey) return false;
+    if (!this.marking || !this.draws(id)) return true;
+    {
+      const anchor = this.#markAnchor !== null && this.marks.includes(this.#markAnchor) ? this.#markAnchor : null;
+      const from = [anchor, this.selectedId].find((x): x is string => x !== null && order.includes(x)) ?? id;
       const { marks, full } = markRange(this.marks, order, from, id);
       if (full) this.say('error', 'bulk.limit');
       this.marks = marks;
       this.#markAnchor = id;
-    } else {
-      this.toggleMark(id);
     }
     return true;
   }
@@ -2031,7 +2042,8 @@ export class App {
    */
   exportRows(): { view: string; rows: ExportRow[]; printRows: ExportRow[]; kept: number } {
     const { view, rows, data, words } = this.viewRows();
-    const marked = onlyMarked(rows, new Set(this.marking ? this.marks : []));
+    // The marks of the tasks the view draws: a mark of another view's task neither narrows nor empties this export.
+    const marked = onlyMarked(rows, new Set(this.marksHere));
     const { rows: out, kept } = mayLeave(marked, (task) => this.mayRememberArea(task.area));
     const leaving = withoutPlansOf(out, (plan) => this.mayRememberArea(areaOfId(plan)));
     return { view, rows: relabel(leaving, data), printRows: relabel(leaving, words), kept };
@@ -2196,10 +2208,15 @@ export class App {
     // Not while a write is on its way: a list read in the middle of it may lack tasks the write has moved already, and
     // their marks would go before the answer can tell where the tasks went. The read after the write sets this right.
     if (this.marks.length === 0 || this.saving) return;
-    const shown = new Set(this.markable.map((t) => t.id));
+    const shown = new Set(this.shown.map((t) => t.id));
     const arriving = this.#arriving?.ids;
     const kept = this.marks.filter((id) => shown.has(id) || arriving?.has(id));
-    if (kept.length !== this.marks.length) this.marks = kept;
+    if (kept.length === this.marks.length) return;
+    // Marks made in a saved view (whose selection is its own) can be of tasks the filter of the list hides: they go
+    // here, and the person is told, so a mark is never lost without a word.
+    const hidden = this.marks.filter((id) => !kept.includes(id) && this.tasks.some((t) => t.id === id)).length;
+    this.marks = kept;
+    if (hidden > 0) this.say('ok', 'marks.hidden', { n: hidden });
   }
 
   /**
@@ -2215,6 +2232,7 @@ export class App {
 
   clearMarks(): void {
     this.marks = [];
+    this.#markAnchor = null;
   }
 
   /** Say something to the person without writing (a refusal before anything is sent). */

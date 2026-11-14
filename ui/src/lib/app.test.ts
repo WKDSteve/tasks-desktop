@@ -6137,50 +6137,83 @@ describe('the defaults (dialog "Defaults ...")', () => {
     m.app.stop();
   });
 
-  it('marks with a click as a file explorer does: Ctrl flips one, Shift takes the range along what the view shows', async () => {
+  it('marks with Shift and a click: the range along what the view shows; Ctrl and Cmd are left to the new tab', async () => {
     const m = make({ token: 't' });
     m.hub.doc = snapshot([task('pub/1'), task('pub/2'), task('pub/3'), task('pub/4'), task('pub/5')]);
     await m.app.start(null);
     m.app.setView('board');
     const order = ['pub/3', 'pub/1', 'pub/5', 'pub/2', 'pub/4'];
     const plain = { ctrlKey: false, metaKey: false, shiftKey: false };
-    // A plain click is no mark: the caller opens the task.
+    // A plain click, and a click with Ctrl or Cmd (a new tab, lib/taskApart.ts), are no mark: the caller goes on.
     expect(m.app.markClick(plain, 'pub/1', order)).toBe(false);
+    expect(m.app.markClick({ ...plain, ctrlKey: true }, 'pub/1', order)).toBe(false);
+    expect(m.app.markClick({ ...plain, metaKey: true }, 'pub/1', order)).toBe(false);
+    expect(m.app.markClick({ ...plain, shiftKey: true, ctrlKey: true }, 'pub/1', order)).toBe(false);
     expect(m.app.marks).toEqual([]);
-    // Ctrl (or Cmd) flips the mark of that task.
-    expect(m.app.markClick({ ...plain, ctrlKey: true }, 'pub/1', order)).toBe(true);
-    expect(m.app.markClick({ ...plain, metaKey: true }, 'pub/4', order)).toBe(true);
-    expect(m.app.marks).toEqual(['pub/1', 'pub/4']);
-    m.app.markClick({ ...plain, ctrlKey: true }, 'pub/4', order);
+    // Shift with nothing marked and nothing selected: this task alone.
+    expect(m.app.markClick({ ...plain, shiftKey: true }, 'pub/1', order)).toBe(true);
     expect(m.app.marks).toEqual(['pub/1']);
-    // Shift: from the task marked last (pub/4, the last one clicked) back to pub/5, along the order of the view.
-    expect(m.app.markClick({ ...plain, shiftKey: true }, 'pub/5', order)).toBe(true);
-    expect([...m.app.marks].sort()).toEqual(['pub/1', 'pub/2', 'pub/4', 'pub/5']);
-    // With no mark made yet the range starts at the selected task; with neither, the task alone.
+    // Then from it (the task marked last) to pub/2, along the order of the view.
+    m.app.markClick({ ...plain, shiftKey: true }, 'pub/2', order);
+    expect([...m.app.marks].sort()).toEqual(['pub/1', 'pub/2', 'pub/5']);
+    // Cleared, the anchor goes with the marks: the next range starts at the selected task.
     m.app.clearMarks();
-    const fresh = make({ token: 't' });
-    fresh.hub.doc = m.hub.doc;
-    await fresh.app.start(null);
-    fresh.app.setView('plan');
-    fresh.app.select('pub/3');
-    fresh.app.markClick({ ...plain, shiftKey: true }, 'pub/5', order);
-    expect([...fresh.app.marks].sort()).toEqual(['pub/1', 'pub/3', 'pub/5']);
-    fresh.app.clearMarks();
-    fresh.app.select(null);
-    // A click on a task the view cannot mark, or in a view that marks nothing, is taken (it opens nothing) and marks nothing.
-    expect(fresh.app.markClick({ ...plain, ctrlKey: true }, 'pub/gone', order)).toBe(true);
-    fresh.app.setView('today');
-    expect(fresh.app.markClick({ ...plain, ctrlKey: true }, 'pub/1', order)).toBe(true);
-    expect(fresh.app.marks).toEqual([]);
-    // The marks follow what the view shows: a filter that hides a marked task takes its mark.
-    fresh.app.setView('board');
-    fresh.app.toggleMark('pub/1');
-    fresh.app.toggleMark('pub/2');
-    fresh.app.setQuery('pub/2');
-    fresh.app.keepMarksShown();
-    expect(fresh.app.marks).toEqual(['pub/2']);
+    m.app.select('pub/3');
+    m.app.markClick({ ...plain, shiftKey: true }, 'pub/5', order);
+    expect([...m.app.marks].sort()).toEqual(['pub/1', 'pub/3', 'pub/5']);
+    // An anchor whose mark was taken off is none either.
+    m.app.clearMarks();
+    m.app.select(null);
+    m.app.toggleMark('pub/4');
+    m.app.toggleMark('pub/4');
+    m.app.markClick({ ...plain, shiftKey: true }, 'pub/1', order);
+    expect(m.app.marks).toEqual(['pub/1']);
+    m.app.clearMarks();
+    // A view that marks nothing takes the click (it opens nothing) and marks nothing.
+    m.app.setView('today');
+    expect(m.app.markClick({ ...plain, shiftKey: true }, 'pub/1', order)).toBe(true);
+    expect(m.app.marks).toEqual([]);
     m.app.stop();
-    fresh.app.stop();
+  });
+
+  it('works on the marks of the tasks the view draws: the strip, Export and the keys leave the others alone', async () => {
+    const m = make({ token: 't' });
+    m.hub.areaList = [{ name: 'pub', data_class: 'public' }];
+    m.hub.doc = snapshot([task('pub/1'), task('pub/2'), task('pub/3')]);
+    await m.app.start(null);
+    // The list: the fixture's tasks have no status a column of the board takes.
+    m.app.setView('list');
+    m.app.toggleMark('pub/1');
+    m.app.toggleMark('pub/3');
+    // Nobody reads the page: every mark counts.
+    expect(m.app.marksHere).toEqual(['pub/1', 'pub/3']);
+    // The page draws pub/1 and pub/2 (pub/3 is in a folded column): only pub/1 is marked here.
+    m.app.drawn = new Set(['pub/1', 'pub/2']);
+    expect(m.app.marksHere).toEqual(['pub/1']);
+    expect(m.app.draws('pub/3')).toBe(false);
+    await vi.waitFor(() => expect(m.app.exportRows().rows.map((r) => r.task.id)).toEqual(['pub/1']));
+    // No marked task drawn here: the export is the view's, not empty.
+    m.app.drawn = new Set(['pub/2']);
+    expect(m.app.marksHere).toEqual([]);
+    expect(m.app.exportRows().rows.map((r) => r.task.id).sort()).toEqual(['pub/1', 'pub/2', 'pub/3']);
+    // The marks themselves stay: one marking for all views.
+    expect(m.app.marks).toEqual(['pub/1', 'pub/3']);
+    m.app.stop();
+  });
+
+  it('the list takes the marks of tasks its filter hides, and says so', async () => {
+    const m = make({ token: 't' });
+    m.hub.doc = snapshot([task('pub/1'), task('pub/2')]);
+    await m.app.start(null);
+    m.app.setView('views');
+    m.app.toggleMark('pub/1');
+    m.app.toggleMark('pub/2');
+    m.app.setView('list');
+    m.app.setQuery('pub/2');
+    m.app.keepMarksShown();
+    expect(m.app.marks).toEqual(['pub/2']);
+    expect(m.app.toast?.text).toBe(translate(m.app.lang, 'marks.hidden', { n: 1 }));
+    m.app.stop();
   });
 
   it('keeps the switches of the areas in lists: separation on, zebra, grouping and the filter in the bar off', async () => {
