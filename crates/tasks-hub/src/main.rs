@@ -10,7 +10,10 @@ const USAGE: &str = "usage:
                                           background if it is not running, open the browser
   tasks-hub serve [--port <1024-65535>]   run the hub until Ctrl-C
   tasks-hub start [--open]                run the hub in the background (no window; log in
-                                          the config folder); --open also opens the browser
+                                          the config folder); --open also opens the browser.
+                                          It ends itself 10 minutes after the last page closed,
+                                          unless it starts with your login, a phone is paired
+                                          or config.json has keep_running: true
   tasks-hub stop                          stop the hub that runs in the background
   tasks-hub autostart on|off|status       start the hub with your login (Windows: Run key;
                                           Linux: autostart entry; macOS: launch agent)
@@ -103,18 +106,62 @@ async fn click() -> Result<(), String> {
     } else {
         None
     };
-    match installed {
+    let started = match installed {
         // The hub runs from the installed copy, not from the file that was downloaded.
-        Some(program) => print!("{}", background::start_from(&program)?),
-        None => print!("{}", background::start().await?),
+        Some(program) => background::start_from(&program)?,
+        None => background::start().await?,
+    };
+    print!("{started}");
+    let print_only = std::env::var_os(tasks_hub::IDENTITY.var("NO_LAUNCH")).is_some();
+    open_page(started, print_only).await
+}
+
+/// Open the page of the hub that was just started or found, in the browser (`print_only`: print the link instead).
+/// Its future is on the heap and made here, not in the `match` of `run`: a large future made there takes room in the
+/// stack of the main thread for every command (see `uninstall` of the kit), which overflows it in a debug build.
+fn open_page(
+    started: String,
+    print_only: bool,
+) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), String>>>> {
+    Box::pin(async move {
+        let page = async {
+            let url = app::open().await?;
+            if print_only {
+                println!("{url}");
+                Ok(())
+            } else {
+                app::launch(link_of_this_pc(&url))
+            }
+        };
+        open_or_stop(&started, page, background::stop).await
+    })
+}
+
+/// The link the browser of this PC opens, out of what `open` printed: its first line. With a tailnet name set there
+/// is a second one, the link for the phone, which is not for this browser (and made `launch` refuse the whole text).
+fn link_of_this_pc(printed: &str) -> &str {
+    printed.lines().next().unwrap_or(printed)
+}
+
+/// Open the page of the hub that was just started or found (`started` is what the start printed). A hub this call
+/// started for the page does not stay behind when the page cannot be opened: nobody would see it. One that ran
+/// already is not this call's to stop.
+async fn open_or_stop<P, S, F>(started: &str, page: P, stop: S) -> Result<(), String>
+where
+    P: std::future::Future<Output = Result<(), String>>,
+    S: FnOnce() -> F,
+    F: std::future::Future<Output = Result<String, String>>,
+{
+    let Err(why) = page.await else {
+        return Ok(());
+    };
+    if !background::started_now(started) {
+        return Err(why);
     }
-    let url = app::open().await?;
-    if std::env::var_os(tasks_hub::IDENTITY.var("NO_LAUNCH")).is_some() {
-        println!("{url}");
-        Ok(())
-    } else {
-        app::launch(&url)
-    }
+    Err(match stop().await {
+        Ok(_) => format!("{why}; the hub that was started for the page is stopped again"),
+        Err(left) => format!("{why}; the hub that was started for the page still runs: {left}"),
+    })
 }
 
 /// A console that was opened by a double click closes with the program: an error is read before that.
@@ -172,10 +219,7 @@ async fn run(args: Vec<String>) -> Result<(), String> {
                 Ok(text) => {
                     print!("{text}");
                     if args.len() == 2 {
-                        match app::open().await {
-                            Ok(url) => app::launch(&url),
-                            Err(e) => Err(e),
-                        }
+                        open_page(text, false).await
                     } else {
                         Ok(())
                     }
@@ -268,5 +312,75 @@ async fn main() {
             wait_for_enter();
         }
         std::process::exit(1);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{link_of_this_pc, open_or_stop};
+    use std::cell::Cell;
+
+    const STARTED: &str = "the hub runs in the background (port 1, process 2)\n";
+    const FOUND: &str = "a hub is already running (port 1, process 2)\n";
+
+    async fn run(
+        started: &str,
+        page: Result<(), String>,
+        stop: Result<String, String>,
+    ) -> (Result<(), String>, bool) {
+        let stopped = Cell::new(false);
+        let said = open_or_stop(started, async { page }, || {
+            stopped.set(true);
+            async { stop }
+        })
+        .await;
+        (said, stopped.get())
+    }
+
+    #[tokio::test]
+    async fn a_hub_started_for_a_page_that_does_not_open_is_stopped_again() {
+        let (said, stopped) = run(STARTED, Err("no browser".to_owned()), Ok(String::new())).await;
+        assert!(stopped);
+        let why = said.unwrap_err();
+        assert!(
+            why.starts_with("no browser; ") && why.ends_with("is stopped again"),
+            "{why}"
+        );
+
+        let (said, stopped) = run(
+            STARTED,
+            Err("no browser".to_owned()),
+            Err("denied".to_owned()),
+        )
+        .await;
+        assert!(stopped);
+        assert!(said.unwrap_err().ends_with("still runs: denied"));
+    }
+
+    /// With `TASKS_DESKTOP_TAILNET` set `open` prints two lines; the browser gets the first, and `launch` takes it.
+    #[test]
+    fn the_browser_opens_the_link_of_this_pc_and_not_the_one_for_the_phone() {
+        let code = "0123456789abcdef0123456789abcdef";
+        let local = format!("http://127.0.0.1:17615/#pair={code}");
+        let both =
+            format!("{local}\nphone through Tailscale: https://pc.tail1234.ts.net/m/#pair={code}");
+        assert_eq!(link_of_this_pc(&both), local);
+        assert_eq!(link_of_this_pc(&local), local);
+        assert!(tasks_hub::app::is_own_link(link_of_this_pc(&both)));
+        assert!(
+            !tasks_hub::app::is_own_link(&both),
+            "the whole text was what stopped the hub"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_hub_that_ran_already_or_a_page_that_opened_stops_nothing() {
+        let (said, stopped) = run(FOUND, Err("no browser".to_owned()), Ok(String::new())).await;
+        assert_eq!(said, Err("no browser".to_owned()));
+        assert!(!stopped, "the hub was not started by this call");
+
+        let (said, stopped) = run(STARTED, Ok(()), Ok(String::new())).await;
+        assert_eq!(said, Ok(()));
+        assert!(!stopped);
     }
 }

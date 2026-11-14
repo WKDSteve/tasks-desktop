@@ -37,7 +37,9 @@ Nothing here is released.
 ```
 tasks-hub serve [--port 1024-65535]   run the hub until Ctrl-C
 tasks-hub start [--open]               run the hub in the background (no window; log: hub.log
-                                      in the config folder); --open also opens the browser
+                                      in the config folder); --open also opens the browser.
+                                      It ends itself 10 minutes after the last page closed
+                                      (see "A hub in the background ends itself")
 tasks-hub stop                        stop the hub that runs in the background
 tasks-hub autostart on|off|status     start the hub with your login, also in the Options menu of the page (Windows: Run key;
                                       Linux: autostart entry; macOS: launch agent)
@@ -345,6 +347,26 @@ to replace it. The hub then runs from the installed copy. What was answered or d
 a script) nothing is asked; `TASKS_DESKTOP_NO_SETUP=1` switches the questions off. The program of a rolling build or a release carries its engine (Neovim 0.12, cut down, with tasks.nvim and lib.nvim, see `tools/nvim.lock`): what is set by hand goes first, then that, then what is found on the machine. A build of your own without `TASKS_HUB_ENGINE_BUNDLE` needs Neovim 0.12+ and checkouts of `tasks.nvim` and `lib.nvim` (the engine), found through
 `TASKS_ENGINE_DIR` and `LIB_NVIM_DIR`, `REPOS_DIR` or the settings file; the vault is `TASKS_VAULT`.
 `tasks-hub --version` names the commit of the build; `tasks-hub stop` ends the hub.
+
+### A hub in the background ends itself
+
+A hub that `start` or a double click put in the background has no window, so nobody would notice one that is
+left over (an install that was cancelled, a browser that never opened, a tab closed days ago). It therefore ends
+by itself **ten minutes after the last page was closed** and says so in `hub.log`; the next double click or
+`start --open` starts it again. "A page" is a connection on which the hub accepted a session (the open tab on the
+PC, the page on a paired phone); a program that only asks who runs on the port does not keep the hub alive.
+
+It stays when you gave it an order to:
+
+- it starts with your login (`tasks-hub autostart on`, or the switch in the Options menu),
+- a phone is paired (`tasks-hub devices` lists them): the phone reaches the hub when no page is open on the PC,
+- `config.json` says `"keep_running": true`.
+
+A hub in a terminal (`tasks-hub serve`) is not affected: it runs until Ctrl-C. When a double click or
+`start --open` started the hub and the page then cannot be opened, the hub is stopped again at once and the message
+says so. `install --autostart` that fails in a later step takes its login entry back, and `uninstall` stops the
+hub before it removes the entry and the links. `TASKS_DESKTOP_ALONE_SECS` (1 to 86400) sets another time than the
+ten minutes.
 
 ## Look at the current state
 

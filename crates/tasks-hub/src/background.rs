@@ -8,7 +8,8 @@ use std::pin::Pin;
 
 use appkit_hub::background::Background;
 pub use appkit_hub::background::{
-    run_command, start_from, Autostart, InstallOptions, UninstallOptions,
+    has_order, left_alone, run_command, start_from, started_now, Autostart, InstallOptions,
+    UninstallOptions,
 };
 
 use crate::config::Env;

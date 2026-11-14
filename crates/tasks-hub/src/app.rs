@@ -11,6 +11,7 @@ use appkit_core::authn::{Secret, SystemClock, CODE_BYTES, TOKEN_BYTES};
 use appkit_core::registry::{self, HubRecord};
 use serde_json::Value;
 
+use crate::background;
 use crate::classes::{self, AreaPolicy, Classes};
 use crate::client;
 use crate::config::{self, Env, FileConfig};
@@ -72,6 +73,36 @@ async fn wait_for_stop() {
         }
     }
     let _ = tokio::signal::ctrl_c().await;
+}
+
+/// Wait until the hub is to end: Ctrl-C (or SIGTERM), or, for a hub in the background, being left alone. Such a hub
+/// has no window to close: it ends itself once no page has been connected for a while, unless the person gave it an
+/// order to stay. The settings are read then, not at the start: the order may be new.
+async fn wait_until_over(running: &appkit_hub::RunningServer, dir: &Path, env: &Env) {
+    let presence = running.presence();
+    let stay = || {
+        let keep_running = match config::load_file(dir) {
+            Ok(file) => file.keep_running.unwrap_or(false),
+            // Settings that cannot be read are no reason to go: the order may stand in them (a typo while it was
+            // written, a file held for a moment). The hub stays and says why.
+            Err(e) => {
+                println!("the settings cannot be read, so the hub stays: {e}");
+                true
+            }
+        };
+        background::has_order(
+            &background::APP,
+            env,
+            keep_running,
+            running.paired_devices(),
+        )
+    };
+    tokio::select! {
+        () = wait_for_stop() => {}
+        () = background::left_alone(&background::APP, env, &presence, stay) => {
+            println!("no page is connected and nothing asks the hub to stay: it ends");
+        }
+    }
 }
 
 /// What the start found out about the engine.
@@ -780,7 +811,9 @@ pub async fn serve(opts: ServeOptions) -> Result<(), String> {
         crate::IDENTITY.binary
     );
 
-    wait_for_stop().await;
+    // On the heap: the future of `serve` is polled on the main thread, whose stack (1 MB on Windows) a debug build
+    // already fills; what waits here must not add to it.
+    Box::pin(wait_until_over(&running, &dir, &env)).await;
     registry::remove_record(&dir);
     registry::remove_secret(&dir);
     running.shutdown().await;
