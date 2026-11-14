@@ -72,7 +72,8 @@ one).
 
 1. Get the file: `git clone` (later `git pull`) of the public repository
    [tasks-web](https://github.com/WKDSteve/tasks-web); compare `Get-FileHash tasks.html` with `SHA256SUMS`. The start
-   script below pulls and checks the sums at every start (`start-tasks.cmd /update` does only that), and Options >
+   script below, run by hand, pulls and checks the sums before it opens the page (`start-tasks.cmd /update` does only
+   that; the shortcut it makes starts the browser alone and updates nothing), and Options >
    "Update the page ..." in the page names its build (ref, commit, day) and gives the lines to copy; the page itself
    fetches nothing.
 2. Open `file:///<path>/tasks-web/tasks.html` in Chrome, or run `start-tasks.cmd` there (it finds Chrome, `/app` for a
