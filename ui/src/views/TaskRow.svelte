@@ -143,12 +143,18 @@
     align-items: baseline;
     min-width: 0;
   }
+  /* The title keeps the width the row promises it (6rem, the least of its column): in a narrow window the name of the
+     area gives way and is cut, never the title. The band and the id still say which area it is. */
   .what .title {
-    flex: 1;
+    flex: 1 0 6rem;
     min-width: 0;
   }
   .area {
-    flex: none;
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
     margin-right: 0.45rem;
     padding: 0 0.35rem;
     border-radius: var(--radius);

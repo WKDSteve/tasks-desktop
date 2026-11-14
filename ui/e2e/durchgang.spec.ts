@@ -76,6 +76,8 @@ test('in a narrow window the title of a row keeps a width and its tags wrap', as
   expect(measured.tags, 'a row with tags').toBeGreaterThanOrEqual(3);
   // 6rem at the page's 14px: the tags took it down to zero before.
   expect(measured.title, measured.id).toBeGreaterThanOrEqual(80);
+  // The name of the area before the title (the list mixes two areas here) gives way to it: it is there, and cut.
+  await expect(page.locator('.rows[data-areas="bands"] .line.banded .area').first()).toBeAttached();
   await expectAccessible(page, 'the list in a narrow window');
 });
 
