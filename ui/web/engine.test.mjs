@@ -249,7 +249,7 @@ const READ_METHODS = [
 const BY_ID = ['task', 'done_preview', 'plan_for'];
 
 const mask = (text) =>
-  text.trim().replace(/"generated_at":"[^"]*"/g, '"generated_at":"*"').replace(/"engine":\{[^}]*\}/g, '"engine":{*}');
+  text.trim().replace(/"generated_at":"[^"]*"/g, '"generated_at":"*"').replace(/"time":"\d\d:\d\d"/g, '"time":"*"').replace(/"engine":\{[^}]*\}/g, '"engine":{*}');
 
 /** `nvim -l tasks.lua call <method>` of the pinned commits on `vault`, written from the git objects into a temp folder. */
 function nvimCaller(t, label, vault) {

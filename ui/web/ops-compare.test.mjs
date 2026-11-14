@@ -28,7 +28,7 @@ const COMPARE = process.env.TASKS_WEB_COMPARE === '1';
 const TODAY = '2026-10-29';
 
 const mask = (text) =>
-  text.trim().replace(/"generated_at":"[^"]*"/g, '"generated_at":"*"').replace(/"engine":\{[^}]*\}/g, '"engine":{*}');
+  text.trim().replace(/"generated_at":"[^"]*"/g, '"generated_at":"*"').replace(/"time":"\d\d:\d\d"/g, '"time":"*"').replace(/"engine":\{[^}]*\}/g, '"engine":{*}');
 
 function materialize(repo, commit, prefixes, target) {
   for (const [path, content] of gitFiles(repo, commit, prefixes)) {
