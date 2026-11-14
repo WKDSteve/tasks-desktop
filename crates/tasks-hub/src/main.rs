@@ -28,6 +28,9 @@ const USAGE: &str = "usage:
                                           vault); the program file is left for the script
   tasks-hub open [--launch]               print a one-time pairing link for the running hub
                                           (a phone: the same link with /m/ in front of the #)
+  tasks-hub open --phone [--no-window]    a pairing code for a phone through Tailscale Serve
+                                          (TASKS_DESKTOP_TAILNET), as a QR code for its camera;
+                                          in a terminal also as a picture in a window
   tasks-hub devices                       list the phones paired with a key of their own
   tasks-hub devices revoke <id>           revoke one: its sessions end, it has to pair again
   tasks-hub devices level <id> read|create|change|trigger
@@ -188,6 +191,17 @@ fn phone_export(
     })
 }
 
+/// `open --phone`, a task of the runtime like the export (it holds the code open until it is over).
+fn open_phone(
+    window: bool,
+) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), String>> + Send>> {
+    let task = tokio::spawn(async move { app::open_phone(window).await });
+    Box::pin(async move {
+        task.await
+            .map_err(|e| format!("the pairing stopped: {e}"))?
+    })
+}
+
 /// `testing link <link>`, a task of the runtime like the export (the pairing goes over the network).
 fn testing_link(
     text: &str,
@@ -264,10 +278,18 @@ async fn run(args: Vec<String>) -> Result<(), String> {
         Some("open") if args.len() == 2 && args[1] == "--launch" => match app::open().await {
             Ok(url) => {
                 println!("{url}");
-                app::launch(&url)
+                app::launch(link_of_this_pc(&url))
             }
             Err(e) => Err(e),
         },
+        Some("open") if args.len() == 2 && args[1] == "--phone" => open_phone(true).await,
+        Some("open")
+            if args.len() == 3
+                && args[1..].iter().any(|a| a == "--phone")
+                && args[1..].iter().any(|a| a == "--no-window") =>
+        {
+            open_phone(false).await
+        }
         Some("devices") if args.len() == 1 => app::devices(app::DevicesCommand::List)
             .await
             .map(|text| println!("{text}")),

@@ -60,6 +60,7 @@ tasks-hub uninstall [--purge-settings] stop the hub, take away the login entry a
                                       of the program you run it from: a build in target/ included)
 tasks-hub open [--launch]             print a one-time pairing link for the running hub
                                       (--launch also opens it in the default browser)
+tasks-hub open --phone [--no-window]  the same for a phone through Tailscale Serve, as a QR code
 tasks-hub usage [--days=14]           on how many of the last days the interface was opened
 ```
 
@@ -275,6 +276,10 @@ forwards another HTTPS port than 443 to this hub, `tailscale serve --bg --https=
 stops the start). The hub then also answers that host, but there only to paired phones: pairing a phone with a key
 works there, a plain pairing code does not, and neither does anything of the PC. `tasks-hub open` (with the same
 variable set) prints the link for the phone too: `https://<pc>.<tailnet>.ts.net/m/#pair=<code>`.
+`tasks-hub open --phone` shows that link as a QR code for the phone's camera: in the terminal, black on white
+whatever the theme, and in a terminal also as a picture in a window (the one to scan when the terminal's font leaves
+gaps between the lines; `--no-window` leaves it out). The command ends when the code is over, after 60 s, and removes
+the page of the picture (`pair-qr.html` in the settings folder).
 
 **Notifications (Web Push).** A paired phone may ask to be told (the phone page offers it; the routes `/api/push/*`
 are released for phones at `read`, a session of the PC gets `403 device_required` there). The hub sends Web Push

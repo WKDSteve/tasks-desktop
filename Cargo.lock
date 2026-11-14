@@ -46,7 +46,7 @@ dependencies = [
 [[package]]
 name = "appkit-core"
 version = "0.0.0"
-source = "git+https://github.com/WKDSteve/appkit?tag=v0.52.0#23e64a2dfc43fe6c696ce4939b91a3a769438f77"
+source = "git+https://github.com/WKDSteve/appkit?tag=v0.52.1#c75b0d1db9c46760690d02d3fcd27ef48c11af3a"
 dependencies = [
  "getrandom 0.4.3",
  "serde",
@@ -58,7 +58,7 @@ dependencies = [
 [[package]]
 name = "appkit-hub"
 version = "0.0.0"
-source = "git+https://github.com/WKDSteve/appkit?tag=v0.52.0#23e64a2dfc43fe6c696ce4939b91a3a769438f77"
+source = "git+https://github.com/WKDSteve/appkit?tag=v0.52.1#c75b0d1db9c46760690d02d3fcd27ef48c11af3a"
 dependencies = [
  "aes-gcm",
  "appkit-core",
@@ -81,7 +81,7 @@ dependencies = [
 [[package]]
 name = "appkit-mobile"
 version = "0.0.0"
-source = "git+https://github.com/WKDSteve/appkit?tag=v0.52.0#23e64a2dfc43fe6c696ce4939b91a3a769438f77"
+source = "git+https://github.com/WKDSteve/appkit?tag=v0.52.1#c75b0d1db9c46760690d02d3fcd27ef48c11af3a"
 dependencies = [
  "getrandom 0.4.3",
  "p256",
@@ -95,7 +95,7 @@ dependencies = [
 [[package]]
 name = "appkit-scratch"
 version = "0.0.0"
-source = "git+https://github.com/WKDSteve/appkit?tag=v0.52.0#23e64a2dfc43fe6c696ce4939b91a3a769438f77"
+source = "git+https://github.com/WKDSteve/appkit?tag=v0.52.1#c75b0d1db9c46760690d02d3fcd27ef48c11af3a"
 dependencies = [
  "tempfile",
 ]
@@ -103,7 +103,7 @@ dependencies = [
 [[package]]
 name = "appkit-testkit"
 version = "0.0.0"
-source = "git+https://github.com/WKDSteve/appkit?tag=v0.52.0#23e64a2dfc43fe6c696ce4939b91a3a769438f77"
+source = "git+https://github.com/WKDSteve/appkit?tag=v0.52.1#c75b0d1db9c46760690d02d3fcd27ef48c11af3a"
 dependencies = [
  "appkit-core",
  "appkit-hub",

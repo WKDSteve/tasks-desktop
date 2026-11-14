@@ -908,20 +908,53 @@ pub fn tailnet_name(env: &Env) -> Result<Option<String>, String> {
 ///
 /// A text for the person at the terminal.
 pub async fn open() -> Result<String, String> {
-    let (status, doc) = control_post("/api/control/pair", "{}").await?;
-    if status != 200 {
-        return Err(format!("the hub refused the request (HTTP {status})"));
-    }
-    let code = doc["code"].as_str().ok_or("the hub sent no code")?;
+    let code = pair_code().await?;
     let local = format!("http://127.0.0.1:{}/#pair={code}", running_port()?);
     Ok(match tailnet_name(&Env::from_process())? {
         Some(name) => format!(
             "{local}
 phone through Tailscale: {}",
-            tailnet_link(&name, code)
+            tailnet_link(&name, &code)
         ),
         None => local,
     })
+}
+
+/// A new one-time pairing code of the running hub.
+async fn pair_code() -> Result<String, String> {
+    let (status, doc) = control_post("/api/control/pair", "{}").await?;
+    if status != 200 {
+        return Err(format!("the hub refused the request (HTTP {status})"));
+    }
+    Ok(doc["code"]
+        .as_str()
+        .ok_or("the hub sent no code")?
+        .to_owned())
+}
+
+/// `tasks-hub open --phone`: a pairing code for a phone through Tailscale Serve, as a QR code to scan with the
+/// phone's camera (in the terminal, and with `window` in a terminal also as a picture in a window) and as a link.
+///
+/// # Errors
+///
+/// No tailnet name is set, or as [`open`].
+pub async fn open_phone(window: bool) -> Result<(), String> {
+    let env = Env::from_process();
+    let Some(name) = tailnet_name(&env)? else {
+        return Err(format!(
+            "no tailnet name: set {}=<pc>.<tailnet>.ts.net, start the hub again, and let `tailscale serve` forward to it",
+            crate::config::TAILNET_VAR
+        ));
+    };
+    let link = tailnet_link(&name, &pair_code().await?);
+    appkit_hub::phone::present_pairing(
+        &app_dir(&env)?,
+        &link,
+        "Pair a phone with tasks",
+        "Scan the code with the camera of the phone (or open the link there) within 60 seconds.",
+        window,
+    )
+    .await
 }
 
 /// The link of the phone page through Tailscale Serve.
