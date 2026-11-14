@@ -266,7 +266,9 @@ Nothing a phone may do starts something on the PC (`trigger`).
 
 **Through Tailscale**, without a tunnel: `tailscale serve --bg 17615` forwards `https://<pc>.<tailnet>.ts.net` to the
 hub (which still listens on loopback only). Tell the hub that name before it starts, in its environment:
-`TASKS_DESKTOP_TAILNET=<pc>.<tailnet>.ts.net` (a plain host name: lower case, no `https://`, no port; another value
+`TASKS_DESKTOP_TAILNET=<pc>.<tailnet>.ts.net` (a plain host name: lower case, no `https://`; `:<port>` only when Serve
+forwards another HTTPS port than 443 to this hub, `tailscale serve --bg --https=8443 17615` and
+`<pc>.<tailnet>.ts.net:8443`, so that a second hub of the PC keeps 443; another value
 stops the start). The hub then also answers that host, but there only to paired phones: pairing a phone with a key
 works there, a plain pairing code does not, and neither does anything of the PC. `tasks-hub open` (with the same
 variable set) prints the link for the phone too: `https://<pc>.<tailnet>.ts.net/m/#pair=<code>`.

@@ -90,24 +90,13 @@ pub type FileConfig = appkit_hub::config::FileConfig<TasksSettings>;
 /// The variable that names this machine in the tailnet (`pc.example.ts.net`), for a phone through Tailscale Serve.
 pub const TAILNET_VAR: &str = "TASKS_DESKTOP_TAILNET";
 
-/// Is this a plain host name the guard takes as the tailnet name (appkit `with_tailnet_name`): lower-case labels of
-/// letters, digits and `-` (none at an end of a label), at least two, the last not all digits; no port, no scheme.
+/// Is this a name the guard takes as the tailnet name (appkit `with_tailnet_name`, the same rule): a plain host name
+/// (lower-case labels of letters, digits and `-`, none at an end of a label, at least two, the last not all digits; no
+/// scheme), with an optional `:<port>` other than 443 when Tailscale Serve forwards another HTTPS port to this hub
+/// (`tailscale serve --https=8443 ...`, so that a second hub of the PC has 443).
 #[must_use]
 pub fn valid_tailnet_name(name: &str) -> bool {
-    let labels: Vec<&str> = name.split('.').collect();
-    name.len() <= 253
-        && labels.len() >= 2
-        && labels.iter().all(|label| {
-            !label.is_empty()
-                && !label.starts_with('-')
-                && !label.ends_with('-')
-                && label
-                    .bytes()
-                    .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
-        })
-        && labels
-            .last()
-            .is_some_and(|tld| tld.bytes().any(|b| b.is_ascii_lowercase()))
+    appkit_core::authn::tailnet_name_ok(name)
 }
 
 /// The longest name of an area the hub accepts.
@@ -183,7 +172,12 @@ mod tests {
 
     #[test]
     fn a_tailnet_name_is_a_plain_host_name() {
-        for good in ["pc.example.ts.net", "my-pc.tail1a2b.ts.net", "a.b"] {
+        for good in [
+            "pc.example.ts.net",
+            "my-pc.tail1a2b.ts.net",
+            "a.b",
+            "pc.example.ts.net:8443",
+        ] {
             assert!(valid_tailnet_name(good), "{good}");
         }
         for bad in [
@@ -191,6 +185,8 @@ mod tests {
             "pc",
             "PC.example.ts.net",
             "pc.example.ts.net:443",
+            "pc.example.ts.net:0",
+            "pc.example.ts.net:",
             "https://pc.example.ts.net",
             "pc..ts.net",
             "-pc.ts.net",
