@@ -44,7 +44,6 @@
   let preview: HTMLVideoElement | undefined = $state();
   let stream: MediaStream | null = null;
   let recorder: MediaRecorder | null = null;
-  let chunks: Blob[] = [];
   let action: HTMLButtonElement | undefined = $state();
 
   function reasonOf(blocked: Blocked | null): string | undefined {
@@ -65,14 +64,21 @@
     if (why !== null) app.tell('error', `attach.capture.${why}` as Key);
   }
 
+  // Every start of a capture is a session of its own. Whatever comes back late (the browser's answer to a question
+  // that was discarded meanwhile, the last piece of a recording, a picture) belongs to the session that asked: one
+  // that is over stops what it got and attaches nothing, and never ends the session that came after it.
+  let session = 0;
+
   function end(): void {
-    if (recorder && recorder.state !== 'inactive') {
+    session += 1;
+    if (recorder) {
+      // Also when it has stopped already: its last events are still on their way.
       recorder.ondataavailable = null;
       recorder.onstop = null;
-      recorder.stop();
+      recorder.onerror = null;
+      if (recorder.state !== 'inactive') recorder.stop();
     }
     recorder = null;
-    chunks = [];
     stopStream(stream);
     stream = null;
     if (preview) preview.srcObject = null;
@@ -85,16 +91,39 @@
     if (why !== 'cancelled') app.tell('error', `attach.capture.${why}` as Key);
   }
 
+  /** What was taken becomes a file of the task it was taken for; one file at a time, and a second one is told. */
+  function attach(task: string, file: File, kind: Capture): void {
+    if (app.uploading !== null) {
+      app.tell('error', 'attach.capture.busy');
+      return;
+    }
+    void app.attachFile(task, file, kindOf(kind));
+  }
+
+  /** The camera with the sound where the page may use the microphone; a machine without one records without sound. */
+  async function camera(sound: boolean): Promise<MediaStream> {
+    const devices = env.devices as MediaDevices;
+    if (!sound) return devices.getUserMedia({ video: true, audio: false });
+    try {
+      return await devices.getUserMedia({ video: true, audio: true });
+    } catch (error) {
+      if (captureFailure('video', error) !== 'no_device') throw error;
+      return devices.getUserMedia({ video: true, audio: false });
+    }
+  }
+
   /** The camera, shown in the panel: for a photo, or with a recorder that runs from now on for a video. */
   async function startCamera(kind: 'video' | 'photo'): Promise<void> {
     if (taking !== null || busy) return;
     taking = { kind, ready: false };
+    session += 1;
+    const mine = session;
+    const task = id;
+    let got: MediaStream | null = null;
     try {
-      // The sound goes with a video where the page may use the microphone; without it the video is silent.
-      const audio = kind === 'video' && env.allows('microphone');
-      const got = await env.devices!.getUserMedia!({ video: true, audio });
-      // The panel was closed while the browser asked: the camera goes off again at once.
-      if (taking === null) {
+      got = await camera(kind === 'video' && env.allows('microphone'));
+      // Discarded, or another capture started, while the browser asked: this camera goes off again at once.
+      if (mine !== session) {
         stopStream(got);
         return;
       }
@@ -102,73 +131,84 @@
       await tick();
       if (!preview) throw new Error('no preview');
       await playing(preview, got);
+      if (mine !== session) return;
       if (kind === 'video') {
         const format = videoFormat((type) => MediaRecorder.isTypeSupported(type));
-        chunks = [];
-        recorder = new MediaRecorder(got, format.type === '' ? undefined : { mimeType: format.type });
-        recorder.ondataavailable = (event) => {
-          if (event.data.size > 0) chunks.push(event.data);
+        const parts: Blob[] = [];
+        const running = new MediaRecorder(got, format.type === '' ? undefined : { mimeType: format.type });
+        recorder = running;
+        running.ondataavailable = (event) => {
+          if (event.data.size > 0) parts.push(event.data);
         };
-        recorder.start();
+        // The end of the recording, asked for ("Stop and attach") or not (the camera was unplugged): what was
+        // recorded becomes the file either way, so nothing a person recorded is thrown away by an accident.
+        running.onstop = () => {
+          if (mine !== session) return;
+          const type = running.mimeType;
+          end();
+          if (parts.length === 0) {
+            app.tell('error', 'attach.capture.failed');
+            return;
+          }
+          const ext = type.startsWith('video/mp4') ? 'mp4' : 'webm';
+          attach(task, new File(parts, captureName('video', ext, new Date()), { type: type || 'video/webm' }), 'video');
+        };
+        running.onerror = () => {
+          if (mine === session) failed('video', new Error('recorder'));
+        };
+        running.start();
       }
       taking = { kind, ready: true };
       await tick();
       action?.focus();
     } catch (error) {
-      failed(kind, error);
+      // A session that is over has been cleaned up by whoever ended it: only its own camera is left to switch off.
+      if (mine !== session) stopStream(got);
+      else failed(kind, error);
     }
   }
 
-  /** The recording ends and becomes a file of the task. */
+  /** The recording ends and becomes a file of the task (`onstop` of the recorder does the rest). */
   function stopVideo(): void {
-    const running = recorder;
-    if (!running || running.state === 'inactive') return;
-    const type = running.mimeType;
-    running.onstop = () => {
-      const parts = chunks;
-      end();
-      if (parts.length === 0) {
-        app.tell('error', 'attach.capture.failed');
-        return;
-      }
-      const ext = type.startsWith('video/mp4') ? 'mp4' : 'webm';
-      const file = new File(parts, captureName('video', ext, new Date()), { type: type || 'video/webm' });
-      void app.attachFile(id, file, kindOf('video'));
-    };
-    running.stop();
+    if (recorder && recorder.state !== 'inactive') recorder.stop();
   }
 
   /** The picture the camera shows now becomes a file of the task. */
   async function takePhoto(): Promise<void> {
     if (!preview || !taking?.ready) return;
+    const mine = session;
+    const task = id;
     try {
       const blob = await frameOf(preview);
+      if (mine !== session) return;
       end();
-      void app.attachFile(id, new File([blob], captureName('photo', 'png', new Date()), { type: 'image/png' }), kindOf('photo'));
+      attach(task, new File([blob], captureName('photo', 'png', new Date()), { type: 'image/png' }), 'photo');
     } catch (error) {
-      failed('photo', error);
+      if (mine === session) failed('photo', error);
     }
   }
 
   /** The browser asks which screen or window; one picture of it becomes a file of the task. */
   async function takeScreenshot(): Promise<void> {
     if (taking !== null || busy) return;
+    session += 1;
+    const mine = session;
+    const task = id;
     let shared: MediaStream | null = null;
     try {
-      shared = await env.devices!.getDisplayMedia!({ video: true, audio: false });
+      shared = await (env.devices as MediaDevices).getDisplayMedia({ video: true, audio: false });
+      if (mine !== session) return;
       const video = document.createElement('video');
       await playing(video, shared);
       const blob = await frameOf(video);
       video.srcObject = null;
-      stopStream(shared);
-      void app.attachFile(
-        id,
-        new File([blob], captureName('screenshot', 'png', new Date()), { type: 'image/png' }),
-        kindOf('screenshot'),
-      );
+      // The detail shows another task by now, or is gone: the picture was meant for the one that asked.
+      if (mine !== session) return;
+      attach(task, new File([blob], captureName('screenshot', 'png', new Date()), { type: 'image/png' }), 'screenshot');
     } catch (error) {
+      if (mine === session) failed('screenshot', error);
+    } finally {
       stopStream(shared);
-      failed('screenshot', error);
     }
   }
 
@@ -203,7 +243,7 @@
     class="attach"
     data-attach="file"
     data-hint={t('hint.ui.detail.attach_file')}
-    disabled={busy}
+    disabled={busy || taking !== null}
     onclick={() => filePicker?.click()}>{app.uploading === id ? t('attach.uploading') : t('attach.file')}</button
   >
   <ChoiceMenu
@@ -268,11 +308,11 @@
     </p>
     <p class="actions">
       {#if taking.kind === 'video'}
-        <button type="button" class="attach go" bind:this={action} disabled={!taking.ready} onclick={stopVideo}
+        <button type="button" class="attach go" bind:this={action} disabled={!taking.ready || app.uploading !== null} onclick={stopVideo}
           >{t('attach.capture.stop')}</button
         >
       {:else}
-        <button type="button" class="attach go" bind:this={action} disabled={!taking.ready} onclick={() => void takePhoto()}
+        <button type="button" class="attach go" bind:this={action} disabled={!taking.ready || app.uploading !== null} onclick={() => void takePhoto()}
           >{t('attach.capture.take')}</button
         >
       {/if}

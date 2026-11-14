@@ -275,12 +275,23 @@
   const layout = $derived(app.areaSplit ? areaLayout(shown) : 'none');
   const runs = $derived(layout === 'groups' ? areaRuns(visible) : []);
   const totals = $derived(layout === 'groups' ? areaTotals(shown) : new Map<string, number>());
-  const shortArea = (name: string): string => (app.shortAreas ? areaLabel(name, app.allAreaNames) : name);
-  // The areas folded away, for as long as the list is shown. The row that is selected is never hidden: selecting a task
-  // of a folded area (j, k, a link) shows the area again.
+  // Read once for all rows: `allAreaNames` walks every task, and a row that asked for it itself made the list
+  // quadratic (two thousand rows, two thousand walks).
+  const allNames = $derived(app.allAreaNames);
+  const shortArea = (name: string): string => (app.shortAreas ? areaLabel(name, allNames) : name);
+  // The areas folded away, for as long as the list is shown. What is folded away is neither selected nor marked: a
+  // key or the bulk bar must not change a row nobody sees (as with a row the filter hides). Selecting a task of a
+  // folded area (j, k, a link) shows the area again.
   let folded = $state<readonly string[]>([]);
   function toggleFold(area: string): void {
-    folded = folded.includes(area) ? folded.filter((a) => a !== area) : [...folded, area];
+    if (folded.includes(area)) {
+      folded = folded.filter((a) => a !== area);
+      return;
+    }
+    const hidden = shown.filter((task) => task.area === area).map((task) => task.id);
+    app.unmark(hidden);
+    if (app.selectedId !== null && hidden.includes(app.selectedId)) app.select(null);
+    folded = [...folded, area];
   }
   $effect(() => {
     const id = app.selectedId;
@@ -1095,8 +1106,12 @@
     font-size: 0.8rem;
     white-space: nowrap;
   }
-  /* Every second row on a quieter ground (Options > "Zebra stripes in lists"). */
-  .rows.zebra :global(.line:nth-child(even)) {
+  /* The head stays over the rows: a row the keys scroll to stops below it, not under it. */
+  .rows[data-areas='groups'] :global(.row) {
+    scroll-margin-top: 2.2rem;
+  }
+  /* Every second row on a quieter ground (Options > "Zebra stripes in lists"); a marked row keeps its own. */
+  .rows.zebra :global(.line:nth-child(even):not(.marked)) {
     background: color-mix(in srgb, var(--surface-2) 55%, transparent);
   }
   .empty {

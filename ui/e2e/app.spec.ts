@@ -8851,12 +8851,31 @@ for (const scheme of ['light', 'dark'] as const) {
     // A key that selects a task of a folded area shows the area again: the selected row is never hidden.
     const firstGroup = rows.locator('.area-group').first();
     const firstFold = firstGroup.getByRole('heading', { level: 2 }).getByRole('button');
+    // What is folded away is neither marked nor selected: no key and no bulk change reaches a row nobody sees.
+    await firstGroup.locator('.line').nth(0).getByRole('checkbox').check();
+    await expect(page.getByText('1 marked')).toBeVisible();
+    // (Folding lib.nvim above took the selection with it; j starts at the first row again.)
+    await page.locator('main').focus();
+    await page.keyboard.press('j');
+    await expect(firstGroup.locator('button.row[aria-current="true"]')).toHaveCount(1);
     await firstFold.click();
     await expect(firstGroup.locator('button.row')).toHaveCount(0);
+    await expect(page.getByText('1 marked')).toHaveCount(0);
+    await expect(rows.locator('button.row[aria-current="true"]')).toHaveCount(0);
     await page.locator('main').focus();
-    await page.keyboard.press('k');
+    await page.keyboard.press('x');
+    await expect(page.getByText(/\d+ marked/)).toHaveCount(0);
+    // j starts at the first row of the list again, which is in the folded area: the area opens for it.
+    await page.keyboard.press('j');
     await expect(firstFold).toHaveAttribute('aria-expanded', 'true');
     await expect(rows.locator('button.row[aria-current="true"] .id')).toHaveText(order[0] ?? '');
+    // A row the keys scroll to stops below the head that stays at the top, not under it.
+    expect(await rows.locator('button.row').first().evaluate((el) => parseFloat(getComputedStyle(el).scrollMarginTop))).toBeGreaterThan(20);
+    // "Mark all shown" takes the rows as they stand: the first area whole before any row of the next.
+    await page.getByRole('button', { name: 'Mark all shown' }).click();
+    const groupSize = await firstGroup.locator('button.row').count();
+    await expect(firstGroup.getByRole('checkbox', { checked: true })).toHaveCount(groupSize);
+    await page.getByRole('button', { name: 'Clear marks' }).click();
     await page.getByRole('checkbox', { name: 'By area' }).uncheck();
     await mixed();
 
@@ -8891,6 +8910,15 @@ for (const scheme of ['light', 'dark'] as const) {
     await expect(rows).toHaveClass(/zebra/);
     const striped = await grounds();
     expect(striped[0]).not.toBe(striped[1]);
+    // A marked row keeps the ground of a marked row, on a striped line too.
+    const marked = async (n: number): Promise<string> => {
+      const line = rows.locator('.line').nth(n);
+      await line.getByRole('checkbox').check();
+      const ground = await line.evaluate((el) => getComputedStyle(el).backgroundColor);
+      await line.getByRole('checkbox').uncheck();
+      return ground;
+    };
+    expect(await marked(1)).toBe(await marked(0));
     await expectAccessible(page, `the list with zebra stripes (${scheme})`);
     await toggleOption(page, 'Zebra stripes in lists');
     expect(consoleProblems.get(page)).toEqual([]);
@@ -8979,6 +9007,7 @@ const FAKE_STREAM = `
     const timer = setInterval(draw, 40);
     const stream = canvas.captureStream(25);
     window.__fakeStreams = (window.__fakeStreams ?? 0) + 1;
+    window.__lastStream = stream;
     for (const track of stream.getTracks()) {
       const stop = track.stop.bind(track);
       track.stop = () => { clearInterval(timer); window.__fakeStopped = (window.__fakeStopped ?? 0) + 1; stop(); };
@@ -9157,6 +9186,14 @@ test('a camera that is refused or missing is told, and nothing is attached', asy
   const bar = float.getByRole('group', { name: 'Attach to this task' });
   const image = bar.locator('details[data-choice="image"]');
   const choices = page.getByRole('group', { name: 'Image' });
+  const told = page.getByRole('alert').filter({ hasText: /camera|could not be taken|nothing was attached/i });
+  // The choice of the screen closed without choosing is a change of mind: no error is told (none is shown yet, and
+  // none comes), and the buttons work again.
+  await image.locator('summary').click();
+  await choices.getByRole('button', { name: 'Take a screenshot' }).click();
+  await expect(image).not.toHaveAttribute('open', '');
+  await page.waitForTimeout(500);
+  await expect(told).toHaveCount(0);
   await image.locator('summary').click();
   await choices.getByRole('button', { name: 'Take a photo' }).click();
   await expect(page.getByRole('alert').filter({ hasText: 'The camera was not allowed' })).toBeVisible();
@@ -9165,12 +9202,6 @@ test('a camera that is refused or missing is told, and nothing is attached', asy
   await image.locator('summary').click();
   await choices.getByRole('button', { name: 'Take a photo' }).click();
   await expect(page.getByRole('alert').filter({ hasText: 'No camera was found' })).toBeVisible();
-  // The choice of the screen closed without choosing is a change of mind: no error is told, the buttons work again.
-  const alerts = await page.getByRole('alert').count();
-  await image.locator('summary').click();
-  await choices.getByRole('button', { name: 'Take a screenshot' }).click();
-  await expect(image.locator('summary')).not.toHaveAttribute('aria-disabled', 'true');
-  expect(await page.getByRole('alert').count()).toBeLessThanOrEqual(alerts);
   expect(existsSync(join(dir, 'assets'))).toBe(false);
 });
 
@@ -9254,5 +9285,85 @@ test('a number of Today is a target of the context menu: the tasks it counts are
   const kept = (JSON.parse(got[2]!) as { tasks: { id: string }[] }).tasks.map((t) => t.id).sort();
   expect(kept).toEqual(narrowed);
   for (const id of kept) expect(id).toMatch(/^cascade\.nvim\//);
+  expect(consoleProblems.get(page)).toEqual([]);
+});
+
+test('a capture that is discarded while the browser still asks does not come back: its camera goes off and the next one is its own', async ({ page }) => {
+  test.slow();
+  // The browser answers when the test says so, as a person who takes their time with the question.
+  await page.addInitScript(`${FAKE_STREAM}
+    Object.defineProperty(document, 'featurePolicy', { value: { allowsFeature: () => true } });
+    window.__answers = [];
+    navigator.mediaDevices.getUserMedia = () => new Promise((resolve) => window.__answers.push(() => resolve(window.__fakeStream())));
+  `);
+  const { float, dir } = await openAttachTask(page, 'Attach discarded');
+  const bar = float.getByRole('group', { name: 'Attach to this task' });
+  const answer = (n: number) => page.evaluate((i) => (window as unknown as { __answers: (() => void)[] }).__answers[i]?.(), n);
+  const streams = () => page.evaluate(() => {
+    const w = window as unknown as { __fakeStreams?: number; __fakeStopped?: number };
+    return [w.__fakeStreams ?? 0, w.__fakeStopped ?? 0];
+  });
+
+  // A photo is asked for and discarded before the browser answered; then a video is asked for.
+  await bar.locator('details[data-choice="image"] summary').click();
+  await page.getByRole('group', { name: 'Image' }).getByRole('button', { name: 'Take a photo' }).click();
+  const photo = float.getByRole('group', { name: 'Take a photo' });
+  await expect(photo.getByRole('status')).toContainText('Waiting for the camera');
+  // While something is taken no other file is chosen: it could not be sent beside it.
+  await expect(bar.locator('button[data-attach="file"]')).toBeDisabled();
+  await photo.getByRole('button', { name: 'Discard' }).click();
+  await expect(photo).toHaveCount(0);
+  await bar.locator('details[data-choice="video"] summary').click();
+  await page.getByRole('group', { name: 'Video' }).getByRole('button', { name: 'Record a video' }).click();
+  const video = float.getByRole('group', { name: 'Record a video' });
+  await expect(video.getByRole('status')).toContainText('Waiting for the camera');
+
+  // The answer to the discarded question comes late: its camera goes off at once, and the video still waits for its own.
+  await answer(0);
+  await expect.poll(streams).toEqual([1, 1]);
+  await expect(video.getByRole('status')).toContainText('Waiting for the camera');
+  await expect(float.locator('[data-taking]')).toHaveCount(1);
+  await answer(1);
+  await expect(video.getByRole('status')).toContainText('Recording');
+  await expect(page.getByRole('alert').filter({ hasText: /camera|could not be taken|nothing was attached/i })).toHaveCount(0);
+  expect(await streams()).toEqual([2, 1]);
+  await video.getByRole('button', { name: 'Discard' }).click();
+  await expect.poll(streams).toEqual([2, 2]);
+  expect(existsSync(join(dir, 'assets'))).toBe(false);
+  expect(consoleProblems.get(page)).toEqual([]);
+});
+
+test('a machine with a camera and no microphone records without sound, and a recording that ends by itself is attached', async ({ page }) => {
+  test.slow();
+  await page.addInitScript(`${FAKE_STREAM}
+    Object.defineProperty(document, 'featurePolicy', { value: { allowsFeature: () => true } });
+    window.__asked = [];
+    navigator.mediaDevices.getUserMedia = async (wanted) => {
+      window.__asked.push(wanted.audio === true);
+      if (wanted.audio) throw new DOMException('no microphone', 'NotFoundError');
+      return window.__fakeStream();
+    };
+  `);
+  const { float, dir, attached } = await openAttachTask(page, 'Attach silent');
+  const bar = float.getByRole('group', { name: 'Attach to this task' });
+  await bar.locator('details[data-choice="video"] summary').click();
+  await page.getByRole('group', { name: 'Video' }).getByRole('button', { name: 'Record a video' }).click();
+  const taking = float.getByRole('group', { name: 'Record a video' });
+  await expect(taking.getByRole('status')).toContainText('Recording');
+  // Asked with the sound first, then without it: no "no camera" for a missing microphone.
+  expect(await page.evaluate(() => (window as unknown as { __asked: boolean[] }).__asked)).toEqual([true, false]);
+  await expect(page.getByRole('alert').filter({ hasText: /camera|could not be taken|nothing was attached/i })).toHaveCount(0);
+  await page.waitForTimeout(700);
+  // The camera goes away (unplugged): the recorder ends by itself, and what it had is attached, not lost.
+  await page.evaluate(() => {
+    const stream = (window as unknown as { __lastStream: MediaStream }).__lastStream;
+    for (const track of stream.getTracks()) {
+      track.stop();
+      track.dispatchEvent(new Event('ended'));
+    }
+  });
+  await expect(attached).toHaveValue(/^\[video-\d{8}-\d{6}\.webm\]\(assets\/videos\/video-\d{8}-\d{6}\.webm\)$/, { timeout: WRITE_BUDGET });
+  await expect(taking).toHaveCount(0);
+  expect(readdirSync(join(dir, 'assets', 'videos'))).toHaveLength(1);
   expect(consoleProblems.get(page)).toEqual([]);
 });

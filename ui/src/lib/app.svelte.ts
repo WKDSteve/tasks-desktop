@@ -1897,9 +1897,9 @@ export class App {
     return next.includes(id);
   }
 
-  /** Mark every task the list shows (up to one batch; what does not fit is told). */
+  /** Mark every task the list shows, along its rows (up to one batch; what does not fit is told). */
   markShown(): void {
-    const ids = this.shown.map((t) => t.id);
+    const ids = this.listed.map((t) => t.id);
     const next = markAll(this.marks, ids);
     if (ids.some((id) => !next.includes(id))) this.say('error', 'bulk.limit');
     this.marks = next;
@@ -2139,6 +2139,14 @@ export class App {
   private localDay(): string {
     const d = new Date(this.env.now());
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }
+
+  /** Take the marks off `ids`: their rows are no longer seen (an area of the list folded away). */
+  unmark(ids: readonly string[]): void {
+    if (this.marks.length === 0 || ids.length === 0) return;
+    const gone = new Set(ids);
+    const kept = this.marks.filter((id) => !gone.has(id));
+    if (kept.length !== this.marks.length) this.marks = kept;
   }
 
   /** Only the tasks the list shows stay marked: a mark that cannot be seen must not be changed. */
@@ -2484,7 +2492,8 @@ export class App {
     // One that is open keeps its draft: a second call (the palette) does not throw the choices away.
     // The matrix is there to write estimates: read only, it is not opened.
     if (this.phase !== 'ready' || !this.can('estimate') || this.matrix || this.refusedReadOnly()) return;
-    const ids = matrixIds(this.marks, this.shown);
+    // Along the rows of the list: grouped by area, the first tasks of the matrix are the first rows, not a pick of all areas.
+    const ids = matrixIds(this.marks, this.listed);
     if (ids.length === 0) {
       this.say('ok', 'matrix.none');
       return;

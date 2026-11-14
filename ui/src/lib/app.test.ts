@@ -6113,6 +6113,15 @@ describe('the defaults (dialog "Defaults ...")', () => {
     expect(m.app.selectedId).toBe('pub/2');
     m.app.moveSelection(1);
     expect(m.app.selectedId).toBe('inner/1');
+    // "Mark all" takes the rows as they stand, and marks can be taken off rows that are folded away.
+    m.app.clearMarks();
+    m.app.markShown();
+    expect(m.app.marks).toEqual(['pub/1', 'pub/2', 'inner/1', 'inner/2']);
+    m.app.unmark(['pub/1', 'pub/2', 'nobody/x']);
+    expect(m.app.marks).toEqual(['inner/1', 'inner/2']);
+    m.app.unmark([]);
+    expect(m.app.marks).toEqual(['inner/1', 'inner/2']);
+    m.app.clearMarks();
     // Kept for the next start of the page, and switched off again.
     const again = make({ token: 't', prefs: m.prefs });
     expect(again.app.groupAreas).toBe(true);
