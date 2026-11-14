@@ -7,7 +7,7 @@
   runs it. Nothing is installed: no `install`, no `autostart`, no registry or AppData entry.
 
   Run it in a normal terminal. A Claude session (the Claude app redirects AppData and HKCU) is
-  refused on purpose.
+  refused on purpose, except with -Measure, which touches neither.
 
 .PARAMETER Release
   Build and run the release profile instead of debug.
@@ -19,6 +19,19 @@
   `start --open` (hub in the background, browser opened) instead of `serve` (until Ctrl-C). Stop it
   with `tasks-hub stop`.
 
+.PARAMETER Measure
+  Measure instead of showing: build as asked, then run tools/measure-hub.py against the vault. It
+  starts the hub on a free port with a config folder of its own in the temp folder (the installed
+  hub, its settings and port 17615 are left alone), times the start, the snapshot, the search and
+  the task detail, prints a Markdown report and ends that hub again. Use it with -Release: the
+  numbers of docs/PERFORMANCE.md are from a release build.
+
+.PARAMETER Runs
+  With -Measure: requests per series (default 20).
+
+.PARAMETER Out
+  With -Measure: also write the report to this file.
+
 .PARAMETER Vault
   The vault the engine reads ($TASKS_VAULT). Default: the vault already set, else $REPOS_DIR/tasks-vault.
 
@@ -26,18 +39,23 @@
   .\tools\dev-hub.ps1
   .\tools\dev-hub.ps1 -Background
   .\tools\dev-hub.ps1 -NoBuild -Release
+  .\tools\dev-hub.ps1 -Release -Measure
 #>
 [CmdletBinding()]
 param(
   [switch]$Release,
   [switch]$NoBuild,
   [switch]$Background,
+  [switch]$Measure,
+  [int]$Runs = 20,
+  [string]$Out,
   [string]$Vault
 )
 
 $ErrorActionPreference = 'Stop'
 
-if ($env:CLAUDECODE) {
+if ($Measure -and $Background) { throw '-Measure runs a hub of its own: not together with -Background.' }
+if ($env:CLAUDECODE -and -not $Measure) {
   throw 'Run this in a normal terminal, not in a Claude session (the app redirects AppData and the registry).'
 }
 
@@ -90,7 +108,12 @@ try {
 
   Write-Host "engine: $env:TASKS_ENGINE_DIR"
   Write-Host "vault:  $env:TASKS_VAULT"
-  if ($Background) {
+  if ($Measure) {
+    $measureArgs = @('tools/measure-hub.py', '--exe', $exe, '--vault', $env:TASKS_VAULT, '--runs', $Runs)
+    if ($Out) { $measureArgs += @('--out', $Out) }
+    Invoke-Step 'measure (a hub of its own, on a free port)' { python @measureArgs }
+  }
+  elseif ($Background) {
     # A hub that runs already (an earlier run, the installed copy) is found and kept: it may be an older build.
     $started = & $exe start --open | Out-String
     if ($LASTEXITCODE -ne 0) { throw "tasks-hub start --open failed (exit code $LASTEXITCODE)" }

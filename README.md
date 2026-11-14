@@ -375,6 +375,11 @@ ten minutes.
 terminal: `.\tools\dev-hub.ps1` (until Ctrl-C), `-Background` (start and open the browser), `-NoBuild`, `-Release`,
 `-Vault <dir>`.
 
+`.\tools\dev-hub.ps1 -Release -Measure` measures instead: it runs `tools/measure-hub.py`, which starts a hub of its
+own on a free port (the installed hub is left alone), times the start, the snapshot, the search and the task detail on
+your vault and prints a report. The numbers of this machine and how to read them:
+[docs/PERFORMANCE.md](docs/PERFORMANCE.md).
+
 ## Layout
 
 ```
