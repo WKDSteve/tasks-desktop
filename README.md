@@ -734,6 +734,7 @@ characters for a name or a title, 256 KiB.
 - [tasks-mobile](https://github.com/WKDSteve/tasks-mobile): The hub of tasks-desktop serves the phone page of tasks-mobile under `/m/`; `mobile.lock` pins the commit that is built into it. ([picture](assets/graphs/pair/tasks-desktop--tasks-mobile.png))
 - [tasks-web](https://github.com/WKDSteve/tasks-web): The web workflow of tasks-desktop builds the page as one HTML file, tests it and publishes it to the repository tasks-web. ([picture](assets/graphs/pair/tasks-desktop--tasks-web.png))
 - [tasks.nvim](https://github.com/WKDSteve/tasks.nvim): tasks-desktop runs tasks.nvim as its engine, pinned in `engine.lock`: the engine is the only writer, the app shows and sends operations. ([picture](assets/graphs/pair/tasks-desktop--tasks.nvim.png))
+- [testing-desktop](https://github.com/WKDSteve/testing-desktop): `tasks-hub testing link` pairs the tasks hub with the testing hub as a device, so a phone of tasks can start a test run. ([picture](assets/graphs/pair/tasks-desktop--testing-desktop.png))
 
 **Used by**
 
