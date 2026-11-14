@@ -5,12 +5,21 @@ import { ContextRegistry, type ContextTarget } from 'appkit-ui/contextmenu';
 import type { MenuItem } from 'appkit-ui/menu';
 import type { App } from './app.svelte';
 import type { TaskEntry, ViewSelect } from './contract';
+import { tasksOf, type CountKey } from './counts';
 import type { ExportFormat } from './export';
 import { translate, type Key } from './i18n';
 
 /** A target that stands for a selection of tasks (an area, a plan, a group of a view): "open as a view" for it. */
 export function selectionTarget(title: string, select: Partial<ViewSelect>): ContextTarget {
   return { kind: 'selection', id: title, data: { title, select } };
+}
+
+/**
+ * A number of the Today page (ready, doing, blocked, estimated): it stands for the tasks it counts, which no selection
+ * of a view can name (the engine's plan says which are ready). The menu copies them, as it does for an area.
+ */
+export function countTarget(key: CountKey, title: string): ContextTarget {
+  return { kind: 'count', id: key, data: { key, title } };
 }
 
 /** A task (a row, a card): its entries and the view of its area. */
@@ -53,6 +62,12 @@ export function createContextRegistry(app: App): ContextRegistry {
   registry.provide('selection', (target) => {
     const data = target.data as { title: string; select: Partial<ViewSelect> };
     return [...copyEntries(() => app.tasksOfSelect(data.select)), ...app.viewMenuEntries(data.title, data.select)];
+  });
+
+  // The tasks behind a number of Today, as the panel of the number lists them: under the filter that is on.
+  registry.provide('count', (target) => {
+    const { key } = target.data as { key: CountKey };
+    return copyEntries(() => tasksOf(key, app.shown));
   });
 
   registry.provide('task', (target, env) => {

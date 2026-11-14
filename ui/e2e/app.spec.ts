@@ -9173,3 +9173,86 @@ test('a camera that is refused or missing is told, and nothing is attached', asy
   expect(await page.getByRole('alert').count()).toBeLessThanOrEqual(alerts);
   expect(existsSync(join(dir, 'assets'))).toBe(false);
 });
+
+test('a number of Today is a target of the context menu: the tasks it counts are copied, by the mouse and by the keys', async ({ page, context }) => {
+  test.slow();
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  await pair(page);
+  await expect(page.locator('button.tile').first()).toBeVisible();
+  // What goes to the clipboard is recorded on the way.
+  await page.evaluate(() => {
+    const w = window as unknown as { __copied: string[] };
+    w.__copied = [];
+    const write = navigator.clipboard.writeText.bind(navigator.clipboard);
+    navigator.clipboard.writeText = async (text: string) => {
+      w.__copied.push(text);
+      return write(text);
+    };
+  });
+  const copied = () => page.evaluate(() => (window as unknown as { __copied: string[] }).__copied);
+  const menu = page.getByRole('menu', { name: 'Context menu' });
+  /** The ids the panel of a number lists, every group open and every page shown. */
+  const listed = async (count: string): Promise<string[]> => {
+    const tile = page.locator(`button.tile[data-count="${count}"]`);
+    if ((await tile.getAttribute('aria-expanded')) !== 'true') await tile.click();
+    const panel = page.locator('#count-panel');
+    await expect(panel).toBeVisible();
+    await panel.getByRole('radio', { name: 'List', exact: true }).check();
+    for (;;) {
+      const more = panel.locator('button.more');
+      if ((await more.count()) === 0) break;
+      await more.first().click();
+    }
+    const ids = await panel.locator('ul.plain li code').allTextContents();
+    await tile.click();
+    await expect(panel).toHaveCount(0);
+    return ids.sort();
+  };
+
+  // The mouse: a right click on "ready" offers the copies (and nothing of a single task), and copies those tasks.
+  const ready = page.locator('button.tile[data-count="ready"]');
+  const readyIds = await listed('ready');
+  expect(readyIds.length).toBeGreaterThan(1);
+  await ready.click({ button: 'right' });
+  await expect(menu.getByRole('menuitem', { name: 'Copy as JSON' })).toBeVisible();
+  await expect(menu.getByRole('menuitemradio')).toHaveCount(0);
+  await expectAccessible(page, 'the context menu of a number of Today');
+  await menu.getByRole('menuitem', { name: 'Copy as JSON' }).click();
+  await expect(page.getByRole('status').filter({ hasText: /tasks copied/ })).toBeVisible();
+  let got = await copied();
+  expect(got).toHaveLength(1);
+  const ids = (JSON.parse(got[0]!) as { tasks: { id: string }[] }).tasks.map((t) => t.id).sort();
+  expect(ids).toEqual(readyIds);
+  // The number was not opened by it: the menu is no click.
+  await expect(ready).toHaveAttribute('aria-expanded', 'false');
+
+  // The keys: Shift+F10 on another number copies its tasks, not those of the first.
+  const doingIds = await listed('doing');
+  const doing = page.locator('button.tile[data-count="doing"]');
+  await doing.focus();
+  await page.keyboard.press('Shift+F10');
+  await expect(menu).toBeVisible();
+  await menu.getByRole('menuitem', { name: 'Copy as Markdown' }).focus();
+  await page.keyboard.press('Enter');
+  await expect.poll(async () => (await copied()).length).toBe(2);
+  got = await copied();
+  for (const id of doingIds) expect(got[1]).toContain(id);
+  for (const id of readyIds.filter((x) => !doingIds.includes(x))) expect(got[1]).not.toContain(id);
+
+  // Under a filter the number stands for what the filter keeps, as its panel does.
+  await showList(page);
+  await page.getByRole('button', { name: /^Areas/ }).click();
+  await page.getByRole('group', { name: 'Areas' }).getByRole('checkbox', { name: /^cascade\.nvim( \(\d+\))?$/ }).check();
+  await page.keyboard.press('Escape');
+  await chooseView(page, 'View', 'Today');
+  await expect(ready).toBeVisible();
+  const narrowed = await listed('ready');
+  await ready.click({ button: 'right' });
+  await menu.getByRole('menuitem', { name: 'Copy as JSON' }).click();
+  await expect.poll(async () => (await copied()).length).toBe(3);
+  got = await copied();
+  const kept = (JSON.parse(got[2]!) as { tasks: { id: string }[] }).tasks.map((t) => t.id).sort();
+  expect(kept).toEqual(narrowed);
+  for (const id of kept) expect(id).toMatch(/^cascade\.nvim\//);
+  expect(consoleProblems.get(page)).toEqual([]);
+});

@@ -7,6 +7,8 @@
   import { effortWords, laterWords } from '../lib/next';
   import { markHidden } from '../lib/text';
   import { tasksOf, type CountKey } from '../lib/counts';
+  import { contextTarget } from 'appkit-ui/contextmenu';
+  import { countTarget } from '../lib/context';
   import CountPanel from './CountPanel.svelte';
   import DailyTile from './DailyTile.svelte';
   import FilterNote from './FilterNote.svelte';
@@ -207,6 +209,7 @@
             data-hint={`${hintOf(app.lang, 'hint.tile', tile.count)}\n${t('count.hint')}`}
             onclick={() => app.toggleCount(tile.count)}
             onkeydown={(e) => onTileKey(e, tile.count)}
+            use:contextTarget={countTarget(tile.count, t(tile.key))}
           >
             <span class="num">{tile.value}</span>
             <span class="muted">{t(tile.key)}</span>
