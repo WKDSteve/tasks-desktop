@@ -9,6 +9,7 @@ import {
   bulkSetOps,
   followMoves,
   markAll,
+  markRange,
   moveChecks,
   moveOrder,
   moveUndo,
@@ -1894,7 +1895,48 @@ export class App {
       return false;
     }
     this.marks = next;
+    this.#markAnchor = id;
     return next.includes(id);
+  }
+
+  /** The task marked last by a click or a key: where a Shift click starts its range. */
+  #markAnchor: string | null = null;
+
+  /**
+   * The views whose tasks can be marked: the list, the board, the plan, the inbox and the saved views. One marking
+   * for all of them: what is marked in one is marked in the next, as far as that view shows it.
+   */
+  get marking(): boolean {
+    return this.view === 'list' || this.view === 'board' || this.view === 'plan' || this.view === 'inbox' || this.view === 'views';
+  }
+
+  /**
+   * The tasks the view that is shown can mark: what the filter keeps, or the tasks of the open saved view (a view
+   * has a selection of its own, which the filter of the list does not narrow).
+   */
+  get markable(): readonly TaskEntry[] {
+    const open = this.view === 'views' ? this.viewsState.open : null;
+    return open ? this.tasksOfView(open) : this.shown;
+  }
+
+  /**
+   * A click on a task with Ctrl (or Cmd) or Shift marks instead of opening, as in a file explorer: Ctrl flips the mark
+   * of that task, Shift marks from the task marked last (else the selected one) to this one, along `order` (what the
+   * view shows, in its order). True when the click was a mark: the caller then opens nothing.
+   */
+  markClick(event: { ctrlKey: boolean; metaKey: boolean; shiftKey: boolean }, id: string, order: readonly string[]): boolean {
+    if (!event.ctrlKey && !event.metaKey && !event.shiftKey) return false;
+    if (!this.marking || !this.markable.some((t) => t.id === id)) return true;
+    if (event.shiftKey) {
+      const from = [this.#markAnchor, this.selectedId].find((x): x is string => x !== null && order.includes(x)) ?? id;
+      const { marks, full } = markRange(this.marks, order, from, id);
+      if (full) this.say('error', 'bulk.limit');
+      this.marks = marks;
+      this.#markAnchor = id;
+    } else {
+      this.toggleMark(id);
+    }
+    return true;
   }
 
   /** Mark every task the list shows, along its rows (up to one batch; what does not fit is told). */
@@ -1989,7 +2031,7 @@ export class App {
    */
   exportRows(): { view: string; rows: ExportRow[]; printRows: ExportRow[]; kept: number } {
     const { view, rows, data, words } = this.viewRows();
-    const marked = onlyMarked(rows, new Set(this.view === 'list' ? this.marks : []));
+    const marked = onlyMarked(rows, new Set(this.marking ? this.marks : []));
     const { rows: out, kept } = mayLeave(marked, (task) => this.mayRememberArea(task.area));
     const leaving = withoutPlansOf(out, (plan) => this.mayRememberArea(areaOfId(plan)));
     return { view, rows: relabel(leaving, data), printRows: relabel(leaving, words), kept };
@@ -2154,7 +2196,7 @@ export class App {
     // Not while a write is on its way: a list read in the middle of it may lack tasks the write has moved already, and
     // their marks would go before the answer can tell where the tasks went. The read after the write sets this right.
     if (this.marks.length === 0 || this.saving) return;
-    const shown = new Set(this.shown.map((t) => t.id));
+    const shown = new Set(this.markable.map((t) => t.id));
     const arriving = this.#arriving?.ids;
     const kept = this.marks.filter((id) => shown.has(id) || arriving?.has(id));
     if (kept.length !== this.marks.length) this.marks = kept;

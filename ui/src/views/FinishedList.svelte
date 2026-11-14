@@ -4,6 +4,7 @@
   // areas and the text are applied to the tasks that have been loaded (the engine has no text search over the
   // Backlogs), and "Show more" loads the next page.
   import { untrack } from 'svelte';
+  import { areaBand, severalAreas } from '../lib/areaBands';
   import type { App } from '../lib/app.svelte';
   import type { Finished } from '../lib/contract';
   import { ApiError } from '../lib/api';
@@ -41,7 +42,10 @@
       return words.every((w) => text.includes(w));
     }),
   );
-  const nameOf = (name: string): string => (app.shortAreas ? areaLabel(name, app.allAreaNames) : name);
+  const allNames = $derived(app.allAreaNames);
+  const nameOf = (name: string): string => (app.shortAreas ? areaLabel(name, allNames) : name);
+  // The areas set apart as in the list (Options > "Separate areas in lists"): a band per row; the row names its area.
+  const banded = $derived(app.areaSplit && severalAreas(shown));
 
   async function load(query: { area?: string; since?: string; until?: string }, offset: number): Promise<void> {
     seq += 1;
@@ -92,7 +96,7 @@
   {:else}
     <ul class="plain">
       {#each shown as item (item.file)}
-        <li>
+        <li class:banded style:--band={banded ? areaBand(item.area) : undefined} data-area={item.area}>
           <button type="button" class="open" onclick={() => (app.finishedPeek = item)}>
             <span class="when">{item.done ?? t('done.undated_row')}</span>
             <span class="title">{markHidden(item.title)}</span>
@@ -149,6 +153,10 @@
   }
   li.muted {
     padding: 0.3rem 0;
+  }
+  li.banded {
+    border-left: 3px solid var(--band);
+    padding-left: 0.4rem;
   }
   .open {
     display: flex;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { AREA_COLOURS, areaColour, areaLayout, areaRuns, areaTotals, groupedByArea } from './areaBands';
+import { AREA_COLOURS, areaBand, areaColour, areaLayout, areaRuns, areaTotals, groupedByArea, severalAreas } from './areaBands';
 
 const of = (...areas: string[]) => areas.map((area, i) => ({ area, id: `${area}/t${i}` }));
 
@@ -49,6 +49,19 @@ describe('groupedByArea', () => {
     expect(groupedByArea(together)).toBe(together);
     const one = of('a', 'a');
     expect(groupedByArea(one)).toBe(one);
+  });
+});
+
+describe('severalAreas and areaBand', () => {
+  it('asks for a band only where more than one area is shown', () => {
+    expect(severalAreas([])).toBe(false);
+    expect(severalAreas(of('a', 'a'))).toBe(false);
+    expect(severalAreas(of('a', 'b'))).toBe(true);
+    expect(severalAreas(of('a', 'a', 'b'))).toBe(true);
+  });
+
+  it('names the colour of an area as a token of the page', () => {
+    expect(areaBand('lib.nvim')).toBe(`var(--area-${areaColour('lib.nvim')})`);
   });
 });
 

@@ -14,6 +14,8 @@
   import { markHidden } from '../lib/text';
   import { isOverdue } from '../lib/remind';
   import FilterNote from './FilterNote.svelte';
+  import MarksNote from './MarksNote.svelte';
+  import { markGesture } from '../lib/markDom';
   import FoldButton from './FoldButton.svelte';
   import ExportMenu from './ExportMenu.svelte';
   import { allButtonFold, foldOf, withAll, withFold } from '../lib/fold';
@@ -199,6 +201,7 @@
 
 <div class="wrap">
   <FilterNote {app} />
+  <MarksNote {app} />
   <p class="count">
     <span role="status">{t('list.count', { shown: app.shown.length, total: app.tasks.length })}</span>
     <span class="help">{t('board.help')}</span>
@@ -265,6 +268,9 @@
                 type="button"
                 class="card"
                 data-card={card.id}
+                data-mark-id={card.id}
+                use:markGesture={app}
+                class:marked={app.marks.includes(card.id)}
                 use:contextTarget={taskTarget(card)}
                 data-card-column={column}
                 class:selected={card.id === app.selectedId}
@@ -283,7 +289,7 @@
                   else app.peek(card.id);
                 }}
               >
-                <span class="title">{markHidden(card.title)}</span>
+                <span class="title">{#if app.marks.includes(card.id)}<span class="sr-only">{t('mark.marked')} </span>{/if}{markHidden(card.title)}</span>
                 <span class="meta">
                   <!-- A finger drags by this grip (a screen reader and the keys have the keys of the board). -->
                   <span
@@ -555,5 +561,9 @@
     color: var(--accent);
     padding: 0.3rem;
     cursor: pointer;
+  }
+  /* A marked card (x, Ctrl+click, Shift+click): a frame in the accent colour, beside the word a screen reader gets. */
+  .card.marked {
+    box-shadow: inset 0 0 0 2px var(--accent);
   }
 </style>

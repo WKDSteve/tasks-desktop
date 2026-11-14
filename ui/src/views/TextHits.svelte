@@ -3,6 +3,8 @@
   import { translate, type Key } from '../lib/i18n';
   import { matches } from '../lib/filter';
   import { pieces } from '../lib/marks';
+  import { areaBand, severalAreas } from '../lib/areaBands';
+  import { areaLabel } from '../lib/filter';
   import { markHidden } from '../lib/text';
 
   let { app }: { app: App } = $props();
@@ -22,6 +24,9 @@
       return !!task && !inList.has(h.id) && matches(task, app.matchFilter({ ...app.filter, query: '' }), app.today, app.crossIndex, app.quickWinSet, app.projectOf);
     }),
   );
+  // The areas set apart as in the list (Options > "Separate areas in lists"): a band and the area's name per hit.
+  const banded = $derived(app.areaSplit && severalAreas(hits.map((h) => ({ area: byId.get(h.id)?.area ?? '' }))));
+  const allNames = $derived(app.allAreaNames);
 </script>
 
 {#if search}
@@ -37,7 +42,8 @@
       <h2 class="eyebrow">{t('search.in_text', { n: hits.length })}</h2>
       <ul>
         {#each hits as hit (hit.id)}
-          <li>
+          {@const area = byId.get(hit.id)?.area ?? ''}
+          <li class:banded style:--band={banded ? areaBand(area) : undefined}>
             <button
               type="button"
               class="hit"
@@ -45,7 +51,9 @@
               aria-current={hit.id === app.selectedId ? 'true' : undefined}
               onclick={() => app.peek(hit.id)}
             >
-              <span class="title">{markHidden(byId.get(hit.id)?.title ?? hit.id)}</span>
+              <span class="title"
+                >{#if banded}<span class="area" data-area={area}><span class="sr-only">{t('areas.row', { area })} </span><span aria-hidden="true">{app.shortAreas ? areaLabel(area, allNames) : area}</span></span>{/if}{markHidden(byId.get(hit.id)?.title ?? hit.id)}</span
+              >
               <span class="id">{hit.id}</span>
               <span class="snippet">
                 {#if hit.snippet.more_before}…{/if}
@@ -88,6 +96,17 @@
     list-style: none;
     margin: 0;
     padding: 0;
+  }
+  li.banded {
+    border-left: 3px solid var(--band);
+  }
+  .area {
+    margin-right: 0.45rem;
+    padding: 0 0.35rem;
+    border-radius: var(--radius);
+    background: var(--surface);
+    color: var(--muted);
+    font-size: 0.75rem;
   }
   .hit {
     display: grid;

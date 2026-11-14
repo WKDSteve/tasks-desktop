@@ -20,6 +20,20 @@ export function areaColour(name: string): number {
   return ((hash >>> 0) % AREA_COLOURS) + 1;
 }
 
+/** The colour of an area as a value of CSS (`var(--area-3)`), for the band of a row or a head. */
+export function areaBand(name: string): string {
+  return `var(--area-${areaColour(name)})`;
+}
+
+/**
+ * Whether a list of entries shows more than one area: only then a band tells anything. The lists beside the main one
+ * (hits in the text, finished tasks, the inbox) carry the band alone; their rows name the area already.
+ */
+export function severalAreas(entries: readonly { area: string }[]): boolean {
+  const first = entries[0]?.area;
+  return entries.some((entry) => entry.area !== first);
+}
+
 /** `none`: one area or no task; `groups`: the order keeps each area together; `bands`: it mixes them. */
 export type AreaLayout = 'none' | 'groups' | 'bands';
 

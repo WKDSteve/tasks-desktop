@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { selectionTarget } from '../lib/context';
+  import { selectionTarget, taskTarget } from '../lib/context';
   import { contextTarget, type ContextTarget } from 'appkit-ui/contextmenu';
   // The tab of the saved views: which view is open, a form to make one, and the open view drawn in groups. A view is a
   // file of the vault (the engine reads and writes it); the fields it can be grouped by and their values are the
@@ -9,6 +9,8 @@
   import type { App } from '../lib/app.svelte';
   import type { GroupField, View, ViewSelect } from '../lib/contract';
   import ExportMenu from './ExportMenu.svelte';
+  import MarksNote from './MarksNote.svelte';
+  import { markGesture } from '../lib/markDom';
   import { cellsOf, groupsOf, keepsGroup, neighbourCell, neighbourGroup, NONE, type Cell, type Grouping } from '../lib/groups';
   import { labelOf, translate, type Key } from '../lib/i18n';
   import { markHidden } from '../lib/text';
@@ -508,6 +510,7 @@
       {#if open.id === DRAFT_ID}<p class="note">{t('views.draft')}</p>{/if}
       <p class="muted">{t('views.selection', { what: selectionText(open) })}{open.id === DRAFT_ID ? '' : ` · ${open.id}`}</p>
       {#if renameProblem}<p class="note" role="alert">{renameProblem}</p>{/if}
+      <MarksNote {app} />
       {#if open.display === 'matrix'}
         {#if matrixMovable && !app.readOnly}<p class="muted">{t('views.matrix_help')}</p>{/if}
       {:else if movable && !app.readOnly}<p class="muted">{t('views.help')}</p>{/if}
@@ -566,6 +569,10 @@
                         type="button"
                         class="item"
                         data-matrix-item={task.id}
+                        data-mark-id={task.id}
+                        use:contextTarget={taskTarget(task)}
+                        use:markGesture={app}
+                        class:marked={app.marks.includes(task.id)}
                         class:selected={task.id === app.selectedId}
                         aria-current={task.id === app.selectedId ? 'true' : undefined}
                         onclick={(e) => {
@@ -575,7 +582,7 @@
                         }}
                         onkeydown={(e) => onCellItemKey(e, task.id, cell)}
                       >
-                        <span class="title">{markHidden(task.title)}</span>
+                        <span class="title">{#if app.marks.includes(task.id)}<span class="sr-only">{t('mark.marked')} </span>{/if}{markHidden(task.title)}</span>
                         <span class="id">{task.id}</span>
                       </button>
                     </li>
@@ -602,17 +609,22 @@
               gripHint={t('hint.ui.board.grip')}
             >
               {#snippet item(task, group)}
+                <!-- The entry is the task, as a card of the board is: its own entries, and the marked ones it is one of.
+                     The head of its group is the target for the group. -->
                 <button
                   type="button"
                   class="item"
                   data-view-item={task.id}
+                  data-mark-id={task.id}
+                  class:marked={app.marks.includes(task.id)}
                   class:selected={task.id === app.selectedId}
                   aria-current={task.id === app.selectedId ? 'true' : undefined}
+                  use:markGesture={app}
                   onclick={() => app.peek(task.id)}
                   onkeydown={(e) => onItemKey(e, task.id, group.value)}
-                  use:contextTarget={groupTarget(open, group.value)}
+                  use:contextTarget={taskTarget(task)}
                 >
-                  <span class="title">{markHidden(task.title)}</span>
+                  <span class="title">{#if app.marks.includes(task.id)}<span class="sr-only">{t('mark.marked')} </span>{/if}{markHidden(task.title)}</span>
                   <span class="id">{task.id}</span>
                 </button>
               {/snippet}
@@ -807,5 +819,9 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+  /* A marked entry (x, Ctrl+click, Shift+click): a frame in the accent colour. */
+  .item.marked {
+    box-shadow: inset 0 0 0 2px var(--accent);
   }
 </style>

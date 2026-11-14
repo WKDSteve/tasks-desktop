@@ -35,6 +35,24 @@ export function markAll(marks: readonly string[], ids: readonly string[]): strin
   return out;
 }
 
+/**
+ * Mark everything from `from` to `to` in `order` (what a view shows, in the order it shows it), both ends with it,
+ * whichever comes first; what is marked stays. Up to `BULK_MAX`: `full` says that not all of it fitted. An end the
+ * order does not hold marks `to` alone (the anchor scrolled out of the view, or the view changed).
+ */
+export function markRange(
+  marks: readonly string[],
+  order: readonly string[],
+  from: string,
+  to: string,
+): { marks: string[]; full: boolean } {
+  const a = order.indexOf(from);
+  const b = order.indexOf(to);
+  const ids = a === -1 || b === -1 ? [to] : order.slice(Math.min(a, b), Math.max(a, b) + 1);
+  const next = markAll(marks, ids);
+  return { marks: next, full: ids.some((id) => !next.includes(id)) };
+}
+
 /** Whether a key press in a field of the bar means "apply" (Enter, but not the Enter that ends an IME composition). */
 export function isApplyKey(event: { key: string; isComposing?: boolean }): boolean {
   return event.key === 'Enter' && event.isComposing !== true;

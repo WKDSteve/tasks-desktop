@@ -1,6 +1,6 @@
 <script lang="ts">
   import { contextTarget } from 'appkit-ui/contextmenu';
-  import { selectionTarget } from '../lib/context';
+  import { selectionTarget, taskTarget } from '../lib/context';
   // The plan, read only: what can be worked on at once (a stage), what holds
   // the rest up (the critical path) and what the plan warns about.
   import type { App } from '../lib/app.svelte';
@@ -13,6 +13,8 @@
   import { statusTags } from '../lib/statusTags';
   import { narrows } from '../lib/filter';
   import FilterNote from './FilterNote.svelte';
+  import MarksNote from './MarksNote.svelte';
+  import { markGesture } from '../lib/markDom';
   import GraphPanel from './GraphPanel.svelte';
   import PlanFinished from './PlanFinished.svelte';
   import FoldButton from './FoldButton.svelte';
@@ -116,6 +118,7 @@
 
 <div class="plan">
   <FilterNote {app} plan />
+  <MarksNote {app} />
   {#if planProject}
     <nav class="trail" aria-label={t('project.trail')}>
       <button type="button" class="link" onclick={() => app.openProject(planProject.id)}>{markHidden(planProject.title)}</button>
@@ -330,12 +333,15 @@
             {#each stage.tasks as task (task.id)}
               {@const shownState = task.readiness?.state === 'ready' || task.readiness?.state === 'unknown' ? undefined : task.readiness?.state}
               {@const tags = statusTags(app.lang, task.status, shownState)}
-              <li class:critical={critical.has(task.id)} data-id={task.id}>
+              <li class:critical={critical.has(task.id)} class:marked={app.marks.includes(task.id)} data-id={task.id}>
                 <button
                   type="button"
                   class="link"
+                  data-mark-id={task.id}
+                  use:contextTarget={taskTarget(task)}
                   aria-current={task.id === app.selectedId ? 'true' : undefined}
-                  onclick={() => open(task.id)}>{markHidden(task.title)}</button
+                  use:markGesture={app}
+                  onclick={() => open(task.id)}>{#if app.marks.includes(task.id)}<span class="sr-only">{t('mark.marked')} </span>{/if}{markHidden(task.title)}</button
                 >
                 <span class="meta">
                   {#if critical.has(task.id)}<span class="tag crit">{t('plan.on_path')}</span>{/if}
@@ -611,5 +617,10 @@
   .tag.crit {
     border-color: var(--accent);
     color: var(--accent);
+  }
+  /* A marked task of a stage (x, Ctrl+click, Shift+click). */
+  li.marked {
+    box-shadow: inset 3px 0 0 var(--accent);
+    background: var(--surface-2);
   }
 </style>

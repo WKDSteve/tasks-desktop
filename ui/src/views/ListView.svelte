@@ -161,11 +161,6 @@
   const extraOn = $derived(extraCount(app.filter) + (app.showFinished && app.can('finished') ? 1 : 0));
   const shown = $derived(app.listed);
 
-  // A mark that the filter hides is not changed behind the person's back: marks follow what the list shows.
-  $effect(() => {
-    void shown;
-    untrack(() => app.keepMarksShown());
-  });
 
   // The bulk bar changes what is chosen in it, all at once, when the button is pressed (a select alone never writes).
   // `effort` and `remind` are '' (keep), '-' (take away) or a value; the tags are typed.
@@ -767,6 +762,7 @@
         selected={task.id === app.selectedId}
         marked={app.marks.includes(task.id)}
         onselect={(id) => app.peek(id)}
+        marker={app}
         onmark={(id) => app.toggleMark(id)}
         markLabel={t('bulk.mark', { id: task.id })}
         flagged={app.findingsFor(task.id).length}

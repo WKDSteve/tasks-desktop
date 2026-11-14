@@ -9367,3 +9367,240 @@ test('a machine with a camera and no microphone records without sound, and a rec
   expect(readdirSync(join(dir, 'assets', 'videos'))).toHaveLength(1);
   expect(consoleProblems.get(page)).toEqual([]);
 });
+
+/** Go to a view with the `g` chord, pressed again until `ready` shows (the menu may hold the focus). */
+async function goByKey(page: Page, letter: string, ready: Locator): Promise<void> {
+  await closeFloat(page);
+  await expect(async () => {
+    if (!(await ready.isVisible())) {
+      await page.locator('main').focus();
+      await page.keyboard.press('g');
+      await page.keyboard.press(letter);
+    }
+    await expect(ready).toBeVisible({ timeout: 1000 });
+  }).toPass({ timeout: 10000 });
+}
+
+for (const scheme of ['light', 'dark'] as const) {
+  test(`the areas are set apart beside the list too (${scheme}): hits in the text, finished tasks and the inbox carry the band, and none when switched off`, async ({ page }) => {
+    test.slow();
+    await page.emulateMedia({ colorScheme: scheme });
+    // A word that stands only in the text of a task of each area.
+    const word = `bandword${scheme}${Date.now().toString(36)}`;
+    for (const area of ['lib.nvim', 'cascade.nvim']) {
+      writeFileSync(
+        join(state().vault, area, 'ROADMAP', 'tasks', `band-text-${scheme}.md`),
+        `---\ntitle: Band text ${scheme} ${area}\nstatus: open\nkind: task\n---\n\nThe text holds ${word} and nothing else.\n`,
+      );
+    }
+    await pair(page);
+    await showList(page);
+    /** Each area has one colour, and two areas two: read from the band of every entry. */
+    const colours = async (entries: Locator, areaOf: (el: Locator) => Promise<string>): Promise<Map<string, Set<string>>> => {
+      const byArea = new Map<string, Set<string>>();
+      for (const entry of await entries.all()) {
+        const area = await areaOf(entry);
+        const colour = await entry.evaluate((el) => getComputedStyle(el).borderLeftColor);
+        byArea.set(area, (byArea.get(area) ?? new Set()).add(colour));
+      }
+      return byArea;
+    };
+    const twoColours = (byArea: Map<string, Set<string>>): void => {
+      expect([...byArea.keys()].sort()).toEqual(['cascade.nvim', 'lib.nvim']);
+      for (const set of byArea.values()) expect(set.size).toBe(1);
+      expect(new Set([...byArea.values()].flatMap((set) => [...set])).size).toBe(2);
+    };
+
+    // Hits in the text: a band per hit and the area's name before the title.
+    await page.getByPlaceholder('Search id and title').fill(word);
+    const hits = page.locator('section.hits li');
+    await expect(hits).toHaveCount(2, { timeout: 15_000 });
+    await expect(page.locator('section.hits li.banded')).toHaveCount(2);
+    twoColours(await colours(hits, async (el) => (await el.locator('.area').getAttribute('data-area')) ?? ''));
+    await expect(hits.first().locator('.area')).toContainText(/nvim/);
+    await expectAccessible(page, `hits in the text with bands (${scheme})`);
+    await page.getByPlaceholder('Search id and title').fill('');
+
+    // The finished tasks under the list: of all time, both areas of the fixture have some.
+    await page.getByText('More filters', { exact: false }).first().click();
+    await page.getByLabel('Show finished tasks under the list').check();
+    const finished = page.getByRole('region', { name: 'Finished' });
+    await finished.getByLabel('Period').selectOption('all');
+    const done = finished.locator('ul.plain li[data-area]');
+    await expect(done.first()).toBeVisible();
+    await expect(finished.locator('li.banded')).toHaveCount(await done.count());
+    twoColours(await colours(done, async (el) => (await el.getAttribute('data-area')) ?? ''));
+    await expectAccessible(page, `finished tasks with bands (${scheme})`);
+    // One area alone: no band.
+    await page.getByRole('button', { name: /^Areas/ }).click();
+    await page.getByRole('group', { name: 'Areas' }).getByRole('checkbox', { name: /^cascade\.nvim( \(\d+\))?$/ }).check();
+    await page.keyboard.press('Escape');
+    await expect(done.first()).toBeVisible();
+    await expect(finished.locator('li.banded')).toHaveCount(0);
+    await page.getByRole('button', { name: 'Clear all filters' }).click();
+    await page.getByLabel('Show finished tasks under the list').uncheck();
+
+    // The inbox: the head of each area and its rows carry the band of the area.
+    const inbox = page.locator('section.inbox');
+    await goByKey(page, 'i', inbox);
+    const rows = inbox.locator('button.row');
+    await expect(rows.first()).toBeVisible();
+    await expect(inbox.locator('button.row.banded')).toHaveCount(await rows.count());
+    const heads = inbox.locator('h3.area');
+    expect(await heads.count()).toBeGreaterThan(1);
+    await expect(inbox.locator('h3.area.banded')).toHaveCount(await heads.count());
+    const byRow = await colours(rows, async (el) => ((await el.locator('.id').textContent()) ?? '').split('/')[0] ?? '');
+    expect(byRow.size).toBeGreaterThan(1);
+    for (const set of byRow.values()) expect(set.size).toBe(1);
+    await expectAccessible(page, `the inbox with bands (${scheme})`);
+
+    // Switched off in Options: none of the three carries a band.
+    await toggleOption(page, 'Separate areas in lists');
+    await expect(inbox.locator('.banded')).toHaveCount(0);
+    await showList(page);
+    await page.getByPlaceholder('Search id and title').fill(word);
+    await expect(hits).toHaveCount(2, { timeout: 15_000 });
+    await expect(page.locator('section.hits .banded, section.hits .area')).toHaveCount(0);
+    await page.getByPlaceholder('Search id and title').fill('');
+    await toggleOption(page, 'Separate areas in lists');
+    expect(consoleProblems.get(page)).toEqual([]);
+  });
+}
+
+for (const scheme of ['light', 'dark'] as const) {
+  test(`tasks are marked in the board, the plan, the inbox and a view (${scheme}): x and Ctrl or Shift with a click, one marking for all, copied together`, async ({ page, context }) => {
+    test.slow();
+    await page.emulateMedia({ colorScheme: scheme });
+    await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+    await pair(page);
+    await page.evaluate(() => {
+      const w = window as unknown as { __copied: string[] };
+      w.__copied = [];
+      const write = navigator.clipboard.writeText.bind(navigator.clipboard);
+      navigator.clipboard.writeText = async (text: string) => {
+        w.__copied.push(text);
+        return write(text);
+      };
+    });
+    const copiedIds = async (): Promise<string[]> => {
+      const all = await page.evaluate(() => (window as unknown as { __copied: string[] }).__copied);
+      return (JSON.parse(all.at(-1) ?? '{"tasks":[]}') as { tasks: { id: string }[] }).tasks.map((t) => t.id).sort();
+    };
+    const menu = page.getByRole('menu', { name: 'Context menu' });
+    const note = page.locator('[data-marks-note]');
+    const mod = process.platform === 'darwin' ? 'Meta' : 'Control';
+
+    // The board: a plain click opens the task, Ctrl+click marks instead; x marks the selected card.
+    const board = page.getByRole('group', { name: 'Board' });
+    await goByKey(page, 'b', board);
+    const cards = board.locator('.card');
+    await expect(cards.nth(2)).toBeVisible();
+    const idOf = async (card: Locator): Promise<string> => (await card.getAttribute('data-card')) ?? '';
+    const a = await idOf(cards.nth(0));
+    const c = await idOf(cards.nth(2));
+    await expect(note).toBeHidden();
+    await cards.nth(0).click({ modifiers: [mod] });
+    await expect(taskFloat(page)).toHaveCount(0);
+    await expect(cards.nth(0)).toHaveClass(/marked/);
+    await expect(note.getByRole('status')).toHaveText('1 marked');
+    // The mark has a word for a screen reader, not only a frame.
+    await expect(cards.nth(0).locator('.sr-only', { hasText: 'Marked:' })).toHaveCount(1);
+    // Shift+click: from the card marked last to this one, along the board.
+    await cards.nth(2).click({ modifiers: ['Shift'] });
+    await expect(board.locator('.card.marked')).toHaveCount(3);
+    await expect(note.getByRole('status')).toHaveText('3 marked');
+    await expectAccessible(page, `the board with marked cards (${scheme})`);
+    // Ctrl+click on a marked card takes its mark; x marks the selected card (a plain click selects it).
+    await cards.nth(1).click({ modifiers: [mod] });
+    await expect(board.locator('.card.marked')).toHaveCount(2);
+    await cards.nth(1).click();
+    await closeFloat(page);
+    await page.locator('main').focus();
+    await page.keyboard.press('x');
+    await expect(board.locator('.card.marked')).toHaveCount(3);
+    await page.keyboard.press('x');
+    await expect(board.locator('.card.marked')).toHaveCount(2);
+    // The context menu on a marked card works on the marked ones, and offers no status of one task.
+    await cards.nth(0).click({ button: 'right' });
+    await expect(menu.getByRole('menuitemradio')).toHaveCount(0);
+    await menu.getByRole('menuitem', { name: 'Copy as JSON' }).click();
+    await expect.poll(copiedIds).toEqual([a, c].sort());
+    // Export takes the marked ones too.
+    await page.locator('details.export summary').first().click();
+    await expect(page.locator('details.export[open] .popup.placed')).toBeVisible();
+    await page.getByRole('group', { name: 'Ways to export' }).getByRole('button', { name: 'Copy as JSON' }).click();
+    await expect(page.getByRole('status').filter({ hasText: '2 tasks copied.' })).toBeVisible();
+    expect(await copiedIds()).toEqual([a, c].sort());
+
+    // One marking for all views: the list shows the same two as marked, with its bar.
+    await note.getByRole('button', { name: 'Change them in the list' }).click();
+    await expect(page.getByRole('heading', { level: 1, name: 'List' })).toBeVisible();
+    await expect(page.locator('.bulk')).toContainText('2 marked');
+    await expect(page.locator('.rows').getByRole('checkbox', { checked: true })).toHaveCount(2);
+    // Ctrl+click marks in the list as well.
+    const rows = page.locator('.rows button.row');
+    const third = (await rows.nth(5).locator('.id').textContent()) ?? '';
+    await rows.nth(5).click({ modifiers: [mod] });
+    await expect(taskFloat(page)).toHaveCount(0);
+    await expect(page.locator('.bulk')).toContainText('3 marked');
+
+    // The plan: the same three are marked there; a filter that hides a marked task takes its mark.
+    await goByKey(page, 'p', page.getByRole('region', { name: 'Stages' }));
+    const stages = page.getByRole('region', { name: 'Stages' });
+    await expect(stages.locator('li.marked')).toHaveCount(3);
+    await expect(note.getByRole('status')).toHaveText('3 marked');
+    await expectAccessible(page, `the plan with marked tasks (${scheme})`);
+    await stages.locator(`li[data-id="${third}"] button.link`).click({ modifiers: [mod] });
+    await expect(stages.locator('li.marked')).toHaveCount(2);
+    await expect(taskFloat(page)).toHaveCount(0);
+    // Escape clears the marks (and the selection only after them).
+    await page.locator('main').focus();
+    await page.keyboard.press('Escape');
+    await expect(stages.locator('li.marked')).toHaveCount(0);
+    await expect(note).toBeHidden();
+
+    // The inbox: x marks the selected row, Shift+click the range; the context menu copies them.
+    const inbox = page.locator('section.inbox');
+    await goByKey(page, 'i', inbox);
+    const inRows = inbox.locator('button.row');
+    await expect(inRows.nth(2)).toBeVisible();
+    await inRows.nth(0).click();
+    await page.keyboard.press('x');
+    await expect(inRows.nth(0)).toHaveClass(/marked/);
+    await inRows.nth(2).click({ modifiers: ['Shift'] });
+    await expect(inbox.locator('button.row.marked')).toHaveCount(3);
+    const inIds = (await inbox.locator('button.row.marked .id').allTextContents()).sort();
+    await expectAccessible(page, `the inbox with marked rows (${scheme})`);
+    await inRows.nth(1).click({ button: 'right' });
+    await menu.getByRole('menuitem', { name: 'Copy as JSON' }).click();
+    await expect.poll(copiedIds).toEqual(inIds);
+    // A key of the inbox still writes one task only: the marks are for copying and the list.
+    await note.getByRole('button', { name: 'Clear marks' }).click();
+    await expect(inbox.locator('button.row.marked')).toHaveCount(0);
+    await expect(page.locator('main')).toBeFocused();
+
+    // A view: its entries are marked the same way.
+    await showList(page);
+    await page.locator('.rows button.row').first().focus();
+    await page.keyboard.press('Shift+F10');
+    await page.keyboard.press('l');
+    await expect(menu.getByRole('menuitem', { name: 'List', exact: true })).toBeFocused();
+    await page.keyboard.press('Enter');
+    const items = page.locator('[data-view-item]');
+    await expect(items.nth(1)).toBeVisible();
+    await items.nth(0).click({ modifiers: [mod] });
+    await items.nth(1).click({ modifiers: [mod] });
+    await expect(page.locator('[data-view-item].marked')).toHaveCount(2);
+    await expect(taskFloat(page)).toHaveCount(0);
+    await expect(note.getByRole('status')).toHaveText('2 marked');
+    const viewIds = (await page.locator('[data-view-item].marked .id').allTextContents()).sort();
+    await expectAccessible(page, `a view with marked entries (${scheme})`);
+    await items.nth(0).click({ button: 'right' });
+    await menu.getByRole('menuitem', { name: 'Copy as JSON' }).click();
+    await expect.poll(copiedIds).toEqual(viewIds);
+    await page.locator('main').focus();
+    await page.keyboard.press('Escape');
+    await expect(page.locator('[data-view-item].marked')).toHaveCount(0);
+    expect(consoleProblems.get(page)).toEqual([]);
+  });
+}

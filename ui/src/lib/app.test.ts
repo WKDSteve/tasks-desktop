@@ -1281,7 +1281,7 @@ describe('App, the export', () => {
     app.stop();
   });
 
-  it('takes the board with its columns; the marks count in the list only, where they are seen', async () => {
+  it('takes the board with its columns; the marks count in every view that shows them, and not in the others', async () => {
     const { app, files, copied } = await started([task('pub/a', { status: 'open' }), task('pub/b', { status: 'doing' }), task('pub/c', { status: 'open' })]);
     app.setView('board');
     await app.exportView('csv', 'save');
@@ -1290,9 +1290,16 @@ describe('App, the export', () => {
     expect(lines[0]!.startsWith('group;id;')).toBe(true);
     // The board's columns in order: doing before open.
     expect(lines.slice(1).map((l) => l.split(';').slice(0, 2).join(' '))).toEqual(['doing pub/b', 'open pub/a', 'open pub/c']);
+    // One marking for the views that mark: the board takes the marked card alone, as the list does.
     app.toggleMark('pub/c');
     await app.exportView('csv', 'copy');
-    expect(app.toast?.text).toBe(translate('de', 'export.copied', { n: 3 }));
+    expect(app.toast?.text).toBe(translate('de', 'export.copied', { n: 1 }));
+    expect(copied.at(-1)).toContain('pub/c');
+    expect(copied.at(-1)).not.toContain('pub/b');
+    expect(app.marking).toBe(true);
+    // A view that marks nothing does not count them.
+    app.setView('today');
+    expect(app.marking).toBe(false);
     app.setView('list');
     await app.exportView('csv', 'copy');
     expect(app.toast?.text).toBe(translate('de', 'export.copied', { n: 1 }));
@@ -6128,6 +6135,52 @@ describe('the defaults (dialog "Defaults ...")', () => {
     m.app.setGroupAreas(false);
     expect(ids(m.app.listed)).toEqual(['pub/1', 'inner/1', 'pub/2', 'inner/2']);
     m.app.stop();
+  });
+
+  it('marks with a click as a file explorer does: Ctrl flips one, Shift takes the range along what the view shows', async () => {
+    const m = make({ token: 't' });
+    m.hub.doc = snapshot([task('pub/1'), task('pub/2'), task('pub/3'), task('pub/4'), task('pub/5')]);
+    await m.app.start(null);
+    m.app.setView('board');
+    const order = ['pub/3', 'pub/1', 'pub/5', 'pub/2', 'pub/4'];
+    const plain = { ctrlKey: false, metaKey: false, shiftKey: false };
+    // A plain click is no mark: the caller opens the task.
+    expect(m.app.markClick(plain, 'pub/1', order)).toBe(false);
+    expect(m.app.marks).toEqual([]);
+    // Ctrl (or Cmd) flips the mark of that task.
+    expect(m.app.markClick({ ...plain, ctrlKey: true }, 'pub/1', order)).toBe(true);
+    expect(m.app.markClick({ ...plain, metaKey: true }, 'pub/4', order)).toBe(true);
+    expect(m.app.marks).toEqual(['pub/1', 'pub/4']);
+    m.app.markClick({ ...plain, ctrlKey: true }, 'pub/4', order);
+    expect(m.app.marks).toEqual(['pub/1']);
+    // Shift: from the task marked last (pub/4, the last one clicked) back to pub/5, along the order of the view.
+    expect(m.app.markClick({ ...plain, shiftKey: true }, 'pub/5', order)).toBe(true);
+    expect([...m.app.marks].sort()).toEqual(['pub/1', 'pub/2', 'pub/4', 'pub/5']);
+    // With no mark made yet the range starts at the selected task; with neither, the task alone.
+    m.app.clearMarks();
+    const fresh = make({ token: 't' });
+    fresh.hub.doc = m.hub.doc;
+    await fresh.app.start(null);
+    fresh.app.setView('plan');
+    fresh.app.select('pub/3');
+    fresh.app.markClick({ ...plain, shiftKey: true }, 'pub/5', order);
+    expect([...fresh.app.marks].sort()).toEqual(['pub/1', 'pub/3', 'pub/5']);
+    fresh.app.clearMarks();
+    fresh.app.select(null);
+    // A click on a task the view cannot mark, or in a view that marks nothing, is taken (it opens nothing) and marks nothing.
+    expect(fresh.app.markClick({ ...plain, ctrlKey: true }, 'pub/gone', order)).toBe(true);
+    fresh.app.setView('today');
+    expect(fresh.app.markClick({ ...plain, ctrlKey: true }, 'pub/1', order)).toBe(true);
+    expect(fresh.app.marks).toEqual([]);
+    // The marks follow what the view shows: a filter that hides a marked task takes its mark.
+    fresh.app.setView('board');
+    fresh.app.toggleMark('pub/1');
+    fresh.app.toggleMark('pub/2');
+    fresh.app.setQuery('pub/2');
+    fresh.app.keepMarksShown();
+    expect(fresh.app.marks).toEqual(['pub/2']);
+    m.app.stop();
+    fresh.app.stop();
   });
 
   it('keeps the switches of the areas in lists: separation on, zebra, grouping and the filter in the bar off', async () => {

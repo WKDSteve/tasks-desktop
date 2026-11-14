@@ -2,6 +2,11 @@
   // The inbox: the open tasks that are not sorted yet, one single key for each field (see `lib/inbox.ts`). The keys
   // are read in `App.svelte`, with the others; this view shows the list, what each task still lacks, and the keys.
   import { onMount, untrack } from 'svelte';
+  import { areaBand, severalAreas } from '../lib/areaBands';
+  import { contextTarget } from 'appkit-ui/contextmenu';
+  import { taskTarget } from '../lib/context';
+  import { markGesture } from '../lib/markDom';
+  import MarksNote from './MarksNote.svelte';
   import type { App } from '../lib/app.svelte';
   import { INBOX_PAGE, inboxOf, missingOf, shownCount } from '../lib/inbox';
   import { narrows } from '../lib/filter';
@@ -18,6 +23,9 @@
   const t = (key: Key, params: Record<string, string | number> = {}) => translate(app.lang, key, params);
 
   const rows = $derived(app.inbox);
+  // The areas set apart as in the list (Options > "Separate areas in lists"): the head of an area and its rows carry
+  // the band of the area; the head names it.
+  const banded = $derived(app.areaSplit && severalAreas(rows));
   // Only a page of rows is drawn; the selection is always drawn, so the keys can walk down the whole list.
   let limit = $state(INBOX_PAGE);
   const shown = $derived(shownCount(rows, app.selectedId, limit));
@@ -54,6 +62,7 @@
 <div class="split">
   <section class="inbox" aria-label={t('nav.inbox')}>
     <FilterNote {app} />
+    <MarksNote {app} />
     <header class="intro">
       <div class="head">
         <h2>{t('inbox.title')}</h2>
@@ -78,17 +87,23 @@
     <div class="rows">
       {#each drawn as task, i (task.id)}
         {#if i === 0 || drawn[i - 1]?.area !== task.area}
-          <h3 class="area">{task.area}<span class="n">{rows.filter((r) => r.area === task.area).length}</span></h3>
+          <h3 class="area" class:banded style:--band={banded ? areaBand(task.area) : undefined}>{task.area}<span class="n">{rows.filter((r) => r.area === task.area).length}</span></h3>
         {/if}
         <button
           type="button"
           class="row"
+          data-mark-id={task.id}
+          class:marked={app.marks.includes(task.id)}
+          use:contextTarget={taskTarget(task)}
+          class:banded
+          style:--band={banded ? areaBand(task.area) : undefined}
           class:selected={task.id === app.selectedId}
           aria-current={task.id === app.selectedId ? 'true' : undefined}
+          use:markGesture={app}
           onclick={() => app.select(task.id)}
         >
           <span class="id">{task.id}</span>
-          <span class="title">{markHidden(task.title)}</span>
+          <span class="title">{#if app.marks.includes(task.id)}<span class="sr-only">{t('mark.marked')} </span>{/if}{markHidden(task.title)}</span>
           <span class="meta">
             {#each missingOf(task) as field (field)}
               <span class="tag" data-hint={hintOf(app.lang, 'hint.inbox.missing', field)}>{t(`inbox.missing.${field}` as Key)}</span>
@@ -283,5 +298,14 @@
   .empty {
     padding: 1rem;
     color: var(--muted);
+  }
+  /* The band of the area (lib/areaBands.ts), beside the mark of the selected row. */
+  .area.banded,
+  .row.banded {
+    border-left: 3px solid var(--band);
+  }
+  /* A marked row (x, Ctrl+click, Shift+click): a frame in the accent colour. */
+  .row.marked {
+    box-shadow: inset 0 0 0 2px var(--accent);
   }
 </style>

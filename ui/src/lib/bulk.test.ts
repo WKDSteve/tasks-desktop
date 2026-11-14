@@ -14,8 +14,7 @@ import {
   moveOrder,
   moveUndo,
   pruneMarks,
-  toggleMark,
-} from './bulk';
+  toggleMark, markRange } from './bulk';
 
 const task = (id: string, etag?: string) => ({ id, ...(etag ? { etag } : {}) }) as unknown as TaskEntry;
 
@@ -206,5 +205,27 @@ describe('marksKeyOf', () => {
     expect(marksKeyOf(['pub/a', 'pub/b'], [{ ...a, etag: 'e9' }, b, other])).not.toBe(key);
     expect(marksKeyOf(['pub/b', 'pub/a'], [a, b, other])).not.toBe(key);
     expect(marksKeyOf([], [a, b])).toBe('');
+  });
+});
+
+describe('markRange', () => {
+  const order = ['a', 'b', 'c', 'd', 'e'];
+
+  it('marks both ends and what lies between, whichever end comes first, and keeps what is marked', () => {
+    expect(markRange([], order, 'b', 'd')).toEqual({ marks: ['b', 'c', 'd'], full: false });
+    expect(markRange(['e'], order, 'd', 'b')).toEqual({ marks: ['e', 'b', 'c', 'd'], full: false });
+    expect(markRange(['c'], order, 'c', 'c')).toEqual({ marks: ['c'], full: false });
+  });
+
+  it('marks the clicked task alone when the order does not hold an end', () => {
+    expect(markRange(['a'], order, 'gone', 'c')).toEqual({ marks: ['a', 'c'], full: false });
+    expect(markRange([], order, 'a', 'gone')).toEqual({ marks: ['gone'], full: false });
+  });
+
+  it('stops at one batch and says so', () => {
+    const many = Array.from({ length: BULK_MAX + 5 }, (_, i) => `t${i}`);
+    const { marks, full } = markRange([], many, 't0', `t${BULK_MAX + 4}`);
+    expect(marks).toHaveLength(BULK_MAX);
+    expect(full).toBe(true);
   });
 });

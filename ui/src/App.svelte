@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, tick } from 'svelte';
+  import { onMount, tick, untrack } from 'svelte';
   import type { App, View } from './lib/app.svelte';
   import { logo } from './lib/logo';
   import { matches } from 'appkit-ui/keymap';
@@ -235,9 +235,10 @@
         break;
       case 'x':
         // Holding the key does not flip the mark back and forth.
-        if (view === 'list' && app.selectedId !== null && !event.repeat) {
+        // In every view that marks (the list, the board, the plan, the inbox, a saved view): the selected task.
+        if (view !== null && app.marking && app.selectedId !== null && !event.repeat) {
           const id = app.selectedId;
-          if (app.shown.some((t) => t.id === id)) app.toggleMark(id);
+          if (app.markable.some((t) => t.id === id)) app.toggleMark(id);
         }
         break;
       case 'e':
@@ -257,7 +258,7 @@
         if (app.taskFloatOpen) break;
         // In the list the marks go first; elsewhere there are none to see. A window of one task lets go of it and shows
         // its view.
-        if (view === 'list' && app.marks.length > 0) app.clearMarks();
+        if (app.marking && app.marks.length > 0) app.clearMarks();
         else app.select(null);
         break;
     }
@@ -684,8 +685,15 @@
     ];
   });
   const contextRegistry = $derived(createContextRegistry(app));
-  // Only the list shows marks; read when the menu opens.
-  const markedTargets = () => (app.view === 'list' ? app.tasks.filter((x) => app.marks.includes(x.id)).map(taskTarget) : []);
+  // The marked tasks of the view that is shown (the list, the board, the plan, the inbox, a saved view); read when the
+  // menu opens.
+  const markedTargets = () => (app.marking ? app.tasks.filter((x) => app.marks.includes(x.id)).map(taskTarget) : []);
+  // A mark that the view does not show is not changed behind the person's back: the marks follow what is shown, in
+  // whatever view (a filter that hides a task, another saved view).
+  $effect(() => {
+    void app.markable;
+    untrack(() => app.keepMarksShown());
+  });
   // The context menu is built at once (the browser's menu is replaced or not before the event is over), so the fields
   // of the engine for "open as a view" are read when the page is ready, not at the first right click.
   $effect(() => {

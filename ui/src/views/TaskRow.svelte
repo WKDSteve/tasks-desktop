@@ -7,6 +7,7 @@
   import { statusTags } from '../lib/statusTags';
   import { isDue, isOverdue } from '../lib/remind';
   import type { StampKind } from '../lib/sort';
+  import { markGesture, type Marker } from '../lib/markDom';
 
   let {
     task,
@@ -26,6 +27,7 @@
     stamp,
     claimant = '',
     area,
+    marker,
   }: {
     task: TaskEntry;
     lang: Lang;
@@ -54,6 +56,8 @@
      * colour and its name before the title. The colour never stands alone.
      */
     area?: { label: string; name: string; colour: number };
+    /** Marks the row on a click with Ctrl or Shift (`App.markClick`). */
+    marker: Marker;
   } = $props();
 
   // A word this version does not know is shown as it is.
@@ -92,6 +96,8 @@
   class="row"
   class:selected
   aria-current={selected ? 'true' : undefined}
+  data-mark-id={task.id}
+  use:markGesture={marker}
   onclick={() => onselect(task.id)}
   use:contextTarget={target}
   onmouseover={hintWhenCut}

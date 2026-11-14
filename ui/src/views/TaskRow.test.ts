@@ -13,7 +13,7 @@ const row = (task: Partial<TaskEntry>, extra: Record<string, unknown> = {}) =>
       today: '2026-10-30',
       onselect: () => undefined,
       onmark: () => false,
-      markLabel: 'mark',
+      markLabel: 'mark', marker: { markClick: () => false },
     },
   }).body.replace(/<!--.*?-->/g, '');
 
