@@ -228,7 +228,7 @@ in its settings folder; on the PC:
 ```
 tasks-hub devices                          the paired phones: id, name, level, when paired, when last used
 tasks-hub devices revoke <id>              revoke one: its sessions end, it has to pair again
-tasks-hub devices level <id> read|create|change
+tasks-hub devices level <id> read|create|change|trigger
                                            what one may do; its open sessions follow at once
 ```
 
@@ -256,13 +256,14 @@ The PC gets everything as before. Its level decides what it may write (`MOB-03`)
 | `read` | read the list and the tasks |
 | `create` | also create a task and answer an open question |
 | `change` | also add a photo or a voice note to a task (`upload`), set a status and finish a task; **a newly paired phone starts here** |
+| `trigger` | also ask this hub to run the test sheets of a task on the PC (`testing_start`, see "The test sheets of a task, from the phone" below), each time with the phone's confirmation of that very request; only the PC raises a phone to it |
 
 Of the operations of `ops` a phone sends only `new`, `answer` (create), `set` and `done` (change), and of each only the
 fields the phone page sends: `new` an area, a title and a text; `set` only the status (with `if_match`); `answer` the
 question and the option; `done` its confirmation. Any other operation (moving, ordering, plans, views, an image from
 the clipboard of the PC, ...) and any other field (a title, a plan or a reminder through `set`, `force` that breaks a
 claim, `by` that acts for someone else, ...) answers it `403 not_for_devices`, at any level.
-Nothing a phone may do starts something on the PC (`trigger`).
+Below `trigger`, nothing a phone may do starts something on the PC.
 
 **Through Tailscale**, without a tunnel: `tailscale serve --bg 17615` forwards `https://<pc>.<tailnet>.ts.net` to the
 hub (which still listens on loopback only). Tell the hub that name before it starts, in its environment:

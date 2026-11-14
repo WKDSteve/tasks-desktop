@@ -27,7 +27,7 @@ const USAGE: &str = "usage:
                                           (a phone: the same link with /m/ in front of the #)
   tasks-hub devices                       list the phones paired with a key of their own
   tasks-hub devices revoke <id>           revoke one: its sessions end, it has to pair again
-  tasks-hub devices level <id> read|create|change
+  tasks-hub devices level <id> read|create|change|trigger
                                           what one may do (a new phone: change); its open
                                           sessions follow at once
                                           (--launch also opens it in the default browser)
