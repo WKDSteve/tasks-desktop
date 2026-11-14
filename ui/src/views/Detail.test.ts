@@ -203,17 +203,25 @@ describe('the file of a task in the detail', () => {
 
 describe('a screenshot to attach', () => {
   it('is offered in the detail and the capture where a hub runs and the engine can attach', () => {
-    expect(detail(page(false, ['attach']))).toContain('Attach screenshot');
+    const out = detail(page(false, ['attach']));
+    // Three buttons: a file at once, a choice for a video, a choice for an image (with the clipboard of the hub in it).
+    expect(out).toContain('Attach to this task');
+    expect(out).toContain('Attach file');
+    for (const entry of ['Upload a video', 'Record a video', 'Upload an image', 'Take a photo', 'Take a screenshot', 'From the clipboard of the hub']) {
+      expect(out).toContain(entry);
+    }
+    // Drawn outside a browser nothing can be taken: the entries say so instead of being left out.
+    expect(out).toContain('This browser cannot do it here.');
     expect(capture(page(false, ['attach']))).toContain('Attach a screenshot');
   });
 
   it('is not offered where the engine cannot attach', () => {
-    expect(detail(page(false, []))).not.toContain('Attach screenshot');
+    expect(detail(page(false, []))).not.toContain('Attach to this task');
     expect(capture(page(false, []))).not.toContain('Attach a screenshot');
   });
 
   it('is not offered in the web variant even when the engine says it can: there is no clipboard or screenshot folder of a machine to take it from', () => {
-    expect(detail(page(true, ['attach']))).not.toContain('Attach screenshot');
+    expect(detail(page(true, ['attach']))).not.toContain('Attach to this task');
     expect(capture(page(true, ['attach']))).not.toContain('Attach a screenshot');
     expect(page(true, ['attach']).canAttach).toBe(false);
   });

@@ -208,6 +208,50 @@ async fn a_second_upload_of_the_same_name_is_exists_and_the_task_keeps_one_asset
     let third = upload("/api/tasks/upload?id=lib.nvim/alpha", "third").await;
     assert_eq!(third["results"][0]["ok"], true, "{third}");
     assert_eq!(assets(&vault).len(), 2, "{:?}", assets(&vault));
+    // `kind`: the asset lies in the folder of its kind below `assets/`, and the answer names that folder.
+    let before: std::collections::BTreeSet<String> = assets(&vault).into_iter().collect();
+    let video = upload("/api/tasks/upload?id=lib.nvim/alpha&kind=video", "video").await;
+    assert_eq!(video["results"][0]["ok"], true, "{video}");
+    assert_eq!(
+        video["results"][0]["asset"], "assets/videos/note.txt",
+        "{video}"
+    );
+    assert_eq!(
+        video["results"][0]["link"], "[note.txt](assets/videos/note.txt)",
+        "{video}"
+    );
+    let added: Vec<String> = assets(&vault)
+        .into_iter()
+        .filter(|path| !before.contains(path))
+        .collect();
+    assert_eq!(added.len(), 1, "{added:?}");
+    assert!(
+        added[0]
+            .replace('\\', "/")
+            .ends_with("/assets/videos/note.txt"),
+        "{added:?}"
+    );
+    assert_eq!(std::fs::read_to_string(&added[0]).unwrap(), "video");
+    // A word that is no kind is refused before anything is taken: the page names no folder.
+    for bad in ["videos", "..%2Fx", ""] {
+        let reply = client::request(
+            port,
+            "POST",
+            &format!("/api/tasks/upload?id=lib.nvim/alpha&kind={bad}"),
+            &[
+                ("Origin", origin.as_str()),
+                ("Authorization", session.as_str()),
+                ("Content-Type", "application/octet-stream"),
+                ("X-Upload-Name", "note.txt"),
+            ],
+            "refused",
+        )
+        .await
+        .unwrap();
+        assert_eq!(reply.status, 400, "{bad:?}: {}", reply.body);
+        assert!(reply.body.contains("bad_query"), "{}", reply.body);
+    }
+    assert_eq!(assets(&vault).len(), 3, "{:?}", assets(&vault));
     server.shutdown().await;
 }
 

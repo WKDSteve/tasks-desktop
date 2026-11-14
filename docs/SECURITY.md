@@ -316,7 +316,11 @@ transfer that sends nothing for 60 seconds. The engine takes that file
 page), copies it below the folder of the task, and the hub removes its copy,
 whatever the engine said; what a killed hub left there goes after a day at the
 next start. The name the page sends is cleaned to letters, digits and `_ . -`,
-and it names no folder. The hub serves no asset, so a file with an active type
+and it names no folder. `kind=video|image|screenshot` asks for the folder of that
+kind below `assets/` of the task (`assets/videos/`, `assets/images/`,
+`assets/screenshots/`): the hub passes one of these three words to the engine
+and refuses any other (`400 bad_query`), so the page chooses among three
+folders the engine has and never names one. The hub serves no asset, so a file with an active type
 (HTML, SVG) is never shown in the origin of the page.
 
 A screenshot is attached with `attach` through `POST /api/tasks/ops` (a button

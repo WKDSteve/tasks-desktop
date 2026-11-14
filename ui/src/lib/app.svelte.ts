@@ -47,6 +47,7 @@ import { cleanClaimName } from './claims';
 export type PlanDisplay = 'stages' | 'graph' | 'compare';
 import { parsePrefs, type Prefs as FinishedPrefs } from './finished';
 import { groupedByArea } from './areaBands';
+import type { AssetKind } from './capture';
 import { activeFilters, applyFilter, areaCounts, filterOfText, filterVaultOf, freshFilter, moveSelection, NONE as NO_VALUE, parseFilter, serializeFilter, type Filter } from './filter';
 import { chipLabel } from './filter-chips';
 import { inboxOf, triageKey } from './inbox';
@@ -2817,13 +2818,14 @@ export class App {
   /**
    * Attach a file from this computer to `id`: it goes through the hub, and the engine makes it an asset of the task (a
    * plain task becomes a folder task). One file at a time. There is nothing to take back (the engine gives no inverse).
-   * True when it was attached.
+   * `kind` names the folder of the task it goes to (`assets/videos/`, `assets/images/`, `assets/screenshots/`); without
+   * it the file lies in `assets/` itself. True when it was attached.
    */
-  async attachFile(id: string, file: File): Promise<boolean> {
+  async attachFile(id: string, file: File, kind?: AssetKind): Promise<boolean> {
     if (this.refusedReadOnly() || this.uploading !== null) return false;
     this.uploading = id;
     try {
-      const result = await this.env.hub.upload(id, file);
+      const result = await this.env.hub.upload(id, file, kind);
       const entry = result.results[0];
       if (!entry?.ok) {
         this.say('error', 'write.failed', { code: entry?.error?.code ?? 'failed' });

@@ -6396,6 +6396,33 @@ describe('App, attaching a screenshot', () => {
   }
   const asked = (m: Awaited<ReturnType<typeof started>>) => m.hub.sent.map((r) => r.ops[0]);
 
+  it('sends a file with the kind it is of, shows its link, and takes one file at a time', async () => {
+    const m = await started();
+    const sent: [string, string, string | undefined][] = [];
+    let release: (() => void) | undefined;
+    const hub = m.hub as unknown as { upload: (id: string, file: File, kind?: string) => Promise<Result> };
+    hub.upload = async (id, file, kind) => {
+      sent.push([id, file.name, kind]);
+      await new Promise<void>((resolve) => (release = resolve));
+      return attached(id, `assets/videos/${file.name}`);
+    };
+    const first = m.app.attachFile('pub/a', new File(['v'], 'clip.webm'), 'video');
+    expect(m.app.uploading).toBe('pub/a');
+    // A second file while the first is on its way is not sent.
+    expect(await m.app.attachFile('pub/a', new File(['x'], 'other.bin'))).toBe(false);
+    release?.();
+    expect(await first).toBe(true);
+    expect(sent).toEqual([['pub/a', 'clip.webm', 'video']]);
+    expect(m.app.uploading).toBeNull();
+    expect(m.app.attached).toEqual({ id: 'pub/a', link: '![shot](assets/videos/clip.webm)' });
+    expect(m.app.toast?.text).toBe(translate(m.app.lang, 'attach.file_done', { asset: 'assets/videos/clip.webm' }));
+    // Without a kind none is named: the file lies in assets/ itself.
+    const second = m.app.attachFile('pub/a', new File(['x'], 'notes.txt'));
+    release?.();
+    await second;
+    expect(sent[1]).toEqual(['pub/a', 'notes.txt', undefined]);
+  });
+
   it('takes the image on the clipboard and shows its link in the detail', async () => {
     const m = await started();
     m.hub.next_ops = attached('pub/a', 'assets/a-shot.png');

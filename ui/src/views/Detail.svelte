@@ -11,6 +11,8 @@
   import { shownTask } from '../lib/drafts';
   import { classChange as classChangeOf } from '../lib/bulk';
   import { copyText } from '../lib/exportDom';
+  import { kindOfFile } from '../lib/capture';
+  import AttachBar from './AttachBar.svelte';
   import {
     badLink,
     badTag,
@@ -249,7 +251,6 @@
     return () => at.removeEventListener('keydown', saveKey);
   });
 
-  let filePicker: HTMLInputElement | undefined = $state();
   /** A file is held over the card. */
   let dropping = $state(false);
 
@@ -279,7 +280,7 @@
       return;
     }
     const file = files[0];
-    if (file) void app.attachFile(task.id, file);
+    if (file) void app.attachFile(task.id, file, kindOfFile(file));
   }
 </script>
 
@@ -1112,34 +1113,7 @@
         <button type="button" class="open-editor" data-hint={t('hint.ui.detail.graph')} onclick={() => app.openGraph(task.id)}>{t('graph.button')}</button>
       {/if}
       {#if app.canAttach}
-        <button
-          type="button"
-          class="open-editor"
-          data-hint={t('hint.ui.detail.attach')}
-          disabled={app.locked}
-          onclick={() => void app.attachScreenshot(task.id)}>{t('attach.button')}</button
-        >
-        <button
-          type="button"
-          class="open-editor"
-          data-hint={t('hint.ui.detail.attach_file')}
-          disabled={app.locked || app.uploading !== null}
-          onclick={() => filePicker?.click()}
-          >{app.uploading === task.id ? t('attach.uploading') : t('attach.file')}</button
-        >
-        <input
-          type="file"
-          class="file-picker"
-          data-file-picker
-          tabindex="-1"
-          aria-hidden="true"
-          bind:this={filePicker}
-          onchange={(e) => {
-            const file = e.currentTarget.files?.[0];
-            e.currentTarget.value = '';
-            if (file) void app.attachFile(task.id, file);
-          }}
-        />
+        <AttachBar {app} id={task.id} />
       {/if}
     </p>
     {#if app.attached && app.attached.id === task.id}
@@ -1251,9 +1225,6 @@
     display: grid;
     gap: 0.2rem;
     flex: 1 1 14rem;
-  }
-  .file-picker {
-    display: none;
   }
   .detail.dropping {
     outline: 2px dashed var(--accent);

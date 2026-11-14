@@ -1,5 +1,9 @@
 //! `POST /api/tasks/upload?id=<area>/<slug>`: a file from the page becomes an asset of the task.
 //!
+//! `kind=video|image|screenshot` puts it into the folder of its kind below `assets/` (the engine's `attach` with
+//! `kind`); without it the asset lies in `assets/` itself. Another word is refused here: the folder is never the
+//! page's to name.
+//!
 //! The body is the file as it is, streamed to disk under a name the hub gives it, in a folder of the hub's own below its
 //! configuration; the engine takes it from there (`from: upload`) and the hub removes it afterwards, whatever came of
 //! it. There is no limit on the size and none on the type: what guards the machine is the disk, asked for the room up
@@ -220,12 +224,36 @@ async fn receive(dir: PathBuf, size: Option<u64>, body: Body) -> Result<(Incomin
     Ok((incoming, written))
 }
 
-/// The `attach` of an upload; `exact` only when asked (an engine before it would not know the key).
-fn attach_op(id: &str, upload: &str, name: &str, exact: bool) -> serde_json::Value {
+/// The kinds of an asset the engine has a folder for (`attach` with `kind`).
+const KINDS: [&str; 3] = ["video", "image", "screenshot"];
+
+/// The kind the page asked for: none, one of [`KINDS`], or `Err` for another word.
+fn asked_kind(value: Option<&str>) -> Result<Option<&'static str>, ()> {
+    match value {
+        None => Ok(None),
+        Some(word) => KINDS
+            .iter()
+            .find(|kind| **kind == word)
+            .map(|kind| Some(*kind))
+            .ok_or(()),
+    }
+}
+
+/// The `attach` of an upload; `exact` and `kind` only when asked (an engine before them would not know the keys).
+fn attach_op(
+    id: &str,
+    upload: &str,
+    name: &str,
+    exact: bool,
+    kind: Option<&str>,
+) -> serde_json::Value {
     let mut op =
         json!({ "op": "attach", "id": id, "from": "upload", "upload": upload, "name": name });
     if exact {
         op["exact"] = json!(true);
+    }
+    if let Some(kind) = kind {
+        op["kind"] = json!(kind);
     }
     op
 }
@@ -237,7 +265,7 @@ pub(super) async fn upload(
     headers: HeaderMap,
     body: Body,
 ) -> Response {
-    let params = match parse_query(query.as_deref(), &["id", "exact"]) {
+    let params = match parse_query(query.as_deref(), &["id", "exact", "kind"]) {
         Ok(p) => p,
         Err(why) => return error_body(StatusCode::BAD_REQUEST, "bad_query", why),
     };
@@ -247,6 +275,13 @@ pub(super) async fn upload(
         None | Some("0") => false,
         Some("1") => true,
         Some(_) => return error_body(StatusCode::BAD_REQUEST, "bad_query", "exact is 0 or 1"),
+    };
+    let Ok(kind) = asked_kind(params.get("kind").map(String::as_str)) else {
+        return error_body(
+            StatusCode::BAD_REQUEST,
+            "bad_query",
+            "kind is video, image or screenshot",
+        );
     };
     let Some(id) = params.get("id").filter(|id| valid_task_id(id)).cloned() else {
         return error_body(
@@ -287,7 +322,7 @@ pub(super) async fn upload(
     // in a dry run, so the file need not be there yet.
     let look = json!({
         "dry_run": true,
-        "ops": [attach_op(&id, "pending", &name, exact)],
+        "ops": [attach_op(&id, "pending", &name, exact, kind)],
         "upload_dir": dir.to_string_lossy(),
     });
     let refused = match ask_as(&st, device, Calls::Ops, Some(&look)).await {
@@ -324,7 +359,7 @@ pub(super) async fn upload(
         );
     };
     let request = json!({
-        "ops": [attach_op(&id, file_name, &name, exact)],
+        "ops": [attach_op(&id, file_name, &name, exact, kind)],
         "upload_dir": dir.to_string_lossy(),
     });
     // A large file takes its time to copy, longer than the engine of the page may take for a question, and the page must
@@ -380,7 +415,27 @@ static UPLOAD_NAME: header::HeaderName = header::HeaderName::from_static("x-uplo
 
 #[cfg(test)]
 mod tests {
-    use super::{clean_name, percent_decoded};
+    use super::{asked_kind, attach_op, clean_name, percent_decoded};
+
+    #[test]
+    fn a_kind_is_one_of_the_engines_or_refused() {
+        assert_eq!(asked_kind(None), Ok(None));
+        for kind in ["video", "image", "screenshot"] {
+            assert_eq!(asked_kind(Some(kind)), Ok(Some(kind)));
+        }
+        for other in ["", "videos", "Video", "../x", "assets", "file"] {
+            assert_eq!(asked_kind(Some(other)), Err(()), "{other:?}");
+        }
+    }
+
+    #[test]
+    fn the_op_names_a_kind_only_when_one_was_asked() {
+        let plain = attach_op("a/b", "u1", "x.bin", false, None);
+        assert!(plain.get("kind").is_none() && plain.get("exact").is_none());
+        let video = attach_op("a/b", "u1", "x.webm", true, Some("video"));
+        assert_eq!(video["kind"], "video");
+        assert_eq!(video["exact"], true);
+    }
 
     #[test]
     fn a_name_is_what_the_engine_takes_as_an_asset() {

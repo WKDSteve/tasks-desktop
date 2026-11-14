@@ -8945,3 +8945,231 @@ test('the area filter in the top bar: the same filter as the list, in every view
   await expect(page.locator('header.bar').getByRole('button', { name: /^Areas/ })).toHaveCount(0);
   expect(consoleProblems.get(page)).toEqual([]);
 });
+
+/** A folder task's file made in the vault, opened in its float; the paths of its folder. */
+async function openAttachTask(page: Page, title: string): Promise<{ float: Locator; dir: string; attached: Locator }> {
+  const slug = `${title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${Date.now().toString(36)}`;
+  const file = join(state().vault, 'lib.nvim', 'ROADMAP', 'tasks', `${slug}.md`);
+  writeFileSync(file, `---\ntitle: ${title}\nstatus: open\nkind: task\n---\n\nSomething is attached to this one.\n`);
+  await pair(page);
+  await showList(page);
+  await page.getByRole('searchbox', { name: /search/i }).first().fill(title);
+  await page.locator('button.row', { hasText: title }).click();
+  const float = taskFloat(page);
+  await expect(float).toBeVisible();
+  return { float, dir: join(state().vault, 'lib.nvim', 'ROADMAP', 'tasks', slug), attached: float.locator('.attached input') };
+}
+
+/** A stream with a moving picture in place of a camera or a screen: a canvas that is drawn on. */
+const FAKE_STREAM = `
+  window.__fakeStream = () => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 320;
+    canvas.height = 240;
+    const context = canvas.getContext('2d');
+    let n = 0;
+    const draw = () => {
+      n += 1;
+      context.fillStyle = n % 2 === 0 ? 'navy' : 'teal';
+      context.fillRect(0, 0, 320, 240);
+      context.fillStyle = 'white';
+      context.fillRect((n * 7) % 300, 100, 20, 20);
+    };
+    draw();
+    const timer = setInterval(draw, 40);
+    const stream = canvas.captureStream(25);
+    window.__fakeStreams = (window.__fakeStreams ?? 0) + 1;
+    for (const track of stream.getTracks()) {
+      const stop = track.stop.bind(track);
+      track.stop = () => { clearInterval(timer); window.__fakeStopped = (window.__fakeStopped ?? 0) + 1; stop(); };
+    }
+    return stream;
+  };
+`;
+
+for (const scheme of ['light', 'dark'] as const) {
+  test(`the detail attaches a file, a video and an image, each into its folder (${scheme}); what the hub does not let the page do says why`, async ({ page }) => {
+    test.slow();
+    await page.emulateMedia({ colorScheme: scheme });
+    // The screen: the browser's own choice of a window cannot be driven, so a canvas stands in for what it gives.
+    await page.addInitScript(`${FAKE_STREAM}
+      navigator.mediaDevices.getDisplayMedia = async () => window.__fakeStream();
+    `);
+    const { float, dir, attached } = await openAttachTask(page, `Attach kinds ${scheme}`);
+    const bar = float.getByRole('group', { name: 'Attach to this task' });
+    // The first button opens the file choice at once (no menu); the other two open a choice.
+    await expect(bar.locator('button[data-attach="file"]')).toHaveText('Attach file');
+    const video = bar.locator('details[data-choice="video"]');
+    const image = bar.locator('details[data-choice="image"]');
+
+    // A video from this computer goes to assets/videos, and the link names that folder.
+    await video.locator('summary').focus();
+    await page.keyboard.press('Enter');
+    const videoChoices = page.getByRole('group', { name: 'Video' });
+    await expect(videoChoices.getByRole('button')).toHaveText([/^Upload a video\s*$/, /^Record a video/]);
+    const chooser = page.waitForEvent('filechooser');
+    await videoChoices.getByRole('button', { name: 'Upload a video' }).click();
+    const picked = await chooser;
+    expect(await picked.element().getAttribute('accept')).toBe('video/*');
+    await picked.setFiles({ name: 'Demo Clip.webm', mimeType: 'video/webm', buffer: Buffer.from('not really a video') });
+    await expect(attached).toHaveValue('[Demo-Clip.webm](assets/videos/Demo-Clip.webm)', { timeout: WRITE_BUDGET });
+    expect(readFileSync(join(dir, 'assets', 'videos', 'Demo-Clip.webm'), 'utf8')).toBe('not really a video');
+    await expect(video).not.toHaveAttribute('open', '');
+
+    // Recording needs the camera, which this hub does not let the page use: the entry is there, says why, and a press
+    // tells it instead of doing nothing.
+    await video.locator('summary').click();
+    const record = videoChoices.getByRole('button', { name: /^Record a video/ });
+    await expect(record).toHaveAttribute('aria-disabled', 'true');
+    await expect(record).toContainText('This hub does not let the page use it');
+    await expectAccessible(page, `the choice of the video button (${scheme})`);
+    // Pressed with the keyboard (an entry that cannot be chosen stays in its order).
+    await record.focus();
+    await page.keyboard.press('Enter');
+    await expect(page.getByRole('alert').filter({ hasText: 'This hub does not let the page use it' })).toBeVisible();
+    await expect(float.locator('[data-taking]')).toHaveCount(0);
+    // Escape closes the choice and leaves the float open, with the focus back on the button.
+    await record.focus();
+    await page.keyboard.press('Escape');
+    await expect(video).not.toHaveAttribute('open', '');
+    await expect(float).toBeVisible();
+    await expect(video.locator('summary')).toBeFocused();
+
+    // An image from this computer goes to assets/images.
+    await image.locator('summary').click();
+    const imageChoices = page.getByRole('group', { name: 'Image' });
+    await expect(imageChoices.getByRole('button')).toHaveText([
+      /^Upload an image\s*$/,
+      /^Take a photo/,
+      /^Take a screenshot\s*$/,
+      /^From the clipboard of the hub\s*$/,
+    ]);
+    await expect(imageChoices.getByRole('button', { name: /^Take a photo/ })).toHaveAttribute('aria-disabled', 'true');
+    await page.keyboard.press('Escape');
+    const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64');
+    await float.locator('[data-image-picker]').setInputFiles({ name: 'photo one.png', mimeType: 'image/png', buffer: png });
+    await expect(attached).toHaveValue('![photo-one.png](assets/images/photo-one.png)', { timeout: WRITE_BUDGET });
+    expect(readFileSync(join(dir, 'assets', 'images', 'photo-one.png')).equals(png)).toBe(true);
+
+    // A screenshot: one picture of what the browser shares becomes a PNG in assets/screenshots, and the sharing ends.
+    await image.locator('summary').click();
+    await imageChoices.getByRole('button', { name: 'Take a screenshot' }).click();
+    await expect(attached).toHaveValue(/^!\[screenshot-\d{8}-\d{6}\.png\]\(assets\/screenshots\/screenshot-\d{8}-\d{6}\.png\)$/, { timeout: WRITE_BUDGET });
+    const shots = readdirSync(join(dir, 'assets', 'screenshots'));
+    expect(shots).toHaveLength(1);
+    const shot = readFileSync(join(dir, 'assets', 'screenshots', shots[0] ?? ''));
+    expect(shot.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))).toBe(true);
+    // 320 x 240, the size of what was shared (the IHDR chunk).
+    expect([shot.readUInt32BE(16), shot.readUInt32BE(20)]).toEqual([320, 240]);
+    expect(await page.evaluate(() => (window as unknown as { __fakeStopped?: number }).__fakeStopped ?? 0)).toBeGreaterThan(0);
+
+    // The first button takes any file and files it by what it is: an image to the images, a document to assets/.
+    await float.locator('[data-file-picker]').setInputFiles({ name: 'second.png', mimeType: 'image/png', buffer: png });
+    await expect(attached).toHaveValue('![second.png](assets/images/second.png)', { timeout: WRITE_BUDGET });
+    await float.locator('[data-file-picker]').setInputFiles({ name: 'notes.txt', mimeType: 'text/plain', buffer: Buffer.from('text') });
+    await expect(attached).toHaveValue('[notes.txt](assets/notes.txt)', { timeout: WRITE_BUDGET });
+    expect(readdirSync(join(dir, 'assets')).sort()).toEqual(['images', 'notes.txt', 'screenshots', 'videos']);
+    await expectAccessible(page, `the detail with attached files (${scheme})`);
+    expect(consoleProblems.get(page)).toEqual([]);
+  });
+}
+
+test('a video is recorded and a photo is taken in the page where it may use the camera: both are attached, a discarded one is not', async ({ page }) => {
+  test.slow();
+  // This hub does not let the page use the camera; the test stands in for a hub that does, and for the camera.
+  await page.addInitScript(`${FAKE_STREAM}
+    Object.defineProperty(document, 'featurePolicy', { value: { allowsFeature: () => true } });
+    navigator.mediaDevices.getUserMedia = async () => window.__fakeStream();
+  `);
+  const { float, dir, attached } = await openAttachTask(page, 'Attach camera');
+  const bar = float.getByRole('group', { name: 'Attach to this task' });
+  const video = bar.locator('details[data-choice="video"]');
+  const image = bar.locator('details[data-choice="image"]');
+  const streams = () => page.evaluate(() => {
+    const w = window as unknown as { __fakeStreams?: number; __fakeStopped?: number };
+    return [w.__fakeStreams ?? 0, w.__fakeStopped ?? 0];
+  });
+
+  // A recording that is discarded: the camera goes off, nothing is attached.
+  await video.locator('summary').click();
+  const record = page.getByRole('group', { name: 'Video' }).getByRole('button', { name: 'Record a video' });
+  await expect(record).not.toHaveAttribute('aria-disabled', 'true');
+  await record.click();
+  const taking = float.getByRole('group', { name: 'Record a video' });
+  await expect(taking.getByRole('status')).toContainText('Recording');
+  // While something is taken the buttons do not start another.
+  await expect(video.locator('summary')).toHaveAttribute('aria-disabled', 'true');
+  await expectAccessible(page, 'the detail while a video is recorded');
+  await taking.getByRole('button', { name: 'Discard' }).click();
+  await expect(taking).toHaveCount(0);
+  expect(await streams()).toEqual([1, 1]);
+  expect(existsSync(join(dir, 'assets'))).toBe(false);
+
+  // Recorded and stopped: a video file in assets/videos, named by the time it was taken.
+  await video.locator('summary').click();
+  await record.click();
+  await expect(taking.getByRole('status')).toContainText('Recording');
+  const stop = taking.getByRole('button', { name: 'Stop and attach' });
+  await expect(stop).toBeFocused();
+  await page.waitForTimeout(700);
+  await page.keyboard.press('Enter');
+  await expect(attached).toHaveValue(/^\[video-\d{8}-\d{6}\.webm\]\(assets\/videos\/video-\d{8}-\d{6}\.webm\)$/, { timeout: WRITE_BUDGET });
+  await expect(taking).toHaveCount(0);
+  const clips = readdirSync(join(dir, 'assets', 'videos'));
+  expect(clips).toHaveLength(1);
+  const clip = readFileSync(join(dir, 'assets', 'videos', clips[0] ?? ''));
+  // A WebM file (EBML) with something in it.
+  expect(clip.subarray(0, 4).equals(Buffer.from([0x1a, 0x45, 0xdf, 0xa3]))).toBe(true);
+  expect(clip.length).toBeGreaterThan(200);
+  expect(await streams()).toEqual([2, 2]);
+
+  // A photo: the camera is shown, one picture of it becomes a PNG in assets/images.
+  await image.locator('summary').click();
+  await page.getByRole('group', { name: 'Image' }).getByRole('button', { name: 'Take a photo' }).click();
+  const photo = float.getByRole('group', { name: 'Take a photo' });
+  await expect(photo.getByRole('status')).toContainText('The camera is on');
+  await photo.getByRole('button', { name: 'Take the photo' }).click();
+  await expect(attached).toHaveValue(/^!\[photo-\d{8}-\d{6}\.png\]\(assets\/images\/photo-\d{8}-\d{6}\.png\)$/, { timeout: WRITE_BUDGET });
+  const photos = readdirSync(join(dir, 'assets', 'images'));
+  expect(photos).toHaveLength(1);
+  const taken = readFileSync(join(dir, 'assets', 'images', photos[0] ?? ''));
+  expect(taken.subarray(0, 4).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47]))).toBe(true);
+  expect([taken.readUInt32BE(16), taken.readUInt32BE(20)]).toEqual([320, 240]);
+  expect(await streams()).toEqual([3, 3]);
+
+  // Closing the float while the camera is on switches it off.
+  await image.locator('summary').click();
+  await page.getByRole('group', { name: 'Image' }).getByRole('button', { name: 'Take a photo' }).click();
+  await expect(photo.getByRole('status')).toContainText('The camera is on');
+  await closeFloat(page);
+  await expect.poll(streams).toEqual([4, 4]);
+  expect(consoleProblems.get(page)).toEqual([]);
+});
+
+test('a camera that is refused or missing is told, and nothing is attached', async ({ page }) => {
+  await page.addInitScript(`
+    Object.defineProperty(document, 'featurePolicy', { value: { allowsFeature: () => true } });
+    window.__cameraError = 'NotAllowedError';
+    navigator.mediaDevices.getUserMedia = async () => { throw new DOMException('no', window.__cameraError); };
+    navigator.mediaDevices.getDisplayMedia = async () => { throw new DOMException('closed', 'NotAllowedError'); };
+  `);
+  const { float, dir } = await openAttachTask(page, 'Attach refused');
+  const bar = float.getByRole('group', { name: 'Attach to this task' });
+  const image = bar.locator('details[data-choice="image"]');
+  const choices = page.getByRole('group', { name: 'Image' });
+  await image.locator('summary').click();
+  await choices.getByRole('button', { name: 'Take a photo' }).click();
+  await expect(page.getByRole('alert').filter({ hasText: 'The camera was not allowed' })).toBeVisible();
+  await expect(float.locator('[data-taking]')).toHaveCount(0);
+  await page.evaluate(() => ((window as unknown as { __cameraError: string }).__cameraError = 'NotFoundError'));
+  await image.locator('summary').click();
+  await choices.getByRole('button', { name: 'Take a photo' }).click();
+  await expect(page.getByRole('alert').filter({ hasText: 'No camera was found' })).toBeVisible();
+  // The choice of the screen closed without choosing is a change of mind: no error is told, the buttons work again.
+  const alerts = await page.getByRole('alert').count();
+  await image.locator('summary').click();
+  await choices.getByRole('button', { name: 'Take a screenshot' }).click();
+  await expect(image.locator('summary')).not.toHaveAttribute('aria-disabled', 'true');
+  expect(await page.getByRole('alert').count()).toBeLessThanOrEqual(alerts);
+  expect(existsSync(join(dir, 'assets'))).toBe(false);
+});
