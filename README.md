@@ -507,6 +507,19 @@ pnpm build        # ui/dist
 pnpm check && pnpm test
 ```
 
+`pnpm test` runs three kinds of test, all in one run of vitest (about 20 s):
+
+| Kind | File | What it sees | For |
+| --- | --- | --- | --- |
+| Pure | `*.test.ts` | functions and the state of the page (`App` on a hub that answers from memory, `ui/src/lib/appDouble.ts`) | rules of the page, what a method sends and keeps |
+| Drawn to text | `*.test.ts` with `render` of `svelte/server` | the markup of a component, once; **no `$effect` ever runs** | what is offered and what is not (a button, a text) |
+| In a DOM | `*.dom.test.ts`, first line `// @vitest-environment jsdom`, `mount` and `flushSync` of `svelte` | a component with its effects running, over time: a state changes, the effects react, the DOM follows | logic that lives in an effect, and states that are hard to bring about in a browser test (a list from the cache that is older than what a link names) |
+
+A DOM test is no browser: jsdom lays nothing out (no sizes, no scrolling, no CSS that takes effect) and draws
+nothing, so what the eye, the keyboard order or axe judge stays with the browser tests below. The first one is
+`ui/src/views/PlanView.dom.test.ts` (3 cases, about 0.2 s of test time, 5 s when run alone with its start). The
+same kind of test is in appkit (`ui-kit/src/*.dom.test.ts`).
+
 The interface is part of the binary: `build.rs` embeds `ui/dist`, so build
 the interface first and the hub after (`pnpm build`, then `cargo build`). A
 hub built without `ui/dist` shows a placeholder page. For work on the

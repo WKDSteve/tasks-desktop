@@ -139,7 +139,20 @@ pnpm web:build && PLAYWRIGHT_BROWSERS_PATH="$PWD/node_modules/.cache/ms-playwrig
   Wiederholungen den Vault, und wer nach Positionen in einer Liste fragt (Inbox),
   sieht die Tasks der anderen kommen und gehen.
 - Anfragen zählen (`page.on('request')`) für alles, was ein `$effect` auslöst; die
-  Unit-Tests sehen keine Effekte. Mehr dazu in der Vorlage `web`.
+  Unit-Tests mit `svelte/server` sehen keine Effekte. Mehr dazu in der Vorlage `web`.
+
+## Welche Testart (alle drei laufen in `pnpm test`)
+
+- **Rein** (`*.test.ts`): Funktionen und der Zustand der Seite. `App` auf einem Hub aus dem Speicher: `make` und
+  `FakeHub` aus `ui/src/lib/appDouble.ts` (auch für die DOM-Tests, nie eine zweite Attrappe bauen).
+- **Als Text gezeichnet** (`render` aus `svelte/server`): was eine Komponente anbietet. Ein `$effect` läuft dort nie.
+- **Im DOM** (`*.dom.test.ts`, erste Zeile `// @vitest-environment jsdom`, `mount` + `flushSync`, danach `unmount`
+  und `app.stop()`): Logik in Effekten und Zustände über die Zeit (Liste aus dem Cache, dann die frische). Vorlage:
+  `ui/src/views/PlanView.dom.test.ts`. Nutzt die Datei Runen (`$state`), heißt sie `*.dom.svelte.test.ts`. Kein
+  Ersatz für die Browser-Tests: jsdom kennt kein Layout, kein Scrollen und kein axe. Die `resolve.conditions` für
+  den Browser-Build von Svelte setzt `vite.config.ts` nur unter vitest.
+- Logik muss nicht mehr nur deshalb in eine reine Funktion gezogen werden, weil sie in einem Effekt steht; eine reine
+  Funktion bleibt trotzdem die erste Wahl, wo sie die Sache einfacher macht (`dropsChoice`).
 
 ## Nie
 

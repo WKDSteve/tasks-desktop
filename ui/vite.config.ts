@@ -21,11 +21,17 @@ const test = {
   include: ['src/**/*.test.ts', 'e2e-device/**/*.test.ts'],
 };
 
+// The tests that mount a component in a DOM (`*.dom.test.ts`, jsdom, `// @vitest-environment jsdom`) need the browser
+// build of Svelte: `mount` and the effects are not in the one Node gets. Only for the tests: a build keeps Vite's own
+// conditions.
+const resolve = process.env['VITEST'] ? { conditions: ['browser'] } : {};
+
 // `vite build --mode web` builds the page of the web variant: one module with everything in it, out of `dist-web/`.
 // `web/pack.mjs` turns that into the single `tasks.html` (script, style, engine parts embedded, the CSP).
 // Nothing in it may fetch: no preload, no split chunk, no file next to the page, so an icon is a data: URL.
 const web = defineConfig({
   plugins: [svelte()],
+  resolve,
   base: './',
   define: {
     __DOC_INDEX__: docIndex,
@@ -52,6 +58,7 @@ const web = defineConfig({
 // data: URL, no inline script (the CSP of the shell allows 'self' only).
 const hub = defineConfig({
   plugins: [svelte()],
+  resolve,
   base: './',
   define: { __DOC_INDEX__: docIndex },
   build: {
