@@ -7,7 +7,8 @@ Starts the given program as `serve` on a free port with a config folder of its o
 folder (nothing of the installed hub is read or changed: no AppData, no registry, not port 17615),
 pairs the way the page does, times the read routes and prints a Markdown report. It only reads the
 vault. The hub it started is ended again (its own process, never one found by name), and the config
-folder is removed.
+folder is removed; should this program be killed before that, the hub ends itself a minute after the
+connection is gone.
 
 The report holds no path and no title of the vault: counts, sizes and times only.
 """
@@ -167,37 +168,72 @@ def wait_for(what: str, ready, limit: float = START_LIMIT, child: subprocess.Pop
         time.sleep(0.02)
 
 
+def log_tail(log_path: pathlib.Path, lines: int = 15) -> str:
+    """The last lines the hub wrote: the reason it gives when it does not start or has no engine."""
+    try:
+        text = log_path.read_text(encoding='utf-8', errors='replace')
+    except OSError:
+        return ''
+    return '\n'.join(text.splitlines()[-lines:])
+
+
+def remove_folder(folder: pathlib.Path) -> bool:
+    """Remove the config folder. On Windows a process the hub started may hold a file in it for a moment longer."""
+    for _ in range(50):
+        shutil.rmtree(folder, ignore_errors=True)
+        if not folder.exists():
+            return True
+        time.sleep(0.1)
+    return False
+
+
+def build_profile(exe: pathlib.Path) -> str:
+    """`release` or `debug` when the program sits in cargo's folder of that name; else it is not known."""
+    name = exe.parent.name
+    return name if name in ('release', 'debug') else 'unknown'
+
+
 def measure(exe: pathlib.Path, vault: pathlib.Path, runs: int, details: int) -> dict:
     config = pathlib.Path(tempfile.mkdtemp(prefix='tasks-desktop-measure-'))
-    env = dict(os.environ)
-    for name in ('TASKS_DESKTOP_PORT', 'TASKS_DESKTOP_DETACHED', 'TASKS_DESKTOP_TAILNET'):
-        env.pop(name, None)
-    env.update(
-        TASKS_DESKTOP_CONFIG_DIR=str(config),
-        TASKS_VAULT=str(vault),
-        TASKS_DESKTOP_NO_LOGIN_SYNC='1',
-        TASKS_DESKTOP_NO_SETUP='1',
-    )
-    port = free_port()
-    log = open(config / 'serve.log', 'wb')
-    began = time.perf_counter()
-    child = subprocess.Popen(
-        [str(exe), 'serve', '--port', str(port)], env=env, stdin=subprocess.DEVNULL, stdout=log, stderr=log
-    )
+    log_path = config / 'serve.log'
+    child = None
+    log = None
     try:
+        env = dict(os.environ)
+        for name in ('TASKS_DESKTOP_PORT', 'TASKS_DESKTOP_TAILNET'):
+            env.pop(name, None)
+        env.update(
+            TASKS_DESKTOP_CONFIG_DIR=str(config),
+            TASKS_VAULT=str(vault),
+            TASKS_DESKTOP_NO_LOGIN_SYNC='1',
+            TASKS_DESKTOP_NO_SETUP='1',
+            # As a hub in the background, with a minute alone: if this program is killed (a time limit, the task
+            # manager) and never reaches its `finally`, the hub does not stay behind. While it measures, its
+            # connection with a session keeps the hub here.
+            TASKS_DESKTOP_DETACHED='1',
+            TASKS_DESKTOP_ALONE_SECS='60',
+        )
+        log = open(log_path, 'wb')
+        began = time.perf_counter()
+        child = subprocess.Popen(
+            [str(exe), 'serve', '--port', str(free_port())],
+            env=env,
+            stdin=subprocess.DEVNULL,
+            stdout=log,
+            stderr=log,
+        )
         wait_for('the hub wrote hub.json', lambda: (config / 'hub.json').exists(), child=child)
         up = time.perf_counter() - began
+        # The port the hub really took: it moves to a free one when the wanted one was taken meanwhile.
+        port = json.loads((config / 'hub.json').read_text(encoding='utf-8'))['port']
         hub = Hub(port)
         hub.pair((config / 'control.secret').read_text(encoding='utf-8').strip())
 
-        def hello():
-            status, _, data, _ = hub.request('GET', ROUTE + 'hello')
-            return json.loads(data) if status == 200 else None
-
-        doc = hello()
-        if not doc or not doc['engine']['ready']:
-            problem = (doc or {}).get('engine', {}).get('problem')
-            raise SystemExit(f'measure-hub: the engine is not ready ({problem}); see the note of `serve`')
+        status, _, data, _ = hub.request('GET', ROUTE + 'hello')
+        doc = json.loads(data) if status == 200 else {}
+        if not doc.get('engine', {}).get('ready'):
+            problem = doc.get('engine', {}).get('problem')
+            raise SystemExit(f'measure-hub: the engine is not ready ({problem})')
 
         rows = []
         first = hub.series('snapshot, first request', ROUTE + 'snapshot', 1)
@@ -205,30 +241,10 @@ def measure(exe: pathlib.Path, vault: pathlib.Path, runs: int, details: int) -> 
         status, headers, data, _ = hub.request('GET', ROUTE + 'snapshot')
         snapshot = json.loads(data)
         etag = headers['ETag']
-        rows.append(first)
-        rows.append(hub.series('snapshot, again', ROUTE + 'snapshot', runs))
-        rows.append(
-            hub.series('snapshot, unchanged (304)', ROUTE + 'snapshot', runs, {'If-None-Match': etag}, expect=304)
-        )
-        rows.append(hub.series('areas', ROUTE + 'areas', runs))
-        rows.append(hub.series('next', ROUTE + 'next', runs))
-
         tasks = snapshot['tasks']
-        ids = sorted(task['id'] for task in tasks)[:: max(1, len(tasks) // max(1, details))][:details]
-        firsts, agains, size = [], [], None
-        for task_id in ids:
-            # The id is plain (letters, digits, . _ - /); the hub refuses an escape in it.
-            path = ROUTE + 'task?id=' + task_id
-            status, _, data, took = hub.request('GET', path)
-            if status != 200:
-                raise SystemExit(f'measure-hub: a task detail answered HTTP {status}')
-            firsts.append(took)
-            size = len(data)
-            agains.append(hub.request('GET', path)[3])
-        if firsts:
-            rows.append(summarize('task detail, first request', firsts, size))
-            rows.append(summarize('task detail, again', agains, size))
 
+        # The search index, asked right away: every series below takes time of its own, and asked after them the
+        # index would seem to need as long as they took.
         words = frequent_words([str(task.get('title', '')) for task in tasks], 3) or ['task']
 
         def index_ready():
@@ -239,21 +255,42 @@ def measure(exe: pathlib.Path, vault: pathlib.Path, runs: int, details: int) -> 
 
         wait_for('the search index was built', index_ready, child=child)
         index_ready_at = time.perf_counter() - began
-        search_times, search_size = [], None
+
+        rows.append(first)
+        rows.append(hub.series('snapshot, again', ROUTE + 'snapshot', runs))
+        # The vault may change under the measurement (another program writes a task): the ETag is taken anew.
+        etag = hub.request('GET', ROUTE + 'snapshot')[1]['ETag'] or etag
+        rows.append(
+            hub.series('snapshot, unchanged (304)', ROUTE + 'snapshot', runs, {'If-None-Match': etag}, expect=304)
+        )
+        rows.append(hub.series('areas', ROUTE + 'areas', runs))
+        rows.append(hub.series('next', ROUTE + 'next', runs))
+
+        # Ids the hub takes as they are (letters, digits, . _ - /): it refuses an escape in one.
+        plain = sorted(task['id'] for task in tasks if re.fullmatch(r'[A-Za-z0-9._/-]+', task['id']))
+        ids = plain[:: max(1, len(plain) // max(1, details))][:details] if details else []
+        firsts, agains, largest = [], [], 0
+        for task_id in ids:
+            path = ROUTE + 'task?id=' + task_id
+            status, _, data, took = hub.request('GET', path)
+            if status != 200:
+                raise SystemExit(f'measure-hub: a task detail answered HTTP {status}')
+            firsts.append(took)
+            largest = max(largest, len(data))
+            agains.append(hub.request('GET', path)[3])
+        if firsts:
+            rows.append(summarize('task detail, first request (size: the largest)', firsts, largest))
+            rows.append(summarize('task detail, again at once', agains, largest))
+
+        search_times, largest = [], 0
         for word in words:
-            row = hub.series('search', ROUTE + 'search?q=' + urllib.parse.quote(word, safe=''), runs)
-            search_times.append(row)
-            search_size = row['bytes']
-        if search_times:
-            merged = {
-                'what': f'search, one frequent word ({len(words)} words)',
-                'n': sum(row['n'] for row in search_times),
-                'median': statistics.median(row['median'] for row in search_times),
-                'p95': max(row['p95'] for row in search_times),
-                'max': max(row['max'] for row in search_times),
-                'bytes': search_size,
-            }
-            rows.append(merged)
+            for _ in range(runs):
+                status, _, data, took = hub.request('GET', ROUTE + 'search?q=' + urllib.parse.quote(word, safe=''))
+                if status != 200:
+                    raise SystemExit(f'measure-hub: the search answered HTTP {status}')
+                search_times.append(took)
+                largest = max(largest, len(data))
+        rows.append(summarize(f'search, one frequent word ({len(words)} words; size: the largest)', search_times, largest))
 
         version = subprocess.run([str(exe), '--version'], capture_output=True, text=True, env=env, check=False)
         return {
@@ -267,15 +304,26 @@ def measure(exe: pathlib.Path, vault: pathlib.Path, runs: int, details: int) -> 
             'index_ready_ms': index_ready_at * 1000,
             'rows': rows,
         }
+    except BaseException:
+        # What the hub said (why it has no engine, why it ended) is in its log, which goes with the folder.
+        if log is not None:
+            log.flush()
+        said = log_tail(log_path)
+        if said:
+            print('measure-hub: the last lines of the hub:\n' + said, file=sys.stderr)
+        raise
     finally:
-        child.terminate()
-        try:
-            child.wait(timeout=10)
-        except subprocess.TimeoutExpired:
-            child.kill()
-            child.wait()
-        log.close()
-        shutil.rmtree(config, ignore_errors=True)
+        if child is not None:
+            child.terminate()
+            try:
+                child.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                child.kill()
+                child.wait()
+        if log is not None:
+            log.close()
+        if not remove_folder(config):
+            print(f'measure-hub: could not remove {config} (a file in it is still held); delete it', file=sys.stderr)
 
 
 def report(result: dict, profile: str, when: datetime.date) -> str:
@@ -290,7 +338,8 @@ def report(result: dict, profile: str, when: datetime.date) -> str:
         '| --- | ---: |',
         f"| program started until `hub.json` is written (the hub answers) | {ms(result['start_ms'])} |",
         f"| program started until the first snapshot is there | {ms(result['first_snapshot_ms'])} |",
-        f"| program started until the search index is built | {ms(result['index_ready_ms'])} |",
+        f"| program started until the search index is built (asked right after the first snapshot) "
+        f"| {ms(result['index_ready_ms'])} |",
         '',
         table(result['rows']),
     ]
@@ -315,12 +364,17 @@ def main(argv: list[str]) -> int:
     if args.runs < 1 or args.details < 0:
         print('measure-hub: --runs is 1 or more, --details 0 or more', file=sys.stderr)
         return 2
+    out = args.out.resolve() if args.out else None
+    if out and not out.parent.is_dir():
+        print(f'measure-hub: the folder of --out is not there: {out.parent}', file=sys.stderr)
+        return 2
     result = measure(args.exe.resolve(), args.vault.resolve(), args.runs, args.details)
-    profile = 'release' if 'release' in args.exe.resolve().parts else 'debug'
+    profile = build_profile(args.exe.resolve())
     text = json.dumps(result, indent=2) if args.json else report(result, profile, datetime.date.today())
     sys.stdout.write(text if text.endswith('\n') else text + '\n')
-    if args.out:
-        args.out.write_text(text, encoding='utf-8', newline='\n')
+    if out:
+        with open(out, 'w', encoding='utf-8', newline='\n') as file:
+            file.write(text)
     return 0
 
 

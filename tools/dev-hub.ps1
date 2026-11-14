@@ -55,6 +55,10 @@ param(
 $ErrorActionPreference = 'Stop'
 
 if ($Measure -and $Background) { throw '-Measure runs a hub of its own: not together with -Background.' }
+# The native hubs are not started on the work machine, by a person or by a session.
+if ($Measure -and $env:NVIM_MACHINE_ROLE -eq 'workstation') { throw '-Measure starts a hub: not on the workstation.' }
+# A relative -Out is where the caller stands, not the repository this script changes into.
+if ($Out) { $Out = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Out) }
 if ($env:CLAUDECODE -and -not $Measure) {
   throw 'Run this in a normal terminal, not in a Claude session (the app redirects AppData and the registry).'
 }

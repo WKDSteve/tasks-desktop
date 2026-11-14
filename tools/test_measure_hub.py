@@ -1,6 +1,7 @@
 import datetime
 import importlib.util
 import pathlib
+import tempfile
 import unittest
 
 spec = importlib.util.spec_from_file_location('measure', pathlib.Path(__file__).parent / 'measure-hub.py')
@@ -65,12 +66,30 @@ class Report(unittest.TestCase):
         self.assertTrue(text.endswith('\n'))
 
 
+class Folders(unittest.TestCase):
+    def test_the_profile_is_the_name_of_cargos_folder_and_nothing_is_guessed(self) -> None:
+        self.assertEqual(measure.build_profile(pathlib.Path('x/target/release/tasks-hub.exe')), 'release')
+        self.assertEqual(measure.build_profile(pathlib.Path('x/target/debug/tasks-hub.exe')), 'debug')
+        self.assertEqual(measure.build_profile(pathlib.Path('x/release/bin/tasks-hub.exe')), 'unknown')
+
+    def test_the_config_folder_goes_with_what_is_in_it_and_the_log_is_read_before(self) -> None:
+        folder = pathlib.Path(tempfile.mkdtemp(prefix='tasks-desktop-measure-test-'))
+        (folder / 'serve.log').write_text('\n'.join(f'line {n}' for n in range(40)), encoding='utf-8')
+        self.assertEqual(measure.log_tail(folder / 'serve.log', 2), 'line 38\nline 39')
+        self.assertEqual(measure.log_tail(folder / 'nope.log'), '')
+        self.assertTrue(measure.remove_folder(folder))
+        self.assertFalse(folder.exists())
+        self.assertTrue(measure.remove_folder(folder), 'a folder that is gone is removed')
+
+
 class Arguments(unittest.TestCase):
     def test_a_program_or_a_vault_that_is_not_there_is_a_usage_error(self) -> None:
         here = pathlib.Path(__file__)
         self.assertEqual(measure.main(['--exe', str(here.parent / 'nope.exe'), '--vault', str(here.parent)]), 2)
         self.assertEqual(measure.main(['--exe', str(here), '--vault', str(here)]), 2)
         self.assertEqual(measure.main(['--exe', str(here), '--vault', str(here.parent), '--runs', '0']), 2)
+        missing = str(here.parent / 'no-such-folder' / 'perf.md')
+        self.assertEqual(measure.main(['--exe', str(here), '--vault', str(here.parent), '--out', missing]), 2)
 
 
 if __name__ == '__main__':
