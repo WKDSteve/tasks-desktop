@@ -123,10 +123,12 @@ needs no GitHub login and no token:
 
 ```
 # the rolling build (Windows)
-powershell -ExecutionPolicy Bypass -c "irm https://github.com/WKDSteve/tasks-desktop/releases/download/latest/install.ps1 | iex"
+irm https://github.com/WKDSteve/tasks-desktop/releases/download/latest/install.ps1 | iex
 
 # a release: the same with the tag in place of latest, e.g. .../releases/download/v0.1.0/install.ps1
 ```
+
+Type the line into the PowerShell session as it is. Wrapped in a new `powershell -ExecutionPolicy Bypass -c "..."`, Microsoft Defender reports the command line as a trojan (`Trojan:Win32/Commando.B!ml`) and nothing is installed.
 
 They download the program of that build, check it against its `SHA256SUMS` (a wrong or missing
 checksum installs nothing), and hand over to `tasks-hub install`, which replaces the program in one
