@@ -32,6 +32,19 @@ packages:
 snapshots:
 
   svelte@9.9.9: {}
+
+  clsx@2.1.1:
+    dependencies:
+      other: 3.0.0
+      twice: 2.0.0
+
+  tool@1.0.0:
+    dependencies:
+      twice: 1.0.0
+
+  svelte@5.57.1:
+    dependencies:
+      twice: 7.0.0
 `;
 
 test('the version comes from the packages of the lockfile, not from what depends on it', () => {
@@ -42,6 +55,17 @@ test('the version comes from the packages of the lockfile, not from what depends
 test('a package that is not in the lockfile, or there twice, stops the build', () => {
   assert.throws(() => versionIn(LOCK, 'gone'), /0 times/);
   assert.throws(() => versionIn(LOCK, 'twice'), /2 times/);
+});
+
+test('a package there twice is the one the bundled package that brings it depends on', () => {
+  // clsx depends on twice 2.0.0; the 1.0.0 of a tool beside it does not count.
+  assert.equal(versionIn(LOCK, 'twice', 'clsx'), '2.0.0');
+  // Named by nothing, or by a version the lockfile does not hold: the build stops, as before.
+  assert.throws(() => versionIn(LOCK, 'twice', '@scope/thing'), /names none of them/);
+  assert.throws(() => versionIn(LOCK, 'twice', 'svelte'), /names none of them/);
+  assert.throws(() => versionIn(LOCK, 'gone', 'clsx'), /0 times/);
+  // There once, `via` changes nothing.
+  assert.equal(versionIn(LOCK, 'clsx', 'svelte'), '2.1.1');
 });
 
 test('the file next to the pages is what the lockfile gives', () => {

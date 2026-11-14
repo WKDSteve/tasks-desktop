@@ -32,7 +32,8 @@ export const COMPONENTS = [
   { name: 'uc.micro', pkg: 'uc.micro', license: 'MIT', in: PAGE, copyright: 'Copyright Mathias Bynens.' },
   { name: 'punycode.js', pkg: 'punycode.js', license: 'MIT', in: PAGE, copyright: 'Copyright Mathias Bynens.' },
   { name: 'modern-screenshot', pkg: 'modern-screenshot', license: 'MIT', in: PAGE, copyright: 'Copyright (c) 2021-present wxm.' },
-  { name: 'entities', pkg: 'entities', license: 'BSD-2-Clause', in: PAGE, copyright: 'Copyright (c) Felix Boehm.' },
+  // jsdom (a tool of the tests) has an `entities` of its own: the one in the page is markdown-it's.
+  { name: 'entities', pkg: 'entities', via: 'markdown-it', license: 'BSD-2-Clause', in: PAGE, copyright: 'Copyright (c) Felix Boehm.' },
 ];
 
 const MIT = `Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -73,18 +74,40 @@ BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
 CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
 ANY WAY OUT OF THE USE OF THIS, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.`;
 
-/** The version a package has in `pnpm-lock.yaml`. A package that is not there, or there twice, stops the build. */
-export function versionIn(lock, pkg) {
+const literal = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/**
+ * The version a package has in `pnpm-lock.yaml`. A package that is not there, or there twice, stops the build: which of
+ * two versions a page bundles cannot be guessed. `via` names the bundled package that brings it in: then the version is
+ * the one that package depends on, whatever other versions a tool of the build has beside it (jsdom, for the tests,
+ * has its own `entities`).
+ */
+export function versionIn(lock, pkg, via) {
   const packages = lock.slice(lock.indexOf('\npackages:'), lock.indexOf('\nsnapshots:'));
-  const escaped = pkg.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const found = [...packages.matchAll(new RegExp(`^  '?${escaped}@(\\d[^:'(]*)'?:`, 'gm'))].map((m) => m[1]);
-  if (found.length !== 1) throw new Error(`notices: ${pkg} is ${found.length} times in the lockfile, expected once`);
-  return found[0];
+  const found = [...packages.matchAll(new RegExp(`^  '?${literal(pkg)}@(\\d[^:'(]*)'?:`, 'gm'))].map((m) => m[1]);
+  if (found.length === 1) return found[0];
+  if (via === undefined || found.length === 0) {
+    throw new Error(`notices: ${pkg} is ${found.length} times in the lockfile, expected once`);
+  }
+  // The entry of `via` among the snapshots: its lines are indented deeper than its own, up to the next entry.
+  const lines = lock.slice(lock.indexOf('\nsnapshots:')).split(/\r?\n/);
+  const head = new RegExp(`^  '?${literal(via)}@${literal(versionIn(lock, via))}[^:]*'?:`);
+  const start = lines.findIndex((line) => head.test(line));
+  const wanted = new RegExp(`^      '?${literal(pkg)}'?: (\\d[^\\s(]*)`);
+  let version;
+  for (let i = start + 1; start >= 0 && i < lines.length && !/^  \S/.test(lines[i]); i += 1) {
+    const hit = wanted.exec(lines[i]);
+    if (hit) version = hit[1];
+  }
+  if (version === undefined || !found.includes(version)) {
+    throw new Error(`notices: ${pkg} is ${found.length} times in the lockfile, and ${via} names none of them`);
+  }
+  return version;
 }
 
 /** The components with their versions. */
 export function resolved(lock) {
-  return COMPONENTS.map((c) => ({ ...c, version: c.pkg ? versionIn(lock, c.pkg) : c.version }));
+  return COMPONENTS.map((c) => ({ ...c, version: c.pkg ? versionIn(lock, c.pkg, c.via) : c.version }));
 }
 
 /** The notices as plain text, without markup and without `--`: this is what goes into a comment of a page. */
