@@ -8770,3 +8770,178 @@ test('repo tiles: groups and tiles are made, an image or a letter, moved with th
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+/** Switch a check of the menu Options (the menu closes on the choice). */
+async function toggleOption(page: Page, name: string): Promise<void> {
+  await page.getByRole('menuitem', { name: 'Options', exact: true }).click();
+  await page.getByRole('menuitemcheckbox', { name, exact: true }).click();
+}
+
+for (const scheme of ['light', 'dark'] as const) {
+  test(`the list sets the areas apart in ${scheme}: bands in a mixed order, heads when grouped by area, plain rows when off`, async ({ page }) => {
+    test.slow();
+    await page.emulateMedia({ colorScheme: scheme });
+    await pair(page);
+    await showList(page);
+    const rows = page.locator('.list .rows');
+    const heads = rows.getByRole('heading', { level: 2 });
+
+    // The plan's order mixes the areas of this vault: no heads, a band and the area's name on every row.
+    const mixed = async (): Promise<void> => {
+      await expect(rows).toHaveAttribute('data-areas', 'bands');
+      await expect(heads).toHaveCount(0);
+      const count = await rows.locator('button.row').count();
+      await expect(rows.locator('.line.banded')).toHaveCount(count);
+      const firstLib = rows.locator('.line.banded', { has: page.locator('.id', { hasText: /^lib\.nvim\// }) }).first();
+      await expect(firstLib.locator('.area')).toContainText('lib.nvim');
+      // The same area has the same colour on every row, and the areas differ.
+      const bands = await rows.locator('.line.banded').evaluateAll((lines) =>
+        lines.map((line) => [line.querySelector('.area')?.getAttribute('data-area') ?? '', getComputedStyle(line).borderLeftColor] as const),
+      );
+      const byArea = new Map<string, Set<string>>();
+      for (const [area, colour] of bands) byArea.set(area, (byArea.get(area) ?? new Set()).add(colour));
+      expect(byArea.size).toBeGreaterThan(1);
+      for (const colours of byArea.values()) expect(colours.size).toBe(1);
+      expect(new Set(bands.map(([, colour]) => colour)).size).toBeGreaterThan(1);
+    };
+    await mixed();
+    await expectAccessible(page, `the list with bands (${scheme})`);
+    const idsMixed = await rows.locator('button.row .id').allTextContents();
+    await page.locator('select[data-sort]').selectOption('title');
+    await expect(rows.locator('[data-stamp]')).toHaveCount(0);
+    await mixed();
+    await page.locator('select[data-sort]').selectOption('default');
+    await expect.poll(() => rows.locator('button.row .id').allTextContents()).toEqual(idsMixed);
+
+    // Grouped by area: one head per area, each a named group with its count; inside an area the order stays.
+    await page.getByRole('checkbox', { name: 'By area' }).check();
+    await expect(rows).toHaveAttribute('data-areas', 'groups');
+    const areas = await rows.locator('.area-group').evaluateAll((groups) => groups.map((g) => g.getAttribute('data-area')));
+    expect(areas.length).toBeGreaterThan(1);
+    expect(new Set(areas).size).toBe(areas.length);
+    await expect(heads).toHaveCount(areas.length);
+    const lib = rows.getByRole('group', { name: 'lib.nvim', exact: true });
+    const libHead = lib.getByRole('heading', { level: 2 });
+    const inLib = await lib.locator('button.row').count();
+    await expect(libHead).toContainText(`${inLib} tasks`);
+    expect(await lib.locator('button.row .id').allTextContents()).toEqual(idsMixed.filter((id) => id.startsWith('lib.nvim/')));
+    // The head stays at the top while its rows scroll, and no row carries a band or the area's name.
+    expect(await libHead.evaluate((el) => getComputedStyle(el).position)).toBe('sticky');
+    await expect(rows.locator('.line.banded')).toHaveCount(0);
+    await expectAccessible(page, `the list with heads (${scheme})`);
+    // j and k go along the rows as they stand: from the first row of the list to the one below it.
+    const order = await rows.locator('button.row .id').allTextContents();
+    await rows.locator('button.row').first().click();
+    await closeFloat(page);
+    await page.locator('main').focus();
+    await page.keyboard.press('j');
+    await expect(rows.locator('button.row[aria-current="true"] .id')).toHaveText(order[1] ?? '');
+
+    // Folding with the keyboard: the rows of the area go, the others stay; the head says so.
+    const fold = libHead.getByRole('button');
+    await fold.focus();
+    await expect(fold).toHaveAttribute('aria-expanded', 'true');
+    await page.keyboard.press('Enter');
+    await expect(fold).toHaveAttribute('aria-expanded', 'false');
+    await expect(lib.locator('button.row')).toHaveCount(0);
+    await expect(libHead).toContainText(`${inLib} tasks`);
+    expect(await rows.locator('button.row').count()).toBeGreaterThan(0);
+    await page.keyboard.press('Enter');
+    await expect(lib.locator('button.row')).toHaveCount(inLib);
+    // A key that selects a task of a folded area shows the area again: the selected row is never hidden.
+    const firstGroup = rows.locator('.area-group').first();
+    const firstFold = firstGroup.getByRole('heading', { level: 2 }).getByRole('button');
+    await firstFold.click();
+    await expect(firstGroup.locator('button.row')).toHaveCount(0);
+    await page.locator('main').focus();
+    await page.keyboard.press('k');
+    await expect(firstFold).toHaveAttribute('aria-expanded', 'true');
+    await expect(rows.locator('button.row[aria-current="true"] .id')).toHaveText(order[0] ?? '');
+    await page.getByRole('checkbox', { name: 'By area' }).uncheck();
+    await mixed();
+
+    // One area alone: neither heads nor bands.
+    await page.getByRole('button', { name: /^Areas/ }).click();
+    await page.getByRole('group', { name: 'Areas' }).getByRole('checkbox', { name: /^lib\.nvim( \(\d+\))?$/ }).check();
+    await page.keyboard.press('Escape');
+    await expect(rows).toHaveAttribute('data-areas', 'none');
+    await expect(rows.locator('.line.banded')).toHaveCount(0);
+    await page.getByRole('button', { name: 'Clear all filters' }).click();
+    await expect(rows).toHaveAttribute('data-areas', 'bands');
+
+    // Switched off in Options: the list as it was, mixed or grouped, also after a reload.
+    await toggleOption(page, 'Separate areas in lists');
+    await expect(rows).toHaveAttribute('data-areas', 'none');
+    await expect(rows.locator('.line.banded, .area-head, .area')).toHaveCount(0);
+    await page.getByRole('checkbox', { name: 'By area' }).check();
+    await expect(rows.locator('button.row').first()).toBeVisible();
+    await expect(rows.locator('.line.banded, .area-head, .area')).toHaveCount(0);
+    await page.getByRole('checkbox', { name: 'By area' }).uncheck();
+    await page.reload();
+    await showList(page);
+    await expect(rows).toHaveAttribute('data-areas', 'none');
+    await toggleOption(page, 'Separate areas in lists');
+    await expect(rows).toHaveAttribute('data-areas', 'bands');
+
+    // Zebra stripes: every second row on another ground.
+    const grounds = () => rows.locator('.line').evaluateAll((lines) => lines.slice(0, 2).map((line) => getComputedStyle(line).backgroundColor));
+    const plain = await grounds();
+    expect(plain[0]).toBe(plain[1]);
+    await toggleOption(page, 'Zebra stripes in lists');
+    await expect(rows).toHaveClass(/zebra/);
+    const striped = await grounds();
+    expect(striped[0]).not.toBe(striped[1]);
+    await expectAccessible(page, `the list with zebra stripes (${scheme})`);
+    await toggleOption(page, 'Zebra stripes in lists');
+    expect(consoleProblems.get(page)).toEqual([]);
+  });
+}
+
+test('the area filter in the top bar: the same filter as the list, in every view, switched on in Options', async ({ page }) => {
+  await pair(page);
+  await showList(page);
+  const bar = page.locator('header.bar');
+  await expect(bar.getByRole('button', { name: /^Areas/ })).toHaveCount(0);
+  await toggleOption(page, 'Area filter in the top bar');
+  const inBar = bar.getByRole('button', { name: /^Areas/ });
+  await expect(inBar).toBeVisible();
+  // It stands before the state of the connection.
+  expect(
+    await bar.evaluate((el) => {
+      const filter = el.querySelector('.multi');
+      const conn = el.querySelector('.conn');
+      return filter !== null && conn !== null && (filter.compareDocumentPosition(conn) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
+    }),
+  ).toBe(true);
+  const total = await page.locator('.list .rows button.row').count();
+
+  // On the board: choosing an area there narrows the board, with the counts the list's choice has.
+  await chooseView(page, 'View', 'Board');
+  await expect(page.getByRole('group', { name: 'Board' })).toBeVisible();
+  await inBar.click();
+  const lib = page.getByRole('group', { name: 'Areas' }).getByRole('checkbox', { name: /^lib\.nvim \(\d+\)$/ });
+  const said = Number(/\((\d+)\)$/.exec(((await lib.locator('xpath=..').textContent()) ?? '').trim())?.[1]);
+  await lib.check();
+  await page.keyboard.press('Escape');
+  await expect(inBar).toContainText('lib.nvim');
+  await expect(page.locator('.card').first()).toBeVisible();
+  for (const id of await page.locator('.card .id').allTextContents()) expect(id).toMatch(/^lib\.nvim\//);
+  await expectAccessible(page, 'the board with the area filter in the bar');
+
+  // The list shows the same choice in its own filter, and as many rows as the bar said.
+  await showList(page);
+  await expect(page.locator('.list .filters').getByRole('button', { name: /^Areas/ })).toContainText('lib.nvim');
+  await expect(page.locator('.list .rows button.row')).toHaveCount(said);
+  expect(said).toBeLessThan(total);
+  // Emptied in the list, the bar is empty too.
+  await page.getByRole('button', { name: 'Clear all filters' }).click();
+  await expect(inBar).not.toContainText('lib.nvim');
+  await expect(page.locator('.list .rows button.row')).toHaveCount(total);
+
+  // It holds after a reload, and goes when switched off.
+  await page.reload();
+  await expect(page.locator('header.bar').getByRole('button', { name: /^Areas/ })).toBeVisible();
+  await toggleOption(page, 'Area filter in the top bar');
+  await expect(page.locator('header.bar').getByRole('button', { name: /^Areas/ })).toHaveCount(0);
+  expect(consoleProblems.get(page)).toEqual([]);
+});

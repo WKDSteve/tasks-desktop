@@ -22,6 +22,7 @@
   import DocsDialog from 'appkit-ui/DocsDialog.svelte';
   import { helpItems, type DocEntry } from 'appkit-ui/docs';
   import MenuBar, { type Menu } from 'appkit-ui/MenuBar.svelte';
+  import AreaFilter from './views/AreaFilter.svelte';
   import Capture from './views/Capture.svelte';
   import DoneDialog from './views/DoneDialog.svelte';
   import PrioDialog from './views/PrioDialog.svelte';
@@ -593,6 +594,27 @@
           },
           {
             kind: 'check',
+            label: t('menu.area_split'),
+            hint: t('hint.item.menu.area_split'),
+            checked: app.areaSplit,
+            onselect: () => app.setAreaSplit(!app.areaSplit),
+          },
+          {
+            kind: 'check',
+            label: t('menu.zebra'),
+            hint: t('hint.item.menu.zebra'),
+            checked: app.zebra,
+            onselect: () => app.setZebra(!app.zebra),
+          },
+          {
+            kind: 'check',
+            label: t('menu.bar_areas'),
+            hint: t('hint.item.menu.bar_areas'),
+            checked: app.barAreas,
+            onselect: () => app.setBarAreas(!app.barAreas),
+          },
+          {
+            kind: 'check',
             label: t('menu.save_manual'),
             hint: t('hint.item.menu.save_manual'),
             checked: app.saveMode === 'manual',
@@ -705,6 +727,10 @@
     <span class="spacer"></span>
     {#if app.conflicts.length > 0}
       <ConflictsButton {app} />
+    {/if}
+    {#if app.phase === 'ready' && app.barAreas}
+      <!-- A trial: the areas of the filter, for whatever view is shown (the same filter the list has). -->
+      <AreaFilter {app} hint={t('hint.ui.bar.areas')} />
     {/if}
     {#if app.phase === 'ready'}
       <span class="conn conn-{app.connection}" class:conn-full={connState === 'full'} role="status" data-hint={t(`hint.ui.conn.${connState}` as Key)}>

@@ -25,6 +25,7 @@
     target,
     stamp,
     claimant = '',
+    area,
   }: {
     task: TaskEntry;
     lang: Lang;
@@ -48,6 +49,11 @@
     stamp?: { kind: StampKind; date: string };
     /** The name this browser reserves under (lib/claims.ts): tells an own claim from one of somebody else. */
     claimant?: string;
+    /**
+     * The area of the task, shown on the row where a list mixes the areas (lib/areaBands.ts): a band in the area's
+     * colour and its name before the title. The colour never stands alone.
+     */
+    area?: { label: string; name: string; colour: number };
   } = $props();
 
   // A word this version does not know is shown as it is.
@@ -71,7 +77,7 @@
   }
 </script>
 
-<div class="line" class:marked>
+<div class="line" class:marked class:banded={area !== undefined} style:--band={area ? `var(--area-${area.colour})` : undefined}>
 <input
   type="checkbox"
   class="mark"
@@ -91,7 +97,8 @@
   onmouseover={hintWhenCut}
 >
   <span class="id">{task.id}</span>
-  <span class="title">{markHidden(task.title)}</span>
+  <!-- The area stands beside the title, not in it: the title's cell holds the title alone (its hint when cut, the tests). -->
+  <span class="what">{#if area}<span class="area" data-area={area.name}><span class="sr-only">{translate(lang, 'areas.row', { area: area.name })} </span><span aria-hidden="true">{area.label}</span></span>{/if}<span class="title">{markHidden(task.title)}</span></span>
   <span class="meta">
     <!-- A sign carries its meaning only for the eye: a screen reader gets the word (the hint is the long form). -->
     {#if !task.valid}<span class="tag bad" data-hint={hintOf(lang, 'hint', 'invalid')}><span aria-hidden="true">!</span><span class="sr-only">{translate(lang, 'mark.invalid')}</span></span>{/if}
@@ -126,6 +133,28 @@
     display: flex;
     align-items: center;
     border-bottom: 1px solid var(--border);
+  }
+  /* The band of the area: on the line, so the mark of the selected row (inside the button) stays beside it. */
+  .line.banded {
+    border-left: 3px solid var(--band);
+  }
+  .what {
+    display: flex;
+    align-items: baseline;
+    min-width: 0;
+  }
+  .what .title {
+    flex: 1;
+    min-width: 0;
+  }
+  .area {
+    flex: none;
+    margin-right: 0.45rem;
+    padding: 0 0.35rem;
+    border-radius: var(--radius);
+    background: var(--surface-2);
+    color: var(--muted);
+    font-size: 0.75rem;
   }
   .line.marked {
     background: var(--surface-2);

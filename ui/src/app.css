@@ -13,3 +13,17 @@
   height: 100%;
 }
 
+
+/* The colours of the areas in lists (lib/areaBands.ts), a trial: eight colours the palette has already, checked in both
+   themes there. When the trial stays they become tokens of the kit. A band never stands alone: the name of the area is
+   beside it. */
+:root {
+  --area-1: var(--chart-1);
+  --area-2: var(--chart-2);
+  --area-3: var(--chart-3);
+  --area-4: var(--chart-4);
+  --area-5: var(--chart-5);
+  --area-6: var(--chart-6);
+  --area-7: var(--secondary);
+  --area-8: var(--tertiary);
+}

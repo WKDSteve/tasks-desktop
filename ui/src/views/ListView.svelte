@@ -2,11 +2,14 @@
   import { CLAIM_CLASSES, isClaimClass } from '../lib/claims';
   import { taskTarget } from '../lib/context';
   import type { App } from '../lib/app.svelte';
+  import type { TaskEntry } from '../lib/contract';
   import { hintOf, labelOf, translate, type Key } from '../lib/i18n';
   import { markHidden } from '../lib/text';
   import FinishedList from './FinishedList.svelte';
   import TextHits from './TextHits.svelte';
   import TaskRow from './TaskRow.svelte';
+  import AreaFilter from './AreaFilter.svelte';
+  import { areaColour, areaLayout, areaRuns, areaTotals } from '../lib/areaBands';
   import ExportMenu from './ExportMenu.svelte';
   import MultiSelect from 'appkit-ui/MultiSelect.svelte';
   import ClearSelect from 'appkit-ui/ClearSelect.svelte';
@@ -156,32 +159,7 @@
     searchBox?.focus();
   }
   const extraOn = $derived(extraCount(app.filter) + (app.showFinished && app.can('finished') ? 1 : 0));
-  // Beside each area how many tasks it would keep under the other filters (switched off in Options).
-  const counts = $derived(app.areaCountsShown ? app.areaCounts : null);
-  const areaOptions = $derived([
-    // the area groups first: a name that stands for several areas (the engine's `area_groups`)
-    ...app.areaGroups
-      .filter((g) => !app.allAreaNames.includes(g.name))
-      .map((g) => ({
-        value: g.name,
-        label: t('areas.group', { name: g.name }),
-        title: t('areas.group.title', { members: g.members.join(', ') || '-' }),
-        ...(counts ? { suffix: String(counts.get(g.name) ?? 0) } : {}),
-      })),
-    ...app.areaNames
-      .map((name) => ({
-        value: name,
-        label: app.shortAreas ? areaLabel(name, app.allAreaNames) : name,
-        title: name,
-        ...(counts ? { suffix: String(counts.get(name) ?? 0) } : {}),
-      }))
-      .sort((x, y) => x.label.localeCompare(y.label)),
-  ]);
-  // Counts from the first picture of the cache may still change when the hub answers: the choice says so.
-  const areasNote = $derived(
-    counts && app.cachedAt !== null ? `${t('multi.note.areas')} ${t('multi.note.counts_cached')}` : t('multi.note.areas'),
-  );
-  const shown = $derived(app.shown);
+  const shown = $derived(app.listed);
 
   // A mark that the filter hides is not changed behind the person's back: marks follow what the list shows.
   $effect(() => {
@@ -291,6 +269,26 @@
   const STEP = 200;
   let limit = $state(FIRST);
   const visible = $derived(shown.slice(0, limit));
+
+  // The areas set apart (Options > "Separate areas in lists", lib/areaBands.ts): what the order of the list allows. The
+  // heads count the whole list, not only the rows drawn so far.
+  const layout = $derived(app.areaSplit ? areaLayout(shown) : 'none');
+  const runs = $derived(layout === 'groups' ? areaRuns(visible) : []);
+  const totals = $derived(layout === 'groups' ? areaTotals(shown) : new Map<string, number>());
+  const shortArea = (name: string): string => (app.shortAreas ? areaLabel(name, app.allAreaNames) : name);
+  // The areas folded away, for as long as the list is shown. The row that is selected is never hidden: selecting a task
+  // of a folded area (j, k, a link) shows the area again.
+  let folded = $state<readonly string[]>([]);
+  function toggleFold(area: string): void {
+    folded = folded.includes(area) ? folded.filter((a) => a !== area) : [...folded, area];
+  }
+  $effect(() => {
+    const id = app.selectedId;
+    untrack(() => {
+      const area = shown.find((task) => task.id === id)?.area;
+      if (area !== undefined && folded.includes(area)) folded = folded.filter((a) => a !== area);
+    });
+  });
   $effect(() => {
     if (limit >= shown.length) return;
     const frame = requestAnimationFrame(() => {
@@ -371,17 +369,7 @@
         >
       {/if}
     </span>
-    <MultiSelect
-      label={t('nav.areas')}
-      hint={t('hint.ui.list.areas')}
-      note={areasNote}
-      options={areaOptions}
-      selected={app.filter.areas}
-      onchange={(areas) => (app.filter = { ...app.filter, areas })}
-      clearLabel={t('kit.select.clear', { label: t('nav.areas') })}
-      resetLabel={t('multi.reset')}
-      searchLabel={t('multi.search')}
-    />
+    <AreaFilter {app} hint={t('hint.ui.list.areas')} />
     <MultiSelect
       label={t('list.filter.status')}
       hint={t('hint.ui.list.status')}
@@ -417,6 +405,10 @@
           </optgroup>
         {/each}
       </select>
+    </label>
+    <label class="pick group-areas" data-hint={t('hint.ui.list.group_areas')}>
+      <input type="checkbox" checked={app.groupAreas} onchange={(e) => app.setGroupAreas(e.currentTarget.checked)} />
+      <span>{t('list.group_areas')}</span>
     </label>
     <SizeToggle
       lang={app.lang}
@@ -755,8 +747,8 @@
     onlive={(columns) => (app.listColumns = columns)}
     oncommit={(columns) => app.setListColumns(columns)}
   />
-  <div class="rows">
-    {#each visible as task (task.file)}
+  <div class="rows" class:zebra={app.zebra} data-areas={layout}>
+    {#snippet row(task: TaskEntry, band: boolean)}
       <TaskRow
         {task}
         lang={app.lang}
@@ -774,10 +766,37 @@
         target={taskTarget(task)}
         stamp={sortStamp(task, app.sort)}
         claimant={app.claimName}
+        area={band ? { label: shortArea(task.area), name: task.area, colour: areaColour(task.area) } : undefined}
       />
+    {/snippet}
+    {#if layout === 'groups'}
+      {#each runs as run (run.area)}
+        {@const closed = folded.includes(run.area)}
+        <div class="area-group" role="group" aria-label={run.area} data-area={run.area}>
+          <div class="area-head" role="heading" aria-level="2" style:--band={`var(--area-${areaColour(run.area)})`}>
+            <button
+              type="button"
+              aria-expanded={!closed}
+              data-hint={t('hint.ui.list.area_head')}
+              onclick={() => toggleFold(run.area)}
+              ><span class="chevron" aria-hidden="true">{closed ? '▸' : '▾'}</span><span class="area-name" title={run.area}>{shortArea(run.area)}</span></button
+            >
+            <span class="area-count">{t('areas.head.count', { n: totals.get(run.area) ?? run.tasks.length })}</span>
+          </div>
+          {#if !closed}
+            {#each run.tasks as task (task.file)}
+              {@render row(task, false)}
+            {/each}
+          {/if}
+        </div>
+      {/each}
     {:else}
-      <p class="empty">{t('list.none')}</p>
-    {/each}
+      {#each visible as task (task.file)}
+        {@render row(task, layout === 'bands')}
+      {:else}
+        <p class="empty">{t('list.none')}</p>
+      {/each}
+    {/if}
     <TextHits {app} />
     {#if app.showFinished && app.can('finished')}
       <FinishedList {app} />
@@ -1029,6 +1048,56 @@
     flex: 1;
     min-height: 0;
     border-top: 1px solid var(--border);
+  }
+  /* The areas of a list set apart (lib/areaBands.ts): a head per area that stays at the top while its rows scroll. */
+  .area-group + .area-group {
+    margin-top: 0.6rem;
+    border-top: 1px solid var(--border);
+  }
+  .area-head {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    display: flex;
+    align-items: baseline;
+    gap: 0.6rem;
+    margin: 0;
+    padding: 0.2rem 0.6rem 0.2rem 0.45rem;
+    background: var(--surface-2);
+    border-bottom: 1px solid var(--border);
+    border-left: 3px solid var(--band);
+    font-size: 0.85rem;
+    font-weight: 600;
+  }
+  .area-head button {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 0.35rem;
+    min-width: 0;
+    padding: 0.1rem 0.2rem;
+    background: none;
+    border: 0;
+    color: var(--text);
+    font: inherit;
+    cursor: pointer;
+  }
+  .area-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .chevron {
+    color: var(--muted);
+  }
+  .area-count {
+    color: var(--muted);
+    font-weight: 400;
+    font-size: 0.8rem;
+    white-space: nowrap;
+  }
+  /* Every second row on a quieter ground (Options > "Zebra stripes in lists"). */
+  .rows.zebra :global(.line:nth-child(even)) {
+    background: color-mix(in srgb, var(--surface-2) 55%, transparent);
   }
   .empty {
     padding: 1rem;

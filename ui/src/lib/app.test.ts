@@ -6526,6 +6526,49 @@ describe('the defaults (dialog "Defaults ...")', () => {
     m.app.stop();
   });
 
+  it('groups the list by area: its rows, its keys and its export follow, the other views keep the order', async () => {
+    const m = make({ token: 't' });
+    m.hub.areaList = [
+      { name: 'pub', data_class: 'public' },
+      { name: 'inner', data_class: 'public' },
+    ];
+    m.hub.doc = snapshot([task('pub/1'), task('inner/1'), task('pub/2'), task('inner/2')]);
+    await m.app.start(null);
+    m.app.setView('list');
+    const ids = (tasks: readonly TaskEntry[]) => tasks.map((t) => t.id);
+    expect(ids(m.app.listed)).toEqual(['pub/1', 'inner/1', 'pub/2', 'inner/2']);
+    m.app.setGroupAreas(true);
+    expect(ids(m.app.listed)).toEqual(['pub/1', 'pub/2', 'inner/1', 'inner/2']);
+    // What the other views read is the order the engine gave.
+    expect(ids(m.app.shown)).toEqual(['pub/1', 'inner/1', 'pub/2', 'inner/2']);
+    // The classes of the areas come a moment after the list: then the export may name them.
+    await vi.waitFor(() => expect(m.app.exportRows().rows.map((row) => row.task.id)).toEqual(['pub/1', 'pub/2', 'inner/1', 'inner/2']));
+    m.app.select('pub/1');
+    m.app.moveSelection(1);
+    expect(m.app.selectedId).toBe('pub/2');
+    m.app.moveSelection(1);
+    expect(m.app.selectedId).toBe('inner/1');
+    // Kept for the next start of the page, and switched off again.
+    const again = make({ token: 't', prefs: m.prefs });
+    expect(again.app.groupAreas).toBe(true);
+    m.app.setGroupAreas(false);
+    expect(ids(m.app.listed)).toEqual(['pub/1', 'inner/1', 'pub/2', 'inner/2']);
+    m.app.stop();
+  });
+
+  it('keeps the switches of the areas in lists: separation on, zebra, grouping and the filter in the bar off', async () => {
+    const m = make({ token: 't' });
+    expect([m.app.areaSplit, m.app.zebra, m.app.barAreas, m.app.groupAreas]).toEqual([true, false, false, false]);
+    m.app.setAreaSplit(false);
+    m.app.setZebra(true);
+    m.app.setBarAreas(true);
+    const again = make({ token: 't', prefs: m.prefs });
+    expect([again.app.areaSplit, again.app.zebra, again.app.barAreas]).toEqual([false, true, true]);
+    again.app.resetToFactory();
+    expect([again.app.areaSplit, again.app.zebra, again.app.barAreas, again.app.groupAreas]).toEqual([true, false, false, false]);
+    m.app.stop();
+  });
+
   it('resets everything to the factory: defaults, switches, order and filter', async () => {
     const m = make({ token: 't' });
     m.hub.doc = snapshot(three);

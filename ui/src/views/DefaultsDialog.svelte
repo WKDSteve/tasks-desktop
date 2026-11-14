@@ -104,6 +104,18 @@
         <input type="checkbox" checked={app.shortAreas} onchange={(e) => app.setShortAreas(e.currentTarget.checked)} />
         {t('menu.short_areas')}
       </label>
+      <label class="check" data-hint={t('hint.item.menu.area_split')}>
+        <input type="checkbox" checked={app.areaSplit} onchange={(e) => app.setAreaSplit(e.currentTarget.checked)} />
+        {t('menu.area_split')}
+      </label>
+      <label class="check" data-hint={t('hint.item.menu.zebra')}>
+        <input type="checkbox" checked={app.zebra} onchange={(e) => app.setZebra(e.currentTarget.checked)} />
+        {t('menu.zebra')}
+      </label>
+      <label class="check" data-hint={t('hint.item.menu.bar_areas')}>
+        <input type="checkbox" checked={app.barAreas} onchange={(e) => app.setBarAreas(e.currentTarget.checked)} />
+        {t('menu.bar_areas')}
+      </label>
       <label class="check">
         <input
           type="checkbox"

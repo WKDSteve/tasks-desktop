@@ -46,6 +46,7 @@ import { cleanClaimName } from './claims';
 /** How the plan view draws: the stages or the graph of a plan, or the plans compared. */
 export type PlanDisplay = 'stages' | 'graph' | 'compare';
 import { parsePrefs, type Prefs as FinishedPrefs } from './finished';
+import { groupedByArea } from './areaBands';
 import { activeFilters, applyFilter, areaCounts, filterOfText, filterVaultOf, freshFilter, moveSelection, NONE as NO_VALUE, parseFilter, serializeFilter, type Filter } from './filter';
 import { chipLabel } from './filter-chips';
 import { inboxOf, triageKey } from './inbox';
@@ -341,6 +342,17 @@ export class App {
   shortAreas = $state(true);
   /** The choice of the areas shows beside each area how many tasks it would keep (`areaCounts`). */
   areaCountsShown = $state(true);
+  /**
+   * A list that shows several areas sets them apart (lib/areaBands.ts): a head per area where the order keeps the areas
+   * together, a band in the area's colour on each row where it mixes them. A trial; off shows the list as before.
+   */
+  areaSplit = $state(true);
+  /** The list keeps the tasks of each area together (`listed`), in the order the engine gave inside each area. */
+  groupAreas = $state(false);
+  /** Every second row of a list on a quieter ground. */
+  zebra = $state(false);
+  /** The choice of the areas also stands in the bar at the top, for every view (a trial). */
+  barAreas = $state(false);
   /** The field the statistics cut the areas up by, and the order of the areas there (`lib/stats.ts`). */
   statsDim = $state<StatDim>('status');
   statsSort = $state<StatSort>('count');
@@ -705,6 +717,10 @@ export class App {
     );
     this.shortAreas = safe(() => env.prefs.getItem('tasks-desktop.short-areas')) !== 'off';
     this.areaCountsShown = safe(() => env.prefs.getItem('tasks-desktop.area-counts')) !== 'off';
+    this.areaSplit = safe(() => env.prefs.getItem('tasks-desktop.area-split')) !== 'off';
+    this.zebra = safe(() => env.prefs.getItem('tasks-desktop.zebra')) === 'on';
+    this.groupAreas = safe(() => env.prefs.getItem('tasks-desktop.group-areas')) === 'on';
+    this.barAreas = safe(() => env.prefs.getItem('tasks-desktop.bar-areas')) === 'on';
     const stats = parseStatsPrefs(safe(() => env.prefs.getItem('tasks-desktop.stats')));
     this.statsDim = stats.dim;
     this.statsSort = stats.sort;
@@ -768,6 +784,10 @@ export class App {
     this.setDefaults(FACTORY_DEFAULTS);
     this.setShortAreas(true);
     this.setAreaCounts(true);
+    this.setAreaSplit(true);
+    this.setZebra(false);
+    this.setGroupAreas(false);
+    this.setBarAreas(false);
     this.setSaveMode('auto');
     for (const view of LAYOUT_VIEWS) this.resetLayout(view);
     this.applyDefaults();
@@ -917,6 +937,14 @@ export class App {
   get shown(): TaskEntry[] {
     const filtered = applyFilter(this.tasks, this.matchFilter(this.filter), this.today, this.crossIndex, this.quickWinSet, this.projectOf);
     return this.sort === 'default' ? filtered : applyOrder(filtered, this.#order);
+  }
+
+  /**
+   * What the list shows, in the order of its rows: `shown`, with the tasks of each area together when the list groups
+   * by area (the order of the engine stays inside each area). The keys of the list and its export go along these rows.
+   */
+  get listed(): readonly TaskEntry[] {
+    return this.groupAreas ? groupedByArea(this.shown) : this.shown;
   }
 
   /** The open tasks a saved view shows: its selection found the way the list finds its filter. */
@@ -1900,7 +1928,7 @@ export class App {
     const plain = { data: AS_THEY_ARE, words: AS_THEY_ARE };
     switch (this.view) {
       case 'list':
-        return { view: 'list', rows: this.shown.map((task) => ({ task })), ...plain };
+        return { view: 'list', rows: this.listed.map((task) => ({ task })), ...plain };
       case 'board': {
         // A file keeps the status word of the engine; the page for the printer says it as the board does.
         const status = (v: string) => labelOf(this.lang, 'status', v);
@@ -3038,6 +3066,26 @@ export class App {
     return true;
   }
 
+  setAreaSplit(on: boolean): void {
+    this.areaSplit = on;
+    safe(() => this.env.prefs.setItem('tasks-desktop.area-split', on ? 'on' : 'off'));
+  }
+
+  setGroupAreas(on: boolean): void {
+    this.groupAreas = on;
+    safe(() => this.env.prefs.setItem('tasks-desktop.group-areas', on ? 'on' : 'off'));
+  }
+
+  setZebra(on: boolean): void {
+    this.zebra = on;
+    safe(() => this.env.prefs.setItem('tasks-desktop.zebra', on ? 'on' : 'off'));
+  }
+
+  setBarAreas(on: boolean): void {
+    this.barAreas = on;
+    safe(() => this.env.prefs.setItem('tasks-desktop.bar-areas', on ? 'on' : 'off'));
+  }
+
   setShortAreas(on: boolean): void {
     this.shortAreas = on;
     safe(() => this.env.prefs.setItem('tasks-desktop.short-areas', on ? 'on' : 'off'));
@@ -4027,7 +4075,7 @@ export class App {
   }
 
   moveSelection(delta: number): void {
-    const id = moveSelection(this.shown, this.selectedId, delta);
+    const id = moveSelection(this.listed, this.selectedId, delta);
     if (id !== null && id !== this.selectedId) this.select(id);
   }
 
