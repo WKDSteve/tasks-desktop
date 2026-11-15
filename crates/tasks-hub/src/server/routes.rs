@@ -140,36 +140,9 @@ async fn task_document(st: &Shared, query: Option<&str>) -> Result<String, Respo
             "id must be <area>/<slug>",
         ));
     };
-    // The state of the vault the answer is for: the held snapshot's, so a
-    // repeated look at a task costs no engine question. A hub that holds no
-    // snapshot asks the engine and keeps nothing: this route never makes a
-    // full scan wait in front of a task.
-    let rt = st.rt();
-    let rev = rt.store.latest().and_then(|c| c.rev.clone());
-    if let Some(rev) = &rev {
-        let hit = rt.details.lock().ok().and_then(|mut d| d.get(rev, id));
-        if let Some(doc) = hit {
-            return Ok(String::from_utf8_lossy(&doc).into_owned());
-        }
-    }
-    match ask(st, Calls::Task, Some(&json!({ "id": id }))).await {
-        Ok(reply) => {
-            // The document names its own `rev`, which is not the snapshot's
-            // (it is made over the task and what it touches), so the state is
-            // the one of the held snapshot. Kept only when that snapshot is
-            // still the held one after the read: a change that came in
-            // meanwhile must not leave an old document under the new state.
-            if let Some(rev) = &rev {
-                let now = rt.store.latest().and_then(|c| c.rev.clone());
-                let table = rt.details.lock().ok().filter(|_| now.as_ref() == Some(rev));
-                if let Some(mut details) = table {
-                    details.put(rev, id, Bytes::from(reply.text.clone()));
-                }
-            }
-            Ok(reply.text)
-        }
-        Err(response) => Err(response),
-    }
+    // Held for the state of the snapshot the hub holds: the document names its own `rev`, which is not the snapshot's
+    // (it is made over the task and what it touches), so the state is the one of the held snapshot.
+    ask_held(st, false, id, Calls::Task, Some(&json!({ "id": id }))).await
 }
 
 /// Does a paired device ask (not the PC)? A request the guard named no caller for is one: every route that answers a
@@ -254,8 +227,8 @@ pub(super) async fn next(
         return device_next(&st, request, asked_n).await;
     }
     let request = serde_json::Value::Object(request);
-    match ask(&st, Calls::Next, Some(&request)).await {
-        Ok(reply) => json_response(StatusCode::OK, reply.text, None),
+    match ask_held(&st, false, &next_key(&request), Calls::Next, Some(&request)).await {
+        Ok(text) => json_response(StatusCode::OK, text, None),
         Err(response) => response,
     }
 }
@@ -278,8 +251,9 @@ async fn device_next(
     let scoped = request.contains_key("area");
     request.insert("n".to_owned(), json!(NEXT_MAX_N));
     let rt = st.rt();
-    let mut cut = match ask_as(st, true, Calls::Next, Some(&json!(request))).await {
-        Ok(reply) => match serde_json::from_str::<serde_json::Value>(&reply.text) {
+    let asked = json!(request);
+    let mut cut = match ask_held(st, true, &next_key(&asked), Calls::Next, Some(&asked)).await {
+        Ok(text) => match serde_json::from_str::<serde_json::Value>(&text) {
             Ok(doc) => device_cut::next(&rt.classes, &doc),
             Err(_) => return engine_failed(),
         },
@@ -383,11 +357,11 @@ pub(super) async fn areas(
     if let Some(response) = no_query(query.as_deref()) {
         return response;
     }
-    let reply = match ask(&st, Calls::Areas, None).await {
-        Ok(r) => r,
+    let text = match ask_held(&st, false, AREAS_KEY, Calls::Areas, None).await {
+        Ok(text) => text,
         Err(response) => return response,
     };
-    let Ok(doc) = serde_json::from_str::<serde_json::Value>(&reply.text) else {
+    let Ok(doc) = serde_json::from_str::<serde_json::Value>(&text) else {
         return error_body(
             StatusCode::BAD_GATEWAY,
             "engine_failed",

@@ -16,6 +16,7 @@
 //! * `.fake-snapshot-ms`: a `snapshot` takes that long (an engine started slowly on a busy machine);
 //! * `.fake-task-ms`, `.fake-task-calls`: a `task` read takes that long, and every one is counted;
 //! * `.fake-task-file`: the file every task is in;
+//! * `.fake-calls-areas`, `.fake-calls-next`: every `areas` and `next` question is counted;
 //! * `.fake-check-ms`, `.fake-check-done`, `.fake-check-fail`: a `check` takes that long, leaves a
 //!   note when it ran to its end, or fails;
 //! * `.fake-ops-conflict`: every operation of `ops` is refused with `conflict` (the file changed
@@ -57,6 +58,14 @@ fn tasks_before(call: &Call<'_>) {
             let _ = writeln!(calls, "task");
         }
         std::thread::sleep(Duration::from_millis(text.trim().parse().unwrap_or(0)));
+    }
+    if matches!(call.method, "areas" | "next")
+        && let Ok(mut calls) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(base.join(format!(".fake-calls-{}", call.method)))
+    {
+        let _ = writeln!(calls, "{}", call.method);
     }
     if call.method == "check" {
         if let Ok(text) = std::fs::read_to_string(base.join(".fake-check-ms")) {

@@ -20,10 +20,10 @@ fn unavailable() -> Response {
 
 /// The areas of the vault, as the engine names them; none when it cannot say (a tile then opens no area).
 async fn area_names(st: &Arc<Shared>) -> Vec<String> {
-    let Ok(reply) = ask(st, Calls::Areas, None).await else {
+    let Ok(text) = ask_held(st, false, AREAS_KEY, Calls::Areas, None).await else {
         return Vec::new();
     };
-    let Ok(doc) = serde_json::from_str::<serde_json::Value>(&reply.text) else {
+    let Ok(doc) = serde_json::from_str::<serde_json::Value>(&text) else {
         return Vec::new();
     };
     doc["areas"]

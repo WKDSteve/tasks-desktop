@@ -1,4 +1,4 @@
-//! The detail of a task is kept for one state of the vault: a second look
+//! The detail of a task, the areas and the next tasks are kept for one state of the vault: a second look
 //! costs no engine question, a change of the vault empties the table.
 
 use std::net::SocketAddr;
@@ -210,4 +210,88 @@ async fn a_hub_that_holds_no_snapshot_keeps_nothing_and_fetches_no_scan_for_a_ta
         .map(|t| t.lines().count())
         .unwrap_or(0);
     assert_eq!(scans, 0, "no snapshot was fetched for a task");
+}
+
+async fn get(r: &Rig, path: &str) -> (u16, Value) {
+    let auth = format!("Bearer {}", r.token);
+    let reply = client::request(
+        r.server.addr().port(),
+        "GET",
+        path,
+        &[("Authorization", &auth)],
+        "",
+    )
+    .await
+    .unwrap();
+    let doc = serde_json::from_str(&reply.body).unwrap_or(Value::Null);
+    (reply.status, doc)
+}
+
+fn asked(vault: &Path, method: &str) -> usize {
+    std::fs::read_to_string(vault.join(format!(".fake-calls-{method}")))
+        .map(|t| t.lines().count())
+        .unwrap_or(0)
+}
+
+#[tokio::test]
+async fn areas_and_next_are_asked_once_per_state_of_the_vault() {
+    let r = rig("areas-next").await;
+    // The page has its list first; the hub holds that state.
+    let (status, snap) = get(&r, "/api/tasks/snapshot").await;
+    assert_eq!(status, 200, "{snap}");
+
+    let (status, areas) = get(&r, "/api/tasks/areas").await;
+    assert_eq!(status, 200, "{areas}");
+    let (_, again) = get(&r, "/api/tasks/areas").await;
+    assert_eq!(again, areas);
+    assert_eq!(
+        asked(&r.vault, "areas"),
+        1,
+        "the second look came from the table"
+    );
+
+    let (status, next) = get(&r, "/api/tasks/next?n=3").await;
+    assert_eq!(status, 200, "{next}");
+    let (_, again) = get(&r, "/api/tasks/next?n=3").await;
+    assert_eq!(again, next);
+    assert_eq!(
+        asked(&r.vault, "next"),
+        1,
+        "the second look came from the table"
+    );
+    // Another question is another answer.
+    let (_, other) = get(&r, "/api/tasks/next?n=4").await;
+    assert_eq!(other["echoed"]["n"], 4, "{other}");
+    assert_eq!(asked(&r.vault, "next"), 2);
+    // A task detail beside them does not push them out.
+    task(&r, "alpha.nvim/t1").await;
+    get(&r, "/api/tasks/areas").await;
+    get(&r, "/api/tasks/next?n=3").await;
+    assert_eq!((asked(&r.vault, "areas"), asked(&r.vault, "next")), (1, 2));
+
+    // The vault changes: both are asked again for the new state.
+    std::fs::write(r.vault.join(".fake-n"), "3").unwrap();
+    touch(&r.vault, "new-task.md");
+    let deadline = Instant::now() + Duration::from_secs(15);
+    loop {
+        let (_, now) = get(&r, "/api/tasks/snapshot").await;
+        if now["rev"] != snap["rev"] {
+            break;
+        }
+        assert!(Instant::now() < deadline, "the new state was not seen");
+        tokio::time::sleep(Duration::from_millis(200)).await;
+    }
+    get(&r, "/api/tasks/areas").await;
+    get(&r, "/api/tasks/next?n=3").await;
+    assert_eq!((asked(&r.vault, "areas"), asked(&r.vault, "next")), (2, 3));
+}
+
+#[tokio::test]
+async fn a_hub_that_holds_no_snapshot_asks_areas_and_next_every_time() {
+    let r = rig("areas-cold").await;
+    get(&r, "/api/tasks/areas").await;
+    get(&r, "/api/tasks/areas").await;
+    get(&r, "/api/tasks/next").await;
+    get(&r, "/api/tasks/next").await;
+    assert_eq!((asked(&r.vault, "areas"), asked(&r.vault, "next")), (2, 2));
 }

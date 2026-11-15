@@ -129,3 +129,45 @@ pub(super) async fn ask(
     };
     engine.call(method, params).await.map_err(engine_failure)
 }
+
+/// `ask_as` for a question whose answer holds for one state of the vault (a task document, `areas`, `next`): held under
+/// `key` in the table of the runtime (`Details`) for the state of the snapshot the hub holds, so asking again costs no
+/// engine question until the vault changes or the entry is older than `DETAILS_TTL`. A hub that holds no snapshot asks
+/// the engine and keeps nothing: these routes never make a full scan wait in front of them. An answer is kept only when
+/// that snapshot is still the held one after the read (a change that came in meanwhile must not leave an old answer
+/// under the new state); a refusal is never kept.
+// The error is the answer to send, as everywhere in this file: a response is large, and rare.
+#[allow(clippy::result_large_err)]
+pub(super) async fn ask_held(
+    st: &Shared,
+    device: bool,
+    key: &str,
+    method: Method,
+    params: Option<&serde_json::Value>,
+) -> Result<String, Response> {
+    let rt = st.rt();
+    let rev = rt.store.latest().and_then(|c| c.rev.clone());
+    if let Some(rev) = &rev {
+        let hit = rt.details.lock().ok().and_then(|mut d| d.get(rev, key));
+        if let Some(doc) = hit {
+            return Ok(String::from_utf8_lossy(&doc).into_owned());
+        }
+    }
+    let reply = ask_as(st, device, method, params).await?;
+    if let Some(rev) = &rev {
+        let now = rt.store.latest().and_then(|c| c.rev.clone());
+        let table = rt.details.lock().ok().filter(|_| now.as_ref() == Some(rev));
+        if let Some(mut details) = table {
+            details.put(rev, key, Bytes::from(reply.text.clone()));
+        }
+    }
+    Ok(reply.text)
+}
+
+/// The key `areas` is held under in `Details` (a task id always has a `/`, this has none).
+pub(super) const AREAS_KEY: &str = "areas";
+
+/// The key an answer of `next` is held under in `Details`: the question to the engine is part of it.
+pub(super) fn next_key(request: &serde_json::Value) -> String {
+    format!("next {request}")
+}
