@@ -1,0 +1,8 @@
+# Files that start a process themselves (tools/check-process-starts.py; docs/PROCESSES.md of appkit):
+# <path> <count of lines found> <reason>
+#
+# The hub starts nothing by hand: the engine, the run of test sheets and everything else go through
+# appkit_core::child and appkit_hub::launch.
+
+# A test program (it plays a Neovim whose sheet starts a process of its own).
+crates/hub-testkit/src/bin/sheet-probe.rs 1 the probe of the sheet run tests (the process a sheet starts)

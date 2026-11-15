@@ -221,6 +221,9 @@ jobs:
       # The leftover check of the temp dir (tools/check-temp-leftovers.mjs) tests itself, and ci.yml is held to run it.
       - run: node --test "tools/*.test.mjs"
       - run: python tools/check-control-chars.py
+      # No process is started by hand: only through appkit_core::child and appkit_hub::launch (docs/PROCESSES.md of
+      # appkit); tools/process-starts.allow names what may.
+      - run: python tools/check-process-starts.py
       # A colour the CSS of the page states is a token of appkit-ui (the same check runs in appkit).
       - run: python tools/check-color-literals.py --root ui/src --tokens ui/src/palette.css
       # The shell scripts of the repository (NREL-16): ShellCheck is on the runner (`scoop install shellcheck`).

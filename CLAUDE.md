@@ -18,6 +18,7 @@ cargo test --locked -p hub-testkit -- --test-threads=1   # Hubs mit Engine und Z
 cd ui && pnpm e2e                        # echtes Binary, echte Engine, axe
 cd ui && pnpm e2e:device                 # Handy-Seite am echten Android-Handy (adb); ohne Handy übersprungen
 python tools/check-control-chars.py
+python tools/check-process-starts.py    # no process is started by hand (appkit_core::child, appkit_hub::launch); tools/process-starts.allow
 python tools/check-color-literals.py --root ui/src --tokens ui/src/palette.css   # no colour outside tokens and palette (CI job hygiene)
 python tools/check-bundle-size.py   # after pnpm build: the main chunk stays within its budget
 python tools/check-lock-age.py --min-days 7   # after cargo update: no crate younger than 7 days (CI job rust)

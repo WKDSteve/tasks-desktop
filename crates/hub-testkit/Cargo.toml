@@ -18,6 +18,11 @@ path = "src/lib.rs"
 name = "fake-nvim"
 path = "src/bin/fake-nvim.rs"
 
+# The Neovim of a sheet run that hangs, floods or answers (tests/sheet_run.rs).
+[[bin]]
+name = "sheet-probe"
+path = "src/bin/sheet-probe.rs"
+
 [dependencies]
 appkit-core.workspace = true
 appkit-hub.workspace = true

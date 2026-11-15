@@ -406,6 +406,13 @@ A session names one task (`{ "id" }`, a plain id and nothing else). The hub star
 vault that is read, one run at a time. Which sheets run, where they lie and whether they may run is decided behind that
 command (testing.nvim: its trust gate and the workstation). The page gets the exit code and the last 40 lines of the output.
 
+The run is a child of the hub (`appkit_core::child`, see `docs/PROCESSES.md` of appkit): Neovim under its own name, no console
+window, no shell, named in the log of the hub (`child started by tasks-hub sheet run`, written for the first run; a run
+that had to be ended is always written). It ends with the hub, together with every process the sheets started (on Linux
+and macOS within the limits that document names for a hub that is killed). The engine ends the sheets itself after 30
+minutes and says what they wrote; a run that still takes longer than 35 minutes or writes more than 16 MiB to one of its
+streams is ended by the hub the same way, and the page is told which of the two it was.
+
 The run keeps the environment of the hub (a plugin's tests need `PATH`, the tool chains, `TESTING_*` and
 `NVIM_MACHINE_ROLE`, without which the workstation guard of testing.nvim would not know where it runs), except the
 engine's own variables: every `TASKS_*` the hub was started with (`TASKS_VAULT`, `TASKS_MARKER_DOCS`, ...) is taken

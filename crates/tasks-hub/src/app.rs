@@ -719,6 +719,7 @@ pub async fn serve(opts: ServeOptions) -> Result<(), String> {
                 let vaults = Arc::clone(&for_sheets);
                 Box::pin(async move { vaults.sheet_command().await })
             }),
+            limits: crate::sheetrun::SheetLimits::default(),
         },
     )));
     let for_uploads = Arc::clone(&config_vaults);
