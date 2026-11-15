@@ -39,7 +39,10 @@ fn command(config: &Path) -> Command {
         .env("TASKS_EXTRA_AREAS", "ALL")
         // `install` must not re-point the login entry of the machine the tests run on.
         .env("TASKS_DESKTOP_NO_LOGIN_SYNC", "1")
-        .env_remove("TASKS_DESKTOP_PORT");
+        .env_remove("TASKS_DESKTOP_PORT")
+        // With the tailnet name of the machine `open` prints a second link (the phone's), and the tests that read
+        // the link took both lines for one: red on every machine that has the variable set.
+        .env_remove("TASKS_DESKTOP_TAILNET");
     cmd
 }
 
