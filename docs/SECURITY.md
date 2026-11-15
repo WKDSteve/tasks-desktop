@@ -524,14 +524,16 @@ private is opened too: it is the person at this machine who asks, and showing it
 ## Showing the vault folder, choosing a folder and making a new vault (`POST /api/tasks/vault_reveal`, `POST /api/tasks/vault_pick`, `POST /api/tasks/vault_create`)
 
 `vault_reveal` takes `{}` (any field is refused): the page names no folder. The hub shows the folder of the vault it reads in
-the file manager of the system (`explorer.exe`, `open`, `xdg-open`; no shell, the folder as the one argument) and answers
-with no path. `TASKS_DESKTOP_EDITOR_LOG` makes it write `reveal <folder>` instead of starting anything.
+the file manager of the system and answers with no path. On Windows it hands the folder to the system (`ShellExecuteW`, verb
+`explore`, a folder only) and starts no program; macOS and Linux start `/usr/bin/open` and `xdg-open` with the folder as the one
+argument, no shell. `TASKS_DESKTOP_EDITOR_LOG` makes it write `reveal <folder>` instead of starting anything.
 
 `vault_pick` takes `{}` (any field is refused): the page cannot show a folder dialog with a path, so the hub shows the one of
-the system on its own machine (PowerShell with `FolderBrowserDialog`, `osascript` with `choose folder`, `zenity` or `kdialog`; no
-shell, fixed arguments) and answers `{ "path": "<folder>" }`, or `{ "path": null }` when the dialog was closed. The answer is the
+the system on its own machine and answers `{ "path": "<folder>" }`, or `{ "path": null }` when the dialog was closed. The answer is the
 person's own choice, put in the field of the form to look at and change; nothing is added by it (`vaults/add` asks again and
-checks the folder). Only one dialog is open at a time (`pick_failed`, 502, for the second), and a hub without an opener answers
+checks the folder). On Windows the hub shows the dialog itself (`IFileOpenDialog`), no program is started; macOS and Linux start
+the dialog program of the system (`/usr/bin/osascript` with `choose folder`, `zenity` or `kdialog`; no shell, fixed arguments) as a
+child of the hub that ends with it. Only one dialog is open at a time (`pick_failed`, 502, for the second), and a hub without an opener answers
 `404 open_unavailable`. `TASKS_DESKTOP_EDITOR_LOG` makes it write `pick` and return `TASKS_DESKTOP_PICK_RESULT` (empty: closed).
 
 `vault_create` takes `{ path, area, confirm: true }` and writes on the machine of the hub, so without `confirm: true` it does

@@ -174,7 +174,7 @@ jobs:
           pattern: release-*
           path: dist
           merge-multiple: true
-      - uses: WKDSteve/appkit/release-kit/publish@c75b0d1db9c46760690d02d3fcd27ef48c11af3a # v0.52.1
+      - uses: WKDSteve/appkit/release-kit/publish@feda8c88962d9ffc8e48c18e6091e3fc4f06ea46 # v0.54.0
         with:
           token: ${{ github.token }}
           tag: ${{ github.ref_name }}
