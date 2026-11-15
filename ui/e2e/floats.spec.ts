@@ -452,6 +452,11 @@ test('the handle of a dialog comes first in the order of the focus without takin
     const confirm = page.getByRole('dialog', { name: 'Move to cascade.nvim?' });
     const heading = confirm.getByRole('heading', { name: 'Move to cascade.nvim?' });
     await expect(heading).toHaveClass(/\bfloat-head\b/);
+    // The engine's answer to the check makes the dialog taller, and a modal dialog is centred: it moves up. Measured
+    // before the answer and pressed after it, the mouse missed the heading and nothing moved (CI 42801206174: the answer
+    // came 48 ms after the click, between the measuring and the press). The confirm button names the new id once the
+    // answer is there.
+    await expect(confirm.getByRole('button', { name: `Move (becomes cascade.nvim/${slug})` })).toBeVisible({ timeout: WRITE_BUDGET });
     const before = await box(confirm);
     const h = await box(heading);
     await dragBy(page, { x: h.x + 20, y: h.y + h.height / 2 }, -50, 20);
