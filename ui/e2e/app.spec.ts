@@ -2302,6 +2302,32 @@ test('the tiles of the overview can be put in another order with the keys, the o
   await expect(page.getByRole('menuitem', { name: 'Reset the order of the tiles' })).toBeDisabled();
 });
 
+test('a tile of the overview is dragged by its grip with the mouse onto another, and the order stays', async ({ page }) => {
+  // The part of the hand check that was left (tasks-desktop/hand-pruefung-kacheln-der-uebersicht-und-filter-im-echten-ta):
+  // the keys and the buttons are tested above, this is the drag with the mouse.
+  const nextRead = () => page.waitForResponse((r) => new URL(r.url()).pathname === '/api/tasks/next');
+  let read = nextRead();
+  await pair(page);
+  await read;
+  await expect(page.getByText('Next task')).toBeVisible();
+  const order = () => page.locator('section[data-tile]:has(button.grip)').evaluateAll((els) =>
+    els.sort((a, b) => a.getBoundingClientRect().top - b.getBoundingClientRect().top).map((e) => (e as HTMLElement).dataset.tile));
+  const before = (await order()) as string[];
+  expect(before.length).toBeGreaterThan(1);
+  const after = [before[1], before[0], ...before.slice(2)];
+  // Down: the first tile onto the second puts it after the second.
+  await page.locator(`section[data-tile="${before[0]}"] button.grip`).dragTo(page.locator(`section[data-tile="${before[1]}"]`));
+  await expect.poll(order).toEqual(after);
+  read = nextRead();
+  await page.reload();
+  await read;
+  await expect.poll(order).toEqual(after);
+  // Up: it goes back before the one it was dropped on.
+  await page.locator(`section[data-tile="${before[0]}"] button.grip`).dragTo(page.locator(`section[data-tile="${before[1]}"]`));
+  await expect.poll(order).toEqual(before);
+  expect(consoleProblems.get(page)).toEqual([]);
+});
+
 test('Tasks, Next task opens the task that the tile Next task shows, not the pick of an agent', async ({ page }) => {
   await pair(page);
   const id = (await page.locator('section[data-tile="next"] p.id code').textContent())?.trim() ?? '';
