@@ -117,6 +117,18 @@ pnpm web:build && PLAYWRIGHT_BROWSERS_PATH="$PWD/node_modules/.cache/ms-playwrig
   startet Firefox aus `%LOCALAPPDATA%\ms-playwright` nicht ("Side-by-Side-Konfiguration ungültig", `mozglue`): die App
   leitet AppData um. Die Browser nach `ui/node_modules/.cache/ms-playwright` kopieren (oder dort installieren) und
   `PLAYWRIGHT_BROWSERS_PATH` darauf setzen; die CI nimmt den Tool-Cache des Runners.
+- Auf dem Runner (`CI` gesetzt) gibt `ui/playwright.config.ts` einem Test 60 s und einem `expect` 15 s, lokal 30 s und
+  5 s: dort bauen andere Programme mit, und dann ist jeder Schritt gleichmäßig langsam (Messwerte im Kommentar der
+  Datei). Ein Test, der lokal mehr als 30 s braucht, hat einen Fehler. Die Browsertests laufen in der CI im eigenen Job
+  `browser`, `cargo test --workspace` dort mit `RUST_TEST_THREADS=4` (die cli-Tests starten je einen Hub).
+- Einen roten Browsertest der CI erst lesen (Artefakt `playwright-traces`), dann wiederholen: Schritte im
+  Millisekundenbereich und ein Warten bis zur Zeitgrenze sind ein Wettlauf im Test, keine Last.
+- In einem Fenster schmaler als etwa 410 px kein Menü mit der Maus wählen: das Popup von View ragt über den rechten
+  Rand, der Klick auf den Eintrag scrollt die Seite seitwärts, Options liegt dann unter dem ruhenden Zeiger und die
+  Leiste öffnet dieses Menü (in 10 von 30 Läufen). Die Ansicht über die Adresse wählen (`pair(page, '/#view=list')`)
+  oder per Taste.
+- Ein Route-Handler, der vor `route.continue()` wartet, fängt dessen Fehler (`.catch(() => undefined)`): eine Anfrage,
+  die beim Ende des Tests noch gehalten wird, wirft sonst „Route is already handled!“ und macht den Test rot.
 - Die Tests teilen einen Vault: Titel und Dateinamen müssen eindeutig sein (ein
   Suchbegriff darf keinen Task eines anderen Tests treffen).
 - `keyboard.press('F')` sendet kein Shift: Umschalt+f ist `press('Shift+f')`.

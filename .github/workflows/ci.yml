@@ -139,11 +139,17 @@ jobs:
       # side by side on the busy runner they took the time from each other and failed now and then (the timing family of
       # tasks-desktop/write-route-tests-flackern-auf-dem-runner-the-hub-did-not-an, 2026-11-08). They run one at a time
       # (about 6 minutes); everything else runs in parallel as before.
+      # Four tests at a time: the tests of tasks-hub/tests/cli.rs start a hub with the engine each, and twelve of them
+      # at once on a busy runner did not come up within the 20 s `start` waits (run 43630294438, six tests; the same
+      # family as the eleven Neovims of testing-desktop, 7622df3). Measured on a quiet machine: 14.0 s with four
+      # threads, 13.8 s with twelve (the tests wait, they do not compute).
       - run: cargo test --workspace --locked --exclude hub-testkit
+        env:
+          RUST_TEST_THREADS: "4"
       - run: cargo test --locked -p hub-testkit -- --test-threads=1
       # No test leaves a folder in the temp dir of this job (a test makes its folder with `Scratch`, which removes it
       # also after a failure). Strict: whatever name a test gave its folder counts; `nvim` and `nvim.0` are what the real
-      # Neovim of the engine tests makes itself. The browser tests below have their own check (run-with-temp.mjs).
+      # Neovim of the engine tests makes itself. The browser tests (job browser) have their own check (run-with-temp.mjs).
       - name: The tests left nothing in the temp dir
         run: node tools/check-temp-leftovers.mjs --dir "$JOB_TEMP" --strict --allow nvim --allow nvim.0
       # The install and uninstall scripts (NREL-16) against this build, in folders of their own:
@@ -158,13 +164,60 @@ jobs:
       - name: PSScriptAnalyzer on the scripts
         shell: pwsh
         run: |
-          Install-Module PSScriptAnalyzer -RequiredVersion 1.24.0 -Scope CurrentUser -Force
+          # Only when the version is not there yet: the runners of this machine share the user's module folder, and
+          # `-Force` writes the module again while a job of another runner uses it ("currently in use", then a file
+          # of the module is missing and the step is red; testing-desktop, run 43650895614).
+          if (-not (Get-Module -ListAvailable PSScriptAnalyzer | Where-Object { $_.Version -eq '1.24.0' })) {
+            Install-Module PSScriptAnalyzer -RequiredVersion 1.24.0 -Scope CurrentUser -Force
+          }
           # Import by version too: autoloading would take the newest copy on the runner, not the pinned one.
           Import-Module PSScriptAnalyzer -RequiredVersion 1.24.0
           (Get-Module PSScriptAnalyzer).Version
           $found = @(Invoke-ScriptAnalyzer -Path scripts -Recurse -Severity Error, Warning)
           $found | Format-Table -AutoSize | Out-String | Write-Output
           if ($found) { exit 1 }
+      # The supply chain (concept 7.4): known advisories, licenses, sources.
+      - run: cargo audit
+      - run: cargo deny check
+      # No crate version younger than a week (a hijacked release is caught
+      # within hours, usually; see tools/check-lock-age.py).
+      - run: python tools/check-lock-age.py --min-days 7
+      # appkit is the one git source: the commit Cargo.lock pins must be the one its tag names now.
+      - run: python tools/check-appkit-pin.py
+
+  # The browser tests of the hub, a job of their own. They are the longest part by far: 11 of the 20 minutes the rust
+  # job took on a quiet runner, 21 minutes when other programs of the machine build at the same time, and together
+  # with the rest the one job ran into its 40 minutes (runs 43636854784 and the one for 8c53199). The repository has
+  # one runner, so the jobs still run one after the other; what the split gives is a limit per part, and a failed
+  # browser test is run again without the cargo tests and the web variant (`gh run rerun --failed`). The price is a
+  # second build of the binary (about a minute): `actions/checkout` cleans `target/` between the jobs.
+  browser:
+    runs-on: [self-hosted, windows]
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0 (node24)
+        with:
+          persist-credentials: false
+      - name: Fetch the pinned engine (tasks.nvim) and lib.nvim
+        run: |
+          commit="$(sed -n 's/^commit *= *//p' engine.lock)"
+          lib_commit="$(sed -n 's/^lib_commit *= *//p' engine.lock)"
+          rm -rf engine
+          mkdir engine
+          git clone --quiet https://github.com/WKDSteve/tasks.nvim engine/tasks.nvim
+          git -C engine/tasks.nvim checkout --quiet "$commit"
+          git clone --quiet https://github.com/WKDSteve/lib.nvim engine/lib.nvim
+          git -C engine/lib.nvim checkout --quiet "$lib_commit"
+      - run: nvim --version | head -n1 && cargo --version && pnpm --version
+      # The interface and the phone page are part of the binary (see the rust job).
+      - name: Build the interface
+        working-directory: ui
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm build
+      - name: Build the phone page
+        run: python tools/build-mobile.py
+      - run: cargo build --locked -p tasks-hub
       # The browser tests: the binary, the real engine, the system's Chrome. Each run takes a free port (e2e/port.ts): the
       # runner is the author's machine, where runs in a terminal and of other sessions take theirs.
       - name: Browser tests (Playwright, axe, XSS corpus)
@@ -179,14 +232,6 @@ jobs:
           path: ui/test-results
           if-no-files-found: ignore
           retention-days: 14
-      # The supply chain (concept 7.4): known advisories, licenses, sources.
-      - run: cargo audit
-      - run: cargo deny check
-      # No crate version younger than a week (a hijacked release is caught
-      # within hours, usually; see tools/check-lock-age.py).
-      - run: python tools/check-lock-age.py --min-days 7
-      # appkit is the one git source: the commit Cargo.lock pins must be the one its tag names now.
-      - run: python tools/check-appkit-pin.py
 
   ui:
     runs-on: [self-hosted, windows]
