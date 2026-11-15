@@ -2070,12 +2070,40 @@ test('a change in the vault arrives and the selection stays', async ({ page }) =
 test('the list comes from the cache before the hub answers', async ({ page }) => {
   await pair(page);
   await showList(page);
-  // Let the cache be written (it is after the classes are known).
-  await page.waitForTimeout(1500);
-  // From now on the hub answers a second and a half late. What shows before
-  // that can only be the cache.
+  // The cache is written once the classes are known: wait for the entry itself, not for a fixed time.
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          new Promise<boolean>((resolve) => {
+            const open = indexedDB.open('tasks-desktop', 1);
+            open.onerror = () => resolve(false);
+            open.onupgradeneeded = () => open.result.createObjectStore('list');
+            open.onsuccess = () => {
+              const db = open.result;
+              try {
+                const get = db.transaction('list').objectStore('list').get('current');
+                get.onsuccess = () => resolve(get.result !== undefined);
+                get.onerror = () => resolve(false);
+              } catch {
+                resolve(false);
+              } finally {
+                db.close();
+              }
+            };
+          }),
+      ),
+    )
+    .toBe(true);
+  // From now on the hub answers nothing until the list is seen: what shows can only be the cache. Held, not delayed
+  // by a fixed time: a loaded runner then needs longer, never gets a list from the hub (before: the hub 1.5 s late
+  // and the list within 1.4 s, a race on a busy machine).
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => (release = resolve));
+  let answered = 0;
   await page.route('**/api/**', async (route) => {
-    await new Promise((r) => setTimeout(r, 1500));
+    await held;
+    answered++;
     // A call still held when the test ends (the page asks on its own, too) has nowhere to go: the unroute below has
     // let it through already, and its `continue` then throws "Route is already handled!" (CI run 43661612407).
     await route.continue().catch(() => undefined);
@@ -2083,10 +2111,11 @@ test('the list comes from the cache before the hub answers', async ({ page }) =>
   await page.reload();
   const started = Date.now();
   await chooseView(page, 'View', 'List');
-  await expect(page.locator('button.row').first()).toBeVisible({ timeout: 1400 });
-  const seen = Date.now() - started;
-  console.log(`first list after reload, hub 1500 ms late: ${seen} ms`);
+  await expect(page.locator('button.row').first()).toBeVisible();
+  console.log(`first list after reload, the hub held: ${Date.now() - started} ms`);
   await expect(page.locator('.banner')).toContainText('last known list');
+  expect(answered).toBe(0);
+  release();
   await page.unroute('**/api/**');
 });
 

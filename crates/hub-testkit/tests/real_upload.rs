@@ -10,10 +10,10 @@ use std::time::Duration;
 
 use appkit_core::authn::{ManualClock, Secret, CODE_BYTES, TOKEN_BYTES};
 use hub_testkit::engine_home::engine_env;
+use hub_testkit::patient;
 use hub_testkit::scratch::Scratch;
 use serde_json::Value;
 use tasks_hub::classes::AreaPolicy;
-use tasks_hub::client;
 use tasks_hub::config::{Env, FileConfig, TasksSettings};
 use tasks_hub::discovery::{discover, SetupProblem};
 use tasks_hub::engine::{probe, Calls, CliEngine, Engine};
@@ -125,7 +125,7 @@ async fn a_second_upload_of_the_same_name_is_exists_and_the_task_keeps_one_asset
     let port = server.addr().port();
     let origin = format!("http://127.0.0.1:{port}");
     let auth = format!("Bearer {}", control.to_hex());
-    let reply = client::request(
+    let reply = patient::request(
         port,
         "POST",
         "/api/control/pair",
@@ -141,7 +141,7 @@ async fn a_second_upload_of_the_same_name_is_exists_and_the_task_keeps_one_asset
         .as_str()
         .unwrap()
         .to_owned();
-    let reply = client::request(
+    let reply = patient::request(
         port,
         "POST",
         "/auth/exchange",
@@ -159,7 +159,7 @@ async fn a_second_upload_of_the_same_name_is_exists_and_the_task_keeps_one_asset
         let session = session.clone();
         let origin = origin.clone();
         async move {
-            let reply = client::request(
+            let reply = patient::request(
                 port,
                 "POST",
                 path,
@@ -234,7 +234,7 @@ async fn a_second_upload_of_the_same_name_is_exists_and_the_task_keeps_one_asset
     assert_eq!(std::fs::read_to_string(&added[0]).unwrap(), "video");
     // A word that is no kind is refused before anything is taken: the page names no folder.
     for bad in ["videos", "..%2Fx", ""] {
-        let reply = client::request(
+        let reply = patient::request(
             port,
             "POST",
             &format!("/api/tasks/upload?id=lib.nvim/alpha&kind={bad}"),

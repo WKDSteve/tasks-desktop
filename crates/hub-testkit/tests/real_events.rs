@@ -24,17 +24,15 @@ use std::time::{Duration, Instant};
 
 use appkit_core::authn::{ManualClock, Secret, CODE_BYTES, TOKEN_BYTES};
 use hub_testkit::engine_home::{cache_of, engine_env};
+use hub_testkit::patient;
 use hub_testkit::scratch::Scratch;
 use serde_json::Value;
 use tasks_hub::classes::AreaPolicy;
-use tasks_hub::client;
 use tasks_hub::config::{Env, FileConfig, TasksSettings};
 use tasks_hub::discovery::{discover, SetupProblem};
 use tasks_hub::engine::{probe, Calls, CliEngine, Engine};
 use tasks_hub::server::{start, HubStatus, Limits, RunningServer, ServerConfig, WatchConfig};
 use tasks_hub::store::RefreshOptions;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::net::TcpStream;
 
 mod common;
 use common::Sse;
@@ -86,7 +84,7 @@ fn fixture() -> PathBuf {
 async fn session(addr: SocketAddr, control: &str) -> String {
     let auth = format!("Bearer {control}");
     let port = addr.port();
-    let reply = client::request(
+    let reply = patient::request(
         port,
         "POST",
         "/api/control/pair",
@@ -103,7 +101,7 @@ async fn session(addr: SocketAddr, control: &str) -> String {
         .unwrap()
         .to_owned();
     let origin = format!("http://127.0.0.1:{port}");
-    let reply = client::request(
+    let reply = patient::request(
         port,
         "POST",
         "/auth/exchange",
@@ -227,41 +225,36 @@ async fn rig(name: &str, prepare: impl FnOnce(&Path)) -> Option<Rig> {
 }
 
 impl Rig {
-    async fn get(&self, path: &str, headers: &[(&str, &str)]) -> client::Reply {
+    async fn get(&self, path: &str, headers: &[(&str, &str)]) -> patient::Reply {
         let auth = format!("Bearer {}", self.token);
         let mut all = vec![("Authorization", auth.as_str())];
         all.extend_from_slice(headers);
-        client::request(self.server.addr().port(), "GET", path, &all, "")
+        patient::request(self.server.addr().port(), "GET", path, &all, "")
             .await
             .unwrap()
     }
 
-    /// A write through the hub's route. Not with `client::request`: its 5 s are those of the hub's own programs (hello,
-    /// a pairing code), and a write is two Neovim processes, which a busy machine makes longer than that.
+    /// A write through the hub's route, with the patience of [`patient::request`]: a write is two Neovim processes,
+    /// which a busy machine makes longer than the 5 s of the hub's own client.
     async fn post_ops(&self, body: &str) -> Value {
         let port = self.server.addr().port();
-        let request = format!(
-            "POST /api/tasks/ops HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nOrigin: http://127.0.0.1:{port}\r\n\
-             Authorization: Bearer {}\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\
-             Connection: close\r\n\r\n{body}",
-            self.token,
-            body.len()
-        );
-        let exchange = async {
-            let mut stream = TcpStream::connect(self.server.addr()).await?;
-            stream.write_all(request.as_bytes()).await?;
-            let mut reply = Vec::new();
-            stream.read_to_end(&mut reply).await?;
-            Ok::<_, std::io::Error>(reply)
-        };
-        let reply = tokio::time::timeout(Duration::from_secs(30), exchange)
-            .await
-            .expect("the hub answers the write within 30 s")
-            .expect("the write is sent and its answer read");
-        let reply = String::from_utf8(reply).expect("the answer is text");
-        let (head, body) = reply.split_once("\r\n\r\n").expect("a head and a body");
-        assert!(head.starts_with("HTTP/1.1 200 "), "{head}\n{body}");
-        serde_json::from_str(body).unwrap()
+        let auth = format!("Bearer {}", self.token);
+        let origin = format!("http://127.0.0.1:{port}");
+        let reply = patient::request(
+            port,
+            "POST",
+            "/api/tasks/ops",
+            &[
+                ("Origin", origin.as_str()),
+                ("Authorization", auth.as_str()),
+                ("Content-Type", "application/json"),
+            ],
+            body,
+        )
+        .await
+        .expect("the hub answers the write");
+        assert_eq!(reply.status, 200, "{}", reply.body);
+        serde_json::from_str(&reply.body).unwrap()
     }
 
     /// A request to the engine beside the hub (not through its write route): the document of the answer.
