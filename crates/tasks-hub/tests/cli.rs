@@ -500,6 +500,84 @@ n
     assert!(!bin.join(program_name()).exists());
 }
 
+/// `tasks-hub setup` asks the questions of the first start in the console although they were answered (declined)
+/// before, and without `ASSUME_TERMINAL`: it was asked for.
+#[test]
+fn setup_asks_again_what_was_declined() {
+    use std::io::Write;
+    let config = temp_dir("setup-again");
+    let bin = temp_dir("setup-again-bin");
+    let _guard = Background(config.to_path_buf());
+    let port = free_port();
+    let first = click_with_answers(
+        &config, &bin, port, "
+n
+",
+    );
+    assert!(first.status.success());
+    assert!(!bin.join(program_name()).exists());
+
+    let mut child = command(&config)
+        .env_remove("TASKS_VAULT")
+        .env("TASKS_DESKTOP_NO_LAUNCH", "1")
+        .env("TASKS_DESKTOP_INSTALL_DIR", &bin)
+        .env("TASKS_DESKTOP_PORT", port.to_string())
+        .arg("setup")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(
+            b"
+n
+",
+        )
+        .unwrap();
+    let out = child.wait_with_output().unwrap();
+    let text = String::from_utf8_lossy(&out.stdout).into_owned();
+    assert!(
+        out.status.success(),
+        "{text}
+{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(text.contains("Path of your vault"), "{text}");
+    assert!(text.contains("Install the program"), "{text}");
+    assert!(!bin.join(program_name()).exists(), "declined again");
+}
+
+/// The installation of the page: `install --open` installs, starts the hub from the installed copy and opens its page
+/// with a pairing link (the page's sessions ended with the hub that was stopped for the copy).
+#[test]
+fn install_open_starts_the_installed_hub_and_opens_its_page() {
+    let config = temp_dir("install-open");
+    let bin = temp_dir("install-open-bin");
+    let _guard = Background(config.to_path_buf());
+    let out = command(&config)
+        .env("TASKS_DESKTOP_NO_LAUNCH", "1")
+        .env("TASKS_DESKTOP_INSTALL_DIR", &bin)
+        .env("TASKS_DESKTOP_PORT", free_port().to_string())
+        .args(["install", "--open"])
+        .output()
+        .unwrap();
+    let text = String::from_utf8_lossy(&out.stdout).into_owned();
+    assert!(
+        out.status.success(),
+        "{text}\n{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(bin.join(program_name()).is_file(), "{text}");
+    assert!(text.contains("installed:"), "{text}");
+    assert!(text.contains("#pair="), "{text}");
+    let record = std::fs::read_to_string(config.join("hub.json")).unwrap_or_default();
+    assert!(!record.is_empty(), "the hub runs");
+}
+
 #[test]
 fn nothing_is_asked_when_no_one_is_at_the_console() {
     let config = temp_dir("pipe-click");

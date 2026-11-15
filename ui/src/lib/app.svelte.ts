@@ -61,6 +61,7 @@ import { AboutState, type AboutDialog } from './state/about.svelte';
 import type { About } from './about';
 import { ConflictsState } from './state/conflicts.svelte';
 import { VaultsState } from './state/vaults.svelte';
+import { SetupState } from './state/setup.svelte';
 import { ViewsState } from './state/views.svelte';
 import { emptySelect, filterOfSelect, type ViewForm } from './views';
 import { viewMenuItems } from './viewMenu';
@@ -563,6 +564,15 @@ export class App {
   get vaultsFailed(): boolean {
     return this.vaultsState.failed;
   }
+  /** The first start in the page (its own state: `state/setup.svelte.ts`). */
+  readonly setupState = new SetupState({
+    setup: () => this.env.hub.setup(),
+    setupVault: (area) => this.env.hub.setupVault(area),
+    setupNvim: () => this.env.hub.setupNvim(),
+    installProgram: (autostart, shortcut) => this.env.hub.installProgram(autostart, shortcut),
+    declineInstall: () => this.env.hub.declineInstall(),
+    reload: () => (this.env.reload ?? (() => undefined))(),
+  });
   /** The Info dialog (its own state: `state/about.svelte.ts`). */
   readonly aboutState = new AboutState({
     available: () => this.phase === 'ready' || (this.phase === 'unavailable' && this.env.hub.hasToken),
@@ -3553,6 +3563,9 @@ export class App {
             given = true;
           }
           this.phase = 'unavailable';
+          // The steps of the first start the hub offers for what it misses (not in the web variant: no hub). Read again
+          // when what is missing changed.
+          if (this.env.mode !== 'web' && this.setupState.info?.problem !== this.problem) await this.setupState.load();
           await this.env.sleep(5000);
           if (this.stopped) return;
           continue;

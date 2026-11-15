@@ -39,6 +39,7 @@
   import { createContextRegistry, taskTarget, viewTarget } from './lib/context';
   import { vaultMenuItems } from './lib/vaultMenu';
   import ConflictCenter from './views/ConflictCenter.svelte';
+  import SetupCard from './views/SetupCard.svelte';
   import VaultsDialog from './views/VaultsDialog.svelte';
   import AboutDialog from './views/AboutDialog.svelte';
   import DefaultsDialog from './views/DefaultsDialog.svelte';
@@ -794,6 +795,7 @@
           <h1>{t(`setup.${setupKey}.title` as Key)}</h1>
           <p>{t(`setup.${setupKey}.body` as Key)}</p>
           <p class="muted">{t('state.unavailable.body')} <code>{app.problem ?? '?'}</code></p>
+          <SetupCard {app} />
         </section>
       {:else}
         {#if app.readOnly}

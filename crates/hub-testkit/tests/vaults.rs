@@ -229,6 +229,7 @@ async fn rig(name: &str, with_admin: bool) -> Rig {
             cfg,
             Extras {
                 login: None,
+                first_start: None,
                 all_vaults: None,
                 sheet_run: None,
                 testing: None,

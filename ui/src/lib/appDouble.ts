@@ -1,7 +1,7 @@
 // The app with everything around it replaced, for the tests: a hub that answers from memory (`FakeHub`), storages
 // that are maps, a clock that stands still. `make` builds an `App` on them; the tests of the state (app.test.ts) and
 // the tests that mount a component in a DOM (`*.dom.test.ts`) share it, so both test the app as it is, not a copy.
-import { ApiError, type Hub, type HubArea, type OpsRequest, type VaultList } from './api';
+import { ApiError, type Hub, type HubArea, type OpsRequest, type SetupInfo, type SetupStep, type VaultList } from './api';
 import { App, type Env } from './app.svelte';
 import type { CachedList, ListStore } from './cache';
 import type { DonePreview, Groupings, Result, Snapshot, TaskDocument, TaskEntry, View, Views } from './contract';
@@ -20,6 +20,32 @@ export function snapshot(tasks: TaskEntry[], rev = 'rev:1'): Snapshot {
 }
 
 export class FakeHub {
+  /** The first start: what `setup` answers, what the steps leave, and what was asked. */
+  setupInfo: SetupInfo = { problem: 'no_vault', install: 'install', pickProgram: true, program: 'nvim.exe' };
+  setupNext: SetupStep = { chosen: true, problem: 'nvim_not_found' };
+  setupRefusal: ApiError | null = null;
+  setupCalls: string[] = [];
+  setup = async (): Promise<SetupInfo> => {
+    this.setupCalls.push('setup');
+    return this.setupInfo;
+  };
+  setupVault = async (area: string | null): Promise<SetupStep> => {
+    this.setupCalls.push(area === null ? 'vault' : `vault ${area}`);
+    if (this.setupRefusal) throw this.setupRefusal;
+    return this.setupNext;
+  };
+  setupNvim = async (): Promise<SetupStep> => {
+    this.setupCalls.push('nvim');
+    if (this.setupRefusal) throw this.setupRefusal;
+    return this.setupNext;
+  };
+  installProgram = async (autostart: boolean, shortcut: boolean): Promise<void> => {
+    this.setupCalls.push(`install autostart=${autostart} shortcut=${shortcut}`);
+    if (this.setupRefusal) throw this.setupRefusal;
+  };
+  declineInstall = async (): Promise<void> => {
+    this.setupCalls.push('decline');
+  };
   autostartOn: boolean | null = false;
   autostart = async (): Promise<boolean | null> => this.autostartOn;
   setAutostart = async (on: boolean): Promise<boolean | null> => {

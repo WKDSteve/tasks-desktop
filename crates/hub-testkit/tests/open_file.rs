@@ -182,6 +182,7 @@ row two
             vaults: None,
             opener,
             login: login_entry,
+            first_start: None,
             all_vaults: None,
             sheet_run: runs,
             testing: None,

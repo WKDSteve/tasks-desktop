@@ -352,12 +352,18 @@ console program: its console waits for Enter before it closes). From a terminal 
 but the prompt comes back at once (the shell does not wait for a window program); a script that needs the output or
 the exit code pipes it, `(& tasks-hub --version | Out-String).Trim()`.
 
-The **first** double click also asks, once each, in a console window it opens for that: where your vault is (kept in the settings; an
-empty line skips it), whether to install the program to your user folder (no administrator rights; then
-whether to start it at login and to put a link on the desktop), and, when another version is installed, whether
-to replace it. The hub then runs from the installed copy. What was answered or declined is noted in
-`setup.json` in the settings folder, so a second click asks nothing. Without a person at the console (a pipe,
-a script) nothing is asked; `TASKS_DESKTOP_NO_SETUP=1` switches the questions off. The program of a rolling build or a release carries its engine (Neovim 0.12, cut down, with tasks.nvim and lib.nvim, see `tools/nvim.lock`): what is set by hand goes first, then that, then what is found on the machine. A build of your own without `TASKS_HUB_ENGINE_BUNDLE` needs Neovim 0.12+ and checkouts of `tasks.nvim` and `lib.nvim` (the engine), found through
+The **first** double click opens the page as every other one, and the page sets the hub up: it asks for your vault
+in the folder dialog of Windows (an existing one, or a new one made in the folder you choose, with its first area),
+for Neovim in the file dialog when none is found (the hub runs `nvim.exe --version` before it keeps it), and offers
+to install the program to your user folder (no administrator rights; with a link on the desktop and the start at
+login if you want them), or to replace another installed version. The installation stops the hub, copies the
+program, starts the hub again from the installed copy and opens the page anew. A no is noted in `setup.json` in the
+settings folder, so it is not offered again. No console window opens for any of it.
+
+In a terminal, `tasks-hub setup` asks the same questions there (where your vault is, whether to install; an empty
+line skips the vault) and then starts the hub; a build of your own started from a terminal (a console program)
+asks them on its first start too. Without a person at the console (a pipe, a script) nothing is asked;
+`TASKS_DESKTOP_NO_SETUP=1` switches the questions off. The program of a rolling build or a release carries its engine (Neovim 0.12, cut down, with tasks.nvim and lib.nvim, see `tools/nvim.lock`): what is set by hand goes first, then that, then what is found on the machine. A build of your own without `TASKS_HUB_ENGINE_BUNDLE` needs Neovim 0.12+ and checkouts of `tasks.nvim` and `lib.nvim` (the engine), found through
 `TASKS_ENGINE_DIR` and `LIB_NVIM_DIR`, `REPOS_DIR` or the settings file; the vault is `TASKS_VAULT`.
 `tasks-hub --version` names the commit of the build; `tasks-hub stop` ends the hub.
 

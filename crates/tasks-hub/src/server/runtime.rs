@@ -13,6 +13,7 @@ pub(super) struct VaultRuntime {
     /// Shows a task file in an editor; none in a hub that cannot.
     pub(super) opener: Option<Arc<dyn FileOpener>>,
     pub(super) login: Option<Arc<dyn crate::loginentry::LoginEntry>>,
+    pub(super) first_start: Option<Arc<dyn crate::firststart::FirstStart>>,
     pub(super) all_vaults: Option<Arc<crate::allvaults::AllVaultsCheck>>,
     pub(super) sheet_run: Option<Arc<crate::sheetrun::SheetRunJob>>,
     pub(super) testing: Option<Arc<crate::testing_link::TestingLink>>,
@@ -74,6 +75,7 @@ pub(super) struct AppParts {
     pub(super) classes: Arc<AreaPolicy>,
     pub(super) opener: Option<Arc<dyn FileOpener>>,
     pub(super) login: Option<Arc<dyn crate::loginentry::LoginEntry>>,
+    pub(super) first_start: Option<Arc<dyn crate::firststart::FirstStart>>,
     pub(super) all_vaults: Option<Arc<crate::allvaults::AllVaultsCheck>>,
     pub(super) sheet_run: Option<Arc<crate::sheetrun::SheetRunJob>>,
     pub(super) testing: Option<Arc<crate::testing_link::TestingLink>>,
@@ -165,6 +167,7 @@ pub(super) fn build_runtime(
         classes: Arc::clone(&app.classes),
         opener: app.opener.clone(),
         login: app.login.clone(),
+        first_start: app.first_start.clone(),
         all_vaults: app.all_vaults.clone(),
         sheet_run: app.sheet_run.clone(),
         testing: app.testing.clone(),

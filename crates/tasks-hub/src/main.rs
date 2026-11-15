@@ -13,7 +13,10 @@ use tasks_hub::setup;
 
 const USAGE: &str = "usage:
   tasks-hub                               (no argument, as a double click) start the hub in the
-                                          background if it is not running, open the browser
+                                          background if it is not running, open the browser;
+                                          a hub that is not set up shows its first start there
+  tasks-hub setup                         ask the questions of the first start here (vault,
+                                          installation), then start the hub as above
   tasks-hub serve [--port <1024-65535>]   run the hub until Ctrl-C
   tasks-hub start [--open]                run the hub in the background (no window; log in
                                           the config folder); --open also opens the browser.
@@ -23,11 +26,11 @@ const USAGE: &str = "usage:
   tasks-hub stop                          stop the hub that runs in the background
   tasks-hub autostart on|off|status       start the hub with your login (Windows: Run key;
                                           Linux: autostart entry; macOS: launch agent)
-  tasks-hub install [--autostart] [--shortcut]
+  tasks-hub install [--autostart] [--shortcut] [--open]
                                           copy this program to a fixed place (a build
                                           then does not fight the running hub for the file)
                                           The Start menu gets a link; --shortcut adds one on
-                                          the desktop
+                                          the desktop; --open starts the hub and opens the page
   tasks-hub uninstall [--purge-settings]
                                           stop the hub, take away the login entry and the link;
                                           --purge-settings also removes the settings (never the
@@ -107,10 +110,14 @@ fn parse_areas(args: &[String]) -> Result<AreasCommand, String> {
 
 /// What a double click does: the hub runs in the background (a second click finds it), and the browser
 /// opens with a one-time link. `TASKS_DESKTOP_NO_LAUNCH` prints the link instead (the tests).
-async fn click() -> Result<(), String> {
+async fn click(ask: bool) -> Result<(), String> {
     let env = tasks_hub::config::Env::from_process();
-    // The questions of a first start (vault, install); none without a person at the console.
-    let installed = if setup::interactive(&env) {
+    // The questions of a first start (vault, install) in the console: asked for (`setup`), or a console of the
+    // program's own at a terminal. A double click gets them in the page.
+    if ask {
+        setup::forget_asked(&env)?;
+    }
+    let installed = if ask || setup::interactive(&env) {
         setup::run(&mut setup::Console, &env).await?
     } else {
         None
@@ -225,7 +232,8 @@ fn testing_link(
 /// Windows has 1 MB of stack, and the future of all the verbs together is too big for it in a debug build.
 async fn run(args: Vec<String>) -> Result<(), String> {
     match args.first().map(String::as_str) {
-        None => click().await,
+        None => click(false).await,
+        Some("setup") if args.len() == 1 => click(true).await,
         Some("help" | "--help" | "-h") => {
             println!("{USAGE}");
             Ok(())
@@ -250,17 +258,37 @@ async fn run(args: Vec<String>) -> Result<(), String> {
         Some("install") => {
             let mut opts = InstallOptions::default();
             let mut bad = false;
+            let mut open = false;
             for arg in &args[1..] {
                 match arg.as_str() {
                     "--autostart" => opts.autostart = true,
                     "--shortcut" => opts.shortcut = true,
+                    "--open" => open = true,
                     _ => bad = true,
                 }
             }
             if bad {
                 Err(USAGE.to_owned())
             } else {
-                background::install(opts).await.map(|t| print!("{t}"))
+                match background::install(opts).await {
+                    Ok(text) => {
+                        print!("{text}");
+                        // The installation of the page: the hub that was stopped for the copy took the sessions of the
+                        // page with it, so the page of the hub that runs now opens with a pairing link of its own.
+                        if open {
+                            let print_only =
+                                std::env::var_os(tasks_hub::IDENTITY.var("NO_LAUNCH")).is_some();
+                            let env = tasks_hub::config::Env::from_process();
+                            let started =
+                                background::start_from(&background::installed_program(&env)?)?;
+                            print!("{started}");
+                            open_page(started, print_only).await
+                        } else {
+                            Ok(())
+                        }
+                    }
+                    Err(e) => Err(e),
+                }
             }
         }
         Some("uninstall")

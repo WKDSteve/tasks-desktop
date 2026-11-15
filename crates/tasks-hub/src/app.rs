@@ -193,7 +193,7 @@ async fn engine_state(file: &FileConfig, env: &Env) -> EngineState {
 /// What the copy of one upload into the vault may take: a large file onto a slow disk.
 const UPLOAD_COPY_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(60 * 60);
 
-struct ConfigVaults {
+pub(crate) struct ConfigVaults {
     dir: PathBuf,
     env: Env,
     file: StdMutex<FileConfig>,
@@ -582,6 +582,61 @@ impl VaultAdmin<VaultTarget> for ConfigVaults {
     }
 }
 
+impl ConfigVaults {
+    /// The vault of the first start (the page chose it in the folder dialog, the hub checked it): it becomes the main
+    /// vault and the one that is read. Kept even when the engine cannot read it yet (Neovim is missing, say): the page
+    /// then shows the next step. Only the first start asks this (the route checks that the hub is not set up).
+    pub(crate) async fn set_first_vault(
+        &self,
+        folder: PathBuf,
+    ) -> Result<(VaultTarget, Option<PathBuf>), String> {
+        let _one = self.gate.lock().await;
+        let mut next = self.fresh()?;
+        if let Some(o) = self.vault_at(&next, &folder, config::MAIN_VAULT) {
+            return Err(refusal(o));
+        }
+        next.vault = Some(folder);
+        next.active = None;
+        let policy = self.policy_for(config::MAIN_VAULT)?;
+        let state = engine_state(&next.effective(), &self.env).await;
+        if let Some(note) = &state.note {
+            eprintln!("note: the vault of the first start cannot be read yet: {note}");
+        }
+        self.keep(next, true)?;
+        Ok((first_target(&state, policy), state.nvim.clone()))
+    }
+
+    /// The Neovim of the first start (the page chose it in the file dialog, the hub probed it): kept in the settings,
+    /// and the engine of the vault that is read is set up again with it.
+    pub(crate) async fn set_first_nvim(
+        &self,
+        nvim: PathBuf,
+    ) -> Result<(VaultTarget, Option<PathBuf>), String> {
+        let _one = self.gate.lock().await;
+        let mut next = self.fresh()?;
+        let reading = self.current();
+        next.nvim = Some(nvim);
+        next.active = reading.active.clone();
+        let policy = self.policy_for(next.active_name())?;
+        let state = engine_state(&next.effective(), &self.env).await;
+        if let Some(note) = &state.note {
+            eprintln!("note: the vault cannot be read with the Neovim of the first start: {note}");
+        }
+        self.keep(next, false)?;
+        Ok((first_target(&state, policy), state.nvim.clone()))
+    }
+}
+
+/// What the hub reads after a step of the first start: the engine when it works, else the problem that is left.
+fn first_target(state: &EngineState, policy: Arc<AreaPolicy>) -> VaultTarget {
+    VaultTarget {
+        engine: state.engine.clone(),
+        status: state.status.clone(),
+        vault: state.engine.as_ref().and(state.vault.clone()),
+        policy: Some(policy),
+    }
+}
+
 /// The data classes the hub starts with: those of the vault the settings name as the one that is read.
 fn start_policy(dir: &Path, file: &FileConfig) -> Result<Arc<AreaPolicy>, String> {
     Classes::load(dir)
@@ -727,6 +782,14 @@ pub async fn serve(opts: ServeOptions) -> Result<(), String> {
         let vaults = Arc::clone(&for_uploads);
         Box::pin(async move { vaults.upload_engine().await })
     });
+    // There without Neovim too: the first start asks for the vault in the folder dialog before Neovim is looked for.
+    let opener = Arc::new(crate::editor::HubOpener::new(nvim.clone(), env.clone()));
+    let first_start: Arc<dyn crate::firststart::FirstStart> =
+        Arc::new(crate::firststart::HubFirstStart {
+            vaults: Arc::clone(&config_vaults),
+            opener: Arc::clone(&opener),
+            env: env.clone(),
+        });
     let vaults: Arc<dyn VaultAdmin<VaultTarget>> = config_vaults;
     let snapshot_root = env.path("REPOS_DIR");
     let upload_dir = dir.join("uploads");
@@ -754,10 +817,8 @@ pub async fn serve(opts: ServeOptions) -> Result<(), String> {
         upload_engine: Some(Arc::clone(&upload_engine)),
         snapshot_root: snapshot_root.clone(),
         vaults: Some(Arc::clone(&vaults)),
-        opener: nvim.clone().map(|n| {
-            Arc::new(crate::editor::terminal_opener(n, env.clone()))
-                as Arc<dyn crate::editor::FileOpener>
-        }),
+        opener: Some(Arc::clone(&opener) as Arc<dyn crate::editor::FileOpener>),
+        first_start: Some(Arc::clone(&first_start)),
         login: Some(Arc::new(crate::loginentry::SystemLoginEntry)),
         all_vaults: Some(Arc::clone(&all_vaults)),
         sheet_run: Some(Arc::clone(&sheet_run)),
@@ -1482,6 +1543,54 @@ mod vault_tests {
         let err = admin.policy_for("work").unwrap_err();
         assert!(err.contains("areas_unreadable"), "{err}");
         assert!(!err.contains(&*cfg.to_string_lossy()), "{err}");
+    }
+
+    /// The vault of the first start becomes the main vault and the one that is read, although the engine cannot read it
+    /// yet (no Neovim here): the page then shows the step for Neovim. Neovim is kept as it was chosen, and the engine
+    /// is tried with it.
+    #[tokio::test]
+    async fn the_first_start_keeps_the_vault_and_neovim_even_before_the_engine_runs() {
+        let (admin, cfg, vault, _base) = admin("first-start");
+        let (target, nvim) = admin.set_first_vault(vault.clone()).await.unwrap();
+        assert_eq!(target.status.problem, Some("nvim_not_found"));
+        assert!(target.engine.is_none() && target.vault.is_none() && nvim.is_none());
+        let saved = config::load_file(&cfg).unwrap();
+        assert_eq!(saved.vault.as_deref(), Some(vault.as_path()));
+        assert_eq!(saved.active, None);
+        assert_eq!(admin.current().vault.as_deref(), Some(vault.as_path()));
+
+        let program = vault.parent().unwrap().join("nvim.exe");
+        std::fs::write(&program, "not a program").unwrap();
+        let (target, _) = admin.set_first_nvim(program.clone()).await.unwrap();
+        assert!(target.engine.is_none());
+        assert_ne!(
+            target.status.problem,
+            Some("nvim_not_found"),
+            "the chosen Neovim was tried"
+        );
+        let saved = config::load_file(&cfg).unwrap();
+        assert_eq!(saved.nvim.as_deref(), Some(program.as_path()));
+        assert_eq!(
+            saved.vault.as_deref(),
+            Some(vault.as_path()),
+            "the vault stays"
+        );
+    }
+
+    #[tokio::test]
+    async fn the_vault_of_the_first_start_is_not_one_of_the_list_again() {
+        let (admin, cfg, vault, _base) = admin("first-start-overlap");
+        admin.add("two", &vault.to_string_lossy()).await.unwrap();
+        let before = std::fs::read(cfg.join("config.json")).unwrap();
+        assert!(admin.set_first_vault(vault.clone()).await.is_err());
+        std::fs::create_dir(vault.join("inner")).unwrap();
+        // Inside a vault of the list: the engine would read it as an area of that one.
+        assert!(admin.set_first_vault(vault.join("inner")).await.is_err());
+        assert_eq!(
+            std::fs::read(cfg.join("config.json")).unwrap(),
+            before,
+            "a refusal wrote"
+        );
     }
 
     #[tokio::test]

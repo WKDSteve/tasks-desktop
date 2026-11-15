@@ -65,6 +65,7 @@ mod repos;
 mod routes;
 mod runtime;
 mod settings;
+mod setup;
 mod testing;
 mod upload;
 mod vaults;
@@ -123,6 +124,8 @@ pub struct Extras {
     pub all_vaults: Option<Arc<crate::allvaults::AllVaultsCheck>>,
     /// The entry that starts the hub at login; none: the page offers no switch.
     pub login: Option<Arc<dyn crate::loginentry::LoginEntry>>,
+    /// The steps of the first start in the page; none: the page only says what is missing.
+    pub first_start: Option<Arc<dyn crate::firststart::FirstStart>>,
     /// The folders `attach` takes the newest screenshot from (the settings' `attach_dirs`); none: only the clipboard.
     pub attach_dirs: Vec<std::path::PathBuf>,
     /// The folder of the hub's own a file from the page lies in until the engine has taken it; none: this hub takes no
@@ -160,6 +163,7 @@ pub async fn start_with(cfg: ServerConfig, extras: Extras) -> std::io::Result<Ru
         testing,
         all_vaults,
         login,
+        first_start,
         attach_dirs,
         upload_dir,
         upload_engine,
@@ -188,6 +192,7 @@ pub async fn start_with(cfg: ServerConfig, extras: Extras) -> std::io::Result<Ru
         testing,
         all_vaults,
         login,
+        first_start,
         usage: cfg.usage,
         streams: Arc::new(StreamCounter::default()),
         snapshot_root: snapshot_root.map(Arc::new),
@@ -358,6 +363,19 @@ fn app_routes(core: &Arc<Shared>) -> Router<Arc<Shared>> {
             &r("vault_create"),
             post(vault_create).layer(DefaultBodyLimit::max(small)),
         )
+        .route(&r("setup"), get(self::setup::setup_state))
+        .route(
+            &r("setup_vault"),
+            post(self::setup::setup_vault).layer(DefaultBodyLimit::max(small)),
+        )
+        .route(
+            &r("setup_nvim"),
+            post(self::setup::setup_nvim).layer(DefaultBodyLimit::max(small)),
+        )
+        .route(
+            &r("setup_install"),
+            post(self::setup::setup_install).layer(DefaultBodyLimit::max(small)),
+        )
         .route(&r("repos"), get(self::repos::repos))
         .route(&r("repos/image"), get(self::repos::repo_image))
         .route(
@@ -488,6 +506,7 @@ mod tests {
                 testing: None,
                 all_vaults: None,
                 login: None,
+                first_start: None,
                 usage: None,
                 streams: Arc::new(StreamCounter::default()),
                 push: None,

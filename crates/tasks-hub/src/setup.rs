@@ -1,4 +1,5 @@
-//! The first start by a double click: where the vault is, and whether to install the program. The
+//! The first start in the console (`tasks-hub setup`, or a console program at a terminal): where the vault is, and
+//! whether to install the program. A double click gets the first start in the page (`crate::firststart`). The
 //! questions are the kit's; this module states what the tasks hub calls its vault.
 
 use std::path::{Path, PathBuf};
@@ -9,7 +10,7 @@ pub use appkit_hub::setup::{Console, Io};
 use crate::config::{Env, TasksSettings};
 
 /// What the questions say about this app.
-const APP: SetupApp<'static> = SetupApp {
+pub(crate) const APP: SetupApp<'static> = SetupApp {
     background: &crate::background::APP,
     vault_var: "TASKS_VAULT",
     vault_explained:
@@ -29,6 +30,15 @@ pub fn interactive(env: &Env) -> bool {
 /// A text for the person at the console (the settings cannot be read or written, the install failed).
 pub async fn run(io: &mut dyn Io, env: &Env) -> Result<Option<PathBuf>, String> {
     appkit_hub::setup::run::<TasksSettings>(&APP, io, env).await
+}
+
+/// Forget what was asked and declined, so that `tasks-hub setup` asks again.
+///
+/// # Errors
+///
+/// The note cannot be removed.
+pub fn forget_asked(env: &Env) -> Result<(), String> {
+    appkit_hub::setup::forget_asked(&APP, env)
 }
 
 /// The settings as they are now (for the tests of the vault step).

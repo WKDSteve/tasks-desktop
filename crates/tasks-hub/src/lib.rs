@@ -15,6 +15,7 @@ pub mod config;
 pub mod discovery;
 pub mod editor;
 pub mod engine;
+pub mod firststart;
 pub mod loginentry;
 pub mod newvault;
 pub mod notices;
@@ -104,6 +105,9 @@ mod tests {
             ("NO_LAUNCH", "TASKS_DESKTOP_NO_LAUNCH"),
             ("NO_SETUP", "TASKS_DESKTOP_NO_SETUP"),
             ("ASSUME_TERMINAL", "TASKS_DESKTOP_ASSUME_TERMINAL"),
+            ("PICK_RESULT", "TASKS_DESKTOP_PICK_RESULT"),
+            ("PICK_PROGRAM_RESULT", "TASKS_DESKTOP_PICK_PROGRAM_RESULT"),
+            ("INSTALL_LOG", "TASKS_DESKTOP_INSTALL_LOG"),
         ] {
             assert_eq!(IDENTITY.var(suffix), name);
         }

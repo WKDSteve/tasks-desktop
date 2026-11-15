@@ -164,6 +164,28 @@ export interface CheckAll {
   }[];
 }
 
+/** What the page of the first start offers about the installation of the program. */
+export type InstallOffer = 'install' | 'replace' | 'installed' | 'declined';
+const INSTALL_OFFERS: InstallOffer[] = ['install', 'replace', 'installed', 'declined'];
+
+/** What the page of the first start shows (`GET /api/tasks/setup`). */
+export interface SetupInfo {
+  /** The short code of what stops the engine; `null`: nothing. */
+  problem: string | null;
+  /** `null`: the hub cannot say. */
+  install: InstallOffer | null;
+  /** The hub can show a dialog for the program of Neovim. */
+  pickProgram: boolean;
+  /** The file name of that program on the machine of the hub (`nvim.exe`). */
+  program: string;
+}
+
+/** A step of the first start: whether the person chose something, and what is missing now (`null`: nothing). */
+export interface SetupStep {
+  chosen: boolean;
+  problem: string | null;
+}
+
 export class Hub extends HubClient<Snapshot> {
   constructor(fetchFn: typeof fetch, base: string = '') {
     super(fetchFn, '/api/tasks', base);
@@ -332,6 +354,43 @@ export class Hub extends HubClient<Snapshot> {
   async pickVaultFolder(): Promise<string | null> {
     const doc = await this.postJson<{ path: string | null }>('/api/tasks/vault_pick', {});
     return typeof doc.path === 'string' && doc.path !== '' ? doc.path : null;
+  }
+
+  /** What the page of the first start shows: what stops the engine, what is offered about the installation. */
+  async setup(): Promise<SetupInfo> {
+    const doc = await this.json<Record<string, unknown>>('/api/tasks/setup');
+    const install = doc['install'];
+    return {
+      problem: textOf(doc['problem']),
+      install: INSTALL_OFFERS.includes(install as InstallOffer) ? (install as InstallOffer) : null,
+      pickProgram: doc['pick_program'] === true,
+      program: textOf(doc['program']) ?? 'nvim',
+    };
+  }
+
+  /**
+   * The hub shows the folder dialog and keeps the folder the person chose as the vault (with `area`: makes it a new vault
+   * with that area first). The page names no folder.
+   */
+  async setupVault(area: string | null): Promise<SetupStep> {
+    const doc = await this.postJson<Record<string, unknown>>('/api/tasks/setup_vault', area === null ? {} : { area });
+    return { chosen: doc['chosen'] === true, problem: textOf(doc['problem']) };
+  }
+
+  /** The hub shows the file dialog for the program of Neovim, probes the choice and keeps it. */
+  async setupNvim(): Promise<SetupStep> {
+    const doc = await this.postJson<Record<string, unknown>>('/api/tasks/setup_nvim', {});
+    return { chosen: doc['chosen'] === true, problem: textOf(doc['problem']) };
+  }
+
+  /** Install the program (the hub stops and comes back from the installed copy, which opens the page anew). */
+  installProgram(autostart: boolean, shortcut: boolean): Promise<void> {
+    return this.post('/api/tasks/setup_install', { autostart, shortcut });
+  }
+
+  /** The person does not want the installation: it is not offered again. */
+  declineInstall(): Promise<void> {
+    return this.post('/api/tasks/setup_install', { decline: true });
   }
 
   removeVault(name: string): Promise<void> {
