@@ -13,8 +13,11 @@
 //! The two seconds are those of an idle machine. Most of the time to an event is the engine's read of the vault (a
 //! Neovim process, after the debounce of 300 ms), and on a busy machine only that part grows (measured 2026-10-23: the
 //! event in 0.6 to 0.75 s and one read in 0.45 to 0.5 s alone; with the five tests at once 1 to 2.4 s and 0.85 to 2.3 s).
-//! So the bound is two seconds plus what the engine is slower than idle, as measured beside the change: the hub's own
-//! part keeps its bound, and a busy machine does not make the test red by chance. A write through the route is bound
+//! So the bound is two seconds plus what the engine is slower than idle, as measured beside the change (a read before it,
+//! reads one after another while the event is awaited, one after it): the hub's own part keeps its bound, and a busy
+//! machine does not make the test red by chance. The reads while waiting are there for a load that comes and goes: a
+//! browser suite beside the tests made the hub's read slow while the reads before and after were quick (5.67 s against
+//! a bound of 2.39 s, CI 2026-11-10 on 4c97f1b). A write through the route is bound
 //! from its answer (the time before it is the engine's write and read).
 
 use std::net::SocketAddr;
@@ -277,9 +280,10 @@ impl Rig {
         started.elapsed()
     }
 
-    /// The bound for an event: by the slower of a read of the engine before the change (`before`) and one now.
-    async fn bound(&self, before: Duration) -> Duration {
-        bound(before.max(self.engine_read().await))
+    /// The bound for an event: by the slowest of a read of the engine before the change (`before`), the reads while the
+    /// event was awaited (`during`, see [`Rig::change_under_load`]) and one now.
+    async fn bound(&self, before: Duration, during: Duration) -> Duration {
+        bound(before.max(during).max(self.engine_read().await))
     }
 
     /// The ids of the open tasks the hub's snapshot holds now.
@@ -303,6 +307,47 @@ impl Rig {
             let change = self.sse.next_change(left).await?;
             if change.to_string().contains(&format!("\"{id}\"")) {
                 return Some((change, started.elapsed()));
+            }
+        }
+    }
+
+    /// The first event (that names `id`, when given) within `within`, and the slowest read of the engine while it was
+    /// awaited. The engine reads the vault one read after another until the event comes; a read still running then
+    /// counts with the time it has taken so far (it took at least that long). A load that comes and goes between the
+    /// read before the change and the one after the event is seen this way: the hub's own read ran under it.
+    async fn change_under_load(
+        &mut self,
+        id: Option<&str>,
+        within: Duration,
+    ) -> Option<(Value, Duration)> {
+        let engine = &self.engine;
+        let sse = &mut self.sse;
+        let wanted = id.map(|id| format!("\"{id}\""));
+        let wait = async move {
+            let started = Instant::now();
+            loop {
+                let left = within.checked_sub(started.elapsed())?;
+                let change = sse.next_change(left).await?;
+                match &wanted {
+                    Some(name) if !change.to_string().contains(name.as_str()) => {}
+                    _ => return Some(change),
+                }
+            }
+        };
+        tokio::pin!(wait);
+        let mut slowest = Duration::ZERO;
+        loop {
+            let read_started = Instant::now();
+            let read = engine.call(Calls::Snapshot, None);
+            tokio::pin!(read);
+            tokio::select! {
+                found = &mut wait => {
+                    return found.map(|change| (change, slowest.max(read_started.elapsed())));
+                }
+                done = &mut read => {
+                    done.expect("the engine reads the vault");
+                    slowest = slowest.max(read_started.elapsed());
+                }
             }
         }
     }
@@ -349,9 +394,8 @@ async fn an_edit_of_a_task_file_reaches_the_stream_within_two_seconds() {
     let started = Instant::now();
     std::fs::write(&path, edited).unwrap();
 
-    let change = r
-        .sse
-        .next_change(Duration::from_secs(10))
+    let (change, during) = r
+        .change_under_load(None, Duration::from_secs(10))
         .await
         .expect("an event");
     let took = started.elapsed();
@@ -364,7 +408,7 @@ async fn an_edit_of_a_task_file_reaches_the_stream_within_two_seconds() {
         "{change}"
     );
     assert_eq!(change["cause"], "fs");
-    let limit = r.bound(engine).await;
+    let limit = r.bound(engine, during).await;
     assert!(took < limit, "took {took:?}, bound {limit:?}");
 
     // The ETag moved, and a client that sends the old one gets the new document.
@@ -452,13 +496,13 @@ async fn a_folder_task_moved_by_the_engine_beside_the_hub_reaches_the_stream_thr
     // The clock starts when the engine has moved the folder: the watcher may see it from then on.
     let started = Instant::now();
     assert_eq!(doc["results"][0]["outcome"], "moved", "{doc}");
-    let (change, _) = r
-        .change_naming(&new, Duration::from_secs(10))
+    let (change, during) = r
+        .change_under_load(Some(&new), Duration::from_secs(10))
         .await
         .expect("an event that names the new id");
     assert_eq!(change["cause"], "fs", "{change}");
     let took = started.elapsed();
-    let limit = r.bound(engine).await;
+    let limit = r.bound(engine, during).await;
     assert!(took < limit, "took {took:?}, bound {limit:?}");
     let ids = r.ids().await;
     assert!(ids.contains(&new), "{ids:?}");
@@ -500,13 +544,13 @@ async fn a_folder_task_finished_by_the_engine_beside_the_hub_reaches_the_stream_
         .await;
     let started = Instant::now();
     assert_eq!(doc["results"][0]["outcome"], "done", "{doc}");
-    let (change, _) = r
-        .change_naming(&id, Duration::from_secs(10))
+    let (change, during) = r
+        .change_under_load(Some(&id), Duration::from_secs(10))
         .await
         .expect("an event that names the finished id");
     assert_eq!(change["cause"], "fs", "{change}");
     let took = started.elapsed();
-    let limit = r.bound(engine).await;
+    let limit = r.bound(engine, during).await;
     assert!(took < limit, "took {took:?}, bound {limit:?}");
     let ids = r.ids().await;
     assert!(!ids.contains(&id), "the open id is gone: {ids:?}");
@@ -542,13 +586,13 @@ async fn a_folder_task_renamed_from_outside_reaches_the_stream_as_a_whole_within
     let started = Instant::now();
     std::fs::rename(&from, &to).unwrap();
 
-    let (change, _) = r
-        .change_naming(&new, Duration::from_secs(10))
+    let (change, during) = r
+        .change_under_load(Some(&new), Duration::from_secs(10))
         .await
         .expect("an event that names the new id");
     let took = started.elapsed();
     assert_eq!(change["cause"], "fs", "{change}");
-    let limit = r.bound(engine).await;
+    let limit = r.bound(engine, during).await;
     assert!(took < limit, "took {took:?}, bound {limit:?}");
     let ids = r.ids().await;
     assert!(ids.contains(&new), "{ids:?}");
