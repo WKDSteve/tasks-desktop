@@ -41,8 +41,10 @@ tasks-hub start [--open]               run the hub in the background (no window;
                                       It ends itself 10 minutes after the last page closed
                                       (see "A hub in the background ends itself")
 tasks-hub stop                        stop the hub that runs in the background
-tasks-hub autostart on|off|status     start the hub with your login, also in the Options menu of the page (Windows: Run key;
-                                      Linux: autostart entry; macOS: launch agent)
+tasks-hub autostart on|off|status     start the hub with your login, also in the Options menu of the page and the tile
+                                      of hub-desktop; all three show the same: while hub-desktop starts with your
+                                      login it starts the hub (start_with_hub), otherwise the hub's own entry
+                                      (Windows: Run key; Linux: autostart entry; macOS: launch agent)
 tasks-hub install [--autostart] [--shortcut]
                                       copy the program to a fixed place (Windows:
                                       %LOCALAPPDATA%\tasks-desktop\bin; elsewhere:
@@ -369,7 +371,8 @@ PC, the page on a paired phone); a program that only asks who runs on the port d
 
 It stays when you gave it an order to:
 
-- it starts with your login (`tasks-hub autostart on`, or the switch in the Options menu),
+- it starts with your login (`tasks-hub autostart on`, the switch in the Options menu or the one of its tile in
+  hub-desktop), or hub-desktop started it with itself at the login,
 - a phone is paired (`tasks-hub devices` lists them): the phone reaches the hub when no page is open on the PC,
 - `config.json` says `"keep_running": true`.
 

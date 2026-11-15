@@ -764,6 +764,16 @@ describe('App', () => {
     expect(hub.rescans).toBe(1);
     app.stop();
   });
+
+  it('reads the start at login again when the window gets the focus: the tile of hub-desktop switches it too', async () => {
+    const { app, hub } = make({ token: 't' });
+    await app.start(null);
+    app.autostart = false;
+    hub.autostartOn = true;
+    await app.focused();
+    await vi.waitFor(() => expect(app.autostart).toBe(true));
+    app.stop();
+  });
 });
 
 describe('App, cache and hub', () => {

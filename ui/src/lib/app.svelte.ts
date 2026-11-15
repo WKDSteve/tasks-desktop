@@ -4252,6 +4252,8 @@ export class App {
     if (this.streamsFull) this.#wakeStream?.();
     // Not before the hub has confirmed the session: a page on the cached list holds the token already.
     if (this.phase !== 'ready' || !this.sessionHeld) return;
+    // hub-desktop can switch the start at login too (the tile, in another window): the Options menu shows what is true now.
+    if (this.autostart !== null) void this.readAutostart();
     try {
       await this.env.hub.rescan();
     } catch {
