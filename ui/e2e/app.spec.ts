@@ -6760,7 +6760,8 @@ test('the filter has at least / at most and spans of days, outlives a reload, an
   // The filter is remembered: after a reload it is still on.
   await page.reload();
   await expect(page.getByRole('menubar')).toBeVisible();
-  await showList(page).catch(() => undefined);
+  // Not showList: with this filter the list has no row, and its wait for one would run to its limit.
+  await chooseView(page, 'View', 'List');
   await expect(page.getByRole('list', { name: 'Filters that are on' })).toContainText('Changed: from 2999-01-01');
 
   // The same filter holds in the plan, the board, the inbox and the overview: each says so and shows nothing of the tasks.

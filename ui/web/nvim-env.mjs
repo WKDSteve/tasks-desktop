@@ -62,6 +62,8 @@ export const MACHINE_VARS = [
   'TASKS_FRECENCY_FILE',
   'TASKS_LINKS',
   'TASKS_TRUST_VAULT_LINT',
+  // the hub's: with it the guard lets the tailnet in and `open` prints a second link, on this machine only
+  'TASKS_DESKTOP_TAILNET',
   'NVIM_CONFIG_DIR',
   'CLAUDE_CODE_SESSION_ID',
 ];

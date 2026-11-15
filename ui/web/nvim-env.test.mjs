@@ -19,6 +19,7 @@ const MACHINE = {
   TASKS_LISTS_FILE: 'E:/real/lists.json',
   TASKS_FRECENCY_FILE: 'E:/real/frecency.json',
   TASKS_LINKS: 'wikilink',
+  TASKS_DESKTOP_TAILNET: 'machine.tailnet.ts.net',
   NVIM_CONFIG_DIR: 'E:/real/nvim',
   CLAUDE_CODE_SESSION_ID: 'session-of-the-person',
   XDG_STATE_HOME: 'E:/real/state',

@@ -102,7 +102,7 @@ jobs:
         run: node ../tools/run-with-temp.mjs -- pnpm web:test
       # The page of the web variant as one file: built, opened from disk in Chrome (the project of ui/playwright.web.config.ts,
       # tests in ui/e2e-web/), the engine started in its worker, a folder chosen (a fake one, the same fixture vault and the
-      # same hostile tasks as the hub's browser tests below): the overview, a task, the search, the filters, the plan, the
+      # same hostile tasks as the hub's browser tests in the job browser): the overview, a task, the search, the filters, the plan, the
       # check, accessibility, writing with its conflict check, and what the data classes keep in IndexedDB. Every test holds
       # the page to the same two rules: not one request, not one violation of its own policy.
       # Firefox and WebKit are Playwright's own builds (the read only way in and the record of the browser APIs run there,
@@ -164,14 +164,17 @@ jobs:
       - name: PSScriptAnalyzer on the scripts
         shell: pwsh
         run: |
-          # Only when the version is not there yet: the runners of this machine share the user's module folder, and
-          # `-Force` writes the module again while a job of another runner uses it ("currently in use", then a file
-          # of the module is missing and the step is red; testing-desktop, run 43650895614).
-          if (-not (Get-Module -ListAvailable PSScriptAnalyzer | Where-Object { $_.Version -eq '1.24.0' })) {
+          # Installed only when the pinned version cannot be loaded: the runners of this machine share the user's module
+          # folder, and an `Install-Module -Force` in every run wrote the module again while a job of another runner used
+          # it ("currently in use", then a file of the module is missing and the step is red; testing-desktop, run
+          # 43650895614). The import is the test, not the listing: a copy with a file missing is still listed, and it is
+          # written again here. By version: autoloading would take the newest copy on the runner, not the pinned one.
+          try {
+            Import-Module PSScriptAnalyzer -RequiredVersion 1.24.0 -ErrorAction Stop
+          } catch {
             Install-Module PSScriptAnalyzer -RequiredVersion 1.24.0 -Scope CurrentUser -Force
+            Import-Module PSScriptAnalyzer -RequiredVersion 1.24.0 -ErrorAction Stop
           }
-          # Import by version too: autoloading would take the newest copy on the runner, not the pinned one.
-          Import-Module PSScriptAnalyzer -RequiredVersion 1.24.0
           (Get-Module PSScriptAnalyzer).Version
           $found = @(Invoke-ScriptAnalyzer -Path scripts -Recurse -Severity Error, Warning)
           $found | Format-Table -AutoSize | Out-String | Write-Output
@@ -247,7 +250,7 @@ jobs:
       # ui/pnpm-workspace.yaml. pnpm is the runner's own (a global install would change this machine on every run).
       - run: pnpm install --frozen-lockfile
       - run: pnpm check
-      # The same temp dir of its own and the same count as for the browser tests above (tools/run-with-temp.mjs).
+      # The same temp dir of its own and the same count as for the browser tests of the other jobs (tools/run-with-temp.mjs).
       - run: node ../tools/run-with-temp.mjs -- pnpm test
       - run: pnpm build
       - run: python ../tools/check-bundle-size.py --dist dist
