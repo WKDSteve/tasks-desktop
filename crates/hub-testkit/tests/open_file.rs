@@ -7,6 +7,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use appkit_core::authn::{ManualClock, Secret, CODE_BYTES, TOKEN_BYTES};
+use hub_testkit::patient;
 use hub_testkit::scratch::Scratch;
 use serde_json::Value;
 use tasks_hub::classes::AreaPolicy;
@@ -249,7 +250,7 @@ async fn post(r: &Rig, route: &str, body: &str, session: bool) -> (u16, Value) {
     if session {
         headers.push(("Authorization", &auth));
     }
-    let reply = client::request(r.server.addr().port(), "POST", route, &headers, body)
+    let reply = patient::request(r.server.addr().port(), "POST", route, &headers, body)
         .await
         .unwrap();
     (
@@ -265,7 +266,7 @@ async fn get(r: &Rig, route: &str) -> (u16, Value) {
         ("Authorization", auth.as_str()),
         ("Origin", origin.as_str()),
     ];
-    let reply = client::request(r.server.addr().port(), "GET", route, &headers, "")
+    let reply = patient::request(r.server.addr().port(), "GET", route, &headers, "")
         .await
         .unwrap();
     (
