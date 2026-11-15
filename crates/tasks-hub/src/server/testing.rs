@@ -221,6 +221,17 @@ fn cut_run(doc: &serde_json::Value, shown: impl Fn(&str) -> bool) -> serde_json:
                     out.insert(field.to_owned(), v.clone());
                 }
             }
+            // Whether the sheets were red, and what came of the block in the task: plain values only, no text and no
+            // path of the testing hub.
+            if let Some(red) = run
+                .get("sheets_red")
+                .filter(|v| v.is_boolean() || v.is_null())
+            {
+                out.insert("sheets_red".to_owned(), red.clone());
+            }
+            if let Some(block) = run.get("block") {
+                out.insert("block".to_owned(), block_cut(block));
+            }
             serde_json::Value::Object(out)
         } else {
             json!({ "what": "other", "running": run["running"].as_bool().unwrap_or(false) })
@@ -232,6 +243,26 @@ fn cut_run(doc: &serde_json::Value, shown: impl Fn(&str) -> bool) -> serde_json:
         "available": doc["available"].as_bool().unwrap_or(false),
         "run": cut,
     })
+}
+
+/// The words the testing hub tells the end of writing the block into the task with (testing-desktop `24369eb`).
+const BLOCK_OUTCOMES: [&str; 6] = [
+    "changed",
+    "unchanged",
+    "failed",
+    "missing",
+    "truncated",
+    "unreachable",
+];
+
+/// `block` of a run as a phone may see it: `{ written, outcome }` with a known word, or `null` (none, or not that form).
+fn block_cut(block: &serde_json::Value) -> serde_json::Value {
+    match (block["written"].as_bool(), block["outcome"].as_str()) {
+        (Some(written), Some(outcome)) if BLOCK_OUTCOMES.contains(&outcome) => {
+            json!({ "written": written, "outcome": outcome })
+        }
+        _ => serde_json::Value::Null,
+    }
 }
 
 /// `GET /api/tasks/testing_run`: where the run of the testing hub stands.
@@ -335,6 +366,49 @@ mod tests {
             );
         }
         assert!(cut_run(&json!({ "available": false, "run": null }), shown)["run"].is_null());
+    }
+
+    #[test]
+    fn the_block_and_whether_the_sheets_were_red_come_through_as_plain_values() {
+        let run = |extra: serde_json::Value| {
+            let mut run = json!({ "id": "r1", "what": "task", "task": "open/a", "running": false, "exit": 1,
+                "verdict": "not_written", "started": 1, "ended": 2 });
+            for (k, v) in extra.as_object().unwrap() {
+                run[k] = v.clone();
+            }
+            cut_run(&json!({ "available": true, "run": run }), |_| true)["run"].clone()
+        };
+        let cut = run(json!({ "sheets_red": false,
+            "block": { "written": true, "outcome": "changed", "path": "C:/vault/x.md", "text": "a line" } }));
+        assert_eq!(cut["verdict"], "not_written");
+        assert_eq!(cut["sheets_red"], false);
+        assert_eq!(
+            cut["block"],
+            json!({ "written": true, "outcome": "changed" }),
+            "{cut}"
+        );
+        // Unknown: null, never what the testing hub wrote.
+        for block in [
+            json!(null),
+            json!({ "written": true, "outcome": "C:/vault/x.md" }),
+            json!({ "written": "yes", "outcome": "changed" }),
+            json!("changed"),
+        ] {
+            assert!(
+                run(json!({ "block": block.clone() }))["block"].is_null(),
+                "{block}"
+            );
+        }
+        assert!(run(json!({ "sheets_red": null }))["sheets_red"].is_null());
+        assert!(run(json!({ "sheets_red": "no" }))
+            .get("sheets_red")
+            .is_none());
+        // An older testing hub sends neither.
+        let old = run(json!({}));
+        assert!(
+            old.get("block").is_none() && old.get("sheets_red").is_none(),
+            "{old}"
+        );
     }
 
     #[test]

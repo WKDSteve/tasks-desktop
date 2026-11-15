@@ -318,8 +318,10 @@ This hub reads no secret of the testing hub: it pairs like a phone does and keep
 (`testing-link-keys.json`, secret, and `testing-link.json` in its settings folder; `tasks-hub testing unlink` forgets
 them, then revoke it there too). A phone then sees which sheets name a task (`testing_sheets`, `read`), starts them
 (`testing_start`, `trigger`, with the confirmation of that very request on the phone, which this hub checks before it
-confirms the one request to the testing hub with its own key) and follows the run (`testing_run`, `read`; a run that
-is not of a task the phone may see is told as `other`). A task of an area that is not released is not there for it.
+confirms the one request to the testing hub with its own key) and follows the run (`testing_run`, `read`: the state, the
+verdict, whether the sheets were red and what came of the block in the task, `written` and one word such as `changed`
+or `missing`, never a text or a path of the testing hub; a run that is not of a task the phone may see is told as
+`other`). A task of an area that is not released is not there for it.
 A phone paired before it had a confirmation key pairs again to start a run. A running hub takes a new pairing at the
 next request; after `unlink`, restart it.
 
