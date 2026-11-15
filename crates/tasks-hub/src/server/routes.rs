@@ -227,7 +227,16 @@ pub(super) async fn next(
         return device_next(&st, request, asked_n).await;
     }
     let request = serde_json::Value::Object(request);
-    match ask_held(&st, false, &next_key(&request), Calls::Next, Some(&request)).await {
+    match ask_held_for(
+        &st,
+        false,
+        &next_key(&request),
+        NEXT_TTL,
+        Calls::Next,
+        Some(&request),
+    )
+    .await
+    {
         Ok(text) => json_response(StatusCode::OK, text, None),
         Err(response) => response,
     }
@@ -252,7 +261,16 @@ async fn device_next(
     request.insert("n".to_owned(), json!(NEXT_MAX_N));
     let rt = st.rt();
     let asked = json!(request);
-    let mut cut = match ask_held(st, true, &next_key(&asked), Calls::Next, Some(&asked)).await {
+    let mut cut = match ask_held_for(
+        st,
+        true,
+        &next_key(&asked),
+        NEXT_TTL,
+        Calls::Next,
+        Some(&asked),
+    )
+    .await
+    {
         Ok(text) => match serde_json::from_str::<serde_json::Value>(&text) {
             Ok(doc) => device_cut::next(&rt.classes, &doc),
             Err(_) => return engine_failed(),
@@ -1332,10 +1350,6 @@ pub(super) async fn rescan(State(st): State<Arc<Shared>>) -> Response {
     (StatusCode::ACCEPTED, axum::Json(json!({ "ok": true }))).into_response()
 }
 
-/// What this app tells the guard: its `hello` and the two POST routes that have the coarse limit of
-/// `ops`. `ops` takes writes and dry runs (only its body tells them apart: the writes are counted
-/// again, strictly, by the handler). `estimate` is a read that is a POST (its question is too long
-/// for a query): it changes nothing.
 /// `GET /api/tasks/keep_running`: whether a hub in the background stays without a page (`{ "on": bool }`); `null`: this
 /// hub offers no switch, or its settings cannot be read now.
 pub(super) async fn keep_running_get(State(st): State<Arc<Shared>>) -> Response {
@@ -1399,6 +1413,10 @@ fn switch_body(body: &[u8]) -> Result<bool, Response> {
     }
 }
 
+/// What this app tells the guard: its `hello` and the two POST routes that have the coarse limit of
+/// `ops`. `ops` takes writes and dry runs (only its body tells them apart: the writes are counted
+/// again, strictly, by the handler). `estimate` is a read that is a POST (its question is too long
+/// for a query): it changes nothing.
 pub(super) fn guard_rules() -> GuardRules {
     GuardRules::new(
         crate::IDENTITY.route("hello"),

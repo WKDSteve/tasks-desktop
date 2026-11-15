@@ -3,6 +3,7 @@
 //! reads the key when that wait is over, not at the start, so the switch acts without a restart.
 
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use crate::config;
 
@@ -26,12 +27,23 @@ pub trait KeepRunning: Send + Sync {
 /// The order as the key `keep_running` of `config.json` in a folder of settings.
 pub struct SettingsFile {
     dir: PathBuf,
+    /// The gate of every other writer of the file (the vaults of the hub), if there is one.
+    gate: Option<Arc<tokio::sync::Mutex<()>>>,
 }
 
 impl SettingsFile {
     #[must_use]
     pub fn new(dir: PathBuf) -> Self {
-        Self { dir }
+        Self { dir, gate: None }
+    }
+
+    /// Change the file only through `gate`, the one the other writers of the settings hold while they change it: a
+    /// choice of a vault reads the file, starts an engine (seconds) and writes the whole file back, and an order given
+    /// in between would be lost. `set` is called off the async runtime (`spawn_blocking`), so it may wait for the gate.
+    #[must_use]
+    pub fn with_gate(mut self, gate: Arc<tokio::sync::Mutex<()>>) -> Self {
+        self.gate = Some(gate);
+        self
     }
 }
 
@@ -43,6 +55,7 @@ impl KeepRunning for SettingsFile {
     }
 
     fn set(&self, on: bool) -> Result<(), String> {
+        let _one = self.gate.as_ref().map(|gate| gate.blocking_lock());
         // Read again right before the change: what a person wrote into the file meanwhile stays, and a file that cannot
         // be read stops the change rather than being written over.
         let mut file = config::load_file(&self.dir)
@@ -78,6 +91,34 @@ mod tests {
         let text = std::fs::read_to_string(dir.join("config.json")).unwrap();
         assert!(!text.contains("keep_running"), "{text}");
         assert!(text.contains("17615"), "{text}");
+    }
+
+    #[test]
+    fn the_order_waits_for_another_writer_of_the_settings() {
+        let dir = Scratch::new("keep-running-gate");
+        let gate = std::sync::Arc::new(tokio::sync::Mutex::new(()));
+        let order =
+            std::sync::Arc::new(SettingsFile::new(dir.to_path_buf()).with_gate(gate.clone()));
+        // Another writer holds the gate (a vault being chosen): the order is not written meanwhile.
+        let held = gate.try_lock().unwrap();
+        let writer = {
+            let order = order.clone();
+            std::thread::spawn(move || order.set(true))
+        };
+        std::thread::sleep(std::time::Duration::from_millis(200));
+        assert!(
+            !dir.join("config.json").exists(),
+            "written while the gate was held"
+        );
+        // The other writer puts its file down and lets go: the order is written over it, not lost.
+        std::fs::write(dir.join("config.json"), r#"{"port":17615}"#).unwrap();
+        drop(held);
+        writer.join().unwrap().unwrap();
+        let text = std::fs::read_to_string(dir.join("config.json")).unwrap();
+        assert!(
+            text.contains("keep_running") && text.contains("17615"),
+            "{text}"
+        );
     }
 
     #[test]

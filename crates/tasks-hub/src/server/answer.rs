@@ -145,10 +145,28 @@ pub(super) async fn ask_held(
     method: Method,
     params: Option<&serde_json::Value>,
 ) -> Result<String, Response> {
+    ask_held_for(st, device, key, DETAILS_TTL, method, params).await
+}
+
+/// [`ask_held`] with the answer believed for `ttl` (`NEXT_TTL` for `next`).
+// The error is the answer to send, as everywhere in this file: a response is large, and rare.
+#[allow(clippy::result_large_err)]
+pub(super) async fn ask_held_for(
+    st: &Shared,
+    device: bool,
+    key: &str,
+    ttl: std::time::Duration,
+    method: Method,
+    params: Option<&serde_json::Value>,
+) -> Result<String, Response> {
     let rt = st.rt();
     let rev = rt.store.latest().and_then(|c| c.rev.clone());
     if let Some(rev) = &rev {
-        let hit = rt.details.lock().ok().and_then(|mut d| d.get(rev, key));
+        let hit = rt
+            .details
+            .lock()
+            .ok()
+            .and_then(|mut d| d.get_within(rev, key, ttl));
         if let Some(doc) = hit {
             return Ok(String::from_utf8_lossy(&doc).into_owned());
         }

@@ -197,8 +197,10 @@ pub(crate) struct ConfigVaults {
     dir: PathBuf,
     env: Env,
     file: StdMutex<FileConfig>,
-    /// One change at a time: choosing a vault starts an engine, which takes a while.
-    gate: tokio::sync::Mutex<()>,
+    /// One change at a time: choosing a vault starts an engine, which takes a while. Shared with the switch of
+    /// `keep_running` (`keeprunning::SettingsFile`): both write the whole settings file, and one must not write back
+    /// what it read before the other changed it.
+    gate: Arc<tokio::sync::Mutex<()>>,
 }
 
 impl ConfigVaults {
@@ -219,8 +221,13 @@ impl ConfigVaults {
             dir,
             env,
             file: StdMutex::new(file),
-            gate: tokio::sync::Mutex::new(()),
+            gate: Arc::new(tokio::sync::Mutex::new(())),
         }
+    }
+
+    /// The gate every write of the settings file goes through.
+    pub(crate) fn gate(&self) -> Arc<tokio::sync::Mutex<()>> {
+        Arc::clone(&self.gate)
     }
 
     fn current(&self) -> FileConfig {
@@ -790,6 +797,7 @@ pub async fn serve(opts: ServeOptions) -> Result<(), String> {
             opener: Arc::clone(&opener),
             env: env.clone(),
         });
+    let settings_gate = config_vaults.gate();
     let vaults: Arc<dyn VaultAdmin<VaultTarget>> = config_vaults;
     let snapshot_root = env.path("REPOS_DIR");
     let upload_dir = dir.join("uploads");
@@ -820,7 +828,10 @@ pub async fn serve(opts: ServeOptions) -> Result<(), String> {
         opener: Some(Arc::clone(&opener) as Arc<dyn crate::editor::FileOpener>),
         first_start: Some(Arc::clone(&first_start)),
         login: Some(Arc::new(crate::loginentry::SystemLoginEntry)),
-        keep_running: Some(Arc::new(crate::keeprunning::SettingsFile::new(dir.clone()))),
+        keep_running: Some(Arc::new(
+            crate::keeprunning::SettingsFile::new(dir.clone())
+                .with_gate(Arc::clone(&settings_gate)),
+        )),
         all_vaults: Some(Arc::clone(&all_vaults)),
         sheet_run: Some(Arc::clone(&sheet_run)),
         testing: Some(Arc::clone(&testing)),

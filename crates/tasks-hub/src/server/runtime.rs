@@ -202,6 +202,10 @@ pub(super) const DETAILS_KEPT: usize = 64;
 /// How long one is believed even when no change was seen: the watcher is the
 /// way a change is noticed, and this bounds the harm of a notice that was lost.
 pub(super) const DETAILS_TTL: Duration = Duration::from_secs(30);
+/// How long an answer of `next` is believed: it depends on more than the state of the vault (the claims, which the
+/// watcher does not follow when another program sets them, and the day), so it is held only against the questions of a
+/// moment (a page and its windows, a phone asking at the same time), not for the life of a state.
+pub(super) const NEXT_TTL: Duration = Duration::from_secs(5);
 
 /// The documents of `task` the hub has answered for one state of the vault.
 /// A document holds the blockers in both directions, so it is true for the
@@ -215,13 +219,15 @@ pub(super) struct Details {
 }
 
 impl Details {
-    pub(super) fn get(&mut self, rev: &str, id: &str) -> Option<Bytes> {
+    /// The entry `id` held for `rev`, while it is younger than `ttl` (`DETAILS_TTL`, or less for an answer that depends
+    /// on more than the state).
+    pub(super) fn get_within(&mut self, rev: &str, id: &str, ttl: Duration) -> Option<Bytes> {
         if self.rev.as_deref() != Some(rev) {
             return None;
         }
         self.docs
             .get(id)
-            .filter(|(at, _)| at.elapsed() < DETAILS_TTL)
+            .filter(|(at, _)| at.elapsed() < ttl)
             .map(|(_, doc)| doc.clone())
     }
 

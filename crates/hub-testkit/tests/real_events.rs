@@ -125,6 +125,9 @@ struct Rig {
     /// The engine the hub reads with. Called directly it is a writer beside the hub: the hub learns of the change
     /// only from the files, as it does when Neovim runs the engine.
     engine: Arc<dyn Engine>,
+    /// An engine of its own for measuring how long a read takes now: the hub's engine runs one call at a time, and a
+    /// read of the test through it would hold up the hub's own read of the change it measures.
+    meter: Arc<dyn Engine>,
     server: RunningServer,
     vault: PathBuf,
     token: String,
@@ -182,6 +185,9 @@ async fn rig(name: &str, prepare: impl FnOnce(&Path)) -> Option<Rig> {
     ));
     probe(&engine).await.expect("the engine answers hello");
     let engine: Arc<dyn Engine> = Arc::new(engine);
+    let meter: Arc<dyn Engine> = Arc::new(CliEngine::new(
+        tasks_hub::engine::cli_config_from_setup(&setup, engine_env(&home)),
+    ));
     let control = Secret::generate(TOKEN_BYTES).unwrap();
     let server = start(ServerConfig {
         devices: None,
@@ -218,6 +224,7 @@ async fn rig(name: &str, prepare: impl FnOnce(&Path)) -> Option<Rig> {
     assert!(hello.starts_with("event: hello"), "{hello:?}");
     Some(Rig {
         engine,
+        meter,
         server,
         vault,
         token,
@@ -273,7 +280,7 @@ impl Rig {
     /// How long one read of the whole vault by the engine takes now, under the load the change is made in.
     async fn engine_read(&self) -> Duration {
         let started = Instant::now();
-        self.engine
+        self.meter
             .call(Calls::Snapshot, None)
             .await
             .expect("the engine reads the vault");
@@ -320,7 +327,7 @@ impl Rig {
         id: Option<&str>,
         within: Duration,
     ) -> Option<(Value, Duration)> {
-        let engine = &self.engine;
+        let engine = &self.meter;
         let sse = &mut self.sse;
         let wanted = id.map(|id| format!("\"{id}\""));
         let wait = async move {

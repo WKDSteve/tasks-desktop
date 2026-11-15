@@ -268,6 +268,15 @@ async fn areas_and_next_are_asked_once_per_state_of_the_vault() {
     get(&r, "/api/tasks/areas").await;
     get(&r, "/api/tasks/next?n=3").await;
     assert_eq!((asked(&r.vault, "areas"), asked(&r.vault, "next")), (1, 2));
+    // `next` depends on more than the state (a claim set by another program, the day): it is held for a moment only.
+    tokio::time::sleep(Duration::from_millis(5200)).await;
+    get(&r, "/api/tasks/areas").await;
+    get(&r, "/api/tasks/next?n=3").await;
+    assert_eq!(
+        (asked(&r.vault, "areas"), asked(&r.vault, "next")),
+        (1, 3),
+        "next is asked again after a few seconds, areas not"
+    );
 
     // The vault changes: both are asked again for the new state.
     std::fs::write(r.vault.join(".fake-n"), "3").unwrap();
@@ -283,7 +292,7 @@ async fn areas_and_next_are_asked_once_per_state_of_the_vault() {
     }
     get(&r, "/api/tasks/areas").await;
     get(&r, "/api/tasks/next?n=3").await;
-    assert_eq!((asked(&r.vault, "areas"), asked(&r.vault, "next")), (2, 3));
+    assert_eq!((asked(&r.vault, "areas"), asked(&r.vault, "next")), (2, 4));
 }
 
 #[tokio::test]

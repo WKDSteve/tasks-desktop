@@ -69,8 +69,9 @@ start times only within one run.
 - **The first snapshot is the engine reading the vault**, about 2 s for 786 open tasks (0.9 MB of JSON). The page
   shows nothing before it.
 - **`areas` and `next` are held like a task detail**: the first request for a state of the vault goes to the engine
-  (200 to 500 ms), every later one with the same question takes under a millisecond, for 30 seconds and until anything
-  in the vault changes (`next` depends on the day too, so it is not held longer). The page asks for `areas` once and
+  (200 to 500 ms), every later one with the same question takes under a millisecond until anything in the vault
+  changes: `areas` for 30 seconds, `next` for 5 seconds only (it depends on more than the state of the vault: a claim
+  set by another program, which the watcher does not follow, and the day). The page asks for `areas` once and
   when a new area appears, and for `next` in the Today view per state of the vault.
 - **A task detail goes to the engine** (170 to 210 ms) and is then held for a short while: for 30 seconds, at most
   64 of them, and until anything in the vault changes. Opened again at once it takes 0.3 ms; opened again a minute
