@@ -4,7 +4,8 @@
   import type { App } from '../lib/app.svelte';
   import { translate, type Key } from '../lib/i18n';
 
-  let { app }: { app: App } = $props();
+  // `only: 'install'`: the installation alone (the dialog of the Help menu of a hub that is set up).
+  let { app, only }: { app: App; only?: 'install' } = $props();
   const t = (key: Key, params: Record<string, string | number> = {}) => translate(app.lang, key, params);
 
   const setup = $derived(app.setupState);
@@ -17,7 +18,9 @@
 
 {#if setup.info}
   <div class="setup">
-    {#if setup.vaultStep}
+    {#if only === 'install'}
+      <!-- the steps of what the hub misses are the card's, not the dialog's -->
+    {:else if setup.vaultStep}
       <section aria-labelledby="setup-vault">
         <h2 id="setup-vault">{t('setup.page.vault_title')}</h2>
         <p>{t('setup.page.vault_body')}</p>

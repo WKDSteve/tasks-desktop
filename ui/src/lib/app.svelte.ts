@@ -1093,6 +1093,8 @@ export class App {
     this.#enumsAsked = true;
     try {
       void this.readAutostart();
+      // Whether the Help menu offers the installation (a hub that runs from a download); the web variant has no hub.
+      if (this.env.mode !== 'web') void this.setupState.load();
       this.ranges = rangesOf((await this.env.hub.enums()).enums);
     } catch (error) {
       // A session that is gone asks again after the next pairing; any other failure keeps the defaults.

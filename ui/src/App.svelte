@@ -40,6 +40,7 @@
   import { vaultMenuItems } from './lib/vaultMenu';
   import ConflictCenter from './views/ConflictCenter.svelte';
   import SetupCard from './views/SetupCard.svelte';
+  import InstallDialog from './views/InstallDialog.svelte';
   import VaultsDialog from './views/VaultsDialog.svelte';
   import AboutDialog from './views/AboutDialog.svelte';
   import DefaultsDialog from './views/DefaultsDialog.svelte';
@@ -57,6 +58,7 @@
   // The page opened from disk (the web variant): a shortcut can point to its file. Served pages have their own address.
   const fromDisk = location.protocol === 'file:';
   let shortcutOpen = $state(false);
+  let installOpen = $state(false);
   let defaultsOpen = $state(false);
   let updateOpen = $state(false);
   // A view of the menu is a link to its place: the browser's context menu (and Shift+click) opens it in a new tab, which
@@ -674,6 +676,16 @@
             disabled: !app.canAbout,
             onselect: () => app.openAbout('report'),
           },
+          ...(app.setupState.installStep
+            ? [
+                {
+                  kind: 'action' as const,
+                  label: t('menu.install'),
+                  hint: t('hint.item.menu.install'),
+                  onselect: () => (installOpen = true),
+                },
+              ]
+            : []),
           ...helpItems({
             text: (key, params) => t(key, params),
             docs: DOC_LIST,
@@ -917,6 +929,7 @@
   <!-- Outside the ready block: the Info dialog and its report are there when the engine is not (app.canAbout). -->
   <AboutDialog {app} />
   {#if fromDisk}<ShortcutDialog {app} open={shortcutOpen} onclose={() => (shortcutOpen = false)} />{/if}
+  {#if installOpen}<InstallDialog {app} open={installOpen} onclose={() => (installOpen = false)} />{/if}
   <DefaultsDialog {app} open={defaultsOpen} onclose={() => (defaultsOpen = false)} />
   {#if fromDisk}<UpdateDialog {app} open={updateOpen} onclose={() => (updateOpen = false)} />{/if}
   <!-- While the float of a task is open the toast is drawn inside it: the float is modal, and the Undo out here could not

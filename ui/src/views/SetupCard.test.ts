@@ -97,6 +97,26 @@ describe('the first start in the page', () => {
     app.stop();
   });
 
+  it('the dialog of the Help menu shows the installation alone', async () => {
+    const out = html({ ...(await page('no_vault')).app, lang: 'de' });
+    const only = render(SetupCard, { props: { app: (await page('no_vault')).app, only: 'install' } as never }).body;
+    expect(out).toContain('Ordner wählen…');
+    expect(only).toContain('Programm installieren');
+    expect(only).not.toContain('Ordner wählen…');
+  });
+
+  it('a hub that is set up is asked once whether it runs from the installed copy (the Help menu), not in the web variant', async () => {
+    const hubbed = make({ token: 'tok' });
+    await hubbed.app.loadEnums();
+    expect(hubbed.hub.setupCalls).toEqual(['setup']);
+    expect(hubbed.app.setupState.installStep).toBe(true);
+    await hubbed.app.loadEnums();
+    expect(hubbed.hub.setupCalls).toEqual(['setup']);
+    const web = make({ token: 'tok', mode: 'web' });
+    await web.app.loadEnums();
+    expect(web.hub.setupCalls).toEqual([]);
+  });
+
   it('is read only while the page waits for the hub, not in the web variant', async () => {
     const hubbed = make({ sleep: () => new Promise(() => undefined) });
     hubbed.hub.engineReady = false;
