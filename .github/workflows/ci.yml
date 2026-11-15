@@ -147,6 +147,10 @@ jobs:
         env:
           RUST_TEST_THREADS: "4"
       - run: cargo test --locked -p hub-testkit -- --test-threads=1
+      # The release build is a window program (no console window for the link, the login entry or a double click); a
+      # debug build stays a console program, so only a release test run proves the attribute.
+      - name: The release build is a window program
+        run: cargo test --release --locked -p tasks-hub --test window_program
       # No test leaves a folder in the temp dir of this job (a test makes its folder with `Scratch`, which removes it
       # also after a failure). Strict: whatever name a test gave its folder counts; `nvim` and `nvim.0` are what the real
       # Neovim of the engine tests makes itself. The browser tests (job browser) have their own check (run-with-temp.mjs).

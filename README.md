@@ -343,11 +343,14 @@ the files are replaced each time. It is not a release (see `release.yml` for tha
 | `SHA256SUMS` | the checksums of both |
 
 Started **without an argument**, the program starts the hub in the background if it is not running and opens
-the browser with a one-time pairing link (a second double click finds the running hub and opens a new link). If
-something is missing, the message says what, and a console opened by the double click waits for Enter before it
-closes.
+the browser with a one-time pairing link (a second double click finds the running hub and opens a new link). The
+program of a rolling build or a release is a window program: a double click, the link in the Start menu and the login
+entry open no console window. If something is missing, the message says what, in a message box (a debug build is a
+console program: its console waits for Enter before it closes). From a terminal the program writes its output there,
+but the prompt comes back at once (the shell does not wait for a window program); a script that needs the output or
+the exit code pipes it, `(& tasks-hub --version | Out-String).Trim()`.
 
-The **first** double click also asks, once each, in the console: where your vault is (kept in the settings; an
+The **first** double click also asks, once each, in a console window it opens for that: where your vault is (kept in the settings; an
 empty line skips it), whether to install the program to your user folder (no administrator rights; then
 whether to start it at login and to put a link on the desktop), and, when another version is installed, whether
 to replace it. The hub then runs from the installed copy. What was answered or declined is noted in

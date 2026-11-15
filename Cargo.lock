@@ -1606,6 +1606,7 @@ dependencies = [
  "appkit-core",
  "appkit-hub",
  "appkit-mobile",
+ "appkit-testkit",
  "axum",
  "flate2",
  "futures-core",
