@@ -82,6 +82,21 @@ describe('the first start in the page', () => {
     expect(replace).toContain('Eine andere Version des Programms ist installiert');
   });
 
+  // A double click opens the page with a pairing code while the hub is not set up yet: the steps of the first start
+  // need the session of that code before the engine is ready, or every one of them is refused (401).
+  it('a page opened with a pairing code takes its session before the hub is set up, and reads the setup with it', async () => {
+    const { app, hub, session } = make({ sleep: () => new Promise(() => undefined) });
+    hub.engineReady = false;
+    void app.start('code-1');
+    for (let i = 0; i < 5 && hub.setupCalls.length === 0; i++) await new Promise((r) => setTimeout(r, 0));
+    expect(hub.exchanged).toEqual(['code-1']);
+    expect(hub.token).toBe('token-1');
+    expect(session.get('tasks-desktop.session')).toBe('token-1');
+    expect(hub.setupCalls).toEqual(['setup']);
+    expect(app.phase).toBe('unavailable');
+    app.stop();
+  });
+
   it('is read only while the page waits for the hub, not in the web variant', async () => {
     const hubbed = make({ sleep: () => new Promise(() => undefined) });
     hubbed.hub.engineReady = false;

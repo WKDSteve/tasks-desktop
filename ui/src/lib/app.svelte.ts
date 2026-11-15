@@ -3562,6 +3562,23 @@ export class App {
             this.env.hub.onUnauthorized = () => this.lostSession();
             given = true;
           }
+          // A page opened with a pairing code (the first double click) while the hub is not set up: the steps of the
+          // first start are routes of the session, so the code is traded now, once, and not only when the engine is
+          // ready. A code that is refused stays for the trade after the loop, which says what went wrong.
+          if (this.env.mode !== 'web' && !this.env.hub.hasToken && this.pendingCode) {
+            const code = this.pendingCode;
+            try {
+              const fresh = await this.env.hub.exchange(code);
+              safe(() => this.env.session.setItem(TOKEN_KEY, fresh));
+              this.env.hub.setToken(fresh);
+              this.env.hub.onUnauthorized = () => this.lostSession();
+              stored = fresh;
+              given = true;
+              if (this.pendingCode === code) this.pendingCode = null;
+            } catch {
+              // Left to the trade after the loop.
+            }
+          }
           this.phase = 'unavailable';
           // The steps of the first start the hub offers for what it misses (not in the web variant: no hub). Read again
           // when what is missing changed.
