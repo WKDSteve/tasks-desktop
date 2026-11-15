@@ -672,8 +672,12 @@ test('on a phone the float fits the screen, a kept place too', async ({ page }) 
   await page.addInitScript(() => {
     localStorage.setItem('tasks-desktop.floats', JSON.stringify({ task: { x: 900, y: 500, w: 1200, h: 900 } }));
   });
-  await pair(page);
-  await showList(page);
+  // The list by its address, not by the menu: in a window this narrow the popup of View reaches past the right edge,
+  // the click on its entry first scrolls the page sideways, Options comes to lie under the pointer that rests on View,
+  // and the bar opens that menu instead (appkit-ui switches the open menu on hover). The entry is gone then and the
+  // click waited for it to the end of the test (CI runs 43535423823 and 43636854784; 10 of 30 on a quiet machine).
+  await pair(page, '/#view=list');
+  await expect(page.locator('button.row').first()).toBeVisible();
   const f = await openTask(page, 'lib.nvim/alpha');
   const b = await box(f);
   expect(b.x).toBeGreaterThanOrEqual(0);

@@ -2076,7 +2076,9 @@ test('the list comes from the cache before the hub answers', async ({ page }) =>
   // that can only be the cache.
   await page.route('**/api/**', async (route) => {
     await new Promise((r) => setTimeout(r, 1500));
-    await route.continue();
+    // A call still held when the test ends (the page asks on its own, too) has nowhere to go: the unroute below has
+    // let it through already, and its `continue` then throws "Route is already handled!" (CI run 43661612407).
+    await route.continue().catch(() => undefined);
   });
   await page.reload();
   const started = Date.now();
@@ -7226,8 +7228,11 @@ test.describe('a finger', () => {
     const over = await centre(doing.locator('h2'));
     await touch('touchMove', over);
     await expect(doing).toHaveClass(/target/);
-    await touch('touchEnd');
-    await expect(column('doing').locator('.card', { hasText: 'Board finger e2e' })).toBeVisible({ timeout: 15_000 });
+    // The write is answered and the board at rest before the tap below: the hub's event shows the card in its new
+    // column before the answer is there, and a tap that falls together with the answer is lost (CI run 43636854784:
+    // every step took milliseconds, the detail never opened; 1 of 30 here with the answer held back 120 to 380 ms).
+    await write(page, () => touch('touchEnd'));
+    await expect(column('doing').locator('.card', { hasText: 'Board finger e2e' })).toBeVisible();
     expect(readFileSync(file, 'utf8')).toContain('status: doing');
 
     // A tap on the card still selects it (a drag did not begin).
