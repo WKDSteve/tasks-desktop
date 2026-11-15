@@ -636,6 +636,17 @@
                   onselect: () => void app.toggleAutostart(),
                 },
               ]),
+          ...(app.keepRunning === null
+            ? []
+            : [
+                {
+                  kind: 'check' as const,
+                  label: t('menu.keep_running'),
+                  hint: t('hint.item.menu.keep_running'),
+                  checked: app.keepRunning,
+                  onselect: () => void app.toggleKeepRunning(),
+                },
+              ]),
           { kind: 'section', label: t('menu.sec.export') },
           { kind: 'info', label: t('menu.export_where') },
           ...(fromDisk

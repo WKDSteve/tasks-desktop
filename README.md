@@ -380,7 +380,9 @@ It stays when you gave it an order to:
 - it starts with your login (`tasks-hub autostart on`, the switch in the Options menu or the one of its tile in
   hub-desktop), or hub-desktop started it with itself at the login,
 - a phone is paired (`tasks-hub devices` lists them): the phone reaches the hub when no page is open on the PC,
-- `config.json` says `"keep_running": true`.
+- `config.json` says `"keep_running": true`: the switch "Keep the hub running in the background" in the Options menu
+  writes it (and takes it out again). The hub reads it when its ten minutes are over, so the switch acts without a
+  restart.
 
 A hub in a terminal (`tasks-hub serve`) is not affected: it runs until Ctrl-C. When a double click or
 `start --open` started the hub and the page then cannot be opened, the hub is stopped again at once and the message

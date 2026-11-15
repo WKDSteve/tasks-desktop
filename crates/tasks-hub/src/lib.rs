@@ -16,6 +16,7 @@ pub mod discovery;
 pub mod editor;
 pub mod engine;
 pub mod firststart;
+pub mod keeprunning;
 pub mod loginentry;
 pub mod newvault;
 pub mod notices;

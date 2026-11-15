@@ -774,6 +774,46 @@ describe('App', () => {
     await vi.waitFor(() => expect(app.autostart).toBe(true));
     app.stop();
   });
+
+  it('reads the order to stay with the ranges and again when the window gets the focus: the file may be edited by hand', async () => {
+    const { app, hub } = make({ token: 't' });
+    await app.start(null);
+    await app.loadEnums();
+    await vi.waitFor(() => expect(app.keepRunning).toBe(false));
+    hub.keepRunningOn = true;
+    await app.focused();
+    await vi.waitFor(() => expect(app.keepRunning).toBe(true));
+    app.stop();
+  });
+
+  it('switches the order to stay, says what came of it, and offers nothing where the hub has no settings', async () => {
+    const { app, hub } = make({ token: 't' });
+    await app.start(null);
+    app.keepRunning = false;
+    await app.toggleKeepRunning();
+    expect(hub.keepRunningOn).toBe(true);
+    expect(app.keepRunning).toBe(true);
+    expect(app.toast?.kind).toBe('ok');
+    await app.toggleKeepRunning();
+    expect(app.keepRunning).toBe(false);
+    hub.keepRunningRefused = true;
+    await app.toggleKeepRunning();
+    expect(app.keepRunning).toBe(false);
+    expect(app.toast?.kind).toBe('error');
+    hub.setKeepRunning = async () => null;
+    hub.keepRunningRefused = false;
+    await app.toggleKeepRunning();
+    expect(app.keepRunning).toBeNull();
+    // Nothing to switch: no request.
+    let asked = 0;
+    hub.setKeepRunning = async () => {
+      asked += 1;
+      return true;
+    };
+    await app.toggleKeepRunning();
+    expect(asked).toBe(0);
+    app.stop();
+  });
 });
 
 describe('App, cache and hub', () => {

@@ -14,6 +14,7 @@ use tasks_hub::client;
 use tasks_hub::config::Env;
 use tasks_hub::editor::terminal_opener;
 use tasks_hub::engine::{CliEngine, CliEngineConfig, Engine};
+use tasks_hub::keeprunning::{KeepRunning, SettingsFile};
 use tasks_hub::loginentry::LoginEntry;
 use tasks_hub::server::{
     start_with, Extras, HubStatus, Limits, RunningServer, ServerConfig, WatchConfig,
@@ -36,7 +37,7 @@ async fn rig(name: &str, with_opener: bool) -> Rig {
 
 /// `pick`: the folder the folder dialog "returns" (`None`: the dialog is closed without a choice).
 async fn rig_with(name: &str, with_opener: bool, pick: Option<&str>) -> Rig {
-    rig_full(name, with_opener, pick, None, None).await
+    rig_full(name, with_opener, pick, None, None, None).await
 }
 
 /// A run of test sheets that answers at once, and says which task it was asked for.
@@ -93,6 +94,7 @@ async fn rig_full(
     pick: Option<&str>,
     login_entry: Option<Arc<dyn LoginEntry>>,
     runs: Option<Arc<SheetRunJob>>,
+    stay: Option<Arc<dyn KeepRunning>>,
 ) -> Rig {
     let base = Scratch::new(&format!("open-{name}"));
     let vault = base.join("vault");
@@ -182,6 +184,7 @@ row two
             vaults: None,
             opener,
             login: login_entry,
+            keep_running: stay,
             first_start: None,
             all_vaults: None,
             sheet_run: runs,
@@ -362,7 +365,7 @@ async fn the_login_entry_is_read_set_and_taken_away_and_only_with_a_session() {
         on: Mutex::new(Some(false)),
         refuse: false,
     });
-    let r = rig_full("autostart", false, None, Some(login.clone()), None).await;
+    let r = rig_full("autostart", false, None, Some(login.clone()), None, None).await;
     let route = "/api/tasks/autostart";
     assert_eq!(get(&r, route).await.1["on"], false);
     let (status, doc) = post(&r, route, r#"{"on":true}"#, true).await;
@@ -392,7 +395,7 @@ async fn the_login_entry_is_read_set_and_taken_away_and_only_with_a_session() {
         on: Mutex::new(Some(false)),
         refuse: true,
     });
-    let r2 = rig_full("autostart-refused", false, None, Some(refusing), None).await;
+    let r2 = rig_full("autostart-refused", false, None, Some(refusing), None, None).await;
     let (status, doc) = post(&r2, route, r#"{"on":true}"#, true).await;
     assert_eq!(
         (status, doc["error"]["code"].as_str()),
@@ -406,9 +409,65 @@ async fn the_login_entry_is_read_set_and_taken_away_and_only_with_a_session() {
 }
 
 #[tokio::test]
+async fn the_order_to_stay_is_the_key_of_the_settings_and_only_with_a_session() {
+    let settings = Scratch::new("open-keep-running-settings");
+    std::fs::write(settings.join("config.json"), r#"{"port":17615}"#).unwrap();
+    let file = || std::fs::read_to_string(settings.join("config.json")).unwrap();
+    let stay: Arc<dyn KeepRunning> = Arc::new(SettingsFile::new(settings.to_path_buf()));
+    let r = rig_full("keep-running", false, None, None, None, Some(stay)).await;
+    let route = "/api/tasks/keep_running";
+    assert_eq!(get(&r, route).await.1["on"], false);
+    let (status, doc) = post(&r, route, r#"{"on":true}"#, true).await;
+    assert_eq!((status, doc["on"].as_bool()), (200, Some(true)), "{doc}");
+    assert!(
+        file().contains(r#""keep_running": true"#) || file().contains(r#""keep_running":true"#),
+        "{}",
+        file()
+    );
+    assert!(
+        file().contains("17615"),
+        "the rest of the settings stays: {}",
+        file()
+    );
+    assert_eq!(get(&r, route).await.1["on"], true);
+    let (status, doc) = post(&r, route, r#"{"on":false}"#, true).await;
+    assert_eq!((status, doc["on"].as_bool()), (200, Some(false)), "{doc}");
+    assert!(!file().contains("keep_running"), "{}", file());
+    // Anything else is refused, and the credential comes first.
+    for bad in [
+        r#"{}"#,
+        r#"{"on":"yes"}"#,
+        r#"{"on":true,"dir":"x"}"#,
+        "nonsense",
+    ] {
+        assert_eq!(post(&r, route, bad, true).await.0, 400, "{bad}");
+    }
+    assert_eq!(post(&r, route, r#"{"on":true}"#, false).await.0, 401);
+    assert!(
+        !file().contains("keep_running"),
+        "a refused request changed nothing"
+    );
+
+    // Settings that cannot be read: the page is told, the file is not written over.
+    std::fs::write(settings.join("config.json"), "{ not json").unwrap();
+    assert!(get(&r, route).await.1["on"].is_null());
+    let (status, doc) = post(&r, route, r#"{"on":true}"#, true).await;
+    assert_eq!(
+        (status, doc["error"]["code"].as_str()),
+        (502, Some("keep_running_failed"))
+    );
+    assert_eq!(file(), "{ not json");
+
+    // A hub without settings offers no switch.
+    let none = rig("keep-running-none", false).await;
+    assert!(get(&none, route).await.1["on"].is_null());
+    assert_eq!(post(&none, route, r#"{"on":true}"#, true).await.0, 404);
+}
+
+#[tokio::test]
 async fn the_test_sheets_of_a_task_run_as_one_job_and_only_with_a_session() {
     let job = Arc::new(SheetRunJob::new(Arc::new(FakeSheets)));
-    let r = rig_full("sheets", false, None, None, Some(job)).await;
+    let r = rig_full("sheets", false, None, None, Some(job), None).await;
     let route = "/api/tasks/sheet_run";
     assert_eq!(get(&r, route).await.1["state"], "idle");
     let (status, doc) = post(&r, route, r#"{"id":"alpha.nvim/t1"}"#, true).await;

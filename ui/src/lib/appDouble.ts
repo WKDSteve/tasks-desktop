@@ -54,6 +54,14 @@ export class FakeHub {
     return on;
   };
   autostartRefused = false;
+  keepRunningOn: boolean | null = false;
+  keepRunning = async (): Promise<boolean | null> => this.keepRunningOn;
+  setKeepRunning = async (on: boolean): Promise<boolean | null> => {
+    if (this.keepRunningRefused) throw new Error('no');
+    this.keepRunningOn = on;
+    return on;
+  };
+  keepRunningRefused = false;
   token: string | null = null;
   onUnauthorized: () => void = () => {};
   doc: Snapshot = snapshot([task('pub/a', { etag: 'e1' })]);

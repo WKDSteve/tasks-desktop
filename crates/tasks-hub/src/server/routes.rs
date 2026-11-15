@@ -1228,27 +1228,9 @@ pub(super) async fn autostart_get(State(st): State<Arc<Shared>>) -> Response {
 /// `POST /api/tasks/autostart` `{ "on": bool }`: register the hub at login, or take it away. The answer is what the
 /// system says afterwards, not what was asked.
 pub(super) async fn autostart_set(State(st): State<Arc<Shared>>, body: Bytes) -> Response {
-    let on = match serde_json::from_slice::<serde_json::Value>(&body) {
-        Ok(doc) => match (
-            doc.as_object().map(serde_json::Map::len),
-            doc["on"].as_bool(),
-        ) {
-            (Some(1), Some(on)) => on,
-            _ => {
-                return error_body(
-                    StatusCode::BAD_REQUEST,
-                    "bad_request",
-                    "the body is { \"on\": true | false }",
-                )
-            }
-        },
-        Err(_) => {
-            return error_body(
-                StatusCode::BAD_REQUEST,
-                "bad_request",
-                "the body is not JSON",
-            )
-        }
+    let on = match switch_body(&body) {
+        Ok(on) => on,
+        Err(response) => return response,
     };
     let Some(login) = st.rt().login.clone() else {
         return error_body(
@@ -1354,6 +1336,69 @@ pub(super) async fn rescan(State(st): State<Arc<Shared>>) -> Response {
 /// `ops`. `ops` takes writes and dry runs (only its body tells them apart: the writes are counted
 /// again, strictly, by the handler). `estimate` is a read that is a POST (its question is too long
 /// for a query): it changes nothing.
+/// `GET /api/tasks/keep_running`: whether a hub in the background stays without a page (`{ "on": bool }`); `null`: this
+/// hub offers no switch, or its settings cannot be read now.
+pub(super) async fn keep_running_get(State(st): State<Arc<Shared>>) -> Response {
+    let Some(order) = st.rt().keep_running.clone() else {
+        return axum::Json(json!({ "on": null })).into_response();
+    };
+    match tokio::task::spawn_blocking(move || order.is_on()).await {
+        Ok(Ok(on)) => axum::Json(json!({ "on": on })).into_response(),
+        _ => axum::Json(json!({ "on": null })).into_response(),
+    }
+}
+
+/// `POST /api/tasks/keep_running` `{ "on": bool }`: give a hub in the background the order to stay, or take it back
+/// (`keep_running` of the settings). The answer is what the settings say afterwards, not what was asked.
+pub(super) async fn keep_running_set(State(st): State<Arc<Shared>>, body: Bytes) -> Response {
+    let on = match switch_body(&body) {
+        Ok(on) => on,
+        Err(response) => return response,
+    };
+    let Some(order) = st.rt().keep_running.clone() else {
+        return error_body(
+            StatusCode::NOT_FOUND,
+            "keep_running_unavailable",
+            "this hub has no settings to keep the order in",
+        );
+    };
+    let done =
+        tokio::task::spawn_blocking(move || order.set(on).and_then(|()| order.is_on())).await;
+    match done {
+        Ok(Ok(now)) => axum::Json(json!({ "on": now })).into_response(),
+        Ok(Err(why)) => error_body(StatusCode::BAD_GATEWAY, "keep_running_failed", &why),
+        Err(_) => error_body(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "keep_running_failed",
+            "the change stopped unexpectedly",
+        ),
+    }
+}
+
+/// The body of a switch, `{ "on": true | false }` and nothing else; `Err`: the answer to send.
+// The error is the answer to send, as with `ask`: a response is large, and rare.
+#[allow(clippy::result_large_err)]
+fn switch_body(body: &[u8]) -> Result<bool, Response> {
+    match serde_json::from_slice::<serde_json::Value>(body) {
+        Ok(doc) => match (
+            doc.as_object().map(serde_json::Map::len),
+            doc["on"].as_bool(),
+        ) {
+            (Some(1), Some(on)) => Ok(on),
+            _ => Err(error_body(
+                StatusCode::BAD_REQUEST,
+                "bad_request",
+                "the body is { \"on\": true | false }",
+            )),
+        },
+        Err(_) => Err(error_body(
+            StatusCode::BAD_REQUEST,
+            "bad_request",
+            "the body is not JSON",
+        )),
+    }
+}
+
 pub(super) fn guard_rules() -> GuardRules {
     GuardRules::new(
         crate::IDENTITY.route("hello"),

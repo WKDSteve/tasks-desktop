@@ -820,6 +820,7 @@ pub async fn serve(opts: ServeOptions) -> Result<(), String> {
         opener: Some(Arc::clone(&opener) as Arc<dyn crate::editor::FileOpener>),
         first_start: Some(Arc::clone(&first_start)),
         login: Some(Arc::new(crate::loginentry::SystemLoginEntry)),
+        keep_running: Some(Arc::new(crate::keeprunning::SettingsFile::new(dir.clone()))),
         all_vaults: Some(Arc::clone(&all_vaults)),
         sheet_run: Some(Arc::clone(&sheet_run)),
         testing: Some(Arc::clone(&testing)),

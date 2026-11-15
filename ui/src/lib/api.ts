@@ -348,6 +348,25 @@ export class Hub extends HubClient<Snapshot> {
   }
 
   /**
+   * Whether a hub in the background stays without a page (`keep_running` of its settings); null where there is no such
+   * thing to switch (a hub without settings, the web variant).
+   */
+  async keepRunning(): Promise<boolean | null> {
+    try {
+      const doc = await this.json<{ on: boolean | null }>('/api/tasks/keep_running');
+      return typeof doc.on === 'boolean' ? doc.on : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /** Give a hub in the background the order to stay, or take it back; what the settings say afterwards. */
+  async setKeepRunning(on: boolean): Promise<boolean | null> {
+    const doc = await this.postJson<{ on: boolean | null }>('/api/tasks/keep_running', { on });
+    return typeof doc.on === 'boolean' ? doc.on : null;
+  }
+
+  /**
    * Ask the person for a folder with the dialog of the system on the machine of the hub (a page cannot show one with a
    * path). The folder they chose, or `null` when the dialog was closed; the page names nothing.
    */

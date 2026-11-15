@@ -92,6 +92,7 @@ async fn rig_full(name: &str, limits: Limits, attach_dirs: Vec<PathBuf>) -> Rig 
         },
         Extras {
             login: None,
+            keep_running: None,
             attach_dirs,
             upload_dir: Some(vault.join(".uploads")),
             snapshot_root: None,

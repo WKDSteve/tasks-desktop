@@ -8085,6 +8085,36 @@ test('without a login entry the Options menu has no such switch', async ({ page 
   await page.keyboard.press('Escape');
 });
 
+test('the Options menu keeps the hub running in the background: the real route writes keep_running into the settings', async ({ page }) => {
+  const settings = join(state().config, 'config.json');
+  const written = (): unknown => (JSON.parse(readFileSync(settings, 'utf8')) as Record<string, unknown>)['keep_running'];
+  await pair(page);
+  await showList(page);
+  try {
+    await page.getByRole('menuitem', { name: 'Options', exact: true }).click();
+    const entry = page.getByRole('menuitemcheckbox', { name: 'Keep the hub running in the background' });
+    await expect(entry).toHaveAttribute('aria-checked', 'false');
+    await expectAccessible(page, 'the Options menu with the switch to keep running');
+    await entry.click();
+    await expect(page.getByRole('status').getByText('The hub now keeps running without a page.')).toBeVisible();
+    expect(written()).toBe(true);
+    await page.getByRole('menuitem', { name: 'Options', exact: true }).click();
+    const again = page.getByRole('menuitemcheckbox', { name: 'Keep the hub running in the background' });
+    await expect(again).toHaveAttribute('aria-checked', 'true');
+    await again.click();
+    await expect(page.getByRole('status').getByText('The hub now ends 10 minutes after the last page closed.')).toBeVisible();
+    expect(written()).toBeUndefined();
+  } finally {
+    // The hub of the tests is shared: the order never outlives this test.
+    const doc = JSON.parse(readFileSync(settings, 'utf8')) as Record<string, unknown>;
+    if ('keep_running' in doc) {
+      delete doc['keep_running'];
+      writeFileSync(settings, JSON.stringify(doc));
+    }
+  }
+  expect(consoleProblems.get(page)).toEqual([]);
+});
+
 test('a file from this computer is attached to a task: a plain task becomes a folder, and the link is offered', async ({ page }) => {
   const slug = `upload-e2e-${Date.now().toString(36)}`;
   const file = join(state().vault, 'lib.nvim', 'ROADMAP', 'tasks', `${slug}.md`);

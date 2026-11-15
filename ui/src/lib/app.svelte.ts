@@ -639,6 +639,8 @@ export class App {
   appVersion = $state('');
   /** Whether the hub starts at login; null: nothing to switch here. */
   autostart = $state<boolean | null>(null);
+  /** Whether a hub in the background stays without a page (`keep_running`); null: nothing to switch here. */
+  keepRunning = $state<boolean | null>(null);
   /** The plan wizard is open. */
   planning = $state(false);
   /** The task that is being finished, with what the engine says that does. */
@@ -1095,6 +1097,7 @@ export class App {
       void this.readAutostart();
       // Whether the Help menu offers the installation (a hub that runs from a download); the web variant has no hub.
       if (this.env.mode !== 'web') void this.setupState.load();
+      void this.readKeepRunning();
       this.ranges = rangesOf((await this.env.hub.enums()).enums);
     } catch (error) {
       // A session that is gone asks again after the next pairing; any other failure keeps the defaults.
@@ -3253,6 +3256,28 @@ export class App {
     }
   }
 
+  private async readKeepRunning(): Promise<void> {
+    try {
+      this.keepRunning = await this.env.hub.keepRunning();
+    } catch {
+      this.keepRunning = null;
+    }
+  }
+
+  /** The switch "Keep running in the background" of the Options menu: says what came of it, shows what the settings say. */
+  async toggleKeepRunning(): Promise<void> {
+    if (this.keepRunning === null) return;
+    const wanted = !this.keepRunning;
+    try {
+      const now = await this.env.hub.setKeepRunning(wanted);
+      this.keepRunning = now;
+      if (now === wanted) this.say('ok', wanted ? 'keep_running.on' : 'keep_running.off');
+      else this.say('error', 'keep_running.failed');
+    } catch {
+      this.say('error', 'keep_running.failed');
+    }
+  }
+
   /** The one area the finished tasks open with, from a number of the statistics: taken once by the view. */
   finishedStartArea: string | undefined = undefined;
   takeFinishedStartArea(): string | undefined {
@@ -4286,6 +4311,8 @@ export class App {
     if (this.phase !== 'ready' || !this.sessionHeld) return;
     // hub-desktop can switch the start at login too (the tile, in another window): the Options menu shows what is true now.
     if (this.autostart !== null) void this.readAutostart();
+    // The settings file may have been edited by hand meanwhile.
+    if (this.keepRunning !== null) void this.readKeepRunning();
     try {
       await this.env.hub.rescan();
     } catch {
