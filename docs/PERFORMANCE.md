@@ -21,6 +21,12 @@ pairs the way the page does, times the read routes on one connection that stays 
 ends the hub it started (killed before that, the hub ends itself a minute later). It only reads the vault. The report holds counts, sizes and times: no path and no title.
 The engine is the one the hub finds (`TASKS_ENGINE_DIR`, `LIB_NVIM_DIR`, as for every local build).
 
+The report says what answered: the commit of a rolling build of the hub and the engine's version and commit (from
+`/api/tasks/about`), and which of `TASKS_HUB_ENGINE`, `TASKS_HUB_UI_DIR`, `TASKS_NVIM`, `TASKS_ENGINE_DIR`,
+`LIB_NVIM_DIR` the caller had set (names only; they are passed on). A program that carries its engine unpacks it into
+the new config folder on every run; the report then says that the start times hold the unpacking. Should the vault
+change between taking the ETag and the 304 series, the series runs once more with the new ETag.
+
 Three things make a run comparable: a release build, the same vault, and a machine that does nothing else. The
 series below was taken while another build ran on the machine; read the medians, not the maxima.
 

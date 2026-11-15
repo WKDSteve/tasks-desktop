@@ -36,6 +36,35 @@ import urllib.parse
 
 ROUTE = '/api/tasks/'
 START_LIMIT = 120.0
+# Variables of the caller that change what the hub runs (another engine, another page, another Neovim). They are
+# passed on as they are, and the report names the ones that were set (names only: a value may be a path).
+CALLER_VARS = ('TASKS_HUB_ENGINE', 'TASKS_HUB_UI_DIR', 'TASKS_NVIM', 'TASKS_ENGINE_DIR', 'LIB_NVIM_DIR')
+
+
+class Unexpected(Exception):
+    """A series got another HTTP status than it expects."""
+
+    def __init__(self, path: str, status: int, expect: int) -> None:
+        super().__init__(f'{path} answered HTTP {status}, not {expect}')
+        self.status = status
+
+
+def caller_vars(env: dict) -> list[str]:
+    """The names of `CALLER_VARS` that are set (not empty) in `env`, in the order of the list."""
+    return [name for name in CALLER_VARS if env.get(name)]
+
+
+def unchanged_series(hub, path: str, runs: int) -> dict:
+    """The series of 304 answers. The vault may change between taking the ETag and the series (another program
+    writes a task): then the ETag is taken anew and the series runs once more; a second change ends the run."""
+    for attempt in (1, 2):
+        etag = hub.request('GET', path)[1]['ETag']
+        try:
+            return hub.series('snapshot, unchanged (304)', path, runs, {'If-None-Match': etag}, expect=304)
+        except Unexpected as e:
+            if attempt == 2 or e.status != 200:
+                raise SystemExit(f'measure-hub: {e}') from None
+    raise AssertionError('unreachable')
 
 
 def percentile(values: list[float], share: float) -> float:
@@ -148,7 +177,7 @@ class Hub:
         for _ in range(runs):
             status, _, data, took = self.request('GET', path, headers)
             if status != expect:
-                raise SystemExit(f'measure-hub: {path} answered HTTP {status}, not {expect}')
+                raise Unexpected(path, status, expect)
             times.append(took)
             size = len(data)
         return summarize(name, times, size)
@@ -234,13 +263,15 @@ def measure(exe: pathlib.Path, vault: pathlib.Path, runs: int, details: int) -> 
         if not doc.get('engine', {}).get('ready'):
             problem = doc.get('engine', {}).get('problem')
             raise SystemExit(f'measure-hub: the engine is not ready ({problem})')
+        # Which hub and which engine answered: the commit of a rolling build and the engine's version and commit.
+        status, _, data, _ = hub.request('GET', ROUTE + 'about')
+        about = json.loads(data) if status == 200 else {}
 
         rows = []
         first = hub.series('snapshot, first request', ROUTE + 'snapshot', 1)
         first_ready = time.perf_counter() - began
-        status, headers, data, _ = hub.request('GET', ROUTE + 'snapshot')
+        status, _, data, _ = hub.request('GET', ROUTE + 'snapshot')
         snapshot = json.loads(data)
-        etag = headers['ETag']
         tasks = snapshot['tasks']
 
         # The search index, asked right away: every series below takes time of its own, and asked after them the
@@ -258,11 +289,7 @@ def measure(exe: pathlib.Path, vault: pathlib.Path, runs: int, details: int) -> 
 
         rows.append(first)
         rows.append(hub.series('snapshot, again', ROUTE + 'snapshot', runs))
-        # The vault may change under the measurement (another program writes a task): the ETag is taken anew.
-        etag = hub.request('GET', ROUTE + 'snapshot')[1]['ETag'] or etag
-        rows.append(
-            hub.series('snapshot, unchanged (304)', ROUTE + 'snapshot', runs, {'If-None-Match': etag}, expect=304)
-        )
+        rows.append(unchanged_series(hub, ROUTE + 'snapshot', runs))
         rows.append(hub.series('areas', ROUTE + 'areas', runs))
         rows.append(hub.series('next', ROUTE + 'next', runs))
 
@@ -293,9 +320,16 @@ def measure(exe: pathlib.Path, vault: pathlib.Path, runs: int, details: int) -> 
         rows.append(summarize(f'search, one frequent word ({len(words)} words; size: the largest)', search_times, largest))
 
         version = subprocess.run([str(exe), '--version'], capture_output=True, text=True, env=env, check=False)
+        engine = about.get('engine') or {}
         return {
             'version': version.stdout.strip(),
-            'engine': doc['engine'].get('version'),
+            'build': about.get('build'),
+            'engine': engine.get('version') or doc['engine'].get('version'),
+            'engine_git': engine.get('git'),
+            'caller_vars': caller_vars(env),
+            # A program that carries its engine unpacks it into the config folder, which is new on every run: its
+            # start then holds the unpacking.
+            'embedded_engine': (config / 'engine').is_dir(),
             'tasks': len(tasks),
             'areas': len({task['id'].split('/')[0] for task in tasks}),
             'runs': runs,
@@ -326,10 +360,40 @@ def measure(exe: pathlib.Path, vault: pathlib.Path, runs: int, details: int) -> 
             print(f'measure-hub: could not remove {config} (a file in it is still held); delete it', file=sys.stderr)
 
 
+def short(commit: str | None) -> str:
+    """A commit cut to twelve hex digits; any other word (a `git describe`) as it is."""
+    if not commit:
+        return 'unknown'
+    return commit[:12] if re.fullmatch(r'[0-9a-fA-F]{13,40}', commit) else commit
+
+
+def provenance(result: dict) -> list[str]:
+    """What answered and what of the caller changed it: two runs are comparable when these lines match."""
+    build = result.get('build')
+    lines = [
+        f"Hub commit: {short(build) if build else 'none (not a rolling build)'}. "
+        f"Engine: {result.get('engine') or 'unknown'}, commit {short(result.get('engine_git'))}.",
+    ]
+    names = result.get('caller_vars') or []
+    lines.append(
+        'Set by the caller and passed on: ' + ', '.join(f'`{name}`' for name in names) + '.'
+        if names
+        else 'None of ' + ', '.join(f'`{name}`' for name in CALLER_VARS) + ' was set.'
+    )
+    if result.get('embedded_engine'):
+        lines.append(
+            'The program carries its engine and unpacked it into the new config folder: '
+            'the start times below hold that unpacking.'
+        )
+    return lines
+
+
 def report(result: dict, profile: str, when: datetime.date) -> str:
     lines = [
         f"Measured on {when.isoformat()} with `{result['version']}` ({profile} build), "
         f"{platform.system()} {platform.release()}, {os.cpu_count()} logical CPUs.",
+        '',
+        *provenance(result),
         '',
         f"Vault: {result['tasks']} open tasks in {result['areas']} areas. Each series: {result['runs']} requests "
         'on one connection that stays open, timed in the client from the first byte sent to the last byte read.',
@@ -368,7 +432,10 @@ def main(argv: list[str]) -> int:
     if out and not out.parent.is_dir():
         print(f'measure-hub: the folder of --out is not there: {out.parent}', file=sys.stderr)
         return 2
-    result = measure(args.exe.resolve(), args.vault.resolve(), args.runs, args.details)
+    try:
+        result = measure(args.exe.resolve(), args.vault.resolve(), args.runs, args.details)
+    except Unexpected as e:
+        raise SystemExit(f'measure-hub: {e}') from None
     profile = build_profile(args.exe.resolve())
     text = json.dumps(result, indent=2) if args.json else report(result, profile, datetime.date.today())
     sys.stdout.write(text if text.endswith('\n') else text + '\n')
