@@ -226,3 +226,42 @@ describe('a screenshot to attach', () => {
     expect(page(true, ['attach']).canAttach).toBe(false);
   });
 });
+
+describe('the test sheets of a task', () => {
+  const BODY = [
+    'Check it by eye.',
+    '',
+    '<!-- testing:sheets:begin -->',
+    '## Test sheets',
+    '',
+    '- **Web sheet** (`web.sheet`, `ui.nvim/TESTS/sheets/web.sheet.lua`): automated part green, waiting for your judgement',
+    '  - Judge:',
+    '    - [ ] The border is drawn',
+    '- **Red sheet** (`red.sheet`, `ui.nvim/TESTS/sheets/red.sheet.lua`): red',
+    '<!-- testing:sheets:states web.sheet=inbox red.sheet=red -->',
+    '<!-- testing:sheets:end -->',
+    '',
+  ].join('\n');
+  const doc = (body: string) =>
+    ({ kind: 'tasks.task', task: task('pub/a'), body, body_truncated: false, steps: [], questions: [] }) as never;
+
+  it('lists the sheets the last report wrote into the task, with their state, and runs none', () => {
+    for (const web of [true, false]) {
+      const app = page(web);
+      app.detail = { state: 'ok', id: 'pub/a', doc: doc(BODY) };
+      const out = detail(app);
+      expect(out).toContain('<h3>Test sheets</h3>');
+      expect(out).toMatch(/<span class="sheet-title[^"]*">Web sheet<\/span>\s*<code[^>]*>web\.sheet<\/code>\s*<span class="muted[^"]*">green, waiting for your judgement<\/span>/);
+      expect(out).toMatch(/<span class="sheet-title[^"]*">Red sheet<\/span>\s*<code[^>]*>red\.sheet<\/code>\s*<span class="muted[^"]*">red<\/span>/);
+      expect(out).not.toContain('Run the test sheet');
+      // Only the web variant says where a run goes: the page of the hub has it at hand.
+      expect(out.includes('is run from tasks mobile or from the hub on the PC')).toBe(web);
+    }
+  });
+
+  it('shows no section for a task without the block of a report', () => {
+    const app = page(true);
+    app.detail = { state: 'ok', id: 'pub/a', doc: doc('Just text.') };
+    expect(detail(app)).not.toContain('Test sheets');
+  });
+});

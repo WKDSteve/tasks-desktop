@@ -1,7 +1,7 @@
 // The snapshots of a test sheet in the web variant: without a hub they lie in a folder only the person can give. The page
 // says so once, and shows them when the folder is chosen.
 import { expect, test } from '@playwright/test';
-import { openVault, vaultFiles, violations, watchPage } from './page';
+import { fakePicker, openVault, pageUrl, vaultFiles, violations, watchPage } from './page';
 
 test.use({ locale: 'en-US' });
 
@@ -50,6 +50,26 @@ test('the folder of the checkouts is asked for once, and the snapshots show when
   await choose.click();
   await expect(page.locator('pre.grid').first()).toContainText('first grid of the sheet');
   await expect(choose).toHaveCount(0);
+
+  expect(seen.requests).toEqual([]);
+  expect(await violations(page)).toEqual([]);
+  expect(seen.errors).toEqual([]);
+});
+
+test('the detail of a task lists its test sheets as the last report wrote them, and says where a run goes', async ({ page }) => {
+  const seen = await watchPage(page);
+  await fakePicker(page, { ...vaultFiles(), 'lib.nvim/ROADMAP/tasks/abnahme-web.md': TASK });
+  await page.goto(`${pageUrl()}#task=lib.nvim%2Fabnahme-web`);
+  await page.getByRole('button', { name: /Choose folder/ }).click();
+  const detail = page.locator('main aside.detail');
+  await expect(detail.locator('.id')).toHaveText('lib.nvim/abnahme-web', { timeout: 30_000 });
+
+  const sheets = detail.getByTestId('detail-sheets');
+  await expect(sheets.getByRole('listitem')).toHaveCount(1);
+  await expect(sheets.getByRole('listitem')).toHaveText(/Web sheet\s+web\.sheet\s+green, waiting for your judgement/);
+  await expect(detail.getByText('A test sheet is run from tasks mobile or from the hub on the PC, not from this page.')).toBeVisible();
+  // Nothing to run here, and nothing asked of a hub.
+  await expect(detail.getByRole('button', { name: /run/i })).toHaveCount(0);
 
   expect(seen.requests).toEqual([]);
   expect(await violations(page)).toEqual([]);

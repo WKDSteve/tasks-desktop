@@ -30,6 +30,7 @@
     stepTitle,
   } from '../lib/fields';
   import Blocks from 'appkit-ui/Blocks.svelte';
+  import { parseSheets } from '../lib/abnahme';
 
   let { app }: { app: App } = $props();
   // The detail can stand twice at once (the float and the side): each has its own list of the reasons.
@@ -44,6 +45,23 @@
   const body = $derived(detail.state === 'ok' ? detail.doc.body : '');
   let raw = $state(false);
   const blocks = $derived(raw ? [] : parseMarkdown(body));
+  // The test sheets that name the task, as the last report of testing.nvim wrote them into its body (name, id, state).
+  // Nothing is run from here.
+  const sheets = $derived(parseSheets(body));
+  const SHEET_STATES: Record<string, Key> = {
+    red: 'detail.sheet.red',
+    stale: 'detail.sheet.stale',
+    never: 'detail.sheet.never',
+    inbox: 'detail.sheet.inbox',
+    manual: 'detail.sheet.manual',
+    green: 'detail.sheet.green',
+  };
+  /** The state of a sheet in words; a state this page does not know is shown as written. */
+  function sheetState(state: string | undefined): string {
+    if (state === undefined) return t('detail.sheet.unknown');
+    const key = SHEET_STATES[state];
+    return key ? t(key) : state;
+  }
   const byId = $derived(new Map(app.tasks.map((x) => [x.id, x] as const)));
 
 
@@ -937,6 +955,19 @@
           {/each}
         </div>
       {/if}
+      {#if sheets.length > 0}
+        <h3>{t('detail.sheets')}</h3>
+        <ul class="sheets" data-testid="detail-sheets">
+          {#each sheets as sheet, i (i)}
+            <li>
+              <span class="sheet-title">{markHidden(sheet.title)}</span>
+              {#if sheet.id}<code>{sheet.id}</code>{/if}
+              <span class="muted">{sheetState(sheet.state)}</span>
+            </li>
+          {/each}
+        </ul>
+        {#if app.mode === 'web'}<p class="muted">{t('detail.sheets_run')}</p>{/if}
+      {/if}
       <h3>
         {t('detail.body')}
         <!-- The label names what the button will do, so it is a plain button, not a pressed one (both at once contradict). -->
@@ -1209,6 +1240,13 @@
     font: inherit;
     font-size: 0.9rem;
     resize: vertical;
+  }
+  .sheets {
+    margin: 0;
+    padding-left: 1.2em;
+  }
+  .sheets li > * + * {
+    margin-left: 0.4em;
   }
   .findings {
     margin: 0 0 0.6rem;
