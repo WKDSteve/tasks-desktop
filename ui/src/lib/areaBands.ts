@@ -3,7 +3,7 @@
 // gets a head; where it mixes them, each row gets a band in the colour of its area and the area's name. One area alone
 // gets neither.
 
-/** How many colours the bands have (`--area-1` ... `--area-8` in app.css); more areas than that share colours. */
+/** How many colours the bands have (`--area-1` ... `--area-8`, tokens of the kit); more areas than that share colours. */
 export const AREA_COLOURS = 8;
 
 /**

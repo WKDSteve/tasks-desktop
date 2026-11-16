@@ -8875,6 +8875,15 @@ async function toggleOption(page: Page, name: string): Promise<void> {
   await page.getByRole('menuitemcheckbox', { name, exact: true }).click();
 }
 
+/** The eight area colours of the kit (`--area-1` to `--area-8` in appkit-ui's tokens.css) for one scheme, as computed
+ *  colours: the page takes them from the kit, not from colours of its own. */
+function kitAreaColours(scheme: 'light' | 'dark'): string[] {
+  const tokens = readFileSync(new URL('../node_modules/appkit-ui/src/tokens.css', import.meta.url), 'utf8');
+  const found = [...tokens.matchAll(/--area-\d:\s*light-dark\((#[0-9a-f]{6}),\s*(#[0-9a-f]{6})\)/gi)].map((m) => m[scheme === 'light' ? 1 : 2] ?? '');
+  expect(found).toHaveLength(8);
+  return found.map((hex) => `rgb(${[1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)).join(', ')})`);
+}
+
 for (const scheme of ['light', 'dark'] as const) {
   test(`the list sets the areas apart in ${scheme}: bands in a mixed order, heads when grouped by area, plain rows when off`, async ({ page }) => {
     test.slow();
@@ -8901,6 +8910,8 @@ for (const scheme of ['light', 'dark'] as const) {
       expect(byArea.size).toBeGreaterThan(1);
       for (const colours of byArea.values()) expect(colours.size).toBe(1);
       expect(new Set(bands.map(([, colour]) => colour)).size).toBeGreaterThan(1);
+      const kit = kitAreaColours(scheme);
+      for (const [, colour] of bands) expect(kit).toContain(colour);
     };
     await mixed();
     await expectAccessible(page, `the list with bands (${scheme})`);
