@@ -1,9 +1,8 @@
 // The retry of `fixtures.ts`: a test runs again only after a first attempt that failed while the machine broke its
 // connections. The fault the runner saw (a change of the network interfaces) cannot be made on purpose, so the watch is
 // shown with another fault in its place.
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { readFileSync } from 'node:fs';
+import { removeTree, tempDir } from '../web/tmp.mjs';
 import { expect, isMachineFault, loadWhole, machineFaultNote, noteMachineFaults, retryRefusal, test, watchMachineFaults } from './fixtures';
 
 const ORIGIN = 'http://machine-faults.invalid';
@@ -13,7 +12,7 @@ test('a change of the network interfaces is a fault of the machine', () => {
 });
 
 test('a retry runs only after an attempt that left the note of a fault of the machine', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'tasks-e2e-retry-'));
+  const dir = tempDir('e2e-retry');
   try {
     const note = machineFaultNote(dir, 'abc123');
     expect(retryRefusal(0, note)).toBeNull();
@@ -22,7 +21,7 @@ test('a retry runs only after an attempt that left the note of a fault of the ma
     expect(retryRefusal(1, note)).toBeNull();
     expect(readFileSync(note, 'utf8')).toContain('net::ERR_NETWORK_CHANGED');
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTree(dir);
   }
 });
 
