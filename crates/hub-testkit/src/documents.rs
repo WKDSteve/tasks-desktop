@@ -16,7 +16,8 @@
 //! * `.fake-snapshot-ms`: a `snapshot` takes that long (an engine started slowly on a busy machine);
 //! * `.fake-task-ms`, `.fake-task-calls`: a `task` read takes that long, and every one is counted;
 //! * `.fake-task-file`: the file every task is in;
-//! * `.fake-calls-areas`, `.fake-calls-next`: every `areas` and `next` question is counted;
+//! * `.fake-calls-areas`, `.fake-calls-next`: every `areas` and `next` question is counted (only in a
+//!   vault with `.fake-n`);
 //! * `.fake-check-ms`, `.fake-check-done`, `.fake-check-fail`: a `check` takes that long, leaves a
 //!   note when it ran to its end, or fails;
 //! * `.fake-ops-conflict`: every operation of `ops` is refused with `conflict` (the file changed
@@ -59,11 +60,12 @@ fn tasks_before(call: &Call<'_>) {
         }
         std::thread::sleep(Duration::from_millis(text.trim().parse().unwrap_or(0)));
     }
-    // Counted only into a vault folder that exists: a call without a vault (an empty name) would
-    // otherwise write the count relative to the working folder of the process, which in CI is the
-    // job's temp folder (tools/check-temp-leftovers.mjs turns the job red).
+    // Counted only in a vault that keeps a state (`.fake-n`), as `.fake-calls` of the snapshot is:
+    // a test that counts sets one up. Any other folder the engine is pointed at (no vault, or the
+    // working folder, which in CI is the job's temp folder) gets no file, so
+    // tools/check-temp-leftovers.mjs finds nothing there.
     if matches!(call.method, "areas" | "next")
-        && base.is_dir()
+        && state(base).is_some()
         && let Ok(mut calls) = std::fs::OpenOptions::new()
             .create(true)
             .append(true)
@@ -475,6 +477,7 @@ mod tests {
         let dir =
             std::env::temp_dir().join(format!("hub-testkit-fake-calls-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join(".fake-n"), "2").unwrap();
         let params = Value::Null;
         let vault = dir.to_string_lossy().into_owned();
         tasks_before(&call("areas", &vault, &params));
@@ -488,5 +491,25 @@ mod tests {
         let (areas, next) = (count("areas"), count("next"));
         let _ = std::fs::remove_dir_all(&dir);
         assert_eq!((areas, next), (2, 1));
+    }
+
+    #[test]
+    fn areas_and_next_in_a_folder_without_a_state_leave_no_count() {
+        // The folder exists, as the job's temp folder does, but it is no vault of a test.
+        let dir = std::env::temp_dir().join(format!(
+            "hub-testkit-fake-calls-plain-{}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let params = Value::Null;
+        let vault = dir.to_string_lossy().into_owned();
+        tasks_before(&call("areas", &vault, &params));
+        tasks_before(&call("next", &vault, &params));
+        let left: Vec<_> = std::fs::read_dir(&dir)
+            .unwrap()
+            .filter_map(|e| e.ok().map(|e| e.file_name()))
+            .collect();
+        let _ = std::fs::remove_dir_all(&dir);
+        assert!(left.is_empty(), "the fake wrote {left:?}");
     }
 }
