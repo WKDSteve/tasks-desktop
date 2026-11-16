@@ -122,6 +122,10 @@ pnpm web:build && PLAYWRIGHT_BROWSERS_PATH="$PWD/node_modules/.cache/ms-playwrig
   5 s: dort bauen andere Programme mit, und dann ist jeder Schritt gleichmäßig langsam (Messwerte im Kommentar der
   Datei). Ein Test, der lokal mehr als 30 s braucht, hat einen Fehler. Die Browsertests laufen in der CI im eigenen Job
   `browser`, `cargo test --workspace` dort mit `RUST_TEST_THREADS=4` (die cli-Tests starten je einen Hub).
+- `pnpm e2e` gibt jedem Test einen zweiten Versuch (`retries: 1`), aber nur, wenn der erste rot war, während der
+  Rechner Verbindungen abbrach (`MACHINE_FAULTS` in `ui/e2e/fixtures.ts`, etwa `ERR_NETWORK_CHANGED`, wenn ein
+  WLAN-Adapter neben dem Kabel kommt und geht). Sonst scheitert der zweite Versuch sofort mit "not run again"; der Fehler
+  steht im ersten. Was ein Test in `ROADMAP/tasks`, `Backlog/TASKS` oder `ROADMAP/views` anlegt, räumt die Fixture weg.
 - Einen roten Browsertest der CI erst lesen (Artefakt `playwright-traces`), dann wiederholen: Schritte im
   Millisekundenbereich und ein Warten bis zur Zeitgrenze sind ein Wettlauf im Test, keine Last.
 - In einem Fenster schmaler als etwa 410 px kein Menü mit der Maus wählen: das Popup von View ragt über den rechten

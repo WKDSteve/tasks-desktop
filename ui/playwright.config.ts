@@ -23,6 +23,9 @@ export default defineConfig({
   fullyParallel: false,
   timeout: onRunner ? 60_000 : 30_000,
   expect: { timeout: onRunner ? 15_000 : 5_000 },
+  // One more attempt, but only for a test that failed while the machine broke its connections (a change of the network
+  // interfaces drops those to 127.0.0.1 too): any other failure refuses the retry at once (e2e/fixtures.ts).
+  retries: 1,
   reporter: 'list',
   // A folder of its own per run: two runs on one machine (the runner, a terminal) would clear each other's.
   outputDir: runOutputDir(process.env, process.pid),

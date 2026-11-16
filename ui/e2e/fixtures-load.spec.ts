@@ -49,7 +49,7 @@ test('page.goto of the fixture goes through it, and answers as before', async ({
   expect(response?.ok()).toBe(true);
   expect(asked()).toBe(1);
   // What the runner saw, and nothing wider: a policy that blocks a file is a finding.
-  expect(MACHINE_FAULTS).toEqual(['net::ERR_NO_BUFFER_SPACE']);
+  expect(MACHINE_FAULTS).toEqual(['net::ERR_NO_BUFFER_SPACE', 'net::ERR_NETWORK_CHANGED']);
 });
 
 test('a tab the test opens later is loaded again too', async ({ browser }) => {
