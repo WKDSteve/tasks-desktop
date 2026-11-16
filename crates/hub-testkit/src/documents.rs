@@ -59,7 +59,11 @@ fn tasks_before(call: &Call<'_>) {
         }
         std::thread::sleep(Duration::from_millis(text.trim().parse().unwrap_or(0)));
     }
+    // Counted only into a vault folder that exists: a call without a vault (an empty name) would
+    // otherwise write the count relative to the working folder of the process, which in CI is the
+    // job's temp folder (tools/check-temp-leftovers.mjs turns the job red).
     if matches!(call.method, "areas" | "next")
+        && base.is_dir()
         && let Ok(mut calls) = std::fs::OpenOptions::new()
             .create(true)
             .append(true)
@@ -432,5 +436,57 @@ fn tasks_fill(call: &Call<'_>, doc: &mut Value) {
                 _ => doc[key] = value,
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::dialect::TASKS;
+
+    fn call<'a>(method: &'a str, vault: &str, params: &'a Value) -> Call<'a> {
+        Call {
+            dialect: &TASKS,
+            method,
+            params,
+            vault: vault.to_owned(),
+        }
+    }
+
+    #[test]
+    fn areas_and_next_without_a_vault_leave_no_count_in_the_working_folder() {
+        let params = Value::Null;
+        for method in ["areas", "next"] {
+            let stray = std::env::current_dir()
+                .unwrap()
+                .join(format!(".fake-calls-{method}"));
+            let existed = stray.exists();
+            tasks_before(&call(method, "", &params));
+            let written = !existed && stray.exists();
+            if written {
+                let _ = std::fs::remove_file(&stray);
+            }
+            assert!(!written, "a call without a vault wrote {}", stray.display());
+        }
+    }
+
+    #[test]
+    fn areas_and_next_are_counted_in_the_vault_of_the_test() {
+        let dir =
+            std::env::temp_dir().join(format!("hub-testkit-fake-calls-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let params = Value::Null;
+        let vault = dir.to_string_lossy().into_owned();
+        tasks_before(&call("areas", &vault, &params));
+        tasks_before(&call("areas", &vault, &params));
+        tasks_before(&call("next", &vault, &params));
+        let count = |m: &str| {
+            std::fs::read_to_string(dir.join(format!(".fake-calls-{m}")))
+                .map(|t| t.lines().count())
+                .unwrap_or(0)
+        };
+        let (areas, next) = (count("areas"), count("next"));
+        let _ = std::fs::remove_dir_all(&dir);
+        assert_eq!((areas, next), (2, 1));
     }
 }
