@@ -27,6 +27,8 @@ Nothing here is released.
   `tasks-export/1` (read) and `tasks-ops/1` (write).
 - **Loopback only, token always.** Host and Origin are checked, there is no
   data endpoint without a session. See [docs/SECURITY.md](docs/SECURITY.md).
+- **No console window, nothing left behind.** Every program the hub starts is a child bound to it, a program of
+  somebody else started visibly, or a link the system opens; the list is in [docs/PROCESSES.md](docs/PROCESSES.md).
 - **Data classes fail closed.** An area without an entry in the per-device
   `areas.json` is treated as not released.
 - tasks.nvim stays a pure Lua plugin. This repository holds the hub, the UI
