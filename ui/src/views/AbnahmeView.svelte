@@ -144,12 +144,15 @@
   }
 
   async function tickCursor(): Promise<void> {
+    // As in the inbox: no write while one is on its way (the toast says so), and none on a page that is read only.
+    // Asked first: the hub's event of the write on its way has the view read the task again, and while it is read its
+    // points (and so the stop under the cursor) are not there; a key that falls into that read is still told why
+    // nothing happens.
+    if (app.refusesKeyWrite()) return;
     const stop = stops.find((s) => s.key === cursor);
     if (!stop?.item) return;
     const entry = docs[stop.id];
     if (entry?.state !== 'ok' || entry.doc.body_truncated) return;
-    // As in the inbox: no write while one is on its way (the toast says so), and none on a page that is read only.
-    if (app.refusesKeyWrite()) return;
     await tick(stop.id, entry.doc, stop.item, !stop.item.checked);
   }
 
@@ -472,6 +475,23 @@
     gap: 0.5rem;
     padding: 0.15rem 0;
     border-radius: var(--radius);
+  }
+  /* A button that is not a link has the look of the page's buttons, not the browser's: in dark the browser's own
+     face (#6b6b6b) under the page's text is 4.34, below 4.5. */
+  button:not(.link) {
+    background: var(--surface-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 0.35rem 0.8rem;
+    cursor: pointer;
+  }
+  button:not(.link).primary {
+    border-color: var(--accent);
+  }
+  button:not(.link):disabled {
+    opacity: 0.6;
+    cursor: default;
   }
   .offer {
     display: flex;

@@ -7981,6 +7981,13 @@ test('the acceptance follows the filter of the areas, and its keys move over tas
   await answer;
   await expect(card.getByRole('status').first()).toContainText('2 of 2 ticked', { timeout: WRITE_BUDGET });
   expect(readFileSync(file, 'utf8')).toContain('- [x] Second cursor point');
+  // Every point ticked: the offer to finish the task is the one state the walk through the views (durchgang.spec.ts)
+  // does not reach in its shared vault; its button is looked at here, in both schemes (CI 43838139342: 4.34 in dark).
+  await expect(card.getByRole('button', { name: 'Finish the task ...' })).toBeVisible();
+  for (const colorScheme of ['dark', 'light'] as const) {
+    await page.emulateMedia({ colorScheme });
+    await expectAccessible(page, `the acceptance with every point ticked, ${colorScheme}`);
+  }
 
   // k goes back; Space unticks the point under the cursor.
   await page.keyboard.press('k');
