@@ -153,15 +153,19 @@ export function watchMachineFaults(context: BrowserContext, faults: readonly str
  * `seen` and `check` cover every context `make` made.
  */
 export function contextMaker(browser: Browser, faults: readonly string[] = MACHINE_FAULTS) {
-  const made: { check: () => void; seen: string[] }[] = [];
+  const made: { context: BrowserContext; check: () => void; seen: string[] }[] = [];
   return {
     make: async (options?: BrowserContextOptions): Promise<BrowserContext> => {
       const context = await browser.newContext(options);
-      made.push({ check: guardPages(context, faults), seen: watchMachineFaults(context, faults) });
+      made.push({ context, check: guardPages(context, faults), seen: watchMachineFaults(context, faults) });
       return context;
     },
     seen: (): string[] => made.flatMap((m) => m.seen),
     check: (): void => made.forEach((m) => m.check()),
+    /** Close what the test left open (it ran out of time before its own `close`); a closed one is closed again harmlessly. */
+    close: async (): Promise<void> => {
+      await Promise.all(made.map((m) => m.context.close().catch(() => undefined)));
+    },
   };
 }
 
@@ -228,12 +232,16 @@ export const fixtures: Fixtures<E2eFixtures, object, PlaywrightTestArgs & Playwr
     }
     check();
   },
-  newContext: async ({ browser, machineFaults }, use) => {
+  // Like `context`: the vault is cleaned before the contexts close (a close that hangs skips every later teardown), and
+  // a context the test left open (it ran out of time before its `finally`) is closed here, not left writing.
+  newContext: async ({ browser, machineFaults, vaultClean }, use) => {
     const maker = contextMaker(browser);
     try {
       await use(maker.make);
     } finally {
       machineFaults.push(...maker.seen());
+      vaultClean();
+      await maker.close();
     }
     maker.check();
   },

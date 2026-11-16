@@ -56,6 +56,7 @@ closeWatched('a test leaves a saved view and its context is closed', async ({ pa
 });
 
 test('the view was gone before the context closed', () => {
+  test.skip(leftAtClose === undefined, 'measures the test before it: run the whole file');
   expect(leftAtClose).toBe(false);
   expect(existsSync(leftByClose())).toBe(false);
 });

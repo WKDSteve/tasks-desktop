@@ -84,12 +84,27 @@ test('a context a test makes itself is watched like that of the fixture: its fau
   }
 });
 
-// Only the self tests of the watch make a bare context (they watch it themselves); any other spec takes `newContext`
+test('a context the test left open is closed by the maker', async ({ browser }) => {
+  const maker = contextMaker(browser);
+  const context = await maker.make();
+  await context.newPage();
+  await maker.close();
+  expect(browser.contexts()).not.toContain(context);
+  await maker.close();
+});
+
+// Only the self tests of the watch make a bare context (they watch it themselves); any other file takes `newContext`
 // of the fixture, or a change of the network in its context fails the test with no retry (mobile.spec did, twice).
-test('no spec makes a context the fixture does not watch', () => {
+// `browser.newPage` makes a context of its own as well.
+const BARE_CONTEXT = /\bbrowser\s*\.\s*new(Context|Page)\s*\(/;
+
+test('no file of the tests makes a context the fixture does not watch', () => {
+  expect(BARE_CONTEXT.test('const c = await browser\n    .newContext({})')).toBe(true);
+  expect(BARE_CONTEXT.test('await browser.newPage()')).toBe(true);
+  expect(BARE_CONTEXT.test('await newContext({})')).toBe(false);
   const dir = dirname(fileURLToPath(import.meta.url));
-  const bare = readdirSync(dir)
-    .filter((f) => f.endsWith('.spec.ts') && !f.startsWith('fixtures-'))
-    .filter((f) => readFileSync(join(dir, f), 'utf8').includes('browser.newContext('));
+  const bare = readdirSync(dir, { recursive: true, encoding: 'utf8' })
+    .filter((f) => f.endsWith('.ts') && !/^fixtures(-[a-z]+)?\.(spec\.)?ts$/.test(f.split(/[\\/]/).pop() ?? ''))
+    .filter((f) => BARE_CONTEXT.test(readFileSync(join(dir, f), 'utf8')));
   expect(bare).toEqual([]);
 });
