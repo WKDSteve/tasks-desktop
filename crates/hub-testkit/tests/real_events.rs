@@ -605,3 +605,50 @@ async fn a_folder_task_renamed_from_outside_reaches_the_stream_as_a_whole_within
     assert!(ids.contains(&new), "{ids:?}");
     assert!(!ids.contains(&old), "the old id is gone: {ids:?}");
 }
+
+#[tokio::test]
+async fn a_claim_written_beside_the_hub_reaches_the_stream_through_the_watcher() {
+    let _one_at_a_time = ONE_AT_A_TIME.lock().await;
+    // Neovim and the CLI keep a claim in `<vault>/.claims/<area>/<slug>.json`, a hidden folder of the vault root the
+    // hub does not write. The engine counts the claims in the `rev`: the only way the hub learns of one in time is the
+    // watcher (the periodic scan comes after 45 s, the wait here is 10 s).
+    let Some(mut r) = rig("claim", |_| {}).await else {
+        return;
+    };
+    let id = "lib.nvim/alpha";
+    let before = r.get("/api/tasks/snapshot", &[]).await;
+    let before_etag = before.header("etag").expect("an ETag").to_owned();
+
+    let engine = r.engine_read().await;
+    let folder = r.vault.join(".claims").join("lib.nvim");
+    std::fs::create_dir_all(&folder).unwrap();
+    let started = Instant::now();
+    std::fs::write(
+        folder.join("alpha.json"),
+        "{\n  \"by\": \"someone-else\",\n  \"note\": null,\n  \"since\": \"2026-01-01T00:00:00Z\",\n  \"until\": \"2099-01-01T00:00:00Z\"\n}\n",
+    )
+    .unwrap();
+
+    let (change, during) = r
+        .change_under_load(None, Duration::from_secs(10))
+        .await
+        .expect("an event for the claim");
+    let took = started.elapsed();
+    assert_eq!(change["cause"], "fs", "{change}");
+    let limit = r.bound(engine, during).await;
+    assert!(took < limit, "took {took:?}, bound {limit:?}");
+
+    // The snapshot is a new one, and its entry of the task carries the claim.
+    let after = r
+        .get("/api/tasks/snapshot", &[("If-None-Match", &before_etag)])
+        .await;
+    assert_eq!(after.status, 200, "{:?}", after.status);
+    let doc: Value = serde_json::from_str(&after.body).expect("a snapshot");
+    let task = doc["tasks"]
+        .as_array()
+        .expect("tasks")
+        .iter()
+        .find(|t| t["id"] == id)
+        .expect("the claimed task");
+    assert_eq!(task["claim"]["by"], "someone-else", "{task}");
+}
