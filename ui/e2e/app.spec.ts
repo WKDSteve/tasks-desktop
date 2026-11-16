@@ -2100,13 +2100,21 @@ test('the list comes from the cache before the hub answers', async ({ page }) =>
   // and the list within 1.4 s, a race on a busy machine).
   let release!: () => void;
   const held = new Promise<void>((resolve) => (release = resolve));
-  let answered = 0;
   await page.route('**/api/**', async (route) => {
     await held;
-    answered++;
     // A call still held when the test ends (the page asks on its own, too) has nowhere to go: the unroute below has
     // let it through already, and its `continue` then throws "Route is already handled!" (CI run 43661612407).
     await route.continue().catch(() => undefined);
+  });
+  // What the page got from the hub before it showed the list: every call it made from here on, answered (counted in the
+  // page, not in the route: that one counts only after the hold, which is never before the list).
+  const asked = new Set<import('@playwright/test').Request>();
+  let answered = 0;
+  page.on('request', (request) => {
+    if (new URL(request.url()).pathname.startsWith('/api/')) asked.add(request);
+  });
+  page.on('response', (response) => {
+    if (asked.has(response.request())) answered++;
   });
   await page.reload();
   const started = Date.now();
