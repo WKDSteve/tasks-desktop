@@ -4,7 +4,7 @@
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { expect, isMachineFault, machineFaultNote, noteMachineFaults, retryRefusal, test, watchMachineFaults } from './fixtures';
+import { expect, isMachineFault, loadWhole, machineFaultNote, noteMachineFaults, retryRefusal, test, watchMachineFaults } from './fixtures';
 
 const ORIGIN = 'http://machine-faults.invalid';
 
@@ -43,3 +43,24 @@ for (const [how, counted] of [['internetdisconnected', true], ['blockedbyclient'
     }
   });
 }
+
+test('a stylesheet the load of the page got again is no fault for the retry: a test failing after it fails for itself', async ({ browser }) => {
+  const context = await browser.newContext();
+  try {
+    const seen = watchMachineFaults(context, ['net::ERR_INTERNET_DISCONNECTED']);
+    const page = await context.newPage();
+    let asked = 0;
+    await page.route(`${ORIGIN}/`, (route) =>
+      route.fulfill({ contentType: 'text/html', body: '<!doctype html><link rel="stylesheet" href="/a.css"><p>text</p>' }),
+    );
+    await page.route(`${ORIGIN}/a.css`, (route) => {
+      asked += 1;
+      return asked === 1 ? route.abort('internetdisconnected') : route.fulfill({ contentType: 'text/css', body: 'p { color: red; }' });
+    });
+    await loadWhole(page, () => page.goto(`${ORIGIN}/`), ['net::ERR_INTERNET_DISCONNECTED']);
+    expect(asked).toBe(2);
+    expect(seen).toEqual([]);
+  } finally {
+    await context.close();
+  }
+});

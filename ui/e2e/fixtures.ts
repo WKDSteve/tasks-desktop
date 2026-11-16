@@ -45,6 +45,8 @@ export const isMachineFault = (line: string): boolean => MACHINE_FAULTS.some((fa
 /** How often a page is loaded before the machine is named as the reason the test cannot go on. */
 const LOAD_ATTEMPTS = 3;
 const LOAD_PAUSE_MS = 1_000;
+/** The start of the error of a load the machine did not let `loadWhole` repair. */
+export const LOAD_GAVE_UP = 'the machine lost a file of the page';
 
 /** The pages in `loadWhole` right now: it deals with what they lose, `guardPages` with everything else. */
 const loading = new WeakSet<Page>();
@@ -79,7 +81,7 @@ export async function loadWhole(
   try {
     let response = await load();
     for (let attempt = 1; lost.length > 0; attempt += 1) {
-      if (attempt >= LOAD_ATTEMPTS) throw new Error(`the machine lost a file of the page ${attempt} times: ${lost.join(', ')}`);
+      if (attempt >= LOAD_ATTEMPTS) throw new Error(`${LOAD_GAVE_UP} ${attempt} times: ${lost.join(', ')}`);
       console.warn(`a page is loaded again, the machine lost: ${lost.join(', ')}`);
       lost.length = 0;
       await page.waitForTimeout(LOAD_PAUSE_MS);
@@ -115,15 +117,22 @@ export function guardPages(context: BrowserContext, faults: readonly string[] = 
   };
 }
 
-/** Every request of a context that failed for a fault of the machine, as `url (fault)`, for as long as the test runs. */
+/**
+ * Every request of a context that failed for a fault of the machine, as `url (fault)`, for as long as the test runs. Not
+ * a file `loadWhole` deals with: it loads the page again, and a test that fails after that fails for its own reason (a
+ * load that does not recover fails with LOAD_GAVE_UP, which the fixture counts instead).
+ */
 export function watchMachineFaults(context: BrowserContext, faults: readonly string[] = MACHINE_FAULTS): string[] {
   const seen: string[] = [];
   context.on('requestfailed', (request) => {
     const text = request.failure()?.errorText;
-    if (text !== undefined && faults.includes(text)) seen.push(`${request.url()} (${text})`);
+    if (text === undefined || !faults.includes(text)) return;
+    if (request.serviceWorker() === null && loading.has(request.frame().page()) && lostFile(request, faults) !== null) return;
+    seen.push(`${request.url()} (${text})`);
   });
   return seen;
 }
+
 
 /** The note a failed attempt leaves for its retry: the folder of the run, one file per test. */
 export const machineFaultNote = (outputDir: string, testId: string): string => join(outputDir, '.machine-faults', `${testId}.txt`);
@@ -155,7 +164,8 @@ export const test = base.extend<{ vaultClean: void; machineFaults: string[] }>({
       if (testInfo.retry > 0) console.warn(`run again after a fault of the machine: ${readFileSync(note, 'utf8').trim()}`);
       const seen: string[] = [];
       await use(seen);
-      if (testInfo.status !== testInfo.expectedStatus && seen.length > 0) noteMachineFaults(note, seen);
+      const gaveUp = testInfo.errors.filter((error) => error.message?.includes(LOAD_GAVE_UP)).map((error) => error.message ?? '');
+      if (testInfo.status !== testInfo.expectedStatus && seen.length + gaveUp.length > 0) noteMachineFaults(note, [...seen, ...gaveUp]);
     },
     { auto: true },
   ],
