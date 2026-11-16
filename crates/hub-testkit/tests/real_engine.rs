@@ -320,16 +320,28 @@ async fn engines_on(vault: &Path) -> Option<(CliEngine, CliEngine)> {
 }
 
 /// The document without what belongs to the run and not to the vault: the
-/// moment it was made, and the engine (its commit is looked up by a process of
-/// git and is "unknown" when that is too slow on a loaded machine). The
-/// contract leaves both out of the digest as well.
+/// moment it was made (`generated_at`; `time` and `today` of hello, whose
+/// minute can turn between the call to the host and the one to the process,
+/// seen in ci 43881223961), and the engine (its commit is looked up by a
+/// process of git and is "unknown" when that is too slow on a loaded machine).
+/// The contract leaves `generated_at` and the engine out of the digest as well.
 fn steady(text: &str) -> Value {
     let mut doc: Value = serde_json::from_str(text).unwrap();
     if let Some(map) = doc.as_object_mut() {
-        map.remove("generated_at");
-        map.remove("engine");
+        for key in ["generated_at", "time", "today", "engine"] {
+            map.remove(key);
+        }
     }
     doc
+}
+
+#[test]
+fn a_hello_a_minute_later_is_the_same_document() {
+    let before = r#"{"kind":"tasks.hello","time":"15:51","today":"2026-11-16","vault":{"id":"v"}}"#;
+    let after = r#"{"kind":"tasks.hello","time":"15:52","today":"2026-11-17","vault":{"id":"v"}}"#;
+    assert_eq!(steady(before), steady(after));
+    let other = r#"{"kind":"tasks.hello","time":"15:52","today":"2026-11-17","vault":{"id":"w"}}"#;
+    assert_ne!(steady(before), steady(other));
 }
 
 #[tokio::test]
