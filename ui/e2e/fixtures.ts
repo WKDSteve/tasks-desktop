@@ -5,7 +5,20 @@
 
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { test as base, type Browser, type BrowserContext, type BrowserContextOptions, type Page, type Request, type Response } from '@playwright/test';
+import {
+  test as base,
+  type Browser,
+  type Fixtures,
+  type PlaywrightTestArgs,
+  type PlaywrightTestOptions,
+  type PlaywrightWorkerArgs,
+  type PlaywrightWorkerOptions,
+  type BrowserContext,
+  type BrowserContextOptions,
+  type Page,
+  type Request,
+  type Response,
+} from '@playwright/test';
 import { STATE } from './global';
 import { removeFile } from './hub';
 
@@ -176,12 +189,16 @@ export function retryRefusal(retry: number, note: string): string | null {
   );
 }
 
-export const test = base.extend<{
-  vaultClean: void;
+/** The fixtures of the browser tests, as an object so that a self test can put them over another `context`. */
+export interface E2eFixtures {
+  /** Removes what the test made in the vault (at once, and again when the test ends: see `context`). */
+  vaultClean: () => void;
   machineFaults: string[];
   /** Instead of `browser.newContext`: a context the test makes itself, kept whole and watched for the retry. */
   newContext: (options?: BrowserContextOptions) => Promise<BrowserContext>;
-}>({
+}
+
+export const fixtures: Fixtures<E2eFixtures, object, PlaywrightTestArgs & PlaywrightTestOptions, PlaywrightWorkerArgs & PlaywrightWorkerOptions> = {
   machineFaults: [
     // eslint-disable-next-line no-empty-pattern -- Playwright asks for a destructured first argument
     async ({}, use, testInfo) => {
@@ -196,13 +213,18 @@ export const test = base.extend<{
     },
     { auto: true },
   ],
-  context: async ({ context, machineFaults }, use) => {
+  // The vault is cleaned here first, before Playwright closes the context: a close that hangs (a loaded runner, a write
+  // still on its way) runs out the time of the teardown, and Playwright then skips every teardown after it, the one of
+  // vaultClean too. The tasks of a test that timed out stayed, and every repetition after it found them (app.spec "a
+  // task moved between the groups", 14 of 30 red after one timeout).
+  context: async ({ context, machineFaults, vaultClean }, use) => {
     const check = guardPages(context);
     const seen = watchMachineFaults(context);
     try {
       await use(context);
     } finally {
       machineFaults.push(...seen);
+      vaultClean();
     }
     check();
   },
@@ -220,13 +242,19 @@ export const test = base.extend<{
     async ({}, use) => {
       const { vault } = JSON.parse(readFileSync(STATE, 'utf8')) as { vault: string };
       const before = vaultTasks(vault);
-      await use();
-      for (const path of vaultTasks(vault)) {
-        if (!before.has(path)) removeFile(path);
-      }
+      const clean = (): void => {
+        for (const path of vaultTasks(vault)) {
+          if (!before.has(path)) removeFile(path);
+        }
+      };
+      await use(clean);
+      // Again: a write the closed page still had on its way may have landed after the first time.
+      clean();
     },
     { auto: true },
   ],
-});
+};
+
+export const test = base.extend<E2eFixtures>(fixtures);
 
 export { expect } from '@playwright/test';
