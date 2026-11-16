@@ -766,12 +766,27 @@ describe('App', () => {
   });
 
   it('reads the start at login again when the window gets the focus: the tile of hub-desktop switches it too', async () => {
-    const { app, hub } = make({ token: 't' });
+    const clock = { token: 't', now: 1000 };
+    const { app, hub } = make(clock);
     await app.start(null);
-    app.autostart = false;
+    await vi.waitFor(() => expect(app.autostart).toBe(false));
     hub.autostartOn = true;
+    // Read at the start a moment ago: the focus does not ask again yet.
+    await app.focused();
+    expect(app.autostart).toBe(false);
+    clock.now += 30_000;
     await app.focused();
     await vi.waitFor(() => expect(app.autostart).toBe(true));
+    // Right after a read the focus does not ask again: every read runs the login entries of the machine.
+    let reads = 0;
+    const read = hub.autostart;
+    hub.autostart = async () => {
+      reads += 1;
+      return read();
+    };
+    await app.focused();
+    await app.focused();
+    expect(reads).toBe(0);
     app.stop();
   });
 

@@ -246,6 +246,9 @@ export function clipboardHoldsNoImage(message: string): boolean {
   return /no image in the clipboard|holds no png image/i.test(message);
 }
 
+/** A window that gets the focus reads the start at login again at most this often (it can change in hub-desktop). */
+const AUTOSTART_EVERY_MS = 30_000;
+
 export class App {
   phase = $state<Phase>('starting');
   /** The last pairing code was refused (spent or older than its minute): the page says so and what to do. */
@@ -3234,7 +3237,11 @@ export class App {
     }
   }
 
+  /** When the start at login was read last (`env.now()`); a window that gets the focus again soon after does not read it. */
+  #autostartReadAt = Number.NEGATIVE_INFINITY;
+
   private async readAutostart(): Promise<void> {
+    this.#autostartReadAt = this.env.now();
     try {
       this.autostart = await this.env.hub.autostart();
     } catch {
@@ -4310,7 +4317,10 @@ export class App {
     // Not before the hub has confirmed the session: a page on the cached list holds the token already.
     if (this.phase !== 'ready' || !this.sessionHeld) return;
     // hub-desktop can switch the start at login too (the tile, in another window): the Options menu shows what is true now.
-    if (this.autostart !== null) void this.readAutostart();
+    // At most every AUTOSTART_EVERY_MS: each read runs the login entries of the machine through the hub.
+    if (this.autostart !== null && this.env.now() - this.#autostartReadAt >= AUTOSTART_EVERY_MS) {
+      void this.readAutostart();
+    }
     // The settings file may have been edited by hand meanwhile.
     if (this.keepRunning !== null) void this.readKeepRunning();
     try {
