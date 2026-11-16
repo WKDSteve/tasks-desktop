@@ -4,7 +4,9 @@
 //! The folders are those the Neovim dashboard watches (`<area>/ROADMAP/tasks` with folder tasks,
 //! `plans`, `Backlog/FEATURES` and `Backlog/TASKS`) plus the vault root, which the dashboard does
 //! not see: a new area appears there; and `ROADMAP/views`, the saved views, which the engine counts
-//! in the `rev` of the vault (a view changed by a pull reaches the page by the next event).
+//! in the `rev` of the vault (a view changed by a pull reaches the page by the next event); and
+//! `.claims/<area>/<slug>.json`, the claims, which the engine counts in the `rev` too (a claim set
+//! by Neovim or the CLI reaches the page by the next event, not by the periodic scan).
 //!
 //! A folder task is moved or renamed as a whole (`done`, `move_area`). The system then reports
 //! the folder and not the files in it, so an entry that sits directly in one of those folders
@@ -44,6 +46,9 @@ fn is_markdown(name: &str) -> bool {
 /// The file of the vault root that holds the engine's area groups (tasks.nvim `area_groups.FILE`).
 pub const AREA_GROUPS_FILE: &str = "area-groups.json";
 
+/// The folder of the vault root that holds the engine's claims (tasks.nvim `claims.DIR`).
+pub const CLAIMS_DIR: &str = ".claims";
+
 /// Is a change at this path, given relative to the vault, worth a rescan?
 ///
 /// `entry` says what is at the path; it is asked only when the place of the
@@ -68,6 +73,20 @@ pub fn relevant(relative: &Path, entry: impl FnOnce() -> Entry) -> bool {
         // The area groups of the engine (`area-groups.json`): the one file of
         // the root that is read; a change changes the groups of the snapshot.
         [AREA_GROUPS_FILE] => true,
+        // The claims of the engine (`<vault>/.claims/<area>/<slug>.json`, tasks.nvim `claims`): the one hidden
+        // folder that is read; a claim set or taken by Neovim or the CLI changes the `rev` of the snapshot. The
+        // folders are made with the first claim and may be removed as a whole.
+        [CLAIMS_DIR] => entry() != Entry::File,
+        [CLAIMS_DIR, area] => {
+            !area.starts_with('.') && !ignored_name(area) && entry() != Entry::File
+        }
+        [CLAIMS_DIR, _, name] => {
+            Path::new(name)
+                .extension()
+                .is_some_and(|e| e.eq_ignore_ascii_case("json"))
+                && !name.starts_with('.')
+                && !ignored_name(name)
+        }
         [name] => !name.starts_with('.') && !ignored_name(name) && entry() != Entry::File,
         // The structure of an area: its two folders and the folders of the
         // tasks and plans. A folder only.
@@ -221,6 +240,36 @@ mod tests {
         // task; one that was removed might have been a folder.
         assert!(!file("lib.nvim/ROADMAP/tasks/notes.txt"));
         assert!(gone("lib.nvim/ROADMAP/tasks/notes.txt"));
+    }
+
+    #[test]
+    fn a_claim_set_or_taken_by_another_program_matters() {
+        // `<vault>/.claims/<area>/<slug>.json` (tasks.nvim `claims`): the engine counts the claims in the `rev`
+        // of the vault, so a claim of Neovim or the CLI must reach the snapshot by the next event.
+        for yes in [
+            ".claims/lib.nvim/alpha.json",
+            ".claims/lib.nvim/folder-task.json",
+        ] {
+            assert!(file(yes), "{yes}");
+            assert!(gone(yes), "{yes}");
+        }
+        // The folder of the claims and of an area's claims, made with the first claim, removed as a whole.
+        for yes in [".claims", ".claims/lib.nvim"] {
+            assert!(folder(yes), "{yes}");
+            assert!(gone(yes), "{yes}");
+        }
+        for no in [
+            ".claims/.gitignore",
+            ".claims/lib.nvim/alpha.json.tasks-tmp.123",
+            ".claims/lib.nvim/alpha.tasks-tmp.123.json",
+            ".claims/lib.nvim/notes.txt",
+            ".claims/lib.nvim/deeper/alpha.json",
+        ] {
+            assert!(!file(no), "{no}");
+            assert!(!gone(no), "{no}");
+        }
+        assert!(!file(".claims"));
+        assert!(!file(".claims/lib.nvim"));
     }
 
     #[test]

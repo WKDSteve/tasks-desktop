@@ -202,9 +202,9 @@ pub(super) const DETAILS_KEPT: usize = 64;
 /// How long one is believed even when no change was seen: the watcher is the
 /// way a change is noticed, and this bounds the harm of a notice that was lost.
 pub(super) const DETAILS_TTL: Duration = Duration::from_secs(30);
-/// How long an answer of `next` is believed: it depends on more than the state of the vault (the claims, which the
-/// watcher does not follow when another program sets them, and the day), so it is held only against the questions of a
-/// moment (a page and its windows, a phone asking at the same time), not for the life of a state.
+/// How long an answer of `next` is believed: it depends on more than the state of the vault (a claim that runs out,
+/// and the day), so it is held only against the questions of a moment (a page and its windows, a phone asking at the
+/// same time), not for the life of a state.
 pub(super) const NEXT_TTL: Duration = Duration::from_secs(5);
 
 /// The documents of `task` the hub has answered for one state of the vault.
