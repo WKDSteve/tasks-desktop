@@ -48,18 +48,19 @@
   // The test sheets that name the task, as the last report of testing.nvim wrote them into its body (name, id, state).
   // Nothing is run from here.
   const sheets = $derived(parseSheets(body));
-  const SHEET_STATES: Record<string, Key> = {
-    red: 'detail.sheet.red',
-    stale: 'detail.sheet.stale',
-    never: 'detail.sheet.never',
-    inbox: 'detail.sheet.inbox',
-    manual: 'detail.sheet.manual',
-    green: 'detail.sheet.green',
-  };
+  // A Map, not an object: the state is text of the task, and `constructor` must not find a member of every object.
+  const SHEET_STATES = new Map<string, Key>([
+    ['red', 'detail.sheet.red'],
+    ['stale', 'detail.sheet.stale'],
+    ['never', 'detail.sheet.never'],
+    ['inbox', 'detail.sheet.inbox'],
+    ['manual', 'detail.sheet.manual'],
+    ['green', 'detail.sheet.green'],
+  ]);
   /** The state of a sheet in words; a state this page does not know is shown as written. */
   function sheetState(state: string | undefined): string {
     if (state === undefined) return t('detail.sheet.unknown');
-    const key = SHEET_STATES[state];
+    const key = SHEET_STATES.get(state);
     return key ? t(key) : state;
   }
   const byId = $derived(new Map(app.tasks.map((x) => [x.id, x] as const)));

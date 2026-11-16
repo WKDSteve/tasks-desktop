@@ -259,6 +259,15 @@ describe('the test sheets of a task', () => {
     }
   });
 
+  it('shows a state it does not know as written, also one that is a name of every object', () => {
+    const app = page(true);
+    const odd = BODY.replace('web.sheet=inbox red.sheet=red', 'web.sheet=constructor red.sheet=toString');
+    app.detail = { state: 'ok', id: 'pub/a', doc: doc(odd) };
+    const out = detail(app);
+    expect(out).toMatch(/>web\.sheet<\/code>\s*<span class="muted[^"]*">constructor<\/span>/);
+    expect(out).toMatch(/>red\.sheet<\/code>\s*<span class="muted[^"]*">toString<\/span>/);
+  });
+
   it('shows no section for a task without the block of a report', () => {
     const app = page(true);
     app.detail = { state: 'ok', id: 'pub/a', doc: doc('Just text.') };
