@@ -5,7 +5,7 @@
 
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { test as base, type BrowserContext, type Page, type Request, type Response } from '@playwright/test';
+import { test as base, type Browser, type BrowserContext, type BrowserContextOptions, type Page, type Request, type Response } from '@playwright/test';
 import { STATE } from './global';
 import { removeFile } from './hub';
 
@@ -134,6 +134,24 @@ export function watchMachineFaults(context: BrowserContext, faults: readonly str
 }
 
 
+/**
+ * The contexts a test makes itself (another device, a browser profile of its own), kept whole and watched like the
+ * context of the fixture: without this a change of the network interfaces in them failed the test with no retry.
+ * `seen` and `check` cover every context `make` made.
+ */
+export function contextMaker(browser: Browser, faults: readonly string[] = MACHINE_FAULTS) {
+  const made: { check: () => void; seen: string[] }[] = [];
+  return {
+    make: async (options?: BrowserContextOptions): Promise<BrowserContext> => {
+      const context = await browser.newContext(options);
+      made.push({ check: guardPages(context, faults), seen: watchMachineFaults(context, faults) });
+      return context;
+    },
+    seen: (): string[] => made.flatMap((m) => m.seen),
+    check: (): void => made.forEach((m) => m.check()),
+  };
+}
+
 /** The note a failed attempt leaves for its retry: the folder of the run, one file per test. */
 export const machineFaultNote = (outputDir: string, testId: string): string => join(outputDir, '.machine-faults', `${testId}.txt`);
 
@@ -147,14 +165,23 @@ export function noteMachineFaults(note: string, seen: readonly string[]): void {
  * Why a retry must not run, or null when it may. The config gives every test one retry, but only an attempt that failed
  * while the machine broke its connections earns it: any other failure is the test's or the page's, and a second run that
  * passes would hide it. Such a retry fails at once and points to the first attempt. A group in serial mode runs again
- * as a whole and its tests that passed left no note, so such a group is not retried (only the self tests are serial).
+ * as a whole and its tests that passed left no note, so such a group is not retried (only the self tests are serial):
+ * the refusal says so, as such a test may have passed itself.
  */
 export function retryRefusal(retry: number, note: string): string | null {
   if (retry === 0 || existsSync(note)) return null;
-  return 'not run again: the first attempt failed without a fault of the machine, its error is the finding';
+  return (
+    'not run again: the first attempt failed without a fault of the machine, its error is the finding ' +
+    '(in a serial group the failed attempt may be of a test before this one: the group runs again as a whole)'
+  );
 }
 
-export const test = base.extend<{ vaultClean: void; machineFaults: string[] }>({
+export const test = base.extend<{
+  vaultClean: void;
+  machineFaults: string[];
+  /** Instead of `browser.newContext`: a context the test makes itself, kept whole and watched for the retry. */
+  newContext: (options?: BrowserContextOptions) => Promise<BrowserContext>;
+}>({
   machineFaults: [
     // eslint-disable-next-line no-empty-pattern -- Playwright asks for a destructured first argument
     async ({}, use, testInfo) => {
@@ -178,6 +205,15 @@ export const test = base.extend<{ vaultClean: void; machineFaults: string[] }>({
       machineFaults.push(...seen);
     }
     check();
+  },
+  newContext: async ({ browser, machineFaults }, use) => {
+    const maker = contextMaker(browser);
+    try {
+      await use(maker.make);
+    } finally {
+      machineFaults.push(...maker.seen());
+    }
+    maker.check();
   },
   vaultClean: [
     // eslint-disable-next-line no-empty-pattern -- Playwright asks for a destructured first argument

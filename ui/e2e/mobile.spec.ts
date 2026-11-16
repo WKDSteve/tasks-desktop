@@ -105,10 +105,10 @@ test('the phone page pairs, shows only the classified areas and creates a task t
   expect(problems).toEqual([]);
 });
 
-test('the phone captures a task with a photo and a voice note, and both land in the vault as its assets', async ({ browser }) => {
+test('the phone captures a task with a photo and a voice note, and both land in the vault as its assets', async ({ newContext }) => {
   const { vault, config } = state();
   // Chrome's fake microphone (a tone), granted without a prompt: the note is recorded for real, under the hub's policy.
-  const phone = await browser.newContext({ ...devices['Pixel 7'], locale: 'en-US', baseURL: origin(), permissions: ['microphone'] });
+  const phone = await newContext({ ...devices['Pixel 7'], locale: 'en-US', baseURL: origin(), permissions: ['microphone'] });
   try {
     const page = await phone.newPage();
     const problems = watchConsole(page);
@@ -169,10 +169,10 @@ test('the desktop page keeps its policy, and /m without a slash is not the page'
   }
 });
 
-test('a paired phone signs in by itself on the next start, until the PC revokes it', async ({ page, browser }) => {
+test('a paired phone signs in by itself on the next start, until the PC revokes it', async ({ page, newContext }) => {
   const { config } = state();
   // A browser profile of its own: the phone, with its own storage.
-  const phone = await browser.newContext({ ...devices['Pixel 7'], locale: 'en-US', baseURL: origin() });
+  const phone = await newContext({ ...devices['Pixel 7'], locale: 'en-US', baseURL: origin() });
   try {
     const first = await phone.newPage();
     const problems = watchConsole(first);

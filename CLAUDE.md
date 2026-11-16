@@ -129,6 +129,8 @@ pnpm web:build && PLAYWRIGHT_BROWSERS_PATH="$PWD/node_modules/.cache/ms-playwrig
   Rechner Verbindungen abbrach (`MACHINE_FAULTS` in `ui/e2e/fixtures.ts`, etwa `ERR_NETWORK_CHANGED`, wenn ein
   WLAN-Adapter neben dem Kabel kommt und geht). Sonst scheitert der zweite Versuch sofort mit "not run again"; der Fehler
   steht im ersten. Was ein Test in `ROADMAP/tasks`, `Backlog/TASKS` oder `ROADMAP/views` anlegt, räumt die Fixture weg.
+  Einen eigenen Kontext (ein zweites Gerät, ein eigenes Profil) holt ein Test über die Fixture `newContext`, nie
+  `browser.newContext()`: nur deren Kontexte werden beobachtet (ein Wächter in `fixtures-retry.spec.ts` prüft das).
 - Einen roten Browsertest der CI erst lesen (Artefakt `playwright-traces`), dann wiederholen: Schritte im
   Millisekundenbereich und ein Warten bis zur Zeitgrenze sind ein Wettlauf im Test, keine Last.
 - In einem Fenster schmaler als etwa 410 px kein Menü mit der Maus wählen: das Popup von View ragt über den rechten
