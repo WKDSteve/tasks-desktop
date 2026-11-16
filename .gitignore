@@ -21,3 +21,6 @@ __pycache__/
 
 # The phone page, built by tools/build-mobile.py from mobile.lock (embedded by build.rs).
 /ui/dist-mobile/
+
+# What the test sheets write: pictures of a run (testing.nvim)
+TESTS/sheets/out/

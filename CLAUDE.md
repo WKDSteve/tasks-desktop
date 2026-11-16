@@ -22,6 +22,7 @@ python tools/check-process-starts.py    # no process is started by hand (appkit_
 python tools/check-color-literals.py --root ui/src --tokens ui/src/palette.css   # no colour outside tokens and palette (CI job hygiene)
 python tools/check-bundle-size.py   # after pnpm build: the main chunk stays within its budget
 python tools/check-lock-age.py --min-days 7   # after cargo update: no crate younger than 7 days (CI job rust)
+testing sheets run --all                # test sheets (TESTS/sheets, .testing.lua): the first start in the page against the example setup-hub, a folder of the run; Chrome
 ```
 
 Die Web-Variante (eigene CI `web.yml`), bei jedem Sprung von `engine.lock` und jeder Änderung an `ui/src/web`:
