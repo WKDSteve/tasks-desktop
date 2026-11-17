@@ -1859,6 +1859,21 @@ const en = {
   'hint.form.remind': 'Puts the task on the list To look at again from this day on, say in 7 days. No reminder: it does not come back by itself.',
   'hint.form.bulk.tags_add': 'Tags every marked task gets, separated by commas, say review, q3. The tags it has stay.',
   'hint.form.bulk.tags_remove': 'Tags taken off every marked task, separated by commas. A task without them stays as it is.',
+  'hint.form.plan.kind.plan': 'A plan: tasks in phases towards one target task, say Release 2.0 with design, build, ship.',
+  'hint.form.plan.kind.project': 'A project: several plans under one target, in stages, say a move with the plans packing and moving.',
+  'hint.form.plan.title': 'The name of the plan, as it stands in the plan view; its ID (the file name) is made from it. Say Release 2.0.',
+  'hint.form.project.title': 'The name of the project, as it stands on its page; its ID (the file name) is made from it. Say Move to Graz.',
+  'hint.form.plan.area': 'The area whose folder keeps the plan file (ROADMAP/plans). Its tasks may still lie in other areas.',
+  'hint.form.plan.areas': 'The areas whose tasks the plan takes in: it counts and shows them. None chosen: every area.',
+  'hint.form.plan.phases': 'The steps of the plan in their order, separated by commas, say design, build, ship. A task of the plan belongs to one phase; the plan view shows them as columns.',
+  'hint.form.plan.target': 'The ID of an existing task whose finishing means the goal is reached, say lib.nvim/release-2-0. Its due date carries the forecast of the plan.',
+  'hint.form.plan.target_new': 'The title of the target task made together with the plan: finishing it means the goal is reached. Empty: the title shown greyed out.',
+  'hint.form.plan.target_make': 'Make a new task as the target instead of naming an existing one; it is made with the plan.',
+  'hint.form.plan.target_pick': 'Name an existing task as the target instead of making a new one.',
+  'hint.form.plan.project': 'The project this plan is part of: it counts towards the project\'s progress. No project: the plan stands alone.',
+  'hint.form.plan.stage': 'The stage of the project the plan belongs to: the plans of a later stage wait for those of the earlier ones.',
+  'hint.form.plan.gate': 'On (gate hard): a phase starts only when every task of the phase before is finished. Off: phases are an order, not a barrier.',
+  'hint.form.plan.summary': 'One sentence on what it is about, written right under the title of the file, say Ship the new sync to every user.',
 } as const;
 
 export type Key = keyof typeof en;
@@ -3718,6 +3733,21 @@ const de: Record<Key, string> = {
   'hint.form.remind': 'Setzt die Task ab diesem Tag auf die Liste Wieder ansehen, etwa in 7 Tagen. Keine Erinnerung: sie kommt nicht von selbst wieder.',
   'hint.form.bulk.tags_add': 'Tags, die jede markierte Task bekommt, durch Kommas getrennt, etwa review, q3. Ihre bisherigen Tags bleiben.',
   'hint.form.bulk.tags_remove': 'Tags, die von jeder markierten Task entfernt werden, durch Kommas getrennt. Eine Task ohne sie bleibt, wie sie ist.',
+  'hint.form.plan.kind.plan': 'Ein Plan: Tasks in Phasen auf eine Ziel-Task hin, etwa Release 2.0 mit Entwurf, Bau, Auslieferung.',
+  'hint.form.plan.kind.project': 'Ein Projekt: mehrere Pläne unter einem Ziel, in Stufen, etwa ein Umzug mit den Plänen Packen und Umziehen.',
+  'hint.form.plan.title': 'Der Name des Plans, wie er in der Plan-Ansicht steht; daraus wird seine ID (der Dateiname). Etwa Release 2.0.',
+  'hint.form.project.title': 'Der Name des Projekts, wie er auf seiner Seite steht; daraus wird seine ID (der Dateiname). Etwa Umzug nach Graz.',
+  'hint.form.plan.area': 'Der Bereich, in dessen Ordner die Plan-Datei liegt (ROADMAP/plans). Seine Tasks dürfen trotzdem in anderen Bereichen liegen.',
+  'hint.form.plan.areas': 'Die Bereiche, deren Tasks der Plan umfasst: er zählt und zeigt sie. Keiner gewählt: alle Bereiche.',
+  'hint.form.plan.phases': 'Die Schritte des Plans in ihrer Reihenfolge, durch Kommas getrennt, etwa entwurf, bau, auslieferung. Eine Task des Plans gehört zu einer Phase; die Plan-Ansicht zeigt sie als Spalten.',
+  'hint.form.plan.target': 'Die ID einer bestehenden Task, deren Erledigung heißt, dass das Ziel erreicht ist, etwa lib.nvim/release-2-0. Ihr Fälligkeitsdatum trägt die Prognose des Plans.',
+  'hint.form.plan.target_new': 'Der Titel der Ziel-Task, die mit dem Plan angelegt wird: ihre Erledigung heißt, dass das Ziel erreicht ist. Leer: der grau gezeigte Titel.',
+  'hint.form.plan.target_make': 'Eine neue Task als Ziel anlegen, statt eine bestehende zu nennen; sie entsteht mit dem Plan.',
+  'hint.form.plan.target_pick': 'Eine bestehende Task als Ziel nennen, statt eine neue anzulegen.',
+  'hint.form.plan.project': 'Das Projekt, zu dem dieser Plan gehört: er zählt zu dessen Fortschritt. Kein Projekt: der Plan steht für sich.',
+  'hint.form.plan.stage': 'Die Stufe des Projekts, zu der der Plan gehört: die Pläne einer späteren Stufe warten auf die der früheren.',
+  'hint.form.plan.gate': 'An (gate hard): eine Phase beginnt erst, wenn jede Task der Phase davor erledigt ist. Aus: Phasen sind eine Reihenfolge, keine Schranke.',
+  'hint.form.plan.summary': 'Ein Satz, worum es geht, direkt unter dem Titel der Datei, etwa Die neue Synchronisation an alle ausliefern.',
 };
 
 export const dictionaries: Record<Lang, Record<Key, string>> = { en, de };

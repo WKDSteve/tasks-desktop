@@ -106,7 +106,7 @@
     {#if app.can('project_new')}
       <div class="kind" role="radiogroup" aria-label={t('plan.new.kind')}>
         {#each ['plan', 'project'] as const as kind (kind)}
-          <label class="check">
+          <label class="check" data-hint={t(`hint.form.plan.kind.${kind}`)}>
             <input
               type="radio"
               name="plan-kind"
@@ -126,12 +126,12 @@
         {/each}
       </div>
     {/if}
-    <label>
+    <label data-hint={t(form.kind === 'project' ? 'hint.form.project.title' : 'hint.form.plan.title')}>
       <span>{t('capture.name')}</span>
       <!-- svelte-ignore a11y_autofocus -->
       <input type="text" bind:value={form.title} maxlength="300" required autofocus />
     </label>
-    <label>
+    <label data-hint={t('hint.form.plan.area')}>
       <span>{t('plan.new.area')}</span>
       <select
         bind:value={form.area}
@@ -149,6 +149,7 @@
       <!-- The choice carries its own label; a second one above it said the same twice. -->
       <MultiSelect
         label={t('plan.new.areas')}
+        hint={t('hint.form.plan.areas')}
         options={areas}
         selected={form.areas}
         onchange={(next) => {
@@ -161,7 +162,7 @@
       />
       <small class="hint">{t('plan.new.areas_hint')}</small>
     </div>
-    <label>
+    <label data-hint={t('hint.form.plan.phases')}>
       <span>{t('plan.new.phases')} <small>({t('field.tags_hint')})</small></span>
       <input type="text" bind:value={form.phases} placeholder={t('plan.new.phases_example')} />
     </label>
@@ -190,10 +191,11 @@
     <!-- The target: an existing task named, or a new one made with the plan in the same request. -->
     <div class="field target">
       {#if form.targetNew}
-        <label for="plan-target-title">{t('plan.new.target')}</label>
+        <label for="plan-target-title" data-hint={t('hint.form.plan.target_new')}>{t('plan.new.target')}</label>
         <div class="row">
           <input
             id="plan-target-title"
+            data-hint={t('hint.form.plan.target_new')}
             type="text"
             bind:value={form.targetTitle}
             maxlength="300"
@@ -201,24 +203,25 @@
             aria-describedby="plan-target-help"
             aria-label={t('plan.new.target_title')}
           />
-          <button type="button" onclick={() => (form.targetNew = false)}>{t('plan.new.target_pick')}</button>
+          <button type="button" data-hint={t('hint.form.plan.target_pick')} onclick={() => (form.targetNew = false)}>{t('plan.new.target_pick')}</button>
         </div>
         <small class="hint" id="plan-target-help"
           >{t(form.kind === 'project' ? 'plan.new.target_new_help_project' : 'plan.new.target_new_help')}
           {#if preview?.kind === 'ok' && preview.target}{t('plan.new.target_will', { id: preview.target })}{/if}</small
         >
       {:else}
-        <label for="plan-target">{t('plan.new.target')}</label>
+        <label for="plan-target" data-hint={t('hint.form.plan.target')}>{t('plan.new.target')}</label>
         <div class="row">
           <input
             id="plan-target"
+            data-hint={t('hint.form.plan.target')}
             type="text"
             bind:value={form.target}
             list="plan-targets"
             placeholder="lib.nvim/alpha"
             aria-describedby="plan-target-help"
           />
-          <button type="button" onclick={() => (form.targetNew = true)}>{t('plan.new.target_make')}</button>
+          <button type="button" data-hint={t('hint.form.plan.target_make')} onclick={() => (form.targetNew = true)}>{t('plan.new.target_make')}</button>
         </div>
         <datalist id="plan-targets">
           {#each targets as id (id)}<option value={id}></option>{/each}
@@ -227,7 +230,7 @@
       {/if}
     </div>
     {#if form.kind === 'plan' && projects.length > 0}
-      <label>
+      <label data-hint={t('hint.form.plan.project')}>
         <span>{t('plan.new.project')}</span>
         <select bind:value={form.project} onchange={() => (form.phase = '')}>
           <option value="">{t('project.none')}</option>
@@ -235,7 +238,7 @@
         </select>
       </label>
       {#if form.project !== '' && stagesOfProject.length > 0}
-        <label>
+        <label data-hint={t('hint.form.plan.stage')}>
           <span>{t('plan.new.phase')}</span>
           <select bind:value={form.phase}>
             <option value="">{t('project.no_stage')}</option>
@@ -244,17 +247,17 @@
         </label>
       {/if}
     {/if}
-    <label>
+    <label data-hint={t('hint.form.plan.status')}>
       <span>{t('plan.new.status')}</span>
       <select bind:value={form.status}>
         {#each PLAN_STATUSES as s (s)}<option value={s}>{t(`plan.status.${s}` as Key)}</option>{/each}
       </select>
     </label>
-    <label class="check">
+    <label class="check" data-hint={t('hint.form.plan.gate')}>
       <input type="checkbox" bind:checked={form.hard} />
       <span>{t('plan.new.gate')}</span>
     </label>
-    <label>
+    <label data-hint={t('hint.form.plan.summary')}>
       <span>{t('plan.new.summary')}</span>
       <input type="text" bind:value={form.summary} maxlength="1000" aria-describedby="plan-summary-help" />
       <small class="hint" id="plan-summary-help">{t('plan.new.summary_help')}</small>
