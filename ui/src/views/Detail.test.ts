@@ -46,8 +46,8 @@ describe('the fields of the detail', () => {
     const app = page(false);
     app.tasks = [task('pub/a', { summary: 'A summary' })];
     const out = detail(app);
-    expect(out).toMatch(/<label class="line[^"]*"><span[^>]*>Title<\/span>\s*<input/);
-    expect(out).toMatch(/<label class="line[^"]*"><span[^>]*>Summary<\/span>\s*<textarea class="summary[^"]*" rows="3"/);
+    expect(out).toMatch(/<label class="line[^"]*"[^>]*><span[^>]*>Title<\/span>\s*<input/);
+    expect(out).toMatch(/<label class="line[^"]*"[^>]*><span[^>]*>Summary<\/span>\s*<textarea class="summary[^"]*" rows="3"/);
     expect(out).toContain('>A summary</textarea>');
     // The choices from a few values share lines among themselves, not with the title.
     expect(out).toMatch(/<div class="picks[^"]*"><label/);
