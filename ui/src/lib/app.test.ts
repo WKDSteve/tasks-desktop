@@ -3904,6 +3904,76 @@ describe('writing', () => {
       hubPage.app.chooseFolder();
       expect(hubPage.reloads()).toBe(0);
     });
+
+    describe('the vaults of the web variant (the folders used before)', () => {
+      const listed = (active: string) => [
+        { id: 'a', name: 'tasks-vault', active: active === 'a', access: 'granted' as const },
+        { id: 'b', name: 'tricentis-vault', active: active === 'b', access: 'prompt' as const },
+      ];
+      function webVaults(answer: 'switched' | 'denied' | 'gone' | Error) {
+        const calls: string[] = [];
+        const folderVaults = {
+          list: async () => (calls.push('list'), listed('a')),
+          select: async (id: string) => {
+            calls.push(`select ${id}`);
+            if (answer instanceof Error) throw answer;
+            return answer;
+          },
+        };
+        return { calls, m: make({ token: 't', mode: 'web', folderVaults }) };
+      }
+
+      it('reads the list; a page without one (beside a hub) has none', async () => {
+        const { m, calls } = webVaults('switched');
+        await m.app.loadFolderVaults();
+        expect(m.app.folderVaultList?.map((v) => [v.name, v.active])).toEqual([['tasks-vault', true], ['tricentis-vault', false]]);
+        expect(calls).toEqual(['list']);
+        const hubPage = make({ token: 't' });
+        await hubPage.app.loadFolderVaults();
+        expect(hubPage.app.folderVaultList).toBeNull();
+      });
+
+      it('switches with a click and stays busy until the page loads again; the vault read now is not opened again', async () => {
+        const { m, calls } = webVaults('switched');
+        await m.app.loadFolderVaults();
+        await m.app.selectFolderVault('a');
+        expect(calls).toEqual(['list']);
+        await m.app.selectFolderVault('b');
+        expect(calls).toEqual(['list', 'select b']);
+        expect(m.app.folderSwitching).toBe(true);
+        expect(m.app.toast).toBeNull();
+        // A second click while the page is about to load again asks nothing.
+        await m.app.selectFolderVault('b');
+        expect(calls).toEqual(['list', 'select b']);
+      });
+
+      for (const [answer, key] of [
+        ['denied', 'web.vault.denied'],
+        ['gone', 'web.vault.gone'],
+        [new Error('boom'), 'web.vault.denied'],
+      ] as const) {
+        it(`says why a switch did not happen (${String(answer)}) and reads the list again`, async () => {
+          const { m, calls } = webVaults(answer);
+          await m.app.loadFolderVaults();
+          await m.app.selectFolderVault('b');
+          expect(m.app.toast).toEqual({ kind: 'error', text: translate(m.app.lang, key) });
+          expect(m.app.folderSwitching).toBe(false);
+          expect(calls).toEqual(['list', 'select b', 'list']);
+        });
+      }
+
+      it('refuses to leave the vault while a change is written', async () => {
+        const { m, calls } = webVaults('switched');
+        await m.app.start(null);
+        m.app.stop();
+        await m.app.loadFolderVaults();
+        m.app.saving = true;
+        await m.app.selectFolderVault('b');
+        expect(m.app.toast).toEqual({ kind: 'error', text: translate(m.app.lang, 'write.busy') });
+        expect(calls).toEqual(['list']);
+        expect(m.app.folderSwitching).toBe(false);
+      });
+    });
   });
 });
 

@@ -54,19 +54,32 @@ export { violations, spyOnIndexedDb, idbWrites };
  * `name`, so what the page reads from IndexedDB is made a handle of the folder of this name again.
  */
 export async function fakePicker(page: Page, files: Record<string, string>, name = 'fixture-vault'): Promise<void> {
-  await page.addInitScript(({ tree, rootName }: { tree: Record<string, string>; rootName: string }) => {
+  await fakeFolders(page, { [name]: files }, name);
+}
+
+/**
+ * Several folders, each a fake like `fakePicker`'s, told apart by their names. The picker hands out `first`, or the one
+ * `pickNext` named last. `__disk` and `__setFile` work on `first`.
+ *
+ * The permission of a folder is `granted` until `dropAccess` takes it (a browser that was started again): then the folder
+ * says `prompt`, and `requestPermission` gives it back only inside a click (transient user activation), as Chrome does,
+ * and counts the question (`askedFor`). The state is kept in the page's localStorage, so it lives across reloads and the
+ * page's own reload after a switch keeps the access it got.
+ */
+export async function fakeFolders(page: Page, folders: Record<string, Record<string, string>>, first: string): Promise<void> {
+  await page.addInitScript(({ trees, firstName }: { trees: Record<string, Record<string, string>>; firstName: string }) => {
     const enc = new TextEncoder();
     const dec = new TextDecoder();
     type FileNode = { kind: 'file'; name: string; bytes: Uint8Array; time: number };
     type DirNode = { kind: 'directory'; name: string; children: Map<string, FileNode | DirNode> };
     type Node = FileNode | DirNode;
-    const root: DirNode = { kind: 'directory', name: rootName, children: new Map() };
+    const roots = new Map<string, DirNode>();
     let clock = 1_700_000_000_000;
     const tick = () => (clock += 5000);
 
     const domError = (name: string, message: string): Error => Object.assign(new Error(message), { name });
-    const walkTo = (segments: string[], create: boolean): DirNode | null => {
-      let at = root;
+    const walkTo = (top: DirNode, segments: string[], create: boolean): DirNode | null => {
+      let at = top;
       for (const part of segments) {
         let next = at.children.get(part);
         if (!next) {
@@ -79,13 +92,20 @@ export async function fakePicker(page: Page, files: Record<string, string>, name
       }
       return at;
     };
-    const put = (path: string, text: string) => {
+    const put = (top: DirNode, path: string, text: string) => {
       const parts = path.split('/');
-      const dir = walkTo(parts.slice(0, -1), true) as DirNode;
+      const dir = walkTo(top, parts.slice(0, -1), true) as DirNode;
       const name = parts[parts.length - 1] as string;
       dir.children.set(name, { kind: 'file', name, bytes: enc.encode(text), time: tick() });
     };
-    for (const [path, text] of Object.entries(tree)) put(path, text);
+    for (const [rootName, tree] of Object.entries(trees)) {
+      const top: DirNode = { kind: 'directory', name: rootName, children: new Map() };
+      for (const [path, text] of Object.entries(tree)) put(top, path, text);
+      roots.set(rootName, top);
+    }
+    const root = roots.get(firstName) as DirNode;
+    const permKey = (name: string) => `__fake-perm:${name}`;
+    const permission = (top: string) => (localStorage.getItem(permKey(top)) === 'prompt' ? 'prompt' : 'granted');
 
     const fileHandle = (parent: DirNode, node: FileNode): unknown => ({
       kind: 'file',
@@ -126,17 +146,24 @@ export async function fakePicker(page: Page, files: Record<string, string>, name
     // Only `kind` and `name` are data, the rest is not enumerable: like a real handle, this one can be put into IndexedDB
     // (structured clone copies the enumerable data and nothing else, a function among them would throw), which the page
     // does to remember the folder, and the cache of its list is named by that.
-    const dirHandle = (node: DirNode): unknown => {
+    const dirHandle = (node: DirNode, top: string): unknown => {
       const handle = { kind: 'directory', name: node.name };
-      return Object.defineProperties(handle, Object.fromEntries(Object.entries(dirMembers(node)).map(([key, value]) => [key, { value }])));
+      return Object.defineProperties(handle, Object.fromEntries(Object.entries(dirMembers(node, top)).map(([key, value]) => [key, { value }])));
     };
-    const dirMembers = (node: DirNode): Record<string, unknown> => ({
+    const dirMembers = (node: DirNode, top: string): Record<string, unknown> => ({
       __node: node,
-      queryPermission: async () => 'granted',
-      requestPermission: async () => 'granted',
+      queryPermission: async () => permission(top),
+      requestPermission: async () => {
+        if (permission(top) === 'granted') return 'granted';
+        // Chrome asks only inside a click; without one the request fails.
+        if (!navigator.userActivation.isActive) throw domError('SecurityError', 'User activation is required to request permissions.');
+        localStorage.setItem(`__fake-asked:${top}`, String(Number(localStorage.getItem(`__fake-asked:${top}`) ?? '0') + 1));
+        localStorage.removeItem(permKey(top));
+        return 'granted';
+      },
       isSameEntry: async (other: { __node?: unknown } | null) => other?.__node === node,
       async *values() {
-        for (const child of [...node.children.values()]) yield child.kind === 'file' ? fileHandle(node, child) : dirHandle(child);
+        for (const child of [...node.children.values()]) yield child.kind === 'file' ? fileHandle(node, child) : dirHandle(child, top);
       },
       getFileHandle: async (name: string, opts?: { create?: boolean }) => {
         let child = node.children.get(name);
@@ -156,7 +183,7 @@ export async function fakePicker(page: Page, files: Record<string, string>, name
           node.children.set(name, child);
         }
         if (child.kind !== 'directory') throw domError('TypeMismatchError', name);
-        return dirHandle(child);
+        return dirHandle(child, top);
       },
       removeEntry: async (name: string, opts?: { recursive?: boolean }) => {
         const child = node.children.get(name);
@@ -180,18 +207,21 @@ export async function fakePicker(page: Page, files: Record<string, string>, name
     const w = window as unknown as Record<string, unknown>;
     w['__disk'] = {
       files,
-      write: (path: string, text: string) => put(path, text),
+      write: (path: string, text: string) => put(root, path, text),
       remove: (path: string) => {
         const parts = path.split('/');
-        walkTo(parts.slice(0, -1), false)?.children.delete(parts[parts.length - 1] as string);
+        walkTo(root, parts.slice(0, -1), false)?.children.delete(parts[parts.length - 1] as string);
       },
     };
-    w['__setFile'] = (path: string, text: string) => put(path, text);
-    w['showDirectoryPicker'] = async () => dirHandle(root);
+    w['__setFile'] = (path: string, text: string) => put(root, path, text);
+    w['showDirectoryPicker'] = async () => {
+      const name = (w['__pickNext'] as string | undefined) ?? firstName;
+      return dirHandle(roots.get(name) as DirNode, name);
+    };
 
     // What the page reads back from its store of folders used before (`tasks-web` / `handles`) is made a handle of the
     // folder of that name again. Installed once; every call of this function (a later one wins) says which folder is there.
-    w['__fakeRoot'] = { name: root.name, handle: () => dirHandle(root) };
+    w['__fakeRoots'] = Object.fromEntries([...roots].map(([name, top]) => [name, () => dirHandle(top, name)]));
     if (!w['__fakeRevive']) {
       w['__fakeRevive'] = true;
       const original = Object.getOwnPropertyDescriptor(IDBRequest.prototype, 'result') as PropertyDescriptor;
@@ -199,18 +229,35 @@ export async function fakePicker(page: Page, files: Record<string, string>, name
         configurable: true,
         get(this: IDBRequest) {
           const value = (original.get as () => unknown).call(this);
-          const here = w['__fakeRoot'] as { name: string; handle(): unknown };
+          const here = w['__fakeRoots'] as Record<string, () => unknown>;
           const source = this.source as IDBObjectStore | null;
           if (!Array.isArray(value) || !source || source.name !== 'handles' || source.transaction.db.name !== 'tasks-web') return value;
           return value.map((item: { handle?: { kind?: string; name?: string; values?: unknown } }) =>
-            item && item.handle && item.handle.kind === 'directory' && typeof item.handle.values !== 'function' && item.handle.name === here.name
-              ? { ...item, handle: here.handle() }
+            item && item.handle && item.handle.kind === 'directory' && typeof item.handle.values !== 'function' && typeof item.handle.name === 'string' && Object.hasOwn(here, item.handle.name)
+              ? { ...item, handle: (here[item.handle.name] as () => unknown)() }
               : item,
           );
         },
       });
     }
-  }, { tree: files, rootName: name });
+  }, { trees: folders, firstName: first });
+}
+
+/** The picker hands out the folder `name` from now on (one of `fakeFolders`). */
+export async function pickNext(page: Page, name: string): Promise<void> {
+  await page.evaluate((n) => void ((window as unknown as Record<string, unknown>)['__pickNext'] = n), name);
+}
+
+/** The browser was started again: the folders lose their permission and say `prompt`. */
+export async function dropAccess(page: Page, names: string[]): Promise<void> {
+  await page.evaluate((list) => {
+    for (const n of list) localStorage.setItem(`__fake-perm:${n}`, 'prompt');
+  }, names);
+}
+
+/** How often the page asked the browser for the folder `name` (inside a click). */
+export async function askedFor(page: Page, name: string): Promise<number> {
+  return page.evaluate((n) => Number(localStorage.getItem(`__fake-asked:${n}`) ?? '0'), name);
 }
 
 /**

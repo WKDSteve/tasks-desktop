@@ -238,9 +238,11 @@ change to `areas.json` as you review code.
 
 **Chrome gives every page opened from disk the same origin (`file://`).** Measured with two different local HTML files in
 one Chrome: the second reads the `localStorage` and the IndexedDB databases of the first. So another HTML file opened
-from disk in that browser (one downloaded, say) can read what this page keeps there: its choices, the list cache (public
+from disk in that browser (one downloaded, say) can read what this page keeps there: its choices (the filter, order,
+view and named lists per vault, under the id of the folder, since the menu switches vaults), the list cache (public
 and internal areas only, which is why the classes matter), and the handles of the folders used before (`tasks-web`
-database), whose permission is the origin's. This is a property of `file://`, not something the page can change; open no
+database), whose permission is the origin's. A switch of vaults hands the next page only the id of the folder, in the
+tab's `sessionStorage`. This is a property of `file://`, not something the page can change; open no
 HTML file of unknown origin in the browser profile that runs the page, or serve the page from a place of its own.
 
 ## The interface

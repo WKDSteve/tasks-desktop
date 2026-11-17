@@ -94,9 +94,9 @@ test('the permission of a stored folder, and asking for it again', async () => {
   assert.equal(await grantAccess(handle('v', { onRequest: () => { throw domError('NotFoundError'); } })), 'gone');
 });
 
-function entryOver({ win, recent = new RecentFolders(memoryKv()), open, now = () => 7, forgotten } = {}) {
+function entryOver({ win, recent = new RecentFolders(memoryKv()), open, now = () => 7, forgotten, pending } = {}) {
   const states = [];
-  const entry = new Entry({ win, recent, open: open ?? (async () => ({ files: 3, skipped: [] })), now, forgotten });
+  const entry = new Entry({ win, recent, open: open ?? (async () => ({ files: 3, skipped: [] })), now, forgotten, pending });
   entry.subscribe((s) => states.push(s.step));
   return { entry, states, recent };
 }
@@ -189,6 +189,42 @@ test('a folder used before: a kept permission opens at once, a dropped one is as
   await entry.openRecent('r2');
   assert.deepEqual(log, ['query asks', 'request asks', 'open asks'], 'the question comes before the reading, right after the click');
   assert.equal(entry.state.step, 'open');
+});
+
+test('the vault a switch asked for opens at once when its access is still there, and only once', async () => {
+  const log = [];
+  const recent = new RecentFolders(memoryKv(), { newId: (() => { let n = 0; return () => `r${++n}`; })() });
+  await recent.remember(handle('tasks-vault', { perm: 'granted', log }), 3);
+  await recent.remember(handle('tricentis-vault', { perm: 'granted', log }), 2);
+  let pending = 'r2';
+  const take = () => {
+    const id = pending;
+    pending = null;
+    return id;
+  };
+  const { entry } = entryOver({ win: SECURE(async () => handle('x')), recent, pending: take, open: async (h) => (log.push(`open ${h.name}`), { files: 1, skipped: [] }) });
+  await entry.start();
+  assert.equal(entry.state.step, 'open');
+  assert.equal(entry.state.name, 'tricentis-vault');
+  assert.equal(entry.state.folder, 'r2', 'the same id: the vault keeps its preferences and its list');
+  assert.ok(!log.some((l) => l.startsWith('request')), 'no question: there is no click');
+  // The next start (a reload, a way back) does not switch again.
+  await entry.start();
+  assert.equal(entry.state.step, 'choose');
+});
+
+test('a switch to a folder whose access is gone again, or that is gone, waits on the start page', async () => {
+  const recent = new RecentFolders(memoryKv(), { newId: (() => { let n = 0; return () => `r${++n}`; })() });
+  await recent.remember(handle('asks', { perm: 'prompt' }), 3);
+  await recent.remember(handle('refused', { perm: 'denied' }), 2);
+  const opened = [];
+  for (const [id, notice] of [['r1', null], ['r2', 'denied'], ['nope', 'gone']]) {
+    const { entry } = entryOver({ win: SECURE(async () => handle('x')), recent, pending: () => id, open: async (h) => (opened.push(h.name), { files: 1, skipped: [] }) });
+    await entry.start();
+    assert.equal(entry.state.step, 'choose', id);
+    assert.equal(entry.state.notice?.code ?? null, notice, id);
+  }
+  assert.deepEqual(opened, [], 'nothing is read without the access');
 });
 
 test('a permission that is refused, or a folder that is gone, never reaches the reader', async () => {

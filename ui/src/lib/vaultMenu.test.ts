@@ -11,6 +11,7 @@ const app = (machineActions: boolean, canChooseFolder = false): VaultMenuApp =>
     tasks: [task('pub/a'), task('pub/b'), task('other/c')],
     vaultList: { active: 'main', vaults: [{ name: 'main', label: 'Work' }, { name: 'side', label: 'Home' }] },
     vaultBusy: false,
+    folderSwitching: false,
     machineActions,
     selectVault: async (name: string) => void shown.push(`select ${name}`),
     revealVault: async () => void shown.push('reveal'),
@@ -53,5 +54,45 @@ describe('the vault part of the menu', () => {
     if (other?.kind === 'action') other.onselect();
     expect(shown).toContain('choose folder');
     expect(shown).not.toContain('manage');
+  });
+
+  it('lists the folders used before in the web variant, marks the one read and switches with a click', () => {
+    const picked: string[] = [];
+    const web = {
+      ...app(false, true),
+      vaultList: null,
+      snapshot: { vault: { id: 'vault' } },
+      folderSwitching: false,
+      folderVaultList: [
+        { id: 'a', name: 'tasks-vault', active: true, access: 'granted' },
+        { id: 'b', name: 'tricentis-vault', active: false, access: 'prompt' },
+        { id: 'c', name: 'old-vault', active: false, access: 'gone' },
+      ],
+      selectFolderVault: async (id: string) => void picked.push(id),
+    } as unknown as VaultMenuApp;
+    const items = vaultMenuItems(web);
+    // The folder's name, not the engine's mount point.
+    expect(labels(web)).toEqual([
+      'Vault',
+      'Vault: tasks-vault',
+      '2 areas, 3 tasks',
+      'tasks-vault',
+      'tricentis-vault',
+      'old-vault (not found)',
+      'Open another vault ...',
+    ]);
+    const radios = items.filter((i) => i.kind === 'radio');
+    expect(radios.map((r) => (r.kind === 'radio' ? [r.checked, r.disabled] : null))).toEqual([
+      [true, false],
+      [false, false],
+      [false, true],
+    ]);
+    const other = radios[1];
+    expect(other?.kind === 'radio' && other.hint).toBe('Work in this vault: the browser asks once for access to its folder.');
+    if (other?.kind === 'radio') other.onselect();
+    expect(picked).toEqual(['b']);
+    // While a switch is under way nothing else is chosen.
+    const busy = vaultMenuItems({ ...web, folderSwitching: true } as unknown as VaultMenuApp);
+    expect(busy.filter((i) => i.kind === 'radio' || i.kind === 'action').every((i) => 'disabled' in i && i.disabled)).toBe(true);
   });
 });

@@ -144,6 +144,14 @@ export type Detail =
   | { state: 'ok'; id: string; doc: TaskDocument }
   | { state: 'failed'; id: string };
 
+/** A vault of the web variant: a folder used before. `active`: the one the page reads. */
+export interface FolderVault {
+  id: string;
+  name: string;
+  active: boolean;
+  access: 'granted' | 'prompt' | 'denied' | 'gone';
+}
+
 /** What the page needs from its surroundings. */
 export interface Env {
   hub: Hub;
@@ -164,6 +172,15 @@ export interface Env {
    * list of vaults). Left out where the hub manages the vaults.
    */
   chooseFolder?(): void;
+  /**
+   * The vaults of the web variant: the folders used before, of which one is read (web/vault-switch.ts). `select` asks
+   * the browser for the folder inside the click when it dropped the access, and loads the page again with it. Left out
+   * where the hub manages the vaults.
+   */
+  folderVaults?: {
+    list(): Promise<FolderVault[]>;
+    select(id: string): Promise<'switched' | 'same' | 'denied' | 'gone'>;
+  };
   /**
    * The snapshots of the test sheets where there is no hub: the person gives the folder of the plugin checkouts.
    * Left out where the hub reads them.
@@ -4010,6 +4027,44 @@ export class App {
   /** Leave this folder for the way in, where another one is chosen. */
   chooseFolder(): void {
     this.env.chooseFolder?.();
+  }
+
+  /** The vaults of the web variant (`Env.folderVaults`), or `null` where there are none or before they were read. */
+  folderVaultList = $state.raw<FolderVault[] | null>(null);
+  /** A switch to another folder is under way: the page is about to load again. */
+  folderSwitching = $state(false);
+
+  /** Read the folders used before. A list that cannot be read shows none: switching is a convenience. */
+  async loadFolderVaults(): Promise<void> {
+    if (!this.env.folderVaults) return;
+    try {
+      this.folderVaultList = await this.env.folderVaults.list();
+    } catch {
+      this.folderVaultList = null;
+    }
+  }
+
+  /**
+   * Read another folder of the web variant. Called from the click: the browser may have to be asked for the folder,
+   * which it allows only inside one. Refused while a change is written (leaving the page would cut it off).
+   */
+  async selectFolderVault(id: string): Promise<void> {
+    const vaults = this.env.folderVaults;
+    if (!vaults || this.folderSwitching) return;
+    if (this.folderVaultList?.find((v) => v.id === id)?.active) return;
+    if (this.refusedWhileSaving()) return;
+    this.folderSwitching = true;
+    let result: Awaited<ReturnType<typeof vaults.select>>;
+    try {
+      result = await vaults.select(id);
+    } catch {
+      result = 'denied';
+    }
+    if (result === 'switched') return;
+    this.folderSwitching = false;
+    if (result === 'denied') this.say('error', 'web.vault.denied');
+    if (result === 'gone') this.say('error', 'web.vault.gone');
+    await this.loadFolderVaults();
   }
 
   closeVaults(): void {

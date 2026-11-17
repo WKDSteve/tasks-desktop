@@ -439,6 +439,7 @@ export function make(
     openWindow?: (route: string) => boolean;
     askSession?: (onLate: (token: string) => void) => Promise<string | null>;
     chooseFolder?: () => void;
+    folderVaults?: Env['folderVaults'];
     fetchFn?: typeof fetch;
     sleep?: (ms: number) => Promise<void>;
   } = {},
@@ -486,6 +487,7 @@ export function make(
     ...(overrides.openWindow ? { openWindow: overrides.openWindow } : {}),
     ...(overrides.askSession ? { askSession: overrides.askSession } : {}),
     ...(overrides.chooseFolder ? { chooseFolder: overrides.chooseFolder } : {}),
+    ...(overrides.folderVaults ? { folderVaults: overrides.folderVaults } : {}),
     out: {
       save: (name, text, type) => {
         files.push({ name, text, type });

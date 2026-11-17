@@ -28,6 +28,7 @@ import { loadParts, startBlobWorker, type Parts } from './web/embedded';
 import { Entry } from './web/entry';
 import { HANDLES_DB, idbKeyValue, RecentFolders, type PickerWindow } from './web/folder';
 import { guardUnload, localDay, VaultSession } from './web/vault-session';
+import { FolderVaults, forgetVaultPrefs, takeSwitch, vaultOpened, vaultPrefs } from './web/vault-switch';
 import type { WebHub } from './web/hub';
 import WebEntry from './web/WebEntry.svelte';
 import { watchFolder, type Watcher } from 'appkit-web/watch';
@@ -93,9 +94,14 @@ let watcher: Watcher | null = null;
 // The hub of the page, once the app runs: the session tells it when the data classes changed.
 let hub: WebHub | null = null;
 
+// The folders used before: the start page lists them, the menu "Project" switches between them.
+const recent = new RecentFolders(idbKeyValue(window.indexedDB, HANDLES_DB));
+/** The page at the way in again, without the fragment: neither the view nor a task of this folder goes along. */
+const toEntry = () => window.location.assign(`${window.location.pathname}${window.location.search}`);
+
 const entry = new Entry({
   win: window as unknown as PickerWindow,
-  recent: new RecentFolders(idbKeyValue(window.indexedDB, HANDLES_DB)),
+  recent,
   open: async (handle, readOnly) => {
     const { client } = await started;
     const opened = new VaultSession({
@@ -115,8 +121,17 @@ const entry = new Entry({
     return mounted;
   },
   now: () => Date.now(),
-  // A folder that is forgotten takes its list with it (a list is kept per folder, by the id of the folder).
-  forgotten: (id) => forgetList(indexedDbStore(window.indexedDB), id),
+  // A folder that is forgotten takes its list and its preferences with it (both are kept per folder, by its id).
+  forgotten: async (id) => {
+    try {
+      forgetVaultPrefs(window.localStorage, id);
+    } catch {
+      // storage blocked: nothing was kept under the id either
+    }
+    await forgetList(indexedDbStore(window.indexedDB), id);
+  },
+  // The vault the menu switched to (the page before put its id into the tab).
+  pending: () => takeSwitch(tabStorage()),
 });
 // A write is several calls on several files; closing the page in the middle of one cannot be taken back.
 guardUnload(window, () => vault?.isWriting ?? false);
@@ -127,12 +142,12 @@ let began = false;
 entry.subscribe((state) => {
   if (state.step === 'open' && !began) {
     began = true;
-    void begin(state.folder, state.readOnly);
+    void begin(state.folder, state.name, state.readOnly);
   }
 });
 void entry.start();
 
-async function begin(folder: string | null, readOnly: boolean): Promise<void> {
+async function begin(folder: string | null, name: string, readOnly: boolean): Promise<void> {
   const { client, parts } = await started;
   const session = vault as VaultSession;
   const lock = parts.bundle.engine;
@@ -186,7 +201,8 @@ async function begin(folder: string | null, readOnly: boolean): Promise<void> {
     // The list of this folder, in IndexedDB, while its areas are released.
     cache: pageCache(indexedDbStore(window.indexedDB), folder, (area) => session.classOf(area)),
     session: tabStorage(),
-    prefs: window.localStorage,
+    // Filter, order, view and the named lists are kept per vault (web/vault-switch.ts), the rest is the person's.
+    prefs: vaultPrefs(window.localStorage, folder),
     preferredLanguages: navigator.languages,
     now: () => Date.now(),
     fetchFn,
@@ -194,7 +210,12 @@ async function begin(folder: string | null, readOnly: boolean): Promise<void> {
     reload: () => window.location.reload(),
     // Another vault is another folder: the page starts again at the way in (a folder used before is one click). The
     // fragment goes, so that neither the view nor a task of this folder is taken into the next one.
-    chooseFolder: () => window.location.assign(`${window.location.pathname}${window.location.search}`),
+    chooseFolder: toEntry,
+    // The folders used before, of which this is one: a click in the menu reads another. A folder read through an input
+    // is not remembered, and there is no list to switch in.
+    ...(readOnly
+      ? {}
+      : { folderVaults: new FolderVaults({ recent, active: folder, tab: tabStorage(), reload: toEntry }) }),
     // The same file in a new window, at the task. The new window has its own engine: it asks for the folder again (a
     // folder used before is one click) and then shows the task.
     openWindow: (route) => window.open(`${window.location.pathname}${window.location.search}${route}`, '_blank') !== null,
@@ -213,6 +234,9 @@ async function begin(folder: string | null, readOnly: boolean): Promise<void> {
     },
   };
   const state = new AppState(env);
+  void state.loadFolderVaults();
+  // What hangs on the vault besides its files (the calendars shown with it) is told here.
+  vaultOpened({ folder, name });
   if (place !== null) state.openPlace(place.view, place.selectedId, place.filter, {
     ...(place.plan !== undefined ? { plan: place.plan } : {}),
     ...(place.sort !== undefined ? { sort: place.sort } : {}),

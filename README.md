@@ -89,8 +89,13 @@ one).
    (the folder above the vault, or one area) is refused with a notice that names a folder inside it that looks like the
    vault, instead of an empty vault. After a restart of Chrome, press "Allow
    access" once for the folder used last. Project > "Open another vault ..." goes back to this first screen, where
-   another folder is chosen (the page reads one folder at a time; it has no list of vaults like the app).
-4. Changes made on disk (Neovim, git, agents) show up when the tab gets focus, or within 30 seconds. Writing from the
+   another folder is chosen or one is forgotten (taken off the list).
+4. Switching vaults: the menu Project lists the vault folders used before (five at most, by folder name), the one read
+   now marked, at the same place and with the same words as the Vaults part of the app. One click reads another: the
+   page loads again with that folder, in the filter, order and view it was left with (those are kept per vault; the
+   language, the theme and the columns are the same in every vault). After a restart of Chrome the click on a vault
+   asks Chrome once for access to its folder. The page still reads one folder at a time.
+5. Changes made on disk (Neovim, git, agents) show up when the tab gets focus, or within 30 seconds. Writing from the
    page (create, set a field, done, move) compares each file with what was read and writes nothing on a conflict.
 
 Which browser does what (the page checks the browser itself and says so on the first screen):
@@ -477,6 +482,18 @@ and used as described under "In the browser, without installing". Its built file
   picker (a policy of the organisation), a folder that is gone and a folder over the budget come back to the start
   page with their reason; a browser without the API, or a page that is not a secure context, is told so and offers
   no picker. `web/entry.test.mjs` and `src/web/WebEntry.test.ts` run it without a browser.
+- **Switching vaults.** `ui/src/web/vault-switch.ts`: the menu Project lists the folders used before (`FolderVaults`,
+  the access of each read with `permissionOf`). A click asks for a dropped access inside itself (`grantAccess`), puts
+  the id of the folder (only the id) into the tab's `sessionStorage` (`tasks-web.switch-to`) and loads the page again
+  without the fragment; the way in takes the id out once and opens that folder without a click while the access is
+  still granted (otherwise it waits on the start page). A fresh page means a fresh engine: nothing of the vault that was
+  left goes along. Filter, order, view, the task open in it and the named lists are kept in `localStorage` per folder
+  (`<key>@<folder id>`, `vaultPrefs`; a vault with none of its own yet reads the plain key the page kept before, which
+is never written again); forgetting a folder drops them with its list cache. Nothing of a vault's files is
+  kept for the switch, only the handles (IndexedDB `tasks-web`) and the id. Refused while a change is written.
+  `onVaultOpened` is the place for what hangs on a vault besides its files (the calendars shown with it, a task of its
+  own): it is told of every vault the page opens. `web/vault-switch.test.mjs`, `web/entry.test.mjs` and
+  `ui/e2e-web/vaults.spec.ts` (two fake folders, switching there and back, the access asked once after a restart).
 - **Writing.** A request of `ops` goes through the engine, which changes its copy of the vault in the VM; the files
   it changed, added or removed are then written to the folder (`ui/src/web/vault-session.ts`, `write-back.ts`).
   Nothing is written over something the page has not seen: every file the change touches must still have the time,

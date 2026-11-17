@@ -64,6 +64,11 @@ export interface EntryDeps {
    * convenience like the list of folders: a failure must not keep the folder in the list.
    */
   forgotten?(id: string): Promise<void>;
+  /**
+   * The folder the page before asked to open (a switch in the menu "Project", web/vault-switch.ts), taken out once. It
+   * is opened without a click when the browser still grants the access; otherwise the start page shows it as usual.
+   */
+  pending?(): string | null;
 }
 
 /** Read a folder and mount it at `root` of the engine's file system. */
@@ -121,9 +126,20 @@ export class Entry {
       this.set({ step: 'unsupported', reason: support });
       return;
     }
+    const pending = this.deps.pending?.() ?? null;
     const recent: RecentView[] = [];
-    for (const entry of await this.deps.recent.list()) {
+    const entries = await this.deps.recent.list();
+    for (const entry of entries) {
       recent.push({ id: entry.id, name: entry.name, access: await permissionOf(entry.handle) });
+    }
+    const chosen = pending === null ? undefined : entries.find((e) => e.id === pending);
+    // The switch asked for the access inside its click; a folder that lost it meanwhile (or is gone) waits on the start
+    // page, with its state, for a click of its own.
+    if (chosen && recent.find((r) => r.id === chosen.id)?.access === 'granted') return this.enter(chosen.handle, false);
+    if (pending !== null && notice === null) {
+      const access = recent.find((r) => r.id === pending)?.access;
+      if (access === undefined || access === 'gone') notice = { code: 'gone' };
+      else if (access === 'denied') notice = { code: 'denied' };
     }
     this.set({ step: 'choose', recent, notice, readOnly: false });
   }
