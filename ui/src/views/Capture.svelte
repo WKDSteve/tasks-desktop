@@ -6,7 +6,9 @@
   import type { App } from '../lib/app.svelte';
   import { areaLabel } from '../lib/filter';
   import { badLink, badTag, bodyFromSections, parseList, parseTags, scaffoldRows, severityApplies, splitOther } from '../lib/fields';
-  import { labelOf, translate, type Key } from '../lib/i18n';
+  import { hintOf, labelOf, translate, type Key } from '../lib/i18n';
+  import PickField from './PickField.svelte';
+  import { phaseOptions, planOptions } from '../lib/picker';
 
   let { app }: { app: App } = $props();
   const t = (key: Key, params: Record<string, string | number> = {}) =>
@@ -54,6 +56,21 @@
     ),
   );
   const severityFits = $derived(severityApplies(kind, categories));
+  // The plan and its phase are chosen from the engine's lists (`PickField`), as in the detail.
+  const plans = $derived(app.snapshot?.plans ?? []);
+  const phases = $derived(phaseOptions(plans.find((p) => p.id === plan), app.tasks));
+  let more = $state(false);
+  function choosePlan(next: string): void {
+    plan = next;
+    // A phase of the old plan that the new one does not have is not kept.
+    if (!phaseOptions(plans.find((p) => p.id === next), app.tasks).some((o) => o.value === phase)) phase = '';
+  }
+  function planAction(action: string): void {
+    if (action === 'none') choosePlan('');
+    else if (action === 'new-plan') {
+      app.openPlanWizard('plan', '', { area, then: (id) => choosePlan(id) });
+    }
+  }
 
   const areas = $derived(
     [...app.allAreaNames]
@@ -81,8 +98,10 @@
       scaffoldOff = [];
       status = '';
       after = '';
-      plan = '';
-      phase = '';
+      plan = app.captureFill.plan ?? '';
+      phase = app.captureFill.phase ?? '';
+      // A plan given from outside is shown, with the other fields it stands among.
+      more = plan !== '';
       due = '';
       start = '';
       extraAreas = [];
@@ -250,7 +269,7 @@
         <input type="date" bind:value={start} max={due === '' ? undefined : due} />
       </label>
     </div>
-    <details class="more">
+    <details class="more" bind:open={more}>
       <summary>{t('capture.more')}</summary>
       <label>
         <span>{t('field.summary')}</span>
@@ -305,14 +324,36 @@
         <span>{t('field.after')} <small>({t('field.tags_hint')})</small></span>
         <input type="text" bind:value={after} placeholder="area/task" />
       </label>
-      <label>
-        <span>{t('field.plan')}</span>
-        <input type="text" bind:value={plan} placeholder="area/plan" />
-      </label>
-      <label>
-        <span>{t('field.phase')}</span>
-        <input type="text" bind:value={phase} />
-      </label>
+      <PickField
+        label={t('field.plan')}
+        hint={hintOf(app.lang, 'hint.field', 'plan')}
+        name="plan"
+        value={plan}
+        options={planOptions(plans, area)}
+        actions={[
+          { id: 'none', label: t('pick.plan.none') },
+          ...(app.can('plan_new') ? [{ id: 'new-plan', label: t('pick.plan.new') }] : []),
+        ]}
+        placeholder={t('pick.plan.none')}
+        searchLabel={t('pick.plan.search')}
+        emptyLabel={t('pick.empty')}
+        onpick={choosePlan}
+        onaction={planAction}
+      />
+      <PickField
+        label={t('field.phase')}
+        hint={hintOf(app.lang, 'hint.field', 'phase')}
+        name="phase"
+        value={phase}
+        options={phases}
+        actions={[{ id: 'none', label: t('pick.phase.none') }]}
+        placeholder={plan ? t('pick.phase.none') : t('pick.phase.no_plan')}
+        searchLabel={t('pick.phase.search')}
+        emptyLabel={t('pick.empty')}
+        disabled={plan === '' && phase === ''}
+        onpick={(v) => (phase = v)}
+        onaction={() => (phase = '')}
+      />
     </details>
     <label>
       <span>{t('capture.context')} <small>({t('capture.sections_hint')})</small></span>

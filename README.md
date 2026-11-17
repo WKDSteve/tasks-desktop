@@ -618,6 +618,15 @@ stages, the phase counts and the warnings narrow to it (the choice is kept when 
 is left), while the state counts, the estimate and the critical path stay those of the
 whole vault.
 
+Tasks are put into a plan from there: *Add tasks* in the head of a chosen plan, or the *+* of one of its phases, opens
+a searchable choice of several open tasks (narrowed to the areas of the plan at first; a task of another plan or
+project is marked and moved only after a question). One write sets `plan` (and `phase`) for all of them, each with the
+version that was shown; what the engine refuses is listed task by task with its words, the rest stays, and the toast
+can take it back. *New task in this plan* opens the capture form with the plan, the phase and the area filled in. The
+page of a project offers the same for its own tasks and for each of its plans. In the detail and the capture form the
+fields *Plan* and *Phase* (in the detail also *Project*) are chosen the same way, from the engine's lists, with *No
+plan* and *Create a plan ...* (the new plan is made in the task's area and given to the task).
+
 The choice *Compare* of the Plan view (kept over a reload) lays the open plans side by side in a table: tasks open
 of all (and how many are held), progress, effort open with the range of the sizes and how many open tasks have no
 effort, the rest of each plan's own critical path, how many weeks the rest would take at the pace of the last four weeks

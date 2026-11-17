@@ -23,6 +23,8 @@
   import ProjectPage from './ProjectPage.svelte';
   import ClosePanel from './ClosePanel.svelte';
   import PlanCompare from './PlanCompare.svelte';
+  import AddTasksDialog from './AddTasksDialog.svelte';
+  import type { AddTarget } from '../lib/picker';
   import { projectOfPlan } from '../lib/projects';
   import { allButtonFold, foldOf, withAll, withFold } from '../lib/fold';
 
@@ -87,6 +89,13 @@
   let closing = $state('');
   const closingShown = $derived(closing !== '' && closing === planId);
   const names = $derived(new Map([...titles, ...plans.map((p) => [p.id, p.title] as const)]));
+  // Adding tasks to the chosen plan (or one of its phases): the choice of open tasks (`AddTasksDialog`).
+  const canAdd = $derived(chosen !== undefined && !app.readOnly);
+  let adding = $state<AddTarget | null>(null);
+  function addTo(phase?: string): void {
+    if (!chosen) return;
+    adding = { kind: 'plan', id: chosen.id, areas: chosen.areas, ...(phase !== undefined ? { phase } : {}) };
+  }
 
   // A chosen plan or project that is gone (a change of the vault) is dropped, so the select agrees: only once the vault
   // is read as it is now (`dropsChoice`), not before the first snapshot nor from an older one of the cache.
@@ -200,6 +209,11 @@
             >
           {/each}
         </div>
+        {#if canAdd}
+          <button type="button" class="newplan" data-add="plan" data-hint={t('hint.ui.plan.add')} disabled={app.saving} onclick={() => addTo()}
+            >{t('add.button')}</button
+          >
+        {/if}
         {#if canClose && chosen}
           <button type="button" class="newplan" data-hint={t('hint.ui.plan.close')} aria-expanded={closingShown} onclick={() => (closing = chosen.id)}
             >{t('plan.close')}</button
@@ -217,7 +231,16 @@
       {#if phases.length > 0}
         <p class="phases">
           <span class="label">{t('plan.phases')}</span>
-          {#each phases as ph (ph.phase)}<span class="chip soft">{markHidden(ph.phase)}: {ph.n}</span>{/each}
+          {#each phases as ph (ph.phase)}<span class="chip soft" data-phase={ph.phase}
+              >{markHidden(ph.phase)}: {ph.n}{#if canAdd}<button
+                  type="button"
+                  class="add-phase"
+                  data-hint={t('hint.ui.plan.add_phase')}
+                  aria-label={t('add.phase', { phase: ph.phase })}
+                  disabled={app.saving}
+                  onclick={() => addTo(ph.phase)}>+</button
+                >{/if}</span
+            >{/each}
           <Info hint={t('hint.phases')} label={t('hint.about', { what: t('plan.phases') })} />
         </p>
       {/if}
@@ -292,6 +315,8 @@
     <GraphPanel {app} />
 
     <PlanFinished {app} {planId} />
+
+    <AddTasksDialog {app} target={adding} name={chosen?.title ?? ''} onclose={() => (adding = null)} />
 
     {#if app.planDisplay === 'compare'}
       <PlanCompare {app} />
@@ -473,6 +498,13 @@
     font-size: 0.85rem;
   }
   .chips,
+  .add-phase {
+    margin-left: 0.3rem;
+    padding: 0 0.45rem;
+    min-width: 1.6rem;
+    min-height: 1.6rem;
+    line-height: 1;
+  }
   .phases {
     align-items: center;
     display: flex;

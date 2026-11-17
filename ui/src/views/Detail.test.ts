@@ -51,15 +51,18 @@ describe('the fields of the detail', () => {
     expect(out).toMatch(/<div class="picks[^"]*"><label/);
   });
 
-  it('give the plan and the phase, free text often of a long name, a line each, not a cell among the choices', () => {
+  it('give the plan and the phase a line each, chosen from a list, not a cell among the choices', () => {
     const app = page(false);
     app.tasks = [task('pub/a', { plan: 'a-plan', phase: 'a-phase' })];
     const out = detail(app);
     const picks = out.slice(out.indexOf('<div class="picks'), out.indexOf('</div>', out.indexOf('<div class="picks')));
     expect(picks).not.toContain('>Plan</span>');
     expect(picks).not.toContain('>Phase</span>');
-    expect(out).toMatch(/<label class="line[^"]*"><span[^>]*>Plan<\/span>\s*<input type="text" value="a-plan"/);
-    expect(out).toMatch(/<label class="line[^"]*"><span[^>]*>Phase<\/span>\s*<input type="text" value="a-phase"/);
+    // A plan that is not among the engine's plans is shown as written.
+    expect(out).toMatch(/<div class="line pickfield[^"]*"><span[^>]*>Plan<\/span>\s*<button type="button"[^>]*data-field="plan"[^>]*aria-haspopup="listbox"[^>]*><span[^>]*>a-plan<\/span>/);
+    expect(out).toMatch(/<div class="line pickfield[^"]*"><span[^>]*>Phase<\/span>\s*<button type="button"[^>]*data-field="phase"[^>]*><span[^>]*>a-phase<\/span>/);
+    // Not a field to type a plan id into any more.
+    expect(out).not.toContain('<input type="text" value="a-plan"');
   });
 
   it('end with the large Done button, after everything else of the card', () => {

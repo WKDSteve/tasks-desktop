@@ -2576,8 +2576,15 @@ test('the capture dialog writes after, plan, phase, due and start into the file'
   await dialog.getByLabel('Start').fill('2026-08-01');
   await dialog.getByText('More fields', { exact: true }).click();
   await dialog.getByLabel('After').fill('lib.nvim/alpha');
-  await dialog.getByLabel('Plan', { exact: true }).fill('lib.nvim/the-plan');
-  await dialog.getByLabel('Phase').fill('build');
+  // The plan and its phase are chosen from the engine's lists (`PickField`): searched by the id, chosen with Enter.
+  await dialog.locator('button[data-field="plan"]').click();
+  await dialog.getByRole('combobox', { name: 'Search plans' }).fill('lib.nvim/the-plan');
+  await dialog.getByRole('combobox', { name: 'Search plans' }).press('Enter');
+  await expect(dialog.locator('button[data-field="plan"]')).not.toHaveText(/No plan/);
+  await dialog.locator('button[data-field="phase"]').click();
+  await dialog.getByRole('combobox', { name: 'Search phases' }).fill('build');
+  await dialog.getByRole('combobox', { name: 'Search phases' }).press('Enter');
+  await expect(dialog.locator('button[data-field="phase"]')).toHaveText(/build/);
   await dialog.getByRole('button', { name: 'Create', exact: true }).click();
   await expect(dialog).toHaveCount(0, { timeout: WRITE_BUDGET });
   await expect(taskFloat(page).locator('aside.detail .task-title')).toHaveText(title, { timeout: WRITE_BUDGET });

@@ -46,8 +46,9 @@
   $effect(() => {
     if (!dialog) return;
     if (app.planning && !dialog.open) {
-      // one area chosen (an area group with one member counts); a group is never a place to write to
-      const area = app.writeArea ?? areas[0]?.value ?? '';
+      // the area of the task the wizard was opened for, else the one area chosen (an area group with one member
+      // counts); a group is never a place to write to
+      const area = app.planningArea ?? app.writeArea ?? areas[0]?.value ?? '';
       form = emptyForm(area, app.planningKind, app.planningProject);
       answer = null;
       areasTouched = false;

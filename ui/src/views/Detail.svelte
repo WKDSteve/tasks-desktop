@@ -13,6 +13,8 @@
   import { copyText } from '../lib/exportDom';
   import { kindOfFile } from '../lib/capture';
   import AttachBar from './AttachBar.svelte';
+  import PickField from './PickField.svelte';
+  import { phaseOptions, planOptions, projectOptions } from '../lib/picker';
   import {
     badLink,
     badTag,
@@ -74,11 +76,37 @@
     return labelOf(app.lang, 'status', byId.get(id)?.status);
   }
   /** Write a text field of the task when what was typed differs from what the file has; an empty text takes the key away. */
-  function changeText(key: 'summary' | 'plan' | 'phase', current: string | undefined, typed: string): void {
+  function changeText(key: 'summary' | 'plan' | 'phase' | 'project', current: string | undefined, typed: string): void {
     if (!task) return;
     const next = typed.trim();
     if (next === (current ?? '')) return;
     void app.editField(task.id, key, next === '' ? null : next);
+  }
+  // The plan, the phase and the project are chosen from the engine's lists (its snapshot), not typed.
+  const plans = $derived(app.snapshot?.plans ?? []);
+  const NO_VALUE = 'none';
+  const NEW_PLAN = 'new-plan';
+  const planActions = $derived([
+    { id: NO_VALUE, label: t('pick.plan.none') },
+    ...(app.can('plan_new') && !app.readOnly ? [{ id: NEW_PLAN, label: t('pick.plan.new') }] : []),
+  ]);
+  /**
+   * Another plan for the task: a phase of the old plan that the new one does not have goes in the same write (a phase
+   * names a stage of its plan). Whether the plan takes the task is the engine's to say; its refusal is told.
+   */
+  function choosePlan(id: string, current: { plan?: string; phase?: string } | undefined, next: string | null): void {
+    if ((current?.plan ?? null) === next) return;
+    const phases = phaseOptions(plans.find((p) => p.id === next), app.tasks).map((o) => o.value);
+    const patch: Record<string, string | null> = { plan: next };
+    if (current?.phase && !phases.includes(current.phase)) patch.phase = null;
+    void app.editFields(id, patch);
+  }
+  function planAction(id: string, current: { plan?: string; phase?: string; area: string }, action: string): void {
+    if (action === NO_VALUE) choosePlan(id, current, null);
+    else if (action === NEW_PLAN) {
+      // The new plan is made in the task's area and given to the task once it is there; the phase then offers its own.
+      app.openPlanWizard('plan', '', { area: current.area, then: (planId) => choosePlan(id, current, planId) });
+    }
   }
   /** Write a list field (`after`, `refs`) when the typed list differs from the one the file has. */
   function changeList(key: 'after' | 'refs' | 'links', current: readonly string[], typed: string): void {
@@ -678,27 +706,51 @@
           </div>
         </fieldset>
       {/if}
-      <!-- The plan and the phase are free text, often a long name: a line each, as the title. -->
-      <label class="line">
-        <span data-hint={hintOf(app.lang, 'hint.field', 'plan')}>{t('field.plan')}</span>
-        <input
-          type="text"
-          value={shown.plan ?? ''}
-          data-field="plan"
-          readonly={app.locked}
-          onchange={(e) => changeText('plan', shown.plan, e.currentTarget.value)}
+      <!-- The plan, its phase and the project: chosen from the lists of the engine, a line each, as the title. -->
+      <PickField
+        label={t('field.plan')}
+        hint={hintOf(app.lang, 'hint.field', 'plan')}
+        name="plan"
+        value={shown.plan}
+        options={planOptions(plans, shown.area)}
+        actions={planActions}
+        placeholder={t('pick.plan.none')}
+        searchLabel={t('pick.plan.search')}
+        emptyLabel={t('pick.empty')}
+        disabled={app.locked}
+        onpick={(v) => choosePlan(shown.id, shown, v)}
+        onaction={(a) => planAction(shown.id, shown, a)}
+      />
+      <PickField
+        label={t('field.phase')}
+        hint={hintOf(app.lang, 'hint.field', 'phase')}
+        name="phase"
+        value={shown.phase}
+        options={phaseOptions(plans.find((p) => p.id === shown.plan), app.tasks)}
+        actions={[{ id: NO_VALUE, label: t('pick.phase.none') }]}
+        placeholder={shown.plan ? t('pick.phase.none') : t('pick.phase.no_plan')}
+        searchLabel={t('pick.phase.search')}
+        emptyLabel={t('pick.empty')}
+        disabled={app.locked || (!shown.plan && !shown.phase)}
+        onpick={(v) => changeText('phase', shown.phase, v)}
+        onaction={() => changeText('phase', shown.phase, '')}
+      />
+      {#if app.can('projects') || shown.project}
+        <PickField
+          label={t('field.project')}
+          hint={hintOf(app.lang, 'hint.field', 'project')}
+          name="project"
+          value={shown.project}
+          options={projectOptions(app.projects, shown.area)}
+          actions={[{ id: NO_VALUE, label: t('pick.project.none') }]}
+          placeholder={t('pick.project.none')}
+          searchLabel={t('pick.project.search')}
+          emptyLabel={t('pick.empty')}
+          disabled={app.locked}
+          onpick={(v) => changeText('project', shown.project, v)}
+          onaction={() => changeText('project', shown.project, '')}
         />
-      </label>
-      <label class="line">
-        <span data-hint={hintOf(app.lang, 'hint.field', 'phase')}>{t('field.phase')}</span>
-        <input
-          type="text"
-          value={shown.phase ?? ''}
-          data-field="phase"
-          readonly={app.locked}
-          onchange={(e) => changeText('phase', shown.phase, e.currentTarget.value)}
-        />
-      </label>
+      {/if}
       <label class="line">
         <span data-hint={hintOf(app.lang, 'hint.field', 'tags')}>{t('field.tags')} <small>({t('field.tags_hint')})</small></span>
         <input

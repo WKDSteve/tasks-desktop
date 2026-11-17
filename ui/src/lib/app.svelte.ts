@@ -17,6 +17,7 @@ import {
   toggleMark,
 } from './bulk';
 import { planOp, targetTaskOp, targetTitle, type PlanForm, type PlanKind, type PlanPreview } from './planwizard';
+import { addOps, type AddTarget } from './picker';
 import { connectOp, edgeOp, parseGraphOrder, phaseOp, type DepEdge, type EdgeAction, type EdgeKind, type GraphOrder } from './depGraph';
 import { COLUMNS, columnsOf, isColumn, neighbourColumn, placeNear, stepInGroup, type Column, type Move } from './board';
 import { ApiError, type CheckAll, type SheetRunState, type Hub, type HubArea, type HubAreas, type SearchResult, type VaultList } from './api';
@@ -130,6 +131,12 @@ import { TILES as TODAY_TILES, type OrderedTile, type Tile } from './tiles-list'
 /** The views whose layout can be put back as it came (Defaults ...). */
 export const LAYOUT_VIEWS = ['list', 'plan', 'stats', 'today'] as const;
 export type LayoutView = (typeof LAYOUT_VIEWS)[number];
+
+/**
+ * What a new task is filled with when the capture form opens from a plan. No project: the engine's `new` (and so
+ * `:Tasks new`) has no such field.
+ */
+export type CaptureFill = { plan?: string; phase?: string };
 
 /** What the last write did, in one line; `undo` is the way back, when there is one. */
 export interface Toast {
@@ -445,6 +452,8 @@ export class App {
   captureTitle = $state('');
   /** The area the capture dialog opens with, for such a line: that of its task. */
   captureArea = $state<string | undefined>(undefined);
+  /** The plan and phase the capture dialog opens with (a new task made from a plan's page). */
+  captureFill = $state.raw<CaptureFill>({});
   /** A card dropped among cards of another priority, waiting for the person's answer. */
   repriority = $state.raw<{ id: string; from: string; prio: number; ops: Op[] } | null>(null);
   /**
@@ -677,6 +686,13 @@ export class App {
   /** What the plan wizard makes (a plan or a project) and the project a new plan goes to. */
   planningKind = $state<PlanKind>('plan');
   planningProject = $state('');
+  /** The area the plan wizard opens with (the area of the task it was opened for); undefined: the area written to. */
+  planningArea = $state<string | undefined>(undefined);
+  /**
+   * What happens with the new plan when the wizard was opened from a choice (the plan of a task): it is handed the id
+   * instead of the plan view opening the plan.
+   */
+  private planningThen: ((id: string) => void) | null = null;
 
   tasks = $state.raw<TaskEntry[]>([]);
   /**
@@ -1225,12 +1241,13 @@ export class App {
     this.toast = null;
   }
 
-  openCapture(title = '', area?: string): void {
+  openCapture(title = '', area?: string, fill: CaptureFill = {}): void {
     if (this.phase !== 'ready') return;
     // Nothing could be created: said at once, not after the form was filled in.
     if (this.refusedReadOnly()) return;
     this.captureTitle = title;
     this.captureArea = area;
+    this.captureFill = fill;
     this.capturing = true;
   }
 
@@ -1335,11 +1352,17 @@ export class App {
     safe(() => this.env.prefs.setItem('tasks-desktop.frecency', JSON.stringify(this.frecency)));
   }
 
-  openPlanWizard(kind: PlanKind = 'plan', project = ''): void {
+  openPlanWizard(
+    kind: PlanKind = 'plan',
+    project = '',
+    opts: { area?: string; then?: (id: string) => void } = {},
+  ): void {
     if (this.refusedReadOnly()) return;
     if (this.phase !== 'ready' || !this.can(kind === 'project' ? 'project_new' : 'plan_new')) return;
     this.planningKind = kind;
     this.planningProject = kind === 'plan' ? project : '';
+    this.planningArea = opts.area;
+    this.planningThen = opts.then ?? null;
     this.planning = true;
   }
 
@@ -1417,6 +1440,7 @@ export class App {
   }
 
   closePlanWizard(): void {
+    this.planningThen = null;
     this.planning = false;
   }
 
@@ -1461,7 +1485,8 @@ export class App {
   }
 
   /**
-   * Make the plan, show it in the plan view and choose it there. A target task to make goes in the same request,
+   * Make the plan, show it in the plan view and choose it there (or hand its id to the choice the wizard was opened
+   * from, `openPlanWizard({ then })`). A target task to make goes in the same request,
    * after the plan (so it can be in it): the plan names it by the id the dry run `preview` gave it; when the engine
    * gave it another one meanwhile, the plan is pointed at that one.
    */
@@ -1480,8 +1505,11 @@ export class App {
     if (made?.ok && typeof made.id === 'string' && made.id !== planned?.target) {
       await this.setPlanFile(form.kind, id, { target: made.id });
     }
+    const then = this.planningThen;
+    this.planningThen = null;
     this.planning = false;
-    if (form.kind === 'project') this.openProject(id);
+    if (then) then(id);
+    else if (form.kind === 'project') this.openProject(id);
     else this.openPlan(id);
   }
 
@@ -2322,6 +2350,39 @@ export class App {
   }
 
   /**
+   * Put the chosen tasks into a plan (and phase) or a project: one batch of `set`, each task with the version that was
+   * shown (`if_match`), one message with the way back. What the engine refuses (an area the plan does not cover, a task
+   * that changed meanwhile) fails alone and is handed back with the engine's words, task by task; the rest stays
+   * written. Null: nothing was sent (read only, a write under way) or the answer did not come.
+   */
+  async addTasksTo(
+    ids: readonly string[],
+    target: AddTarget,
+  ): Promise<{ added: number; failed: { id: string; message: string }[] } | null> {
+    const ops = addOps(this.tasks, ids, target);
+    if (ops.length === 0) {
+      this.say('ok', 'bulk.nothing');
+      return { added: 0, failed: [] };
+    }
+    let failed: { id: string; message: string }[] = [];
+    const onAnswer = (result: Result): boolean => {
+      failed = [];
+      for (const r of result.results) {
+        if (r.ok) continue;
+        const id = ops[r.n - 1]?.id ?? (r.error?.details as { id?: unknown } | undefined)?.id;
+        failed.push({ id: typeof id === 'string' ? id : '?', message: r.error?.message ?? r.error?.code ?? 'failed' });
+      }
+      const undo = this.inverseOf(result);
+      if (failed.length === 0) this.say('ok', 'pick.added', { n: ops.length }, undo);
+      else this.say('error', 'pick.partial', { done: ops.length - failed.length, failed: failed.length }, undo);
+      return true;
+    };
+    const result = await this.write(ops, { onAnswer });
+    if (!result) return null;
+    return { added: ops.length - failed.length, failed };
+  }
+
+  /**
    * What a batch of `set` on marked tasks says when its answer is there: how many went through, how many failed (each
    * failed one stays marked, the others are taken off), with the way back of those that went through.
    */
@@ -3150,6 +3211,22 @@ export class App {
     if (sameField(value, (task as unknown as Record<string, unknown>)[key])) delete next[key];
     else next[key] = value;
     this.setDraft(id, next);
+  }
+
+  /**
+   * Several fields of the detail changed together (a new plan takes the phase of the old one away): one write at once
+   * (`auto`), or each held in the draft (`manual`), as `editField` does for one.
+   */
+  async editFields(id: string, patch: Record<string, FieldValue>): Promise<void> {
+    const keys = Object.keys(patch);
+    if (keys.length === 1) return this.editField(id, keys[0]!, patch[keys[0]!]!);
+    if (this.saveMode === 'manual') {
+      for (const key of keys) await this.editField(id, key, patch[key]!);
+      return;
+    }
+    const task = this.tasks.find((t) => t.id === id);
+    if (!task || keys.length === 0) return;
+    await this.write([{ op: 'set', id, patch, ...(task.etag ? { if_match: task.etag } : {}) }]);
   }
 
   private setDraft(id: string, draft: Record<string, FieldValue>): void {

@@ -10,6 +10,8 @@
   import { projectPage, share, subtaskCount, type PlanCard } from '../lib/projects';
   import ClosePanel from './ClosePanel.svelte';
   import { PLAN_STATUSES } from '../lib/planwizard';
+  import AddTasksDialog from './AddTasksDialog.svelte';
+  import type { AddTarget } from '../lib/picker';
 
   let { app, projectId }: { app: App; projectId: string } = $props();
   const t = (key: Key, params: Record<string, string | number> = {}) => translate(app.lang, key, params);
@@ -67,6 +69,9 @@
   function askClose(kind: 'plan' | 'project', id: string, title: string): void {
     closing = { kind, id, title };
   }
+
+  // Adding tasks: to the project itself (its own tasks) or to one of its plans (`AddTasksDialog`).
+  let adding = $state<{ target: AddTarget; name: string } | null>(null);
 
   let attachId = $state('');
   async function attach(): Promise<void> {
@@ -136,6 +141,16 @@
             {#each PLAN_STATUSES as s (s)}<option value={s}>{t(`plan.status.${s}` as Key)}</option>{/each}
           </select>
         </label>
+      {/if}
+      {#if !app.readOnly}
+        <button
+          type="button"
+          data-add="project"
+          data-hint={t('hint.ui.plan.add')}
+          disabled={app.saving}
+          onclick={() => (adding = { target: { kind: 'project', id: project.id, areas: project.areas }, name: project.title })}
+          >{t('add.button')}</button
+        >
       {/if}
       {#if app.can('plan_new') && !app.readOnly}
         <button type="button" onclick={() => app.openPlanWizard('plan', project.id)}>{t('project.new_plan')}</button>
@@ -238,6 +253,15 @@
                   <button
                     type="button"
                     class="link small"
+                    data-add="plan"
+                    data-hint={t('hint.ui.plan.add')}
+                    disabled={app.saving}
+                    onclick={() => (adding = { target: { kind: 'plan', id: card.plan.id, areas: card.plan.areas }, name: card.plan.title })}
+                    >{t('add.button')}</button
+                  >
+                  <button
+                    type="button"
+                    class="link small"
                     data-hint={t('hint.ui.project.detach')}
                     disabled={app.saving}
                     onclick={() => void app.setPlanFile('plan', card.plan.id, { project: null, phase: null })}
@@ -262,6 +286,7 @@
       <p class="muted">{t('project.plans_none')}</p>
     {/each}
   </section>
+  <AddTasksDialog {app} target={adding?.target ?? null} name={adding?.name ?? ''} onclose={() => (adding = null)} />
 {/if}
 
 <style>
