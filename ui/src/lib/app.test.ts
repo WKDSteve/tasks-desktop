@@ -813,6 +813,16 @@ describe('App', () => {
     hub.aiDesktopFound = { installed: true, running: false };
     await app.focused();
     await vi.waitFor(() => expect(app.aiFeatures).toBe(true));
+    // A read that fails at the next focus keeps what was known.
+    let failed = 0;
+    hub.aiDesktop = async () => {
+      failed += 1;
+      return null;
+    };
+    await app.focused();
+    await vi.waitFor(() => expect(failed).toBe(1));
+    expect(app.aiDesktop).toEqual({ installed: true, running: false });
+    expect(app.aiFeatures).toBe(true);
     app.stop();
   });
 

@@ -3361,8 +3361,10 @@ export class App {
     safe(() => this.env.prefs.setItem('tasks-desktop.ai', on ? 'on' : 'off'));
   }
 
+  /** A read that fails (a hub that is restarting) keeps what was known: the switch does not come and go with it. */
   private async readAiDesktop(): Promise<void> {
-    this.aiDesktop = await this.env.hub.aiDesktop();
+    const found = await this.env.hub.aiDesktop();
+    if (found !== null) this.aiDesktop = found;
   }
 
   setShortAreas(on: boolean): void {
