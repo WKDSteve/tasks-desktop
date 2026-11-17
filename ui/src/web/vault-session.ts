@@ -27,6 +27,7 @@ import type { CallResult } from './engine.ts';
 import type { MountedVault } from './entry.ts';
 import type { DataClass, OpsOutcome } from './hub.ts';
 import {
+  assertVault,
   readVaultFolder,
   signatureOf,
   type DirHandleLike,
@@ -62,6 +63,12 @@ export interface SessionDeps {
   today(): string;
   hash?: Hash;
   limits?: Partial<LoadLimits>;
+  /**
+   * Refuse a folder with no area on the first read (`NoAreasError`, before the engine sees it): it is nearly always the
+   * wrong folder, and the page would show an empty vault without a word. The page sets it; the tests of the session
+   * mechanics read flat folders and leave it off.
+   */
+  checkVault?: boolean;
   /**
    * Told what the page knows of the folder after a write, and after the session read the folder again by itself (a write
    * that did not go through): the watcher must not report the page's own work as a change from outside, and must report
@@ -196,9 +203,9 @@ export class VaultSession {
     return this.seen ? signatureOf(this.seen) : '';
   }
 
-  /** Read the folder and replace the VM's copy with it. */
+  /** Read the folder and replace the VM's copy with it (see `checkVault` for a folder with no area). */
   load(): Promise<MountedVault> {
-    return this.exclusive(() => this.read());
+    return this.exclusive(() => this.read(true));
   }
 
   /** Read the folder again (the watcher saw a change from outside). */
@@ -208,11 +215,13 @@ export class VaultSession {
     });
   }
 
-  private async read(): Promise<MountedVault> {
+  /** `first`: the folder was just chosen, so it must look like a vault (a reload takes what is there). */
+  private async read(first = false): Promise<MountedVault> {
     try {
       // Before the read, not after: what changes while the folder is read must differ from what the watcher compares to.
       const before = await vaultStamps(this.deps.handle, this.deps.limits).catch(() => null);
       const vault = await readVaultFolder(this.deps.handle, this.deps.limits);
+      if (first && this.deps.checkVault) assertVault(vault.files);
       const baseline = await makeBaseline(vault, this.deps.hash);
       const files = await this.deps.client.mount(this.deps.root, vault.files);
       this.baseline = baseline;

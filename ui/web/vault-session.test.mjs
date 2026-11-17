@@ -6,6 +6,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { guardUnload, localDay, VaultSession } from '../src/web/vault-session.ts';
+import { NoAreasError } from '../src/web/vault-files.ts';
 import { watchFolder } from 'appkit-web/watch';
 import { fakeDisk } from './fake-folder.mjs';
 
@@ -568,4 +569,19 @@ test('a session of a folder read through an input never asks the engine and neve
   assert.match(outcome.message, /reading only/);
   assert.deepEqual(c.log, [], 'the engine was not called');
   assert.deepEqual(disk.files(), { 'A/a.md': 'task a', 'A/b.md': 'task b' });
+});
+
+test('with checkVault, a first read of a folder with no area is refused before the engine sees it; a re-read is not', async () => {
+  const nested = fakeDisk({ 'v/A/ROADMAP/tasks/a.md': 'x' });
+  const c = client();
+  const session = new VaultSession({ client: c, handle: nested.root, root: '/vault', today: () => '2026-10-29', checkVault: true });
+  await assert.rejects(session.load(), (e) => e instanceof NoAreasError && e.below === 'v');
+  assert.deepEqual(c.log, [], 'nothing was mounted');
+  assert.equal(session.isStale, true);
+
+  const { disk, c: c2, session: ok } = await open({ 'A/ROADMAP/tasks/a.md': 'x' }, {}, { checkVault: true });
+  assert.equal(ok.isStale, false, 'a folder with an area opens');
+  disk.remove('A/ROADMAP/tasks/a.md');
+  await ok.reload();
+  assert.deepEqual(c2.log, ['mount 0'], 'a vault that lost its last task is read as it is');
 });

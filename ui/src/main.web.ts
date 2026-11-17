@@ -102,6 +102,7 @@ const entry = new Entry({
       client,
       handle,
       readOnly,
+      checkVault: true,
       root: ROOT,
       today: () => localDay(new Date()),
       onSignature: (known) => watcher?.accept(known),

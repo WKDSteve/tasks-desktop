@@ -1040,6 +1040,10 @@ const en = {
   'web.entry.notice.denied': 'Access was not allowed. Allow it, or choose the folder again.',
   'web.entry.notice.gone': 'The folder is not there any more. Choose it again.',
   'web.entry.notice.limit': 'The folder is too large to read: {detail}',
+  'web.entry.notice.no_areas':
+    'This folder holds no area (a folder with ROADMAP or Backlog in it), so there would be nothing to show. Choose the vault folder itself, the one that holds the areas.',
+  'web.entry.notice.no_areas_below':
+    'This folder holds no area (a folder with ROADMAP or Backlog in it). The folder "{detail}" inside it looks like the vault: choose that one.',
   'state.unavailable.title': 'The hub is up, the engine is not',
   'state.unavailable.body': 'The hub cannot reach tasks.nvim. Problem code:',
   'state.offline.title': 'The hub is not reachable',
@@ -2788,6 +2792,10 @@ const de: Record<Key, string> = {
   'web.entry.notice.denied': 'Der Zugriff wurde nicht erlaubt. Erlaube ihn oder wähle den Ordner neu.',
   'web.entry.notice.gone': 'Der Ordner ist nicht mehr da. Wähle ihn neu.',
   'web.entry.notice.limit': 'Der Ordner ist zu groß zum Lesen: {detail}',
+  'web.entry.notice.no_areas':
+    'Dieser Ordner enthält keinen Bereich (einen Ordner mit ROADMAP oder Backlog darin), es gäbe also nichts anzuzeigen. Wähle den Vault-Ordner selbst, den, der die Bereiche enthält.',
+  'web.entry.notice.no_areas_below':
+    'Dieser Ordner enthält keinen Bereich (einen Ordner mit ROADMAP oder Backlog darin). Der Ordner „{detail}“ darin sieht wie der Vault aus: wähle diesen.',
   'state.unavailable.title': 'Der Hub läuft, die Engine nicht',
   'state.unavailable.body': 'Der Hub erreicht tasks.nvim nicht. Problem-Code:',
   'state.offline.title': 'Der Hub ist nicht erreichbar',

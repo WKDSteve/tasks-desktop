@@ -17,7 +17,7 @@ import {
   PICKER_ID,
   RecentFolders,
 } from '../src/web/folder.ts';
-import { VaultLimitError } from '../src/web/vault-files.ts';
+import { NoAreasError, VaultLimitError } from '../src/web/vault-files.ts';
 
 const enc = (s) => new TextEncoder().encode(s);
 
@@ -153,6 +153,8 @@ test('a refused or cancelled picker returns to the start page with the reason', 
 test('a folder that cannot be read returns to the start page, and nothing is remembered', async () => {
   const cases = [
     [new VaultLimitError('maxFiles', 'more than 5 files'), 'limit', /more than 5 files/],
+    [new NoAreasError(null), 'no_areas', undefined],
+    [new NoAreasError('tricentis-vault'), 'no_areas_below', /^tricentis-vault$/],
     [domError('NotFoundError'), 'gone', undefined],
     [domError('NotAllowedError'), 'denied', undefined],
     [new Error('disk\nfull'), 'failed', /disk full/],

@@ -13,7 +13,7 @@ import {
   type RecentFolders,
 } from './folder.ts';
 import { inputFolderSupport, pickFolderByInput, type InputDocument } from 'appkit-web/folder-input';
-import { readVaultFolder, VaultLimitError, type DirHandleLike, type Skipped } from './vault-files.ts';
+import { NoAreasError, readVaultFolder, VaultLimitError, type DirHandleLike, type Skipped } from './vault-files.ts';
 
 export type Access = 'granted' | 'prompt' | 'denied' | 'gone';
 
@@ -23,9 +23,12 @@ export interface RecentView {
   access: Access;
 }
 
-/** Why the last attempt did not lead into a vault. `detail` is a short plain line of the browser or the reader. */
+/**
+ * Why the last attempt did not lead into a vault. `detail` is a short plain line of the browser or the reader; for
+ * `no_areas_below` it is the name of the folder inside the chosen one that looks like the vault.
+ */
 export interface Notice {
-  code: 'cancelled' | 'empty' | 'no_paths' | 'blocked' | 'failed' | 'denied' | 'gone' | 'limit';
+  code: 'cancelled' | 'empty' | 'no_paths' | 'blocked' | 'failed' | 'denied' | 'gone' | 'limit' | 'no_areas' | 'no_areas_below';
   detail?: string;
 }
 
@@ -194,6 +197,9 @@ export class Entry {
     } catch (error) {
       const name = typeof error === 'object' && error !== null ? (error as { name?: unknown }).name : undefined;
       if (error instanceof VaultLimitError) return this.start({ code: 'limit', detail: error.message });
+      if (error instanceof NoAreasError) {
+        return this.start(error.below ? { code: 'no_areas_below', detail: error.below } : { code: 'no_areas' });
+      }
       if (name === 'NotFoundError') return this.start({ code: 'gone' });
       if (name === 'NotAllowedError' || name === 'SecurityError') return this.start({ code: 'denied' });
       return this.start({ code: 'failed', detail: oneLine(error) });

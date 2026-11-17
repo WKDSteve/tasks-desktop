@@ -29,6 +29,24 @@ test('with a folder chosen the app shows the tasks of the vault, still without a
   expect(await violations(page)).toEqual([]);
 });
 
+test('a folder with no area (one level above the vault) is refused with a word, and the vault inside it is named', async ({ page }) => {
+  // The slip that left the page empty without a word: the folder that holds the vault was chosen, not the vault.
+  const seen = await watchPage(page);
+  const nested: Record<string, string> = {};
+  for (const [path, text] of Object.entries(vaultFiles())) nested[`my-vault/${path}`] = text;
+  await fakePicker(page, nested);
+  await page.goto(pageUrl());
+  await page.getByRole('button', { name: /Choose folder|Ordner wählen/ }).click();
+  await expect(page.getByRole('alert')).toContainText('The folder "my-vault" inside it looks like the vault', { timeout: 30_000 });
+  // Still the way in: the folder can be chosen again, and the wrong one is not kept in the list of folders used before.
+  await expect(page.getByRole('button', { name: /Choose folder|Ordner wählen/ })).toBeVisible();
+  await expect(page.getByText('Used before')).toHaveCount(0);
+  await expect(page.getByRole('menubar')).toHaveCount(0);
+  expect(seen.errors).toEqual([]);
+  expect(seen.requests).toEqual([]);
+  expect(await violations(page)).toEqual([]);
+});
+
 test('the watch would see a request: the policy refuses it and says so', async ({ page }) => {
   // A detector that reports nothing proves nothing until it has reported something (the positive test).
   const seen = await watchPage(page);

@@ -36,8 +36,11 @@ export const DEFAULT_LIMITS: Readonly<LoadLimits> = {
   maxDepth: 32,
 };
 
+/** The marker file of a vault (tasks.nvim `vault_marker.lua`): layout version, extra areas, defaults. */
+export const MARKER_FILE = 'tasks-vault.json';
+
 /** Files at the root of the vault that are read besides the task files (data classes, vault marker, area groups). */
-export const ROOT_FILES: ReadonlySet<string> = new Set(['areas.json', 'vault.json', 'area-groups.json']);
+export const ROOT_FILES: ReadonlySet<string> = new Set(['areas.json', MARKER_FILE, 'area-groups.json']);
 
 const SKIPPED_DIRS: ReadonlySet<string> = new Set(['node_modules']);
 
@@ -157,6 +160,78 @@ export async function readVaultFolder(root: DirHandleLike, limits: Partial<LoadL
 
   await walk(root, '', 0);
   return out;
+}
+
+/** Folders that are never areas (tasks.nvim `vault.SKIP`). */
+const NOT_AREAS: ReadonlySet<string> = new Set(['TEMPLATES', 'TOOLS']);
+
+/** Whether `name` may be an area, as tasks.nvim `vault.valid_area` and `is_area_dir` say (no hidden, no `_` folder). */
+function areaName(name: string): boolean {
+  return /^[A-Za-z0-9][\w.-]*$/.test(name) && !name.includes('..') && !NOT_AREAS.has(name);
+}
+
+/**
+ * The areas the read files show below `prefix` (`''` for the folder itself): the folders that hold `ROADMAP/` or
+ * `Backlog/` with a file in it. Only the files the reader took are seen, so an area with no task file at all is missed;
+ * that is what the engine sees in the page too. Sorted, a name once.
+ */
+export function areasIn(paths: Iterable<string>, prefix = ''): string[] {
+  const found = new Set<string>();
+  for (const path of paths) {
+    if (!path.startsWith(prefix)) continue;
+    const parts = path.slice(prefix.length).split('/');
+    if (parts.length >= 3 && areaName(parts[0]!) && (parts[1] === 'ROADMAP' || parts[1] === 'Backlog')) found.add(parts[0]!);
+  }
+  return [...found].sort();
+}
+
+/**
+ * The folder right below the root that looks like the vault when the root does not: the one with the most areas (by
+ * name on a tie), or null. The usual slips are a folder one level too high, or a copy that put the vault into a folder
+ * of its own.
+ */
+export function vaultBelow(paths: Iterable<string>): string | null {
+  const list = [...paths];
+  const tops = new Set<string>();
+  for (const path of list) {
+    const slash = path.indexOf('/');
+    if (slash > 0) tops.add(path.slice(0, slash));
+  }
+  let best: string | null = null;
+  let bestCount = 0;
+  for (const top of [...tops].sort()) {
+    const count = list.includes(`${top}/${MARKER_FILE}`) ? Infinity : areasIn(list, `${top}/`).length;
+    if (count > bestCount) {
+      best = top;
+      bestCount = count;
+    }
+  }
+  return best;
+}
+
+/**
+ * The folder holds no area: the page would show an empty vault that looks like a working one. `below` names a folder
+ * inside it that looks like the vault, if there is one.
+ */
+export class NoAreasError extends Error {
+  readonly below: string | null;
+
+  constructor(below: string | null) {
+    super(below ? `no area in this folder; "${below}" inside it looks like the vault` : 'no area in this folder');
+    this.name = 'NoAreasError';
+    this.below = below;
+  }
+}
+
+/**
+ * Refuse a folder that is no vault: no marker file at its root and no area. The engine would read it without a word and
+ * every view would be empty.
+ */
+export function assertVault(files: ReadonlyMap<string, Uint8Array>): void {
+  if (files.has(MARKER_FILE)) return;
+  const paths = [...files.keys()];
+  if (areasIn(paths).length > 0) return;
+  throw new NoAreasError(vaultBelow(paths));
 }
 
 /** A 53-bit hash of a text (cyrb53): a signature to compare, not a secret. */

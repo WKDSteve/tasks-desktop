@@ -84,8 +84,10 @@ one).
    window of its own, `/shortcut` for a shortcut on the desktop and in the Start menu). Without the script: Options >
    "Create a shortcut ..." in the page gives the line for Windows' "New > Shortcut" (Chrome as a window of its own, or
    the plain address); Chrome saves no downloaded `.lnk` or `.url`, so the page offers none.
-3. Press "Choose folder ..." and pick the vault folder. The page reads the `*.md` files, `areas.json` and
-   `vault.json` into memory (`.git` and hidden folders are skipped). After a restart of Chrome, press "Allow
+3. Press "Choose folder ..." and pick the vault folder. The page reads the `*.md` files, `areas.json`,
+   `area-groups.json` and `tasks-vault.json` into memory (`.git` and hidden folders are skipped). A folder with no area
+   (the folder above the vault, or one area) is refused with a notice that names a folder inside it that looks like the
+   vault, instead of an empty vault. After a restart of Chrome, press "Allow
    access" once for the folder used last. Project > "Open another vault ..." goes back to this first screen, where
    another folder is chosen (the page reads one folder at a time; it has no list of vaults like the app).
 4. Changes made on disk (Neovim, git, agents) show up when the tab gets focus, or within 30 seconds. Writing from the
@@ -443,7 +445,9 @@ and used as described under "In the browser, without installing". Its built file
   `pnpm probe -- --out=<tasks-web>/probe.html` builds the probe that checks whether a machine allows all this.
 - **The vault folder.** `ui/src/web/vault-files.ts` reads a picked folder (`showDirectoryPicker`) into memory and
   `VaultMount` puts it into the VM's file system. Names from the folder are untrusted: a separator, a NUL or a dot
-  segment never becomes a path; only `*.md` and, at the root, `areas.json` and `vault.json` are read; hidden folders
+  segment never becomes a path; only `*.md` and, at the root, `areas.json`, `area-groups.json` and the marker
+  `tasks-vault.json` are read; a folder with no area and no marker is refused on the first read (`NoAreasError`, as
+  the Rust hub's `vault_empty`); hidden folders
   (`.git`) and `node_modules` are left out; a file over 4 MiB is skipped and reported; a folder over a budget
   (20 000 files, 256 MiB, 32 levels) is refused as a whole, because a vault read in part would show wrong data.
   `VaultMount.changes()` lists what the engine added, changed and removed since the load (for the write-back).

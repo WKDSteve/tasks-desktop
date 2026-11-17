@@ -6,6 +6,11 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
+  areasIn,
+  assertVault,
+  MARKER_FILE,
+  NoAreasError,
+  vaultBelow,
   DEFAULT_LIMITS,
   readVaultFolder,
   safeName,
@@ -101,7 +106,9 @@ test('which files and folders are read', () => {
   assert.equal(wantedFile('notes.txt', false), false);
   assert.equal(wantedFile('areas.json', true), true);
   assert.equal(wantedFile('areas.json', false), false, 'the named files count at the root only');
-  assert.equal(wantedFile('vault.json', true), true);
+  assert.equal(wantedFile(MARKER_FILE, true), true, 'the engine reads the marker of the vault');
+  assert.equal(MARKER_FILE, 'tasks-vault.json', 'the name tasks.nvim gives it (vault_marker.lua)');
+  assert.equal(wantedFile('vault.json', true), false, 'no file of that name is read by the engine');
   assert.equal(wantedFile('area-groups.json', true), true, 'the engine reads the area groups');
   assert.equal(wantedFile('area-groups.json', false), false);
   assert.equal(wantedDir('.git'), false);
@@ -271,4 +278,46 @@ test('the reader notes the time and the size of every file it took', async () =>
   assert.deepEqual(got.stamps.get('a.md'), { size: 3, lastModified: 1234 });
   assert.deepEqual(got.stamps.get('b.md'), { size: 1, lastModified: undefined }, 'a handle that tells no time gives none');
   assert.deepEqual([...got.stamps.keys()], [...got.files.keys()]);
+});
+
+test('the areas of a folder are the folders with ROADMAP or Backlog, as the engine counts them', () => {
+  const paths = [
+    'B/ROADMAP/tasks/x.md',
+    'A/Backlog/TASKS/y.md',
+    'A/ROADMAP/TASKS.md',
+    'README.md',
+    'notes/a.md',
+    '_archive/ROADMAP/tasks/z.md',
+    '.hidden/ROADMAP/tasks/z.md',
+    'TEMPLATES/ROADMAP/t.md',
+    'TOOLS/Backlog/t.md',
+    'C/ROADMAP',
+  ];
+  assert.deepEqual(areasIn(paths), ['A', 'B'], 'sorted, once; no _, hidden, TEMPLATES, TOOLS; a file inside is needed');
+  assert.deepEqual(areasIn(['v/A/ROADMAP/tasks/a.md', 'A/ROADMAP/tasks/a.md'], 'v/'), ['A']);
+  assert.deepEqual(areasIn([]), []);
+});
+
+test('a folder that holds the vault one level down names it; the one with most areas wins, a marker more', () => {
+  assert.equal(vaultBelow(['tricentis-vault/CS/ROADMAP/tasks/a.md', 'tricentis-vault/README.md', 'other/x.md']), 'tricentis-vault');
+  assert.equal(
+    vaultBelow(['a/X/ROADMAP/t/1.md', 'b/X/ROADMAP/t/1.md', 'b/Y/Backlog/T/2.md']),
+    'b',
+    'the most areas',
+  );
+  assert.equal(vaultBelow(['a/X/ROADMAP/t/1.md', 'b/X/ROADMAP/t/1.md']), 'a', 'a tie goes by name');
+  assert.equal(vaultBelow(['a/X/ROADMAP/t/1.md', 'm/tasks-vault.json']), 'm', 'a marker beats areas');
+  assert.equal(vaultBelow(['Horizon/ROADMAP/tasks/a.md', 'README.md']), null, 'an area folder holds no vault');
+});
+
+test('a folder with no area and no marker is refused, and says where the vault may be', () => {
+  const files = (paths) => new Map(paths.map((p) => [p, new Uint8Array()]));
+  assert.doesNotThrow(() => assertVault(files(['A/ROADMAP/tasks/a.md'])));
+  assert.doesNotThrow(() => assertVault(files(['tasks-vault.json'])), 'a vault with a marker and no area yet');
+  assert.throws(() => assertVault(files([])), (e) => e instanceof NoAreasError && e.below === null);
+  assert.throws(() => assertVault(files(['ROADMAP/tasks/a.md', 'Backlog/TASKS/b.md'])), (e) => e instanceof NoAreasError && e.below === null, 'an area itself');
+  assert.throws(
+    () => assertVault(files(['tricentis-vault/CS/ROADMAP/tasks/a.md'])),
+    (e) => e instanceof NoAreasError && e.below === 'tricentis-vault' && /tricentis-vault/.test(e.message),
+  );
 });
