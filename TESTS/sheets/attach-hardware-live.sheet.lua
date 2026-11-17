@@ -1,4 +1,5 @@
--- The hand check of the attach buttons of a task's detail with what no test sees: the browser's own choice of a screen,
+-- The hand check of the attach buttons of a task's detail (and of a plan or project, and of the forms that attach once
+-- the thing is made) with what no test sees: the browser's own choice of a screen,
 -- a real camera and microphone, real files and the Tauri window. What a machine checks runs elsewhere: ui/e2e (a
 -- drawing surface stands for camera and screen, the buttons, the files in assets/, the refusals). Video and photo are
 -- only choosable once the guard lets the hub's page use the camera
@@ -24,6 +25,15 @@ return {
     {
       ask = "The same in the Tauri window: do the file choice and the screenshot work there (WebView2), and if not,"
         .. " what does the page say?",
+    },
+    {
+      ask = "A plan and a project (Plan view, 'Edit links, attachments'): Attach file and Image > From the clipboard"
+        .. " of the hub with a real clipboard image; the first one makes plans/<slug>/<slug>.md a folder, the file is"
+        .. " listed under Attachments, and the same in the Tauri window?",
+    },
+    {
+      ask = "Create a plan with 'Attach once it is made' (a real file and the clipboard image ticked): after Create"
+        .. " both lie in the plan's assets/, and a clipboard without an image takes the newest screenshot or says so?",
     },
     {
       ask = "Once the camera is released: Record a video with a real camera and microphone (the browser asks, the"
