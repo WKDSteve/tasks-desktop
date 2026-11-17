@@ -1819,7 +1819,7 @@ const en = {
   'hint.form.move_area': 'The area the task file moves to: it leaves the folder of its area and lands in that of the other one, with its ID kept.',
   'hint.form.vaults.name': 'The short name the vault is listed under in this app, say work or home. Only letters, digits, . - and _.',
   'hint.form.vaults.path': 'The whole path of the folder that holds one folder per area, say D:/notes/tasks-vault.',
-  'hint.form.vaults.create': 'On: the hub makes the folder as a new vault with a first area. It must not exist yet or be empty. Off: an existing vault is added.',
+  'hint.form.vaults.create': 'On: the hub makes the folder as a new vault with a first area. The folder must not exist yet, or be empty. Off: an existing vault is added.',
   'hint.form.vaults.area': 'The name of the first area of the new vault, a folder in it, say home or my-project.',
   'hint.form.views.choose': 'Which saved view is shown: the board or one of the views kept as files in an area.',
   'hint.form.views.title': 'The name of the view, as it stands in the choice of views, say Release 2.0 by status.',
