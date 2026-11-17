@@ -1874,6 +1874,21 @@ const en = {
   'hint.form.plan.stage': 'The stage of the project the plan belongs to: the plans of a later stage wait for those of the earlier ones.',
   'hint.form.plan.gate': 'On (gate hard): a phase starts only when every task of the phase before is finished. Off: phases are an order, not a barrier.',
   'hint.form.plan.summary': 'One sentence on what it is about, written right under the title of the file, say Ship the new sync to every user.',
+  'hint.field.due': 'The day the task must be finished by, say the date of a release. After it the task counts as overdue (a parked one never).',
+  'hint.field.start': 'The first day the task can be worked on: before it, it is not offered as startable. Not after the due date.',
+  'hint.field.summary': 'One line on what the task is about, written under its title; lists and search show it.',
+  'hint.field.category': 'What kind of work it is (ux, perf, docs ...), to group and filter by. Several can be ticked.',
+  'hint.field.scope': 'Which part of the project it touches (ui, engine, docs ...), to group and filter by. Several can be ticked.',
+  'hint.field.scope_other': 'Further words, separated by commas: a known scope word is ticked above, any other word becomes a tag.',
+  'hint.field.severity': 'How bad a bug or security problem is, from low to critical. Only for those two kinds.',
+  'hint.form.task.title': 'What is to be done, in a few words, say Fix the login on the phone. The ID (the file name) is made from it.',
+  'hint.form.task.area': 'The area (a folder of the vault, mostly one per repo) the task file is made in.',
+  'hint.form.task.areas_more': 'Each area ticked here gets a task of its own with the same text, say for a change that touches two repos.',
+  'hint.form.task.scaffold': 'Points the chosen kind and scopes bring along: ticked ones open the Acceptance section, untick one to drop it.',
+  'hint.form.task.context': 'Why the task exists and what is known: the section Context of the file. Optional.',
+  'hint.form.task.acceptance': 'When the task is done, one point per line, say Login works on Android. Each line becomes a checkbox.',
+  'hint.form.task.notes': 'Anything else worth keeping: the section Notes of the file. Optional.',
+  'hint.form.task.attach': 'Attaches a screenshot to the new task: the picture on the clipboard, else the newest screenshot of this computer.',
 } as const;
 
 export type Key = keyof typeof en;
@@ -3748,6 +3763,21 @@ const de: Record<Key, string> = {
   'hint.form.plan.stage': 'Die Stufe des Projekts, zu der der Plan gehört: die Pläne einer späteren Stufe warten auf die der früheren.',
   'hint.form.plan.gate': 'An (gate hard): eine Phase beginnt erst, wenn jede Task der Phase davor erledigt ist. Aus: Phasen sind eine Reihenfolge, keine Schranke.',
   'hint.form.plan.summary': 'Ein Satz, worum es geht, direkt unter dem Titel der Datei, etwa Die neue Synchronisation an alle ausliefern.',
+  'hint.field.due': 'Der Tag, bis zu dem die Task erledigt sein muss, etwa der Termin eines Releases. Danach gilt sie als überfällig (eine geparkte nie).',
+  'hint.field.start': 'Der erste Tag, an dem an der Task gearbeitet werden kann: davor wird sie nicht als startbar angeboten. Nicht nach dem Fälligkeitsdatum.',
+  'hint.field.summary': 'Eine Zeile, worum es in der Task geht, unter ihrem Titel; Listen und Suche zeigen sie.',
+  'hint.field.category': 'Welche Art Arbeit es ist (ux, perf, docs ...), zum Gruppieren und Filtern. Mehrere sind möglich.',
+  'hint.field.scope': 'Welchen Teil des Projekts sie betrifft (ui, engine, docs ...), zum Gruppieren und Filtern. Mehrere sind möglich.',
+  'hint.field.scope_other': 'Weitere Wörter, durch Kommas getrennt: ein bekanntes Scope-Wort wird oben angehakt, jedes andere wird ein Tag.',
+  'hint.field.severity': 'Wie schwer ein Fehler oder ein Sicherheitsproblem ist, von niedrig bis kritisch. Nur für diese zwei Arten.',
+  'hint.form.task.title': 'Was zu tun ist, in wenigen Worten, etwa Login am Handy reparieren. Daraus wird die ID (der Dateiname).',
+  'hint.form.task.area': 'Der Bereich (ein Ordner des Vaults, meist einer je Repo), in dem die Task-Datei angelegt wird.',
+  'hint.form.task.areas_more': 'Jeder hier angehakte Bereich bekommt eine eigene Task mit demselben Text, etwa für eine Änderung an zwei Repos.',
+  'hint.form.task.scaffold': 'Punkte, die die gewählte Art und die Scopes mitbringen: angehakte eröffnen den Abschnitt Akzeptanz, abhaken lässt einen weg.',
+  'hint.form.task.context': 'Warum es die Task gibt und was bekannt ist: der Abschnitt Kontext der Datei. Optional.',
+  'hint.form.task.acceptance': 'Wann die Task fertig ist, ein Punkt je Zeile, etwa Login klappt auf Android. Jede Zeile wird eine Checkbox.',
+  'hint.form.task.notes': 'Alles Weitere, das man behalten will: der Abschnitt Notizen der Datei. Optional.',
+  'hint.form.task.attach': 'Hängt einen Screenshot an die neue Task: das Bild in der Zwischenablage, sonst den neuesten Screenshot dieses Rechners.',
 };
 
 export const dictionaries: Record<Lang, Record<Key, string>> = { en, de };

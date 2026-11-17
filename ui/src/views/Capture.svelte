@@ -196,12 +196,12 @@
 <dialog bind:this={dialog} use:floating={{ kind: 'capture', moveLabel: t('float.move'), moveHint: t('hint.float.move') }} use:closeOnBackdrop={{ closeable: () => files.length === 0 && [title, context, acceptance, notes, summary, tags, other, refs, links].every((v) => v.trim() === '') }} aria-labelledby="capture-title" onclose={() => app.closeCapture()}>
   <form onsubmit={submit}>
     <h2 id="capture-title">{t('capture.title')}</h2>
-    <label>
+    <label data-hint={t('hint.form.task.title')}>
       <span>{t('capture.name')}</span>
       <!-- svelte-ignore a11y_autofocus -->
       <input type="text" bind:value={title} maxlength="300" required autofocus />
     </label>
-    <label>
+    <label data-hint={t('hint.form.task.area')}>
       <span>{t('capture.area')}</span>
       <select bind:value={area} required>
         {#each areas as a (a.name)}
@@ -212,7 +212,7 @@
     {#if areas.length > 1}
       <details class="more">
         <summary>{t('capture.areas_more')}</summary>
-        <div class="checks">
+        <div class="checks" data-hint={t('hint.form.task.areas_more')}>
           {#each areas.filter((a) => a.name !== area) as a (a.name)}
             <label class="check">
               <input type="checkbox" value={a.name} bind:group={extraAreas} />
@@ -223,68 +223,68 @@
       </details>
     {/if}
     <div class="grid">
-      <label>
+      <label data-hint={hintOf(app.lang, 'hint.field', 'kind')}>
         <span>{t('field.kind')}</span>
         <select bind:value={kind}>
           <option value="">{t('field.none')}</option>
           {#each app.ranges.kinds as k (k)}<option value={k}>{labelOf(app.lang, 'kind', k)}</option>{/each}
         </select>
       </label>
-      <label>
+      <label data-hint={hintOf(app.lang, 'hint.field', 'prio')}>
         <span>{t('field.prio')}</span>
         <select bind:value={prio}>
           <option value="">{t('field.none')}</option>
           {#each app.ranges.prios as p (p)}<option value={String(p)}>{p}</option>{/each}
         </select>
       </label>
-      <label>
+      <label data-hint={hintOf(app.lang, 'hint.field', 'effort')}>
         <span>{t('field.effort')}</span>
         <select bind:value={effort}>
           <option value="">{t('field.none')}</option>
           {#each app.ranges.efforts as e (e)}<option value={e}>{e}</option>{/each}
         </select>
       </label>
-      <label>
+      <label data-hint={hintOf(app.lang, 'hint.field', 'value')}>
         <span>{t('field.value')}</span>
         <select bind:value={value}>
           <option value="">{t('field.none')}</option>
           {#each app.ranges.values as v (v)}<option value={String(v)}>{v}</option>{/each}
         </select>
       </label>
-      <label>
+      <label data-hint={hintOf(app.lang, 'hint.field', 'actor')}>
         <span>{t('field.actor')}</span>
         <select bind:value={actor}>
           <option value="">{t('field.none')}</option>
           {#each app.ranges.actors as a (a)}<option value={a}>{labelOf(app.lang, 'actor', a)}</option>{/each}
         </select>
       </label>
-      <label>
+      <label data-hint={hintOf(app.lang, 'hint.field', 'status')}>
         <span>{t('field.status')}</span>
         <select bind:value={status}>
           <option value="">{t('field.none')}</option>
           {#each app.ranges.statuses as s (s)}<option value={s}>{labelOf(app.lang, 'status', s)}</option>{/each}
         </select>
       </label>
-      <label>
+      <label data-hint={hintOf(app.lang, 'hint.field', 'due')}>
         <span>{t('field.due')}</span>
         <input type="date" bind:value={due} />
       </label>
-      <label>
+      <label data-hint={hintOf(app.lang, 'hint.field', 'start')}>
         <span>{t('field.start')}</span>
         <input type="date" bind:value={start} max={due === '' ? undefined : due} />
       </label>
     </div>
     <details class="more" bind:open={more}>
       <summary>{t('capture.more')}</summary>
-      <label>
+      <label data-hint={hintOf(app.lang, 'hint.field', 'summary')}>
         <span>{t('field.summary')}</span>
         <input type="text" bind:value={summary} maxlength="300" />
       </label>
-      <label>
+      <label data-hint={hintOf(app.lang, 'hint.field', 'tags')}>
         <span>{t('field.tags')} <small>({t('field.tags_hint')})</small></span>
         <input type="text" bind:value={tags} />
       </label>
-      <fieldset class="cats">
+      <fieldset class="cats" data-hint={hintOf(app.lang, 'hint.field', 'category')}>
         <legend>{t('field.category')}</legend>
         <div class="checks">
           {#each app.ranges.categories as c (c)}
@@ -295,7 +295,7 @@
           {/each}
         </div>
       </fieldset>
-      <fieldset class="cats">
+      <fieldset class="cats" data-hint={hintOf(app.lang, 'hint.field', 'scope')}>
         <legend>{t('field.scope')}</legend>
         <div class="checks">
           {#each app.ranges.scopes as c (c)}
@@ -306,26 +306,26 @@
           {/each}
         </div>
       </fieldset>
-      <label>
+      <label data-hint={hintOf(app.lang, 'hint.field', 'scope_other')}>
         <span>{t('field.scope_other')} <small>({t('field.scope_other_hint')})</small></span>
         <input type="text" bind:value={other} />
       </label>
-      <label>
+      <label data-hint={hintOf(app.lang, 'hint.field', 'severity')}>
         <span>{t('field.severity')}{#if !severityFits} <small>({t('field.severity_only')})</small>{/if}</span>
         <select bind:value={severity} disabled={!severityFits}>
           <option value="">{t('field.none')}</option>
           {#each app.ranges.severities as v (v)}<option value={v}>{labelOf(app.lang, 'severity', v)}</option>{/each}
         </select>
       </label>
-      <label>
+      <label data-hint={hintOf(app.lang, 'hint.field', 'refs')}>
         <span>{t('field.refs')} <small>({t('field.tags_hint')})</small></span>
         <input type="text" bind:value={refs} />
       </label>
-      <label>
+      <label data-hint={hintOf(app.lang, 'hint.field', 'links')}>
         <span>{t('field.links')} <small>({t('field.tags_hint')})</small></span>
         <input type="text" bind:value={links} placeholder="https://" />
       </label>
-      <label>
+      <label data-hint={hintOf(app.lang, 'hint.field', 'after')}>
         <span>{t('field.after')} <small>({t('field.tags_hint')})</small></span>
         <input type="text" bind:value={after} placeholder="area/task" />
       </label>
@@ -375,12 +375,12 @@
         />
       {/if}
     </details>
-    <label>
+    <label data-hint={t('hint.form.task.context')}>
       <span>{t('capture.context')} <small>({t('capture.sections_hint')})</small></span>
       <textarea bind:value={context} rows="3" maxlength="20000"></textarea>
     </label>
     {#if scaffold.length > 0}
-      <fieldset class="cats">
+      <fieldset class="cats" data-hint={t('hint.form.task.scaffold')}>
         <legend>{t('capture.scaffold')} <small>({t('capture.scaffold_hint')})</small></legend>
         <div class="checks">
           {#each scaffold as row (row.id)}
@@ -398,11 +398,11 @@
         </div>
       </fieldset>
     {/if}
-    <label>
+    <label data-hint={t('hint.form.task.acceptance')}>
       <span>{t('capture.acceptance')} <small>({t('capture.acceptance_hint')})</small></span>
       <textarea bind:value={acceptance} rows="3" maxlength="20000"></textarea>
     </label>
-    <label>
+    <label data-hint={t('hint.form.task.notes')}>
       <span>{t('capture.notes')}</span>
       <textarea bind:value={notes} rows="2" maxlength="20000"></textarea>
     </label>
