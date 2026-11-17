@@ -263,7 +263,7 @@
       <small class="hint" id="plan-summary-help">{t('plan.new.summary_help')}</small>
     </label>
     {#if app.can('plan_links')}
-      <label>
+      <label data-hint={t('hint.form.plan.links')}>
         <span>{t('field.links')} <small>({t('field.tags_hint')})</small></span>
         <input
           type="text"

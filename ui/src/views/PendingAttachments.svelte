@@ -26,7 +26,7 @@
 {#if app.canAttach}
   <fieldset class="pending">
     <legend>{t('attach.pending')}</legend>
-    <label class="file">
+    <label class="file" data-hint={t('hint.form.task.files')}>
       <span>{t('attach.pending_files')}</span>
       <input type="file" multiple onchange={(e) => picked(e.currentTarget)} />
     </label>
@@ -44,7 +44,7 @@
         {/each}
       </ul>
     {/if}
-    <label class="check">
+    <label class="check" data-hint={t('hint.form.task.attach')}>
       <input type="checkbox" bind:checked={screenshot} />
       <span>{t('capture.attach')}</span>
     </label>

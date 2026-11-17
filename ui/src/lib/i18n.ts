@@ -1895,6 +1895,8 @@ const en = {
   'hint.form.detail.body': 'The whole text below the properties (Markdown): context, acceptance, plan, notes. Saving replaces all of it.',
   'hint.form.detail.note': 'A line for the notes of the task, dated today, say Asked the reviewer. Enter adds it; nothing else changes.',
   'hint.form.detail.discard': 'Why the task is dropped, say No longer needed. The reason goes into the notes and the task is parked; it does not count as done.',
+  'hint.form.plan.links': 'Web addresses that belong to the plan or project, separated by commas, say the issue or the design document. The plan view shows them as links.',
+  'hint.form.task.files': 'Files from this computer (pictures, videos, documents) that are attached to the new task once it is made; they go to its assets folder.',
 } as const;
 
 export type Key = keyof typeof en;
@@ -3790,6 +3792,8 @@ const de: Record<Key, string> = {
   'hint.form.detail.body': 'Der ganze Text unter den Eigenschaften (Markdown): Kontext, Akzeptanz, Plan, Notizen. Speichern ersetzt ihn ganz.',
   'hint.form.detail.note': 'Eine Zeile für die Notizen der Task, mit dem heutigen Datum, etwa Reviewer gefragt. Enter fügt sie an; sonst ändert sich nichts.',
   'hint.form.detail.discard': 'Warum die Task fallen gelassen wird, etwa Nicht mehr nötig. Der Grund kommt in die Notizen und die Task wird geparkt; sie zählt nicht als erledigt.',
+  'hint.form.plan.links': 'Webadressen, die zum Plan oder Projekt gehören, durch Kommas getrennt, etwa das Issue oder das Entwurfsdokument. Die Plan-Ansicht zeigt sie als Links.',
+  'hint.form.task.files': 'Dateien von diesem Rechner (Bilder, Videos, Dokumente), die an die neue Task gehängt werden, sobald sie angelegt ist; sie kommen in ihren Ordner assets.',
 };
 
 export const dictionaries: Record<Lang, Record<Key, string>> = { en, de };

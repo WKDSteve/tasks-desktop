@@ -47,7 +47,7 @@
     <details>
       <summary>{t('plan.files.more', { n: assets.length })}</summary>
       {#if canEdit}
-        <label>
+        <label data-hint={t('hint.form.plan.links')}>
           <span>{t('plan.files.links')} <small>({t('field.tags_hint')})</small></span>
           <!-- {#key}: a value the engine refused, or one changed elsewhere, is drawn anew from the file -->
           {#key tagsText(links)}
