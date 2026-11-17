@@ -12,7 +12,9 @@ import {
   onVaultOpened,
   SWITCH_KEY,
   takeSwitch,
+  UNREMEMBERED,
   VAULT_KEYS,
+  vaultKeyOf,
   vaultOpened,
   vaultPrefs,
 } from '../src/web/vault-switch.ts';
@@ -128,7 +130,7 @@ test('the next page takes the folder once', () => {
   assert.equal(takeSwitch({ getItem: () => { throw new Error('blocked'); }, removeItem: () => {} }), null);
 });
 
-test('filter, order, view and lists are kept per vault; the rest is the same in every vault', () => {
+test("filter, order, view, lists and the rest of a vault are kept per vault; the person's own are the same in every vault", () => {
   const prefs = storage();
   const a = vaultPrefs(prefs, 'a');
   const b = vaultPrefs(prefs, 'b');
@@ -140,26 +142,69 @@ test('filter, order, view and lists are kept per vault; the rest is the same in 
   assert.equal(b.getItem('tasks-desktop.filter'), null, 'the other vault does not see the filter');
   assert.equal(a.getItem('tasks-desktop.view'), 'board');
   assert.equal(b.getItem('tasks-desktop.view'), 'list');
-  assert.equal(b.getItem('tasks-desktop.lang'), 'de', 'the language is the person\'s');
+  assert.equal(b.getItem('tasks-desktop.lang'), 'de', "the language is the person's");
   assert.equal(prefs.getItem('tasks-desktop.filter'), null, 'nothing under the plain key');
-  for (const key of ['tasks-desktop.filter', 'tasks-desktop.sort', 'tasks-desktop.view', 'tasks-desktop.view-open', 'tasks-desktop.lists']) {
-    assert.ok(VAULT_KEYS.includes(key), key);
+  for (const key of ['filter', 'sort', 'view', 'view-open', 'lists', 'folds', 'graph-order', 'frecency', 'defaults']) {
+    assert.ok(VAULT_KEYS.includes(`tasks-desktop.${key}`), key);
   }
-  // A folder the browser could not remember has no id: the plain keys.
+  // A folder the browser could not remember keeps them apart from the others, never under the plain key.
   vaultPrefs(prefs, null).setItem('tasks-desktop.filter', 'x');
-  assert.equal(prefs.getItem('tasks-desktop.filter'), 'x');
-  // What was kept under the plain key (before the page kept it per vault) is read by a vault with none of its own, and
-  // is not written over: the vault's own value goes under its key.
-  assert.equal(b.getItem('tasks-desktop.filter'), 'x');
-  assert.equal(a.getItem('tasks-desktop.filter'), 'area=pub', "a vault's own value comes first");
-  b.setItem('tasks-desktop.filter', 'area=job');
-  assert.equal(b.getItem('tasks-desktop.filter'), 'area=job');
-  assert.equal(prefs.getItem('tasks-desktop.filter'), 'x');
-  // Forgetting a folder drops its preferences, not the other's.
+  assert.equal(prefs.getItem('tasks-desktop.filter'), null);
+  assert.equal(prefs.getItem(`tasks-desktop.filter@${UNREMEMBERED}`), 'x');
+  assert.equal(b.getItem('tasks-desktop.filter'), null);
+  // Forgetting a folder drops its preferences (the task ids the palette ranks among them), not the other's.
+  a.setItem('tasks-desktop.frecency', '{"pub/one":3}');
   forgetVaultPrefs(prefs, 'a');
   assert.equal(a.getItem('tasks-desktop.view'), null);
+  assert.equal(a.getItem('tasks-desktop.frecency'), null);
   assert.equal(b.getItem('tasks-desktop.view'), 'list');
   assert.equal(prefs.getItem('tasks-desktop.lang'), 'de');
+});
+
+test('what was kept before the page kept it per vault goes to the first vault opened, and no other reads it', () => {
+  const prefs = storage();
+  prefs.setItem('tasks-desktop.filter', 'area=old');
+  prefs.setItem('tasks-desktop.sort', 'prio');
+  prefs.setItem('tasks-desktop.lang', 'de');
+  prefs.setItem(vaultKeyOf('tasks-desktop.sort', 'a'), 'due');
+  const a = vaultPrefs(prefs, 'a');
+  assert.equal(a.getItem('tasks-desktop.filter'), 'area=old', 'taken over');
+  assert.equal(a.getItem('tasks-desktop.sort'), 'due', "a vault's own value is not written over");
+  assert.equal(prefs.getItem('tasks-desktop.filter'), null, 'the plain key is gone');
+  assert.equal(prefs.getItem('tasks-desktop.sort'), null);
+  assert.equal(prefs.getItem('tasks-desktop.lang'), 'de', "the person's own stay");
+  const b = vaultPrefs(prefs, 'b');
+  assert.equal(b.getItem('tasks-desktop.filter'), null, 'the next vault starts with its own, empty');
+  assert.equal(b.getItem('tasks-desktop.sort'), null);
+  // Blocked storage: the page still gets its preferences object.
+  const blocked = { getItem: () => { throw new Error('blocked'); }, setItem: () => {}, removeItem: () => {} };
+  assert.ok(vaultPrefs(blocked, 'a'));
+});
+
+test('a change that began while the browser asked for the folder keeps the page where it is', async () => {
+  let writing = false;
+  const log = [];
+  const tab = storage();
+  const vaults = new FolderVaults({
+    recent: { list: async () => [{ id: 'b', name: 'x', handle: {}, lastUsed: 1 }] },
+    active: 'a',
+    tab,
+    reload: () => log.push('reload'),
+    permissionOf: async () => 'prompt',
+    // The first question takes long enough for a write to begin; the second one does not.
+    grantAccess: async () => {
+      if (log.length === 0) writing = true;
+      log.push('asked');
+      return 'granted';
+    },
+    writing: () => writing,
+  });
+  assert.equal(await vaults.select('b'), 'busy');
+  assert.deepEqual(log, ['asked'], 'no reload');
+  assert.equal(tab.getItem(SWITCH_KEY), null, 'nothing that a later reload would take for a switch');
+  writing = false;
+  assert.equal(await vaults.select('b'), 'switched');
+  assert.deepEqual(log, ['asked', 'asked', 'reload']);
 });
 
 test('the hooks are told of the vault opened; one that throws keeps no other from it, and a hook can leave', () => {

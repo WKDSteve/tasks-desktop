@@ -3910,7 +3910,7 @@ describe('writing', () => {
         { id: 'a', name: 'tasks-vault', active: active === 'a', access: 'granted' as const },
         { id: 'b', name: 'tricentis-vault', active: active === 'b', access: 'prompt' as const },
       ];
-      function webVaults(answer: 'switched' | 'denied' | 'gone' | Error) {
+      function webVaults(answer: 'switched' | 'denied' | 'gone' | 'busy' | Error) {
         const calls: string[] = [];
         const folderVaults = {
           list: async () => (calls.push('list'), listed('a')),
@@ -3950,6 +3950,7 @@ describe('writing', () => {
       for (const [answer, key] of [
         ['denied', 'web.vault.denied'],
         ['gone', 'web.vault.gone'],
+        ['busy', 'write.busy'],
         [new Error('boom'), 'web.vault.denied'],
       ] as const) {
         it(`says why a switch did not happen (${String(answer)}) and reads the list again`, async () => {

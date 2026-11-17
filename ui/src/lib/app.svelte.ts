@@ -179,7 +179,7 @@ export interface Env {
    */
   folderVaults?: {
     list(): Promise<FolderVault[]>;
-    select(id: string): Promise<'switched' | 'same' | 'denied' | 'gone'>;
+    select(id: string): Promise<'switched' | 'same' | 'denied' | 'gone' | 'busy'>;
   };
   /**
    * The snapshots of the test sheets where there is no hub: the person gives the folder of the plugin checkouts.
@@ -4064,6 +4064,7 @@ export class App {
     this.folderSwitching = false;
     if (result === 'denied') this.say('error', 'web.vault.denied');
     if (result === 'gone') this.say('error', 'web.vault.gone');
+    if (result === 'busy') this.say('error', 'write.busy');
     await this.loadFolderVaults();
   }
 

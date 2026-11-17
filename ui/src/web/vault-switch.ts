@@ -26,8 +26,11 @@ export interface FolderVault {
   access: Access;
 }
 
-/** What came of a click on a vault. `switched`: the page loads again with that folder. */
-export type SwitchResult = 'switched' | 'same' | 'denied' | 'gone';
+/**
+ * What came of a click on a vault. `switched`: the page loads again with that folder. `busy`: a change began to be
+ * written while the browser asked for the folder; the page stays (leaving it would cut the change off).
+ */
+export type SwitchResult = 'switched' | 'same' | 'denied' | 'gone' | 'busy';
 
 type TabStorage = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
 
@@ -42,6 +45,8 @@ export interface FolderVaultsDeps {
   /** The permission of a stored folder now, and asking for it again; the page's (folder.ts), replaced in tests. */
   permissionOf?(handle: DirHandle): Promise<Access>;
   grantAccess?(handle: DirHandle): Promise<Access>;
+  /** A change is being written to the folder now (asked again right before the page loads again). */
+  writing?(): boolean;
 }
 
 export class FolderVaults {
@@ -87,6 +92,9 @@ export class FolderVaults {
     }
     if (access === 'gone') return 'gone';
     if (access !== 'granted') return 'denied';
+    // The question of the browser can stay open for a while, and a change can begin meanwhile: asked again here, with
+    // nothing that waits between this look and the reload.
+    if (this.deps.writing?.()) return 'busy';
     try {
       this.deps.tab.setItem(SWITCH_KEY, id);
     } catch {
@@ -109,8 +117,9 @@ export function takeSwitch(tab: TabStorage): string | null {
 }
 
 /**
- * The keys of the preferences that belong to a vault: the filter, the order, the view (and the task open in it) and the
- * named lists. Everything else (language, theme, columns, sizes) is the person's, the same in every vault.
+ * The keys of the preferences that belong to a vault: the filter, the order, the view (and the task open in it), the
+ * named lists, the folded groups, the order of the graph, what the palette ranks (task ids among it) and the start
+ * view. Everything else (language, theme, columns, sizes) is the person's, the same in every vault.
  */
 export const VAULT_KEYS: readonly string[] = [
   'tasks-desktop.filter',
@@ -118,9 +127,17 @@ export const VAULT_KEYS: readonly string[] = [
   'tasks-desktop.view',
   'tasks-desktop.view-open',
   'tasks-desktop.lists',
+  'tasks-desktop.folds',
+  'tasks-desktop.graph-order',
+  'tasks-desktop.frecency',
+  'tasks-desktop.defaults',
 ];
 
 type Prefs = Pick<Storage, 'getItem' | 'setItem'>;
+type Store = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
+
+/** The scope of a folder the browser could not remember (no id): one for all such folders, apart from the others. */
+export const UNREMEMBERED = '-';
 
 /** The key a preference of the vault `folder` is kept under. */
 export function vaultKeyOf(key: string, folder: string): string {
@@ -129,16 +146,27 @@ export function vaultKeyOf(key: string, folder: string): string {
 
 /**
  * The preferences of the page for the vault `folder`: the keys of `VAULT_KEYS` are kept per folder, the rest as they
- * are. A folder the browser could not remember (`null`) has no id to keep them under and uses the plain keys.
+ * are. A folder the browser could not remember (`null`) keeps them under `UNREMEMBERED`.
  *
- * A vault that has kept none of its own yet reads the plain key: what the page kept before it kept them per vault (or
- * in a vault it could not remember) is where it was, as it was before. It is never written again from here.
+ * What the page kept before it kept them per vault (the plain keys) goes to the first vault opened after that, the
+ * one it was most likely made in, and the plain keys go: no other vault ever reads them.
  */
-export function vaultPrefs(prefs: Prefs, folder: string | null): Prefs {
-  if (folder === null) return prefs;
+export function vaultPrefs(prefs: Store, folder: string | null): Prefs {
+  const scope = folder ?? UNREMEMBERED;
+  try {
+    for (const key of VAULT_KEYS) {
+      const old = prefs.getItem(key);
+      if (old === null) continue;
+      if (prefs.getItem(vaultKeyOf(key, scope)) === null) prefs.setItem(vaultKeyOf(key, scope), old);
+      prefs.removeItem(key);
+    }
+  } catch {
+    // storage blocked: there is nothing to take over either
+  }
+  const scoped = (key: string) => (VAULT_KEYS.includes(key) ? vaultKeyOf(key, scope) : key);
   return {
-    getItem: (key) => (VAULT_KEYS.includes(key) ? (prefs.getItem(vaultKeyOf(key, folder)) ?? prefs.getItem(key)) : prefs.getItem(key)),
-    setItem: (key, value) => prefs.setItem(VAULT_KEYS.includes(key) ? vaultKeyOf(key, folder) : key, value),
+    getItem: (key) => prefs.getItem(scoped(key)),
+    setItem: (key, value) => prefs.setItem(scoped(key), value),
   };
 }
 

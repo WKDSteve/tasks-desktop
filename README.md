@@ -93,7 +93,8 @@ one).
 4. Switching vaults: the menu Project lists the vault folders used before (five at most, by folder name), the one read
    now marked, at the same place and with the same words as the Vaults part of the app. One click reads another: the
    page loads again with that folder, in the filter, order and view it was left with (those are kept per vault; the
-   language, the theme and the columns are the same in every vault). After a restart of Chrome the click on a vault
+   language, the theme and the columns are the same in every vault; what the page kept before the update goes to the
+   first vault opened after it). After a restart of Chrome the click on a vault
    asks Chrome once for access to its folder. The page still reads one folder at a time.
 5. Changes made on disk (Neovim, git, agents) show up when the tab gets focus, or within 30 seconds. Writing from the
    page (create, set a field, done, move) compares each file with what was read and writes nothing on a conflict.
@@ -487,10 +488,12 @@ and used as described under "In the browser, without installing". Its built file
   the id of the folder (only the id) into the tab's `sessionStorage` (`tasks-web.switch-to`) and loads the page again
   without the fragment; the way in takes the id out once and opens that folder without a click while the access is
   still granted (otherwise it waits on the start page). A fresh page means a fresh engine: nothing of the vault that was
-  left goes along. Filter, order, view, the task open in it and the named lists are kept in `localStorage` per folder
-  (`<key>@<folder id>`, `vaultPrefs`; a vault with none of its own yet reads the plain key the page kept before, which
-is never written again); forgetting a folder drops them with its list cache. Nothing of a vault's files is
-  kept for the switch, only the handles (IndexedDB `tasks-web`) and the id. Refused while a change is written.
+  left goes along. Filter, order, view, the task open in it, the named lists, the folded groups, the order of the graph,
+  the palette's ranking and the start view are kept in `localStorage` per folder (`<key>@<folder id>`, `vaultPrefs`; a
+  folder the browser could not remember under `-`). What the page kept before under the plain keys goes once to the
+  first vault opened after the update, and the plain keys go. Forgetting a folder drops them with its list cache. Nothing of a vault's files is
+  kept for the switch, only the handles (IndexedDB `tasks-web`) and the id. Refused while a change is written, also
+  when one began while the browser asked for the folder.
   `onVaultOpened` is the place for what hangs on a vault besides its files (the calendars shown with it, a task of its
   own): it is told of every vault the page opens. `web/vault-switch.test.mjs`, `web/entry.test.mjs` and
   `ui/e2e-web/vaults.spec.ts` (two fake folders, switching there and back, the access asked once after a restart).

@@ -215,7 +215,15 @@ async function begin(folder: string | null, name: string, readOnly: boolean): Pr
     // is not remembered, and there is no list to switch in.
     ...(readOnly
       ? {}
-      : { folderVaults: new FolderVaults({ recent, active: folder, tab: tabStorage(), reload: toEntry }) }),
+      : {
+          folderVaults: new FolderVaults({
+            recent,
+            active: folder,
+            tab: tabStorage(),
+            reload: toEntry,
+            writing: () => session.isWriting,
+          }),
+        }),
     // The same file in a new window, at the task. The new window has its own engine: it asks for the folder again (a
     // folder used before is one click) and then shows the task.
     openWindow: (route) => window.open(`${window.location.pathname}${window.location.search}${route}`, '_blank') !== null,

@@ -15,7 +15,14 @@ test('the defaults dialog of the web variant: a start view that holds when the p
   await expectAccessible(page, 'the defaults dialog of the web variant');
   await dialog.getByLabel('Open on').selectOption('stats');
   await dialog.getByRole('button', { name: 'Close' }).click();
-  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('tasks-desktop.defaults') ?? '{}').startView)).toBe('stats');
+  // Kept for this vault (under the id of its folder, web/vault-switch.ts), not for every vault of the browser.
+  const kept = await page.evaluate(() => {
+    const keys = Object.keys(localStorage).filter((k) => k.startsWith('tasks-desktop.defaults'));
+    return { keys, startView: keys.length === 1 ? JSON.parse(localStorage.getItem(keys[0] as string) ?? '{}').startView : null };
+  });
+  expect(kept.keys).toHaveLength(1);
+  expect(kept.keys[0]).toMatch(/^tasks-desktop\.defaults@.+/);
+  expect(kept.startView).toBe('stats');
   // The page opened again starts on the default view (the address names none). The picker of `openVault` stays in the
   // page; its wait for a task title does not fit a start on the statistics.
   await page.goto(pageUrl());
