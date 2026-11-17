@@ -8,6 +8,7 @@ import type { Hub } from '../lib/api';
 import { App, type Env } from '../lib/app.svelte';
 import { task } from '../lib/fixtures';
 import Capture from './Capture.svelte';
+import PendingAttachments from './PendingAttachments.svelte';
 import Detail from './Detail.svelte';
 import DoneDialog from './DoneDialog.svelte';
 import TaskDialog from './TaskDialog.svelte';
@@ -38,6 +39,7 @@ const strip = (body: string) => body.replace(/<!--.*?-->/g, '');
 const detail = (app: App) => strip(render(Detail, { props: { app } }).body);
 const capture = (app: App) => strip(render(Capture, { props: { app } }).body);
 const float = (app: App) => strip(render(TaskDialog, { props: { app } }).body);
+const pending = (app: App) => strip(render(PendingAttachments, { props: { app } }).body);
 
 describe('the fields of the detail', () => {
   it('give the title a line of its own, and the summary several lines', () => {
@@ -215,17 +217,21 @@ describe('a screenshot to attach', () => {
     }
     // Drawn outside a browser nothing can be taken: the entries say so instead of being left out.
     expect(out).toContain('This browser cannot do it here.');
-    expect(capture(page(false, ['attach']))).toContain('Attach a screenshot');
+    // The capture loads the part when it can be used (outside the main chunk); the part offers files and the screenshot.
+    expect(pending(page(false, ['attach']))).toContain('Attach a screenshot');
+    expect(pending(page(false, ['attach']))).toContain('Files from this computer');
   });
 
   it('is not offered where the engine cannot attach', () => {
     expect(detail(page(false, []))).not.toContain('Attach to this task');
     expect(capture(page(false, []))).not.toContain('Attach a screenshot');
+    expect(pending(page(false, []))).not.toContain('Attach a screenshot');
   });
 
   it('is not offered in the web variant even when the engine says it can: there is no clipboard or screenshot folder of a machine to take it from', () => {
     expect(detail(page(true, ['attach']))).not.toContain('Attach to this task');
     expect(capture(page(true, ['attach']))).not.toContain('Attach a screenshot');
+    expect(pending(page(true, ['attach']))).not.toContain('Attach a screenshot');
     expect(page(true, ['attach']).canAttach).toBe(false);
   });
 });

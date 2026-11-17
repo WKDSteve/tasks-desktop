@@ -11,6 +11,7 @@
   import ClosePanel from './ClosePanel.svelte';
   import { PLAN_STATUSES } from '../lib/planwizard';
   import AddTasksDialog from './AddTasksDialog.svelte';
+  import PlanFiles from './PlanFiles.svelte';
   import type { AddTarget } from '../lib/picker';
 
   let { app, projectId }: { app: App; projectId: string } = $props();
@@ -172,6 +173,7 @@
       {/if}
     </div>
     {#if closing?.kind === 'project' && closing.id === project.id}{@render closePanel(closing)}{/if}
+    <PlanFiles {app} kind="project" id={project.id} />
   </section>
 
   <section class="card" aria-label={t('project.own')}>

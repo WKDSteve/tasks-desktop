@@ -46,6 +46,7 @@
   let acceptance = $state('');
   let notes = $state('');
   let attach = $state(false);
+  let files = $state<File[]>([]);
   let busy = $state(false);
 
   const scaffold = $derived(
@@ -115,6 +116,7 @@
       acceptance = '';
       notes = '';
       attach = false;
+      files = [];
       dialog.showModal();
     }
     if (!app.capturing && dialog.open) dialog.close();
@@ -182,8 +184,8 @@
         return;
       }
       const created = await app.createTask(names, title.trim(), fields, body);
-      // After the task is made: a plain task becomes the folder of its asset.
-      if (created && attach) await app.attachScreenshot(created);
+      // After the task is made: a plain task becomes the folder of its assets.
+      if (created) await app.attachAll(created, files, attach);
       if (created && split.tags.length > 0) app.tell('ok', 'capture.other_to_tags', { words: split.tags.join(', ') });
     } finally {
       busy = false;
@@ -191,7 +193,7 @@
   }
 </script>
 
-<dialog bind:this={dialog} use:floating={{ kind: 'capture', moveLabel: t('float.move'), moveHint: t('hint.float.move') }} use:closeOnBackdrop={{ closeable: () => [title, context, acceptance, notes, summary, tags, other, refs, links].every((v) => v.trim() === '') }} aria-labelledby="capture-title" onclose={() => app.closeCapture()}>
+<dialog bind:this={dialog} use:floating={{ kind: 'capture', moveLabel: t('float.move'), moveHint: t('hint.float.move') }} use:closeOnBackdrop={{ closeable: () => files.length === 0 && [title, context, acceptance, notes, summary, tags, other, refs, links].every((v) => v.trim() === '') }} aria-labelledby="capture-title" onclose={() => app.closeCapture()}>
   <form onsubmit={submit}>
     <h2 id="capture-title">{t('capture.title')}</h2>
     <label>
@@ -404,11 +406,11 @@
       <span>{t('capture.notes')}</span>
       <textarea bind:value={notes} rows="2" maxlength="20000"></textarea>
     </label>
+    <!-- loaded when it can be used: the main chunk of the page stays within its budget -->
     {#if app.canAttach}
-      <label class="check">
-        <input type="checkbox" bind:checked={attach} />
-        <span>{t('capture.attach')}</span>
-      </label>
+      {#await import('./PendingAttachments.svelte') then { default: PendingAttachments }}
+        <PendingAttachments {app} bind:files bind:screenshot={attach} />
+      {/await}
     {/if}
     {#if problem}<p class="problem" role="alert">{problem}</p>{/if}
     <div class="actions">

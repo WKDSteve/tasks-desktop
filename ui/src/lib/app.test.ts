@@ -2675,7 +2675,7 @@ describe('writing', () => {
       app.setView('list');
       app.openPlanWizard();
       expect(app.planning).toBe(true);
-      await app.createPlan(form);
+      expect(await app.createPlan(form)).toBe('pub/made-plan');
       expect(hub.sent).toHaveLength(1);
       expect(hub.sent[0]?.dry_run).toBeUndefined();
       expect(hub.sent[0]?.ops[0]).toMatchObject({ op: 'plan_new', title: 'A plan' });
@@ -6175,6 +6175,31 @@ describe('App, attaching a screenshot', () => {
     release?.();
     await second;
     expect(sent[1]).toEqual(['pub/a', 'notes.txt', undefined]);
+  });
+
+  it('attaches what a form gathered once the thing is made: each file, then the screenshot', async () => {
+    const m = await started();
+    const sent: [string, string, string | undefined][] = [];
+    const hub = m.hub as unknown as { upload: (id: string, file: File, kind?: string) => Promise<Result> };
+    hub.upload = async (id, file, kind) => {
+      sent.push([id, file.name, kind]);
+      return attached(id, `assets/${file.name}`);
+    };
+    m.hub.next_ops = attached('pub/plan', 'assets/a-shot.png');
+    await m.app.attachAll(
+      'pub/plan',
+      [new File(['p'], 'shot.png', { type: 'image/png' }), new File(['t'], 'notes.txt', { type: 'text/plain' })],
+      true,
+    );
+    expect(sent).toEqual([
+      ['pub/plan', 'shot.png', 'image'],
+      ['pub/plan', 'notes.txt', undefined],
+    ]);
+    expect(asked(m)).toEqual([{ op: 'attach', id: 'pub/plan', from: 'clipboard' }]);
+    // nothing gathered: nothing is sent
+    await m.app.attachAll('pub/plan', [], false);
+    expect(sent).toHaveLength(2);
+    expect(m.hub.sent).toHaveLength(1);
   });
 
   it('takes the image on the clipboard and shows its link in the detail', async () => {

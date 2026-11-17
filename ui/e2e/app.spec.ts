@@ -1383,7 +1383,8 @@ test('the plan as a graph: an arrow is taken away or turned hard or soft, by its
     const line = graph.locator(`path.line[data-edge="${edge}"]`);
     await expect(line).toHaveAttribute('data-kind', 'blocked_by');
 
-    // A click on the middle of the arrow opens its menu; soft it is.
+    // A click on the middle of the arrow opens its menu; soft it is. The click goes to a point: the arrow is in view.
+    await graph.locator(`path.hit[data-edge-key="blocked_by:${edge}"]`).scrollIntoViewIfNeeded();
     const mid = await graph.locator(`path.hit[data-edge-key="blocked_by:${edge}"]`).evaluate((el) => {
       const path = el as SVGPathElement;
       const at = path.getPointAtLength(path.getTotalLength() / 2);
@@ -4407,6 +4408,65 @@ test('the plan wizard makes the target task with the plan, in its last phase, in
   const taskText = readFileSync(task, 'utf8');
   expect(taskText).toContain('plan: lib.nvim/target-e2e-plan');
   expect(taskText).toContain('phase: ship');
+
+  expect(await violations(page)).toEqual([]);
+  expect(consoleProblems.get(page)).toEqual([]);
+});
+
+test('a plan is made with a link and a file: the plan view draws the link, lists the file and changes the links', async ({
+  page,
+}) => {
+  await watchViolations(page);
+  await pair(page);
+  await showList(page);
+
+  const dialog = page.getByRole('dialog', { name: 'Create a plan' });
+  await page.getByRole('menuitem', { name: 'Project', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Create a plan' }).click();
+  await expect(dialog).toBeVisible();
+  await dialog.getByLabel('Title', { exact: true }).fill('Links e2e plan');
+  await dialog.getByLabel('Area of the plan file').selectOption('lib.nvim');
+
+  // A link that is no web address is named, and the plan cannot be made with it.
+  const links = dialog.getByLabel(/^Links/);
+  await links.fill('https://github.com/WKDSteve/tasks.nvim/issues/1, ftp://old');
+  await expect(dialog.getByRole('alert')).toContainText('ftp://old');
+  const create = dialog.getByRole('button', { name: 'Create', exact: true });
+  await expect(create).toBeDisabled();
+  await links.fill('https://github.com/WKDSteve/tasks.nvim/issues/1');
+  await expect(dialog.getByRole('status')).toHaveText('The plan will be lib.nvim/links-e2e-plan');
+
+  // A file to attach once the plan is made.
+  await dialog.getByLabel('Files from this computer').setInputFiles({
+    name: 'brief.txt',
+    mimeType: 'text/plain',
+    buffer: Buffer.from('the brief'),
+  });
+  await expect(dialog.getByRole('list', { name: 'Files to attach' })).toContainText('brief.txt');
+  expect(await violations(page)).toEqual([]);
+  await create.click();
+  await expect(dialog).toHaveCount(0);
+
+  // The first asset made the plan a folder; the link is in its frontmatter.
+  const folder = join(state().vault, 'lib.nvim', 'ROADMAP', 'plans', 'links-e2e-plan');
+  await expect.poll(() => existsSync(join(folder, 'assets', 'brief.txt')), { timeout: WRITE_BUDGET }).toBe(true);
+  expect(readFileSync(join(folder, 'links-e2e-plan.md'), 'utf8')).toContain('https://github.com/WKDSteve/tasks.nvim/issues/1');
+
+  // The plan view: the link opens in a new window, the attachment is listed.
+  const files = page.getByRole('region', { name: 'Links and attachments' });
+  await expect(files.getByRole('link', { name: 'https://github.com/WKDSteve/tasks.nvim/issues/1' })).toHaveAttribute(
+    'target',
+    '_blank',
+  );
+  await files.getByText('Edit links, attachments (1)').click({ timeout: WRITE_BUDGET });
+  await expect(files.getByRole('listitem').filter({ hasText: 'assets/brief.txt' })).toBeVisible();
+
+  // The links are changed afterwards (plan_set): a second one joins.
+  const edit = files.getByRole('textbox', { name: /^Links/ });
+  await edit.fill('https://github.com/WKDSteve/tasks.nvim/issues/1, https://docs.example/brief');
+  await edit.press('Enter');
+  await expect(files.getByRole('link', { name: 'https://docs.example/brief' })).toBeVisible({ timeout: WRITE_BUDGET });
+  expect(readFileSync(join(folder, 'links-e2e-plan.md'), 'utf8')).toContain('https://docs.example/brief');
 
   expect(await violations(page)).toEqual([]);
   expect(consoleProblems.get(page)).toEqual([]);

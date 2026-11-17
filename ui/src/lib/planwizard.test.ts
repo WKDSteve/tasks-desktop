@@ -162,3 +162,17 @@ describe('a phase the engine refused', () => {
     );
   });
 });
+
+describe('the links of a plan', () => {
+  it('are sent as a list, an empty field not at all', () => {
+    expect(planOp(form({ links: ' https://github.com/x/y/issues/1 , https://docs.example/a ' }))).toMatchObject({
+      op: 'plan_new',
+      links: ['https://github.com/x/y/issues/1', 'https://docs.example/a'],
+    });
+    expect(planOp(form({ links: ' , ' }))).not.toHaveProperty('links');
+    expect(planOp({ ...form({ links: 'https://a.example' }), kind: 'project' })).toMatchObject({
+      op: 'project_new',
+      links: ['https://a.example'],
+    });
+  });
+});

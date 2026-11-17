@@ -3,7 +3,7 @@
 // its answer, so the page keeps no second copy of them.
 
 import type { Op } from './api';
-import { parseTags } from './fields';
+import { parseList, parseTags } from './fields';
 
 export type PlanStatus = 'planning' | 'doing' | 'parked';
 export const PLAN_STATUSES: readonly PlanStatus[] = ['planning', 'doing', 'parked'];
@@ -33,6 +33,8 @@ export interface PlanForm {
   /** Each phase waits for the one before (`gate: hard`). */
   hard: boolean;
   summary: string;
+  /** Web addresses of the plan (http/https), comma separated; sent only where the engine takes them (`plan_links`). */
+  links: string;
   /** A plan only: the project it belongs to (an id), or empty. */
   project: string;
   /** A plan only: its stage in that project (one of the project's phases), or empty. */
@@ -52,6 +54,7 @@ export function emptyForm(area = '', kind: PlanKind = 'plan', project = ''): Pla
     targetTitle: '',
     hard: false,
     summary: '',
+    links: '',
     project: kind === 'plan' ? project : '',
     phase: '',
   };
@@ -74,6 +77,7 @@ export function planOp(form: PlanForm, newTarget = ''): Op {
   const target = form.targetNew ? newTarget : form.target.trim();
   const project = form.kind === 'plan' ? form.project.trim() : '';
   const phase = project !== '' ? form.phase.trim() : '';
+  const links = parseList(form.links);
   const common = {
     area: form.area,
     title: form.title.trim(),
@@ -83,6 +87,7 @@ export function planOp(form: PlanForm, newTarget = ''): Op {
     ...(form.hard ? { gate: 'hard' } : {}),
     ...(form.status !== 'planning' ? { status: form.status } : {}),
     ...(summary !== '' ? { summary } : {}),
+    ...(links.length > 0 ? { links } : {}),
   };
   if (form.kind === 'project') return { op: 'project_new', ...common };
   return {

@@ -57,7 +57,7 @@ import { cleanClaimName } from './claims';
 export type PlanDisplay = 'stages' | 'graph' | 'compare';
 import { parsePrefs, type Prefs as FinishedPrefs } from './finished';
 import { groupedByArea } from './areaBands';
-import type { AssetKind } from './capture';
+import { kindOfFile, type AssetKind } from './capture';
 import { activeFilters, applyFilter, areaCounts, filterOfText, filterVaultOf, freshFilter, moveSelection, NONE as NO_VALUE, parseFilter, serializeFilter, type Filter } from './filter';
 import { chipLabel } from './filter-chips';
 import { inboxOf, triageKey } from './inbox';
@@ -1497,7 +1497,7 @@ export class App {
    * after the plan (so it can be in it): the plan names it by the id the dry run `preview` gave it; when the engine
    * gave it another one meanwhile, the plan is pointed at that one.
    */
-  async createPlan(form: PlanForm, preview?: PlanPreview | null): Promise<void> {
+  async createPlan(form: PlanForm, preview?: PlanPreview | null): Promise<string | undefined> {
     const planned = preview?.kind === 'ok' ? preview : undefined;
     const making = form.targetNew && planned?.target !== undefined;
     const ops =
@@ -1507,7 +1507,7 @@ export class App {
     const result = await this.write(ops, { undoable: false });
     const first = result?.results[0];
     const id = first?.ok && first.outcome === 'created' ? first.id : undefined;
-    if (!id) return;
+    if (!id) return undefined;
     const made = making ? result?.results[1] : undefined;
     if (made?.ok && typeof made.id === 'string' && made.id !== planned?.target) {
       await this.setPlanFile(form.kind, id, { target: made.id });
@@ -1518,6 +1518,7 @@ export class App {
     if (then) then(id);
     else if (form.kind === 'project') this.openProject(id);
     else this.openPlan(id);
+    return id;
   }
 
   /**
@@ -3013,6 +3014,16 @@ export class App {
     }
     this.say('error', 'attach.none');
     return false;
+  }
+
+  /**
+   * Attach what a form gathered to `id` once the task, plan or project is made: each file (to the folder of its kind),
+   * then the image of the clipboard (else the newest screenshot). One after another, each told as it goes; one that
+   * fails does not stop the others.
+   */
+  async attachAll(id: string, files: readonly File[], screenshot: boolean): Promise<void> {
+    for (const file of files) await this.attachFile(id, file, kindOfFile(file));
+    if (screenshot) await this.attachScreenshot(id);
   }
 
   /** The task a file is on its way to, while one is. */

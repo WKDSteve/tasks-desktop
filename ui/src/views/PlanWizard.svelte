@@ -17,6 +17,8 @@
     type PlanPreview,
   } from '../lib/planwizard';
   import MultiSelect from 'appkit-ui/MultiSelect.svelte';
+  import PendingAttachments from './PendingAttachments.svelte';
+  import { badLink, parseList } from '../lib/fields';
 
   let { app }: { app: App } = $props();
   const t = (key: Key, params: Record<string, string | number> = {}) =>
@@ -31,6 +33,11 @@
   // The areas the plan covers follow the area of the file until the person chooses them.
   let areasTouched = $state(false);
   let busy = $state(false);
+  // What is attached once the plan is made (the plan does not exist before): not part of the form the engine judges.
+  let files = $state<File[]>([]);
+  let screenshot = $state(false);
+  // A link that is no web address, named before anything is sent (as "Create task" does).
+  const notLink = $derived(badLink(parseList(form.links)));
 
   const areas = $derived(
     [...app.allAreaNames]
@@ -55,6 +62,8 @@
       form = emptyForm(area, app.planningKind, app.planningProject);
       answer = null;
       areasTouched = false;
+      files = [];
+      screenshot = false;
       dialog.showModal();
     }
     if (!app.planning && dialog.open) dialog.close();
@@ -79,17 +88,19 @@
 
   async function submit(event: SubmitEvent): Promise<void> {
     event.preventDefault();
-    if (busy || app.saving || !canCreate(form, preview)) return;
+    if (busy || app.saving || notLink !== null || !canCreate(form, preview)) return;
     busy = true;
     try {
-      await app.createPlan($state.snapshot(form) as PlanForm, preview);
+      const id = await app.createPlan($state.snapshot(form) as PlanForm, preview);
+      // after the plan is made: the first asset makes the plain file a folder
+      if (id) await app.attachAll(id, files, screenshot);
     } finally {
       busy = false;
     }
   }
 </script>
 
-<dialog bind:this={dialog} use:floating={{ kind: 'plan-wizard', moveLabel: t('float.move'), moveHint: t('hint.float.move') }} use:closeOnBackdrop={{ closeable: () => form.title.trim() === '' }} aria-labelledby="plan-title" onclose={() => app.closePlanWizard()}>
+<dialog bind:this={dialog} use:floating={{ kind: 'plan-wizard', moveLabel: t('float.move'), moveHint: t('hint.float.move') }} use:closeOnBackdrop={{ closeable: () => form.title.trim() === '' && files.length === 0 }} aria-labelledby="plan-title" onclose={() => app.closePlanWizard()}>
   <form onsubmit={submit}>
     <h2 id="plan-title">{t(form.kind === 'project' ? 'plan.new.project_title' : 'plan.new.title')}</h2>
     {#if app.can('project_new')}
@@ -248,6 +259,23 @@
       <input type="text" bind:value={form.summary} maxlength="1000" aria-describedby="plan-summary-help" />
       <small class="hint" id="plan-summary-help">{t('plan.new.summary_help')}</small>
     </label>
+    {#if app.can('plan_links')}
+      <label>
+        <span>{t('field.links')} <small>({t('field.tags_hint')})</small></span>
+        <input
+          type="text"
+          bind:value={form.links}
+          placeholder="https://"
+          aria-invalid={notLink !== null || undefined}
+          aria-describedby="plan-links-help"
+        />
+        <small class="hint" id="plan-links-help">{t('plan.new.links_help')}</small>
+      </label>
+      {#if notLink !== null}<p class="bad" role="alert">{t('field.links_invalid', { link: notLink })}</p>{/if}
+    {/if}
+    {#if app.can('plan_assets')}
+      <PendingAttachments {app} bind:files bind:screenshot />
+    {/if}
 
     <p class="preview" role="status" aria-live="polite">
       {#if preview?.kind === 'ok'}
@@ -265,7 +293,7 @@
 
     <div class="actions">
       <button type="button" onclick={() => app.closePlanWizard()}>{t('dialog.cancel')}</button>
-      <button type="submit" class="primary" disabled={busy || app.locked || !canCreate(form, preview)}
+      <button type="submit" class="primary" disabled={busy || app.locked || notLink !== null || !canCreate(form, preview)}
         >{t('capture.create')}</button
       >
     </div>

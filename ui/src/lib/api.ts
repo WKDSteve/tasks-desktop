@@ -59,6 +59,8 @@ export type Op =
       status?: string;
       summary?: string;
       slug?: string;
+      /** Web addresses (http/https, capability `plan_links`). */
+      links?: string[];
       /** The project the plan belongs to, and its stage there (capability `projects`). */
       project?: string;
       phase?: string;
@@ -75,6 +77,7 @@ export type Op =
       status?: string;
       summary?: string;
       slug?: string;
+      links?: string[];
     }
   /** The frontmatter of an open plan or project file; `null` removes a key (capabilities `plan_set`, `project_set`). */
   | { op: 'plan_set' | 'project_set'; id: string; patch: Record<string, unknown>; if_match?: string }

@@ -1,0 +1,99 @@
+<script lang="ts">
+  // What a form that makes a task, a plan or a project attaches to it once it is made: files from this computer and
+  // the image on the clipboard of the hub's machine (else its newest screenshot). Nothing is sent while the form is
+  // open: the thing does not exist yet. `App.attachAll` sends them after it was made, one by one, each through the
+  // hub's upload to the engine (`attach`), which makes a plain file the folder of its assets.
+  import type { App } from '../lib/app.svelte';
+  import { translate, type Key } from '../lib/i18n';
+
+  let {
+    app,
+    files = $bindable([]),
+    screenshot = $bindable(false),
+  }: { app: App; files?: File[]; screenshot?: boolean } = $props();
+
+  const t = (key: Key, params: Record<string, string | number> = {}) => translate(app.lang, key, params);
+
+  function picked(input: HTMLInputElement): void {
+    const chosen = [...(input.files ?? [])];
+    input.value = '';
+    // the same file twice is attached once
+    const known = new Set(files.map((f) => `${f.name}\u0000${f.size}`));
+    files = [...files, ...chosen.filter((f) => !known.has(`${f.name}\u0000${f.size}`))];
+  }
+</script>
+
+{#if app.canAttach}
+  <fieldset class="pending">
+    <legend>{t('attach.pending')}</legend>
+    <label class="file">
+      <span>{t('attach.pending_files')}</span>
+      <input type="file" multiple onchange={(e) => picked(e.currentTarget)} />
+    </label>
+    {#if files.length > 0}
+      <ul aria-label={t('attach.pending_list')}>
+        {#each files as file, i (`${file.name}-${file.size}-${i}`)}
+          <li>
+            <span class="name">{file.name}</span>
+            <button
+              type="button"
+              aria-label={t('attach.pending_remove', { name: file.name })}
+              onclick={() => (files = files.filter((_, j) => j !== i))}>×</button
+            >
+          </li>
+        {/each}
+      </ul>
+    {/if}
+    <label class="check">
+      <input type="checkbox" bind:checked={screenshot} />
+      <span>{t('capture.attach')}</span>
+    </label>
+  </fieldset>
+{/if}
+
+<style>
+  .pending {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 0.4rem 0.6rem 0.2rem;
+    margin: 0 0 0.7rem;
+  }
+  legend {
+    color: var(--muted);
+    font-size: 0.85rem;
+    padding: 0 0.3rem;
+  }
+  label {
+    display: grid;
+    gap: 0.2rem;
+    margin-bottom: 0.5rem;
+  }
+  label.check {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+  }
+  ul {
+    list-style: none;
+    margin: 0 0 0.5rem;
+    padding: 0;
+    display: grid;
+    gap: 0.2rem;
+  }
+  li {
+    display: flex;
+    gap: 0.4rem;
+    align-items: center;
+  }
+  .name {
+    overflow-wrap: anywhere;
+  }
+  button {
+    background: var(--surface-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 0 0.45rem;
+    cursor: pointer;
+  }
+</style>

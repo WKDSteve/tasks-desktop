@@ -674,7 +674,10 @@ project or stage it does not know is refused in its words), and the message offe
 tasks, a project with only parked plans) is finished by hand (`plan_close`, `project_close`): the engine is asked
 first and the page says what would happen, or which tasks and plans still hold it open; there is no way back, and a
 project the last plan takes with it is named. The plan view offers the same for the plan chosen in it
-(*Finish the plan ...*), also for a plan that is in no project. The head of the page switches to another project. The plan wizard makes a project too (`project_new`), and a plan can be made in a project and one of
+(*Finish the plan ...*), also for a plan that is in no project. A chosen plan and a project's page show the links
+of the file (drawn as links, changed in the field above them with `plan_set`/`project_set`) and the files of its
+folder, with the same buttons to attach as a task has; the first one makes the plain file a folder (capabilities
+`plan_links`, `plan_assets`, tasks.nvim `ec53a8f` on). The head of the page switches to another project. The plan wizard makes a project too (`project_new`), and a plan can be made in a project and one of
 its stages. The filter of the list has the field *Project*: the tasks of the project's plans and its own (the page
 reads which plan belongs to which project from the snapshot). A saved view groups by *Project* too (read only, like
 *Readiness*: a card is not dragged to another project; the group is named by the project's title, and a task stands in
@@ -704,7 +707,7 @@ Discarding a routine ends it, so no further round comes: the detail says so besi
 the interval, before anything is written.
 
 The interface can create a task (`c`, or the Project menu), change status,
-priority, who, kind, effort, value and tags in the detail, tick a step of the plan section and add a dated line to the notes (the box of a step shows what the file says; a click asks the engine first), attach something to a task (three buttons in the detail, see *Attaching* below; or the box in the new-task form: the image on the clipboard of the machine the hub runs on, else its newest screenshot; the detail then shows the link to put into the text),
+priority, who, kind, effort, value and tags in the detail, tick a step of the plan section and add a dated line to the notes (the box of a step shows what the file says; a click asks the engine first), attach something to a task (three buttons in the detail, see *Attaching* below; or *Attach once it is made* in the new-task form: files from this computer and the image on the clipboard of the machine the hub runs on, else its newest screenshot, sent after the task is made; the detail then shows the link to put into the text),
 change several marked
 tasks at once (also effort, reminder and tags: added or taken off for each task) (`x` or the box marks, the choice in the bar is applied with a button,
 and a filter that hides a task also takes its mark; one batch, each task with the version that
@@ -715,7 +718,10 @@ follow the new ids, and undo moves them back; at most 50 in one batch, as a move
 engine's order; a card is dragged to another column to set its status or among
 the cards of its priority to reorder, or moved with `Shift` and `j` `k` `h` `l`; `g b` opens
 the board; the order holds inside one priority and one stage only, which the board says), sort the tasks that lack a priority, an effort or a who in the inbox (`g i`: `j` `k` move, `1` `2` `3` set the priority, `a` `s` `d` `f` the effort XS S M L and `Shift`+`f` XL, `m` `p` `i` the who me, pair and cdx, `u` takes the last change back; one key is one change the engine judges; a key of the board or the inbox pressed while a change is still being saved is refused with "Still saving" and not kept for later: press it again), check the vault in the background (the Check dialog from the list or the palette: the engine reads every task file and applies its rules while the page goes on; the findings come with the task each is about, with a flag on its row and a section in its detail, and a check made for an older state of the vault shows none), ask what a task needs before it can start, or what waits for it (the detail's button or the palette: the Plan view then lists the tasks by their distance, with the engine's edges, the critical path and the cycles; the arrow keys move between them, and the list is the form for the keyboard and a screen reader), set effort and value of many tasks side by side in the estimate matrix (`e` in the list, on the marked tasks or the shown ones: the sum, its range and how many tasks have an effort or a value are the engine's, asked again for what you chose; nothing is written before Apply, which is one batch with only the cells that differ), make a plan with a wizard (a title and an area are enough; the engine names the
-plan in a dry run while you type, tells a name that is taken and refuses what is not a plan),
+plan in a dry run while you type, tells a name that is taken and refuses what is not a plan; a refused phase is
+marked at its chip with the engine's reason, and its suggestion (`einführung` gives `einfuehrung`) is one click away;
+*Create target task* makes the last task of the plan together with it, in one request, in the plan and its last phase;
+links and files to attach can be given at once, the files go to the plan's folder once it is made),
 add a step to a task's plan, or make a task of a step or of the line of a note (it opens *New task* with that title), find an action or a task in the command palette (`Ctrl`+`K`: a few letters in order are enough, what you chose before comes first; it changes the status or priority of the selected task, goes to a view, and more), finish a task after a preview of
 what it does, and set a reminder (a date on which a task comes back on the
 Today page; also when finishing); the engine makes every change. The interface lists the vault in the engine's own order (it

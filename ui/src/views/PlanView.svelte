@@ -24,6 +24,7 @@
   import ClosePanel from './ClosePanel.svelte';
   import PlanCompare from './PlanCompare.svelte';
   import AddTasksDialog from './AddTasksDialog.svelte';
+  import PlanFiles from './PlanFiles.svelte';
   import type { AddTarget } from '../lib/picker';
   import { projectOfPlan } from '../lib/projects';
   import { allButtonFold, foldOf, withAll, withFold } from '../lib/fold';
@@ -245,6 +246,7 @@
         </p>
       {/if}
       {#if planId !== ''}
+        <PlanFiles {app} kind="plan" id={planId} />
         <p class="muted">{t('plan.whole_vault')}</p>
       {/if}
       {#if estimate}
