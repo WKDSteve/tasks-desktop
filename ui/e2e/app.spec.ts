@@ -1007,7 +1007,7 @@ for (const scheme of ['light', 'dark'] as const) {
     await expect(clear).toHaveCount(0);
     await expect(reset).toHaveCount(0);
     await expect(tip).toBeHidden();
-    await expect(search).toHaveAttribute('aria-describedby', /hint-tip/);
+    await expect(search).toHaveAttribute('aria-describedby', /hint-desc/);
 
     // Tab brings the focus back to the field: its hint shows. With the hint open the first Escape closes the hint only
     // and the words stay; the second empties the field.
