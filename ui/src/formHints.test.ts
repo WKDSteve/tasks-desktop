@@ -13,7 +13,7 @@ const COMPONENTS = import.meta.glob('./**/*.svelte', { query: '?raw', import: 'd
 /** The elements that take an entry. */
 const FIELDS = new Set(['input', 'textarea', 'select']);
 /** Components that are fields and carry their hint by a prop of their own (it shows on their button). */
-const FIELD_COMPONENTS: Record<string, string> = { MultiSelect: 'hint' };
+const FIELD_COMPONENTS: Record<string, string> = { MultiSelect: 'hint', PickField: 'hint', PickList: 'hint' };
 
 interface Attr {
   type: string;

@@ -81,6 +81,7 @@
     aria-haspopup="listbox"
     aria-expanded={open}
     aria-labelledby={`${uid}-label ${uid}-value`}
+    data-hint={open ? undefined : hint || undefined}
     {disabled}
     onclick={() => (open = !open)}
   >
