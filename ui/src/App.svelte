@@ -975,6 +975,19 @@
 </div>
 
 <style>
+  /* As in Lazy.svelte: a dialog whose chunk could not be loaded says so. */
+  .lazy-failed {
+    margin: 1rem;
+    color: var(--text);
+  }
+  .lazy-failed button {
+    background: var(--surface-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 0.2rem 0.6rem;
+    cursor: pointer;
+  }
   .brand-mark {
     display: inline-flex;
     align-items: center;

@@ -37,8 +37,12 @@ function text(a: Attr | undefined): string | undefined {
   return only?.type === 'Text' && more.length === 0 ? only.data : undefined;
 }
 
-/** The element carries a hint: `data-hint=...` or `use:tooltip`. */
+/**
+ * The element carries a hint: `data-hint=...` or `use:tooltip`. Only an element of the page does: on a component
+ * `data-hint` is a prop, which need not end up around the field.
+ */
 const hinted = (n: Node): boolean =>
+  n.type === 'RegularElement' &&
   (n.attributes ?? []).some((a) => (a.type === 'Attribute' && a.name === 'data-hint') || (a.type === 'UseDirective' && a.name === 'tooltip'));
 
 /**
@@ -100,12 +104,14 @@ describe('every field has a hint', () => {
       '<input type="file" hidden /><input type="hidden" /><textarea readonly></textarea>',
       '<MultiSelect hint="Areas" /><MultiSelect />',
       '{#snippet row()}<input use:tooltip={"x"} /><input readonly={busy} />{/snippet}',
+      '<Card data-hint="A prop, not an element"><input type="date" /></Card>',
     ].join('\n');
     expect(fieldsWithoutHint(src, 'T.svelte').map((m) => `${m.line}:${m.field}`)).toEqual([
       '1:input[type=text]',
       '3:select',
       '6:MultiSelect',
       '7:input',
+      '8:input[type=date]',
     ]);
   });
 

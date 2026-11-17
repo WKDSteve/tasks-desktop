@@ -23,7 +23,8 @@ const ON_DEMAND = [
 
 describe('the main chunk', () => {
   it.each(ON_DEMAND)('does not import %s statically', (name) => {
-    expect(app).not.toMatch(new RegExp(`import\\s+${name}\\s+from\\s+'\\./views/${name}\\.svelte'`));
+    // Any name, either quote: what counts is the file imported at the top.
+    expect(app).not.toMatch(new RegExp(`import\\s+\\w+\\s+from\\s+['"]\\./views/${name}\\.svelte['"]`));
     expect(app).toContain(`import('./views/${name}.svelte')`);
   });
 });
