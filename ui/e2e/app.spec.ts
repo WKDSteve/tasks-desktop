@@ -8245,6 +8245,53 @@ test('without a login entry the Options menu has no such switch', async ({ page 
   await page.keyboard.press('Escape');
 });
 
+test('without ai-desktop the real hub offers no AI: the switch is greyed out with its reason, the task has no AI place', async ({ page }) => {
+  const asked = page.waitForResponse((r) => r.url().endsWith('/api/tasks/ai_desktop'));
+  await pair(page);
+  await showList(page);
+  expect(await (await asked).json()).toEqual({ installed: false, running: false });
+  await page.getByRole('menuitem', { name: 'Options', exact: true }).click();
+  await expect(page.getByRole('menuitem', { name: 'Show AI functions (ai-desktop not found)' })).toBeDisabled();
+  await expect(page.getByRole('menuitemcheckbox', { name: 'Show AI functions', exact: true })).toHaveCount(0);
+  await page.keyboard.press('Escape');
+  await open(page, 'lib.nvim/alpha');
+  await expect(page.locator('aside.detail [data-testid="ai-actions"]')).toHaveCount(0);
+  expect(consoleProblems.get(page)).toEqual([]);
+});
+
+test('the switch "Show AI functions" off: no AI place in the task, kept over a reload', async ({ page }) => {
+  await page.route('**/api/tasks/ai_desktop', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: '{"installed":true,"running":true}' }),
+  );
+  await pair(page);
+  await showList(page);
+  try {
+    await open(page, 'lib.nvim/alpha');
+    const place = page.locator('aside.detail [data-testid="ai-actions"]');
+    await expect(place).toHaveCount(1);
+    // The float of the task holds the page: the menu bar is reached after it is closed.
+    await closeFloat(page);
+    await page.getByRole('menuitem', { name: 'Options', exact: true }).click();
+    await expect(page.getByRole('menuitemcheckbox', { name: 'Show AI functions', exact: true })).toHaveAttribute('aria-checked', 'true');
+    await page.keyboard.press('Escape');
+    await toggleOption(page, 'Show AI functions');
+    await open(page, 'lib.nvim/alpha');
+    await expect(place).toHaveCount(0);
+    await closeFloat(page);
+    await page.reload();
+    await showList(page);
+    await open(page, 'lib.nvim/alpha');
+    await expect(page.locator('aside.detail [data-testid="ai-actions"]')).toHaveCount(0);
+    await closeFloat(page);
+    await page.getByRole('menuitem', { name: 'Options', exact: true }).click();
+    await expect(page.getByRole('menuitemcheckbox', { name: 'Show AI functions', exact: true })).toHaveAttribute('aria-checked', 'false');
+    await page.keyboard.press('Escape');
+  } finally {
+    await page.evaluate(() => localStorage.removeItem('tasks-desktop.ai'));
+  }
+  expect(consoleProblems.get(page)).toEqual([]);
+});
+
 test('the Options menu keeps the hub running in the background: the real route writes keep_running into the settings', async ({ page }) => {
   const settings = join(state().config, 'config.json');
   const written = (): unknown => (JSON.parse(readFileSync(settings, 'utf8')) as Record<string, unknown>)['keep_running'];

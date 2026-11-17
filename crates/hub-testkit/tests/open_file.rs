@@ -15,6 +15,7 @@ use tasks_hub::client;
 use tasks_hub::config::Env;
 use tasks_hub::editor::terminal_opener;
 use tasks_hub::engine::{CliEngine, CliEngineConfig, Engine};
+use tasks_hub::family::{FamilyApps, NotWired, Presence};
 use tasks_hub::keeprunning::{KeepRunning, SettingsFile};
 use tasks_hub::loginentry::LoginEntry;
 use tasks_hub::server::{
@@ -38,7 +39,7 @@ async fn rig(name: &str, with_opener: bool) -> Rig {
 
 /// `pick`: the folder the folder dialog "returns" (`None`: the dialog is closed without a choice).
 async fn rig_with(name: &str, with_opener: bool, pick: Option<&str>) -> Rig {
-    rig_full(name, with_opener, pick, None, None, None).await
+    rig_full(name, with_opener, pick, None, None, None, None).await
 }
 
 /// A run of test sheets that answers at once, and says which task it was asked for.
@@ -96,6 +97,7 @@ async fn rig_full(
     login_entry: Option<Arc<dyn LoginEntry>>,
     runs: Option<Arc<SheetRunJob>>,
     stay: Option<Arc<dyn KeepRunning>>,
+    family: Option<Arc<dyn FamilyApps>>,
 ) -> Rig {
     let base = Scratch::new(&format!("open-{name}"));
     let vault = base.join("vault");
@@ -186,6 +188,7 @@ row two
             opener,
             login: login_entry,
             keep_running: stay,
+            family,
             first_start: None,
             all_vaults: None,
             sheet_run: runs,
@@ -366,7 +369,16 @@ async fn the_login_entry_is_read_set_and_taken_away_and_only_with_a_session() {
         on: Mutex::new(Some(false)),
         refuse: false,
     });
-    let r = rig_full("autostart", false, None, Some(login.clone()), None, None).await;
+    let r = rig_full(
+        "autostart",
+        false,
+        None,
+        Some(login.clone()),
+        None,
+        None,
+        None,
+    )
+    .await;
     let route = "/api/tasks/autostart";
     assert_eq!(get(&r, route).await.1["on"], false);
     let (status, doc) = post(&r, route, r#"{"on":true}"#, true).await;
@@ -396,7 +408,16 @@ async fn the_login_entry_is_read_set_and_taken_away_and_only_with_a_session() {
         on: Mutex::new(Some(false)),
         refuse: true,
     });
-    let r2 = rig_full("autostart-refused", false, None, Some(refusing), None, None).await;
+    let r2 = rig_full(
+        "autostart-refused",
+        false,
+        None,
+        Some(refusing),
+        None,
+        None,
+        None,
+    )
+    .await;
     let (status, doc) = post(&r2, route, r#"{"on":true}"#, true).await;
     assert_eq!(
         (status, doc["error"]["code"].as_str()),
@@ -409,13 +430,78 @@ async fn the_login_entry_is_read_set_and_taken_away_and_only_with_a_session() {
     assert_eq!(post(&none, route, r#"{"on":true}"#, true).await.0, 404);
 }
 
+/// ai-desktop as some discovery sees it: the test says what is found.
+struct FoundAi(Presence);
+
+impl FamilyApps for FoundAi {
+    fn ai_desktop(&self) -> Presence {
+        self.0
+    }
+}
+
+#[tokio::test]
+async fn ai_desktop_is_reported_as_the_family_finds_it_and_only_with_a_session() {
+    let route = "/api/tasks/ai_desktop";
+    let found = Presence {
+        installed: true,
+        running: true,
+    };
+    let r = rig_full(
+        "ai-found",
+        false,
+        None,
+        None,
+        None,
+        None,
+        Some(Arc::new(FoundAi(found))),
+    )
+    .await;
+    let (status, doc) = get(&r, route).await;
+    assert_eq!(status, 200, "{doc}");
+    assert_eq!(
+        (doc["installed"].as_bool(), doc["running"].as_bool()),
+        (Some(true), Some(true)),
+        "{doc}"
+    );
+    // Without a session the hub says nothing about the machine.
+    let origin = format!("http://127.0.0.1:{}", r.server.addr().port());
+    let reply = patient::request(
+        r.server.addr().port(),
+        "GET",
+        route,
+        &[("Origin", origin.as_str())],
+        "",
+    )
+    .await
+    .unwrap();
+    assert_eq!(reply.status, 401, "{}", reply.body);
+
+    // Until the discovery of appkit is wired, and in a hub without it: not found.
+    for (name, family) in [
+        (
+            "ai-not-wired",
+            Some(Arc::new(NotWired) as Arc<dyn FamilyApps>),
+        ),
+        ("ai-none", None),
+    ] {
+        let r = rig_full(name, false, None, None, None, None, family).await;
+        let (status, doc) = get(&r, route).await;
+        assert_eq!(status, 200, "{name}: {doc}");
+        assert_eq!(
+            doc,
+            serde_json::json!({ "installed": false, "running": false }),
+            "{name}"
+        );
+    }
+}
+
 #[tokio::test]
 async fn the_order_to_stay_is_the_key_of_the_settings_and_only_with_a_session() {
     let settings = Scratch::new("open-keep-running-settings");
     std::fs::write(settings.join("config.json"), r#"{"port":17615}"#).unwrap();
     let file = || std::fs::read_to_string(settings.join("config.json")).unwrap();
     let stay: Arc<dyn KeepRunning> = Arc::new(SettingsFile::new(settings.to_path_buf()));
-    let r = rig_full("keep-running", false, None, None, None, Some(stay)).await;
+    let r = rig_full("keep-running", false, None, None, None, Some(stay), None).await;
     let route = "/api/tasks/keep_running";
     assert_eq!(get(&r, route).await.1["on"], false);
     let (status, doc) = post(&r, route, r#"{"on":true}"#, true).await;
@@ -468,7 +554,7 @@ async fn the_order_to_stay_is_the_key_of_the_settings_and_only_with_a_session() 
 #[tokio::test]
 async fn the_test_sheets_of_a_task_run_as_one_job_and_only_with_a_session() {
     let job = Arc::new(SheetRunJob::new(Arc::new(FakeSheets)));
-    let r = rig_full("sheets", false, None, None, Some(job), None).await;
+    let r = rig_full("sheets", false, None, None, Some(job), None, None).await;
     let route = "/api/tasks/sheet_run";
     assert_eq!(get(&r, route).await.1["state"], "idle");
     let (status, doc) = post(&r, route, r#"{"id":"alpha.nvim/t1"}"#, true).await;

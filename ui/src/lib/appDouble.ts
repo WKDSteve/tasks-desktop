@@ -62,6 +62,9 @@ export class FakeHub {
     return on;
   };
   keepRunningRefused = false;
+  /** ai-desktop as the hub finds it; null: the hub cannot say (the web variant). */
+  aiDesktopFound: { installed: boolean; running: boolean } | null = { installed: false, running: false };
+  aiDesktop = async (): Promise<{ installed: boolean; running: boolean } | null> => this.aiDesktopFound;
   token: string | null = null;
   onUnauthorized: () => void = () => {};
   doc: Snapshot = snapshot([task('pub/a', { etag: 'e1' })]);

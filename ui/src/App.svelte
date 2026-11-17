@@ -644,6 +644,29 @@
                   onselect: () => void app.toggleKeepRunning(),
                 },
               ]),
+          // AI does not push itself forward: the switch is there only where a hub can say whether ai-desktop is found (not
+          // in the web variant); where it is not found, a greyed-out entry says why there is nothing to switch.
+          ...(app.aiDesktop === null
+            ? []
+            : app.aiDesktop.installed
+              ? [
+                  {
+                    kind: 'check' as const,
+                    label: t('menu.ai_features'),
+                    hint: t('hint.item.menu.ai_features'),
+                    checked: app.aiFeatures,
+                    onselect: () => app.setAiWanted(!app.aiWanted),
+                  },
+                ]
+              : [
+                  {
+                    kind: 'action' as const,
+                    label: t('menu.ai_features_missing'),
+                    hint: t('hint.item.menu.ai_features_missing'),
+                    disabled: true,
+                    onselect: () => {},
+                  },
+                ]),
           { kind: 'section', label: t('menu.sec.export') },
           { kind: 'info', label: t('menu.export_where') },
           ...(fromDisk

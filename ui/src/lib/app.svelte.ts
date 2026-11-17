@@ -28,7 +28,7 @@ import {
 import { addOps, type AddTarget } from './picker';
 import { connectOp, edgeOp, parseGraphOrder, phaseOp, type DepEdge, type EdgeAction, type EdgeKind, type GraphOrder } from './depGraph';
 import { COLUMNS, columnsOf, isColumn, neighbourColumn, placeNear, stepInGroup, type Column, type Move } from './board';
-import { ApiError, type CheckAll, type SheetRunState, type Hub, type HubArea, type HubAreas, type SearchResult, type VaultList } from './api';
+import { ApiError, type AiDesktop, type CheckAll, type SheetRunState, type Hub, type HubArea, type HubAreas, type SearchResult, type VaultList } from './api';
 import { cacheableClass, cacheableList, type CachedList, type ListStore } from './cache';
 import type {
   DonePreview,
@@ -675,6 +675,10 @@ export class App {
   autostart = $state<boolean | null>(null);
   /** Whether a hub in the background stays without a page (`keep_running`); null: nothing to switch here. */
   keepRunning = $state<boolean | null>(null);
+  /** ai-desktop as the hub finds it; null: nobody can say (the web variant), and the Options menu has no switch. */
+  aiDesktop = $state<AiDesktop | null>(null);
+  /** The switch "Show AI functions" (`tasks-desktop.ai`): on unless turned off; it only counts where ai-desktop is found. */
+  aiWanted = $state(true);
   /** The plan wizard is open. */
   planning = $state(false);
   /** The task that is being finished, with what the engine says that does. */
@@ -776,6 +780,7 @@ export class App {
     this.zebra = safe(() => env.prefs.getItem('tasks-desktop.zebra')) === 'on';
     this.groupAreas = safe(() => env.prefs.getItem('tasks-desktop.group-areas')) === 'on';
     this.barAreas = safe(() => env.prefs.getItem('tasks-desktop.bar-areas')) === 'on';
+    this.aiWanted = safe(() => env.prefs.getItem('tasks-desktop.ai')) !== 'off';
     const stats = parseStatsPrefs(safe(() => env.prefs.getItem('tasks-desktop.stats')));
     this.statsDim = stats.dim;
     this.statsSort = stats.sort;
@@ -1139,6 +1144,7 @@ export class App {
       // Whether the Help menu offers the installation (a hub that runs from a download); the web variant has no hub.
       if (this.env.mode !== 'web') void this.setupState.load();
       void this.readKeepRunning();
+      void this.readAiDesktop();
       this.ranges = rangesOf((await this.env.hub.enums()).enums);
     } catch (error) {
       // A session that is gone asks again after the next pairing; any other failure keeps the defaults.
@@ -3341,6 +3347,24 @@ export class App {
     safe(() => this.env.prefs.setItem('tasks-desktop.bar-areas', on ? 'on' : 'off'));
   }
 
+  /**
+   * Whether the page offers its AI functions (the button of a task, menu entries, commands of the palette): only where
+   * ai-desktop is found and the person did not turn them off. AI does not push itself forward.
+   */
+  get aiFeatures(): boolean {
+    return this.aiWanted && this.aiDesktop?.installed === true;
+  }
+
+  /** The switch "Show AI functions" of the Options menu, kept in this browser. */
+  setAiWanted(on: boolean): void {
+    this.aiWanted = on;
+    safe(() => this.env.prefs.setItem('tasks-desktop.ai', on ? 'on' : 'off'));
+  }
+
+  private async readAiDesktop(): Promise<void> {
+    this.aiDesktop = await this.env.hub.aiDesktop();
+  }
+
   setShortAreas(on: boolean): void {
     this.shortAreas = on;
     safe(() => this.env.prefs.setItem('tasks-desktop.short-areas', on ? 'on' : 'off'));
@@ -4528,6 +4552,8 @@ export class App {
     }
     // The settings file may have been edited by hand meanwhile.
     if (this.keepRunning !== null) void this.readKeepRunning();
+    // ai-desktop may have been installed or started meanwhile: one file read in the hub, no request to another app.
+    if (this.env.mode !== 'web') void this.readAiDesktop();
     try {
       await this.env.hub.rescan();
     } catch {

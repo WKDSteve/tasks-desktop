@@ -441,6 +441,13 @@ read again right before the change, so what a person wrote into it meanwhile sta
 the change (nothing is written over it). Off takes the key out. A paired phone does not reach the route (it is not one of
 the device routes). The order only keeps a hub running; it starts nothing and registers nothing with the system.
 
+## ai-desktop on this machine (`GET /api/tasks/ai_desktop`)
+
+A session reads whether ai-desktop is installed and running (`{ "installed": bool, "running": bool }`, nothing else):
+no port, no path, no secret of the other app. The hub asks no other hub for it; it reads what the discovery of the
+family finds on this machine (until that is wired: not found). A paired phone does not reach the route (it is not one
+of the device routes), and nothing can be changed through it.
+
 ## Vaults (`/api/vaults`)
 
 The hub reads one vault at a time. `config.json` may hold more (`vaults`: a name and an absolute folder each, at most 16)

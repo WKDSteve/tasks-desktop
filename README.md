@@ -819,6 +819,15 @@ through the tab *Repos*); a file that cannot be used does not stop the hub: the 
 first change keeps the old file as `repos.json.invalid` beside the new one. At most 200 repos, 50 groups, 80
 characters for a name or a title, 256 KiB.
 
+### AI functions (ai-desktop)
+
+AI does not push itself forward. The page offers its AI functions (handing a task to an agent of ai-desktop, which
+comes in a later step) only where the hub finds ai-desktop on this computer, and the switch *Options > Show AI
+functions* turns them all off: no button in a task, no menu entry, no command in the palette. The switch is kept in
+the browser (`tasks-desktop.ai`) and is on unless you turn it off. Where ai-desktop is not found there is nothing to
+switch: the entry is greyed out and says why. The web variant has no hub to ask and shows no such entry. Until the
+discovery of the family in appkit is wired, the hub reports ai-desktop as not found.
+
 <!-- connections:begin (written by the app-icons tool of the workshop; change integrations.json there, not this block) -->
 ## Connections
 

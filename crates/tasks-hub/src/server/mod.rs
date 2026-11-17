@@ -126,6 +126,8 @@ pub struct Extras {
     pub login: Option<Arc<dyn crate::loginentry::LoginEntry>>,
     /// The order to stay of a hub in the background (`keep_running` of the settings); none: the page offers no switch.
     pub keep_running: Option<Arc<dyn crate::keeprunning::KeepRunning>>,
+    /// The other apps of the family (ai-desktop); none: the route says none is found.
+    pub family: Option<Arc<dyn crate::family::FamilyApps>>,
     /// The steps of the first start in the page; none: the page only says what is missing.
     pub first_start: Option<Arc<dyn crate::firststart::FirstStart>>,
     /// The folders `attach` takes the newest screenshot from (the settings' `attach_dirs`); none: only the clipboard.
@@ -166,6 +168,7 @@ pub async fn start_with(cfg: ServerConfig, extras: Extras) -> std::io::Result<Ru
         all_vaults,
         login,
         keep_running,
+        family,
         first_start,
         attach_dirs,
         upload_dir,
@@ -196,6 +199,7 @@ pub async fn start_with(cfg: ServerConfig, extras: Extras) -> std::io::Result<Ru
         all_vaults,
         login,
         keep_running,
+        family,
         first_start,
         usage: cfg.usage,
         streams: Arc::new(StreamCounter::default()),
@@ -365,6 +369,7 @@ fn app_routes(core: &Arc<Shared>) -> Router<Arc<Shared>> {
                 .post(keep_running_set)
                 .layer(DefaultBodyLimit::max(small)),
         )
+        .route(&r("ai_desktop"), get(ai_desktop_get))
         .route(
             &r("vault_pick"),
             post(vault_pick).layer(DefaultBodyLimit::max(small)),
@@ -517,6 +522,7 @@ mod tests {
                 all_vaults: None,
                 login: None,
                 keep_running: None,
+                family: None,
                 first_start: None,
                 usage: None,
                 streams: Arc::new(StreamCounter::default()),

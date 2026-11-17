@@ -1389,6 +1389,19 @@ pub(super) async fn keep_running_set(State(st): State<Arc<Shared>>, body: Bytes)
     }
 }
 
+/// `GET /api/tasks/ai_desktop`: whether ai-desktop is on this machine and running (`{ "installed", "running" }`), for
+/// the switch "Show AI functions" of the page. A hub without the discovery of the family says it is not found; the web
+/// variant has no such route, and its page offers no switch.
+pub(super) async fn ai_desktop_get(State(st): State<Arc<Shared>>) -> Response {
+    let presence = match st.rt().family.clone() {
+        Some(family) => tokio::task::spawn_blocking(move || family.ai_desktop())
+            .await
+            .unwrap_or_default(),
+        None => crate::family::Presence::default(),
+    };
+    axum::Json(presence).into_response()
+}
+
 /// The body of a switch, `{ "on": true | false }` and nothing else; `Err`: the answer to send.
 // The error is the answer to send, as with `ask`: a response is large, and rare.
 #[allow(clippy::result_large_err)]

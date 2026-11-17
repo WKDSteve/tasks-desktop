@@ -15,6 +15,7 @@ pub mod config;
 pub mod discovery;
 pub mod editor;
 pub mod engine;
+pub mod family;
 pub mod firststart;
 pub mod keeprunning;
 pub mod loginentry;

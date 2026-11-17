@@ -104,6 +104,14 @@ export type CheckJobState =
   | { state: 'done'; id: number; result: Check }
   | { state: 'failed'; id: number; error: { code: string; message: string } };
 
+/** ai-desktop on this machine, as the hub finds it (`GET /api/tasks/ai_desktop`). */
+export interface AiDesktop {
+  /** Installed on this machine (it may not be running). */
+  installed: boolean;
+  /** Its hub runs now. */
+  running: boolean;
+}
+
 export interface HubArea {
   name: string;
   data_class: 'public' | 'internal' | 'private' | 'unclassified';
@@ -358,6 +366,19 @@ export class Hub extends HubClient<Snapshot> {
     try {
       const doc = await this.json<{ on: boolean | null }>('/api/tasks/keep_running');
       return typeof doc.on === 'boolean' ? doc.on : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Whether ai-desktop is on this machine and running, as the hub finds it; null where nobody can say (the web variant
+   * has no such route, a hub that is gone). Only this decides whether the page offers its AI functions at all.
+   */
+  async aiDesktop(): Promise<AiDesktop | null> {
+    try {
+      const doc = await this.json<Partial<AiDesktop>>('/api/tasks/ai_desktop');
+      return { installed: doc.installed === true, running: doc.running === true };
     } catch {
       return null;
     }

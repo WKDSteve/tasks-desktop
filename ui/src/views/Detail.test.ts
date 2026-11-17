@@ -41,6 +41,20 @@ const capture = (app: App) => strip(render(Capture, { props: { app } }).body);
 const float = (app: App) => strip(render(TaskDialog, { props: { app } }).body);
 const pending = (app: App) => strip(render(PendingAttachments, { props: { app } }).body);
 
+describe('the place of the AI functions in the detail', () => {
+  it('is there only where ai-desktop is found and "Show AI functions" is on', () => {
+    const app = page(false);
+    expect(detail(app)).not.toContain('data-testid="ai-actions"');
+    app.aiDesktop = { installed: true, running: false };
+    expect(detail(app)).toContain('data-testid="ai-actions"');
+    app.setAiWanted(false);
+    expect(detail(app)).not.toContain('data-testid="ai-actions"');
+    app.setAiWanted(true);
+    app.aiDesktop = { installed: false, running: false };
+    expect(detail(app)).not.toContain('data-testid="ai-actions"');
+  });
+});
+
 describe('the fields of the detail', () => {
   it('give the title a line of its own, and the summary several lines', () => {
     const app = page(false);

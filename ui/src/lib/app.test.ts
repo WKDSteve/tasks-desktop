@@ -801,6 +801,63 @@ describe('App', () => {
     app.stop();
   });
 
+  it('offers the AI functions only where the hub finds ai-desktop, and reads that again when the window gets the focus', async () => {
+    const { app, hub } = make({ token: 't' });
+    await app.start(null);
+    await app.loadEnums();
+    // Not found (the hub until the discovery of the family is wired): nothing to switch, no AI functions.
+    await vi.waitFor(() => expect(app.aiDesktop).toEqual({ installed: false, running: false }));
+    expect(app.aiWanted).toBe(true);
+    expect(app.aiFeatures).toBe(false);
+    // Installed meanwhile: offered at the next focus, on unless turned off.
+    hub.aiDesktopFound = { installed: true, running: false };
+    await app.focused();
+    await vi.waitFor(() => expect(app.aiFeatures).toBe(true));
+    app.stop();
+  });
+
+  it('keeps the switch "Show AI functions" in the browser: off wins over an ai-desktop that is found', async () => {
+    const prefs = new Map<string, string>();
+    const { app, hub } = make({ token: 't', prefs });
+    hub.aiDesktopFound = { installed: true, running: true };
+    await app.start(null);
+    await app.loadEnums();
+    await vi.waitFor(() => expect(app.aiFeatures).toBe(true));
+    app.setAiWanted(false);
+    expect(app.aiFeatures).toBe(false);
+    expect(prefs.get('tasks-desktop.ai')).toBe('off');
+    app.stop();
+    // A new page remembers it.
+    const again = make({ token: 't', prefs });
+    again.hub.aiDesktopFound = { installed: true, running: true };
+    await again.app.start(null);
+    await again.app.loadEnums();
+    await vi.waitFor(() => expect(again.app.aiDesktop?.installed).toBe(true));
+    expect(again.app.aiWanted).toBe(false);
+    expect(again.app.aiFeatures).toBe(false);
+    again.app.setAiWanted(true);
+    expect(again.app.aiFeatures).toBe(true);
+    expect(prefs.get('tasks-desktop.ai')).toBe('on');
+    again.app.stop();
+  });
+
+  it('has no AI switch in the web variant: there is no ai-desktop to find, and the focus does not ask', async () => {
+    const { app, hub } = make({ token: 't', mode: 'web' });
+    hub.aiDesktopFound = null;
+    let asked = 0;
+    hub.aiDesktop = async () => {
+      asked += 1;
+      return null;
+    };
+    await app.start(null);
+    await app.loadEnums();
+    await app.focused();
+    expect(app.aiDesktop).toBeNull();
+    expect(app.aiFeatures).toBe(false);
+    expect(asked).toBeLessThanOrEqual(1);
+    app.stop();
+  });
+
   it('switches the order to stay, says what came of it, and offers nothing where the hub has no settings', async () => {
     const { app, hub } = make({ token: 't' });
     await app.start(null);

@@ -230,6 +230,7 @@ async fn rig(name: &str, with_admin: bool) -> Rig {
             Extras {
                 login: None,
                 keep_running: None,
+                family: None,
                 first_start: None,
                 all_vaults: None,
                 sheet_run: None,
