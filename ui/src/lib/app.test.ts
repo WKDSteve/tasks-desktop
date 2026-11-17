@@ -2716,6 +2716,35 @@ describe('writing', () => {
       expect(hub.sent[1]?.ops).toEqual([{ op: 'plan_set', id: 'pub/made-plan', patch: { target: 'pub/created' } }]);
     });
 
+    it('names the phase the engine refused, with its suggestion', async () => {
+      const { app, hub } = await ready();
+      hub.next_ops = {
+        kind: 'tasks.result',
+        ok: false,
+        dry_run: true,
+        results: [
+          {
+            n: 1,
+            op: 'plan_new',
+            ok: false,
+            outcome: 'failed',
+            changed_ids: [],
+            error: {
+              code: 'invalid_argument',
+              message: "phase 'einführung': 'ü' is not allowed",
+              retryable: false,
+              details: { field: 'phase', value: 'einführung', char: 'ü', suggestion: 'einfuehrung' },
+            },
+          },
+        ],
+      } as unknown as Result;
+      expect(await app.previewPlan({ ...form, phases: 'testen, einführung' })).toEqual({
+        kind: 'refused',
+        message: "phase 'einführung': 'ü' is not allowed",
+        phase: { value: 'einführung', char: 'ü', suggestion: 'einfuehrung' },
+      });
+    });
+
     it('a refused target task refuses the form with its reason', async () => {
       const { app, hub } = await ready();
       hub.next_ops = {

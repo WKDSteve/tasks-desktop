@@ -118,10 +118,39 @@ export function targetTaskOp(form: PlanForm, title: string, planId = ''): Op {
   return { op: 'new', area: form.area, title, ...(Object.keys(fields).length > 0 ? { fields } : {}) };
 }
 
+/**
+ * The phase the engine refused (`error.details` of the dry run, field `phase`): the word, the first character it
+ * does not allow (none for an empty word) and what it would take instead (none when nothing valid is left).
+ */
+export interface BadPhase {
+  value: string;
+  char?: string;
+  suggestion?: string;
+}
+
+/** The refused phase in the `details` of an engine error, if that is what was refused. */
+export function badPhaseOf(details: unknown): BadPhase | undefined {
+  if (typeof details !== 'object' || details === null) return undefined;
+  const d = details as Record<string, unknown>;
+  if (d.field !== 'phase' || typeof d.value !== 'string') return undefined;
+  return {
+    value: d.value,
+    ...(typeof d.char === 'string' ? { char: d.char } : {}),
+    ...(typeof d.suggestion === 'string' ? { suggestion: d.suggestion } : {}),
+  };
+}
+
+/** The phases text with `word` replaced by `by` (the engine's suggestion), written back as a list. */
+export function replacePhase(text: string, word: string, by: string): string {
+  return parsePhases(text)
+    .map((p) => (p === word ? by : p))
+    .join(', ');
+}
+
 /** What the dry run said. `target` is the id the target task made with the plan would get. */
 export type PlanPreview =
   | { kind: 'ok'; id: string; renamed: boolean; target?: string }
-  | { kind: 'refused'; message: string }
+  | { kind: 'refused'; message: string; phase?: BadPhase }
   | { kind: 'unknown' };
 
 /**

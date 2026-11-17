@@ -12,6 +12,7 @@
     canCreate,
     emptyForm,
     parsePhases,
+    replacePhase,
     type PlanForm,
     type PlanPreview,
   } from '../lib/planwizard';
@@ -37,6 +38,8 @@
       .sort((a, b) => a.label.localeCompare(b.label)),
   );
   const phases = $derived(parsePhases(form.phases));
+  // The phase the engine refused in the last dry run (the first wrong word): its chip is marked, with the reason.
+  const badPhase = $derived(preview?.kind === 'refused' ? preview.phase : undefined);
   // A plan can go to a project (and one of its stages); a project is in none.
   const projects = $derived(app.projects);
   const stagesOfProject = $derived(projects.find((p) => p.id === form.project)?.phase_order ?? []);
@@ -153,8 +156,25 @@
     </label>
     {#if phases.length > 0}
       <p class="phases" role="group" aria-label={t('plan.new.order')}>
-        {#each phases as phase, i (phase)}<span class="chip">{i + 1} {phase}</span>{/each}
+        {#each phases as phase, i (phase)}
+          {@const bad = badPhase?.value === phase}
+          <span
+            class="chip"
+            class:bad-chip={bad}
+            title={bad && preview?.kind === 'refused' ? preview.message : undefined}
+            >{i + 1} {phase}{#if bad}<span class="sr-only"> ({t('plan.new.phase_refused')})</span>{/if}</span
+          >
+        {/each}
       </p>
+      {#if badPhase?.suggestion}
+        {@const word = badPhase.value}
+        {@const by = badPhase.suggestion}
+        <p class="suggest">
+          <button type="button" onclick={() => (form.phases = replacePhase(form.phases, word, by))}
+            >{t('plan.new.phase_take', { word, suggestion: by })}</button
+          >
+        </p>
+      {/if}
     {/if}
     <!-- The target: an existing task named, or a new one made with the plan in the same request. -->
     <div class="field target">
@@ -320,6 +340,22 @@
     border: 1px solid var(--border);
     border-radius: 999px;
     color: var(--muted);
+  }
+  .bad-chip {
+    border-color: var(--bad);
+    color: var(--bad);
+    text-decoration: wavy underline;
+  }
+  .suggest {
+    margin: -0.4rem 0 0.7rem;
+  }
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
   }
   .preview {
     min-height: 1.4rem;

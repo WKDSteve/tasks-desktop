@@ -1,5 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { canCreate, emptyForm, parsePhases, planOp, targetTaskOp, targetTitle, type PlanForm } from './planwizard';
+import {
+  badPhaseOf,
+  canCreate,
+  emptyForm,
+  parsePhases,
+  planOp,
+  replacePhase,
+  targetTaskOp,
+  targetTitle,
+  type PlanForm,
+} from './planwizard';
 
 const form = (extra: Partial<PlanForm> = {}): PlanForm => ({ ...emptyForm('lib.nvim'), title: 'A plan', ...extra });
 
@@ -130,5 +140,25 @@ describe('a target task made with the plan', () => {
     const f = form({ targetNew: true });
     expect(canCreate(f, { kind: 'ok', id: 'lib.nvim/a-plan', renamed: false })).toBe(false);
     expect(canCreate(f, { kind: 'ok', id: 'lib.nvim/a-plan', renamed: false, target: 'lib.nvim/t' })).toBe(true);
+  });
+});
+
+describe('a phase the engine refused', () => {
+  it('is read from the details of the error, and only a phase is', () => {
+    expect(badPhaseOf({ field: 'phase', value: 'einführung', char: 'ü', suggestion: 'einfuehrung' })).toEqual({
+      value: 'einführung',
+      char: 'ü',
+      suggestion: 'einfuehrung',
+    });
+    expect(badPhaseOf({ field: 'phase', value: '!!!', char: '!' })).toEqual({ value: '!!!', char: '!' });
+    expect(badPhaseOf({ field: 'slug', value: 'x' })).toBeUndefined();
+    expect(badPhaseOf(undefined)).toBeUndefined();
+    expect(badPhaseOf('phase')).toBeUndefined();
+  });
+
+  it('is replaced by the suggestion in place, the others kept in their order', () => {
+    expect(replacePhase('abstimmungen, testen, einführung, abschluss', 'einführung', 'einfuehrung')).toBe(
+      'abstimmungen, testen, einfuehrung, abschluss',
+    );
   });
 });

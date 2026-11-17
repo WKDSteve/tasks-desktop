@@ -4326,8 +4326,16 @@ test('the plan wizard names the plan with a dry run, refuses what the engine ref
 
   // What the engine refuses is shown as it says it, and the plan cannot be made.
   await dialog.getByLabel(/Phases in order/).fill('design, Not Kebab');
-  await expect(dialog.getByRole('status')).toContainText('kebab');
+  await expect(dialog.getByRole('status')).toContainText("phase 'Not Kebab': 'N' is not allowed");
   await expect(create).toBeDisabled();
+  // The chip of the refused word is marked (the others not), and the engine's suggestion is one click away.
+  const chips = dialog.getByRole('group', { name: 'The order of the phases' });
+  await expect(chips.locator('.bad-chip')).toHaveText(/Not Kebab/);
+  await expect(chips.locator('.bad-chip')).toHaveCount(1);
+  await dialog.getByRole('button', { name: "Use 'not-kebab' instead of 'Not Kebab'" }).click();
+  await expect(dialog.getByLabel(/Phases in order/)).toHaveValue('design, not-kebab');
+  await expect(chips.locator('.bad-chip')).toHaveCount(0);
+  await expect(dialog.getByRole('status')).toHaveText('The plan will be lib.nvim/wizard-e2e-plan');
   await dialog.getByLabel(/Phases in order/).fill('design, build');
   await expect(dialog.getByRole('status')).toHaveText('The plan will be lib.nvim/wizard-e2e-plan');
   await expect(create).toBeEnabled();

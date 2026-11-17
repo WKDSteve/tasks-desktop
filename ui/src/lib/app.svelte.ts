@@ -16,7 +16,15 @@ import {
   pruneMarks,
   toggleMark,
 } from './bulk';
-import { planOp, targetTaskOp, targetTitle, type PlanForm, type PlanKind, type PlanPreview } from './planwizard';
+import {
+  badPhaseOf,
+  planOp,
+  targetTaskOp,
+  targetTitle,
+  type PlanForm,
+  type PlanKind,
+  type PlanPreview,
+} from './planwizard';
 import { addOps, type AddTarget } from './picker';
 import { connectOp, edgeOp, parseGraphOrder, phaseOp, type DepEdge, type EdgeAction, type EdgeKind, type GraphOrder } from './depGraph';
 import { COLUMNS, columnsOf, isColumn, neighbourColumn, placeNear, stepInGroup, type Column, type Move } from './board';
@@ -1455,6 +1463,8 @@ export class App {
       const result = await this.env.hub.ops({ client_op_id: this.opId(), dry_run: true, ops }, signal);
       const entry = result.results[0];
       const made = result.results[1];
+      // The plan first: a refused phase of the plan is what the person has to fix, and its chip shows it.
+      if (entry && !entry.ok) return refusedPlan(entry.error);
       if (form.targetNew && !(made?.ok && typeof made.id === 'string')) {
         return { kind: 'refused', message: made?.error?.message ?? '' };
       }
@@ -1466,7 +1476,7 @@ export class App {
           ...(form.targetNew && typeof made?.id === 'string' ? { target: made.id } : {}),
         };
       }
-      return { kind: 'refused', message: entry?.error?.message ?? '' };
+      return refusedPlan(entry?.error);
     } catch (error) {
       if (error instanceof ApiError && error.status === 400) {
         return { kind: 'refused', message: error.message };
@@ -4564,4 +4574,10 @@ export class App {
       }
     }
   }
+}
+
+/** A refusal of the plan wizard's dry run: the engine's words, and the phase it names when a phase was the reason. */
+function refusedPlan(error: { message?: string; details?: unknown } | undefined): PlanPreview {
+  const phase = badPhaseOf(error?.details);
+  return { kind: 'refused', message: error?.message ?? '', ...(phase ? { phase } : {}) };
 }
