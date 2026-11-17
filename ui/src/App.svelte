@@ -40,12 +40,6 @@
   import { vaultMenuItems } from './lib/vaultMenu';
   import ConflictCenter from './views/ConflictCenter.svelte';
   import SetupCard from './views/SetupCard.svelte';
-  import InstallDialog from './views/InstallDialog.svelte';
-  import VaultsDialog from './views/VaultsDialog.svelte';
-  import AboutDialog from './views/AboutDialog.svelte';
-  import DefaultsDialog from './views/DefaultsDialog.svelte';
-  import ShortcutDialog from './views/ShortcutDialog.svelte';
-  import UpdateDialog from './views/UpdateDialog.svelte';
   import Toast from './views/Toast.svelte';
   import Lazy from './views/Lazy.svelte';
 
@@ -60,6 +54,9 @@
   let shortcutOpen = $state(false);
   let installOpen = $state(false);
   let defaultsOpen = $state(false);
+  // The dialogs below are loaded when they are first wanted (the main chunk has a budget) and kept from then on: a
+  // dialog that goes away with its element would not give the focus back.
+  let wanted = $state({ shortcut: false, defaults: false, update: false });
   let updateOpen = $state(false);
   // A view of the menu is a link to its place: the browser's context menu (and Shift+click) opens it in a new tab, which
   // takes the session of an open tab. A middle click, Ctrl+click or Ctrl+Enter opens it in a new tab from here, with
@@ -574,7 +571,7 @@
             kind: 'action',
             label: t('menu.defaults'),
             hint: t('hint.item.menu.defaults'),
-            onselect: () => (defaultsOpen = true),
+            onselect: () => ((wanted.defaults = true), (defaultsOpen = true)),
           },
           {
             kind: 'check',
@@ -656,13 +653,13 @@
                   kind: 'action' as const,
                   label: t('menu.shortcut'),
                   hint: t('hint.item.menu.shortcut'),
-                  onselect: () => (shortcutOpen = true),
+                  onselect: () => ((wanted.shortcut = true), (shortcutOpen = true)),
                 },
                 {
                   kind: 'action' as const,
                   label: t('menu.update'),
                   hint: t('hint.item.menu.update'),
-                  onselect: () => (updateOpen = true),
+                  onselect: () => ((wanted.update = true), (updateOpen = true)),
                 },
               ]
             : []),
@@ -935,14 +932,43 @@
       }}
     />
     <ConflictCenter {app} />
-    <VaultsDialog {app} />
+    <Lazy {app} when={app.managingVaults} load={() => import('./views/VaultsDialog.svelte')} />
   {/if}
   <!-- Outside the ready block: the Info dialog and its report are there when the engine is not (app.canAbout). -->
-  <AboutDialog {app} />
-  {#if fromDisk}<ShortcutDialog {app} open={shortcutOpen} onclose={() => (shortcutOpen = false)} />{/if}
-  {#if installOpen}<InstallDialog {app} open={installOpen} onclose={() => (installOpen = false)} />{/if}
-  <DefaultsDialog {app} open={defaultsOpen} onclose={() => (defaultsOpen = false)} />
-  {#if fromDisk}<UpdateDialog {app} open={updateOpen} onclose={() => (updateOpen = false)} />{/if}
+  <Lazy {app} when={app.about.state !== 'closed'} load={() => import('./views/AboutDialog.svelte')} />
+  {#if fromDisk && wanted.shortcut}
+    {#await import('./views/ShortcutDialog.svelte') then { default: ShortcutDialog }}
+      <ShortcutDialog {app} open={shortcutOpen} onclose={() => (shortcutOpen = false)} />
+    {:catch}
+      {@render lazyFailed()}
+    {/await}
+  {/if}
+  {#if installOpen}
+    {#await import('./views/InstallDialog.svelte') then { default: InstallDialog }}
+      <InstallDialog {app} open={installOpen} onclose={() => (installOpen = false)} />
+    {:catch}
+      {@render lazyFailed()}
+    {/await}
+  {/if}
+  {#if wanted.defaults}
+    {#await import('./views/DefaultsDialog.svelte') then { default: DefaultsDialog }}
+      <DefaultsDialog {app} open={defaultsOpen} onclose={() => (defaultsOpen = false)} />
+    {:catch}
+      {@render lazyFailed()}
+    {/await}
+  {/if}
+  {#if fromDisk && wanted.update}
+    {#await import('./views/UpdateDialog.svelte') then { default: UpdateDialog }}
+      <UpdateDialog {app} open={updateOpen} onclose={() => (updateOpen = false)} />
+    {:catch}
+      {@render lazyFailed()}
+    {/await}
+  {/if}
+  {#snippet lazyFailed()}
+    <p class="lazy-failed" role="alert">
+      {t('lazy.failed')} <button type="button" onclick={() => location.reload()}>{t('lazy.reload')}</button>
+    </p>
+  {/snippet}
   <!-- While the float of a task is open the toast is drawn inside it: the float is modal, and the Undo out here could not
        be reached. -->
   {#if !app.taskFloatOpen}<Toast {app} />{/if}
