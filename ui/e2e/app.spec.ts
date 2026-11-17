@@ -994,8 +994,8 @@ for (const scheme of ['light', 'dark'] as const) {
     await expect(reset).toBeVisible();
     await expectAccessible(page, `the list with words in the search (${scheme})`);
 
-    // The keyboard reaches the button from the field; Enter empties it and the focus is back in the field (whose hint
-    // the focus from the keyboard shows).
+    // The keyboard reaches the button from the field; Enter empties it and the focus is back in the field. The page put
+    // it there (no Tab): the field is described by its hint, the popup stays closed (appkit v0.65.0).
     const tip = page.locator('#hint-tip');
     await search.focus();
     await page.keyboard.press('Tab');
@@ -1006,9 +1006,15 @@ for (const scheme of ['light', 'dark'] as const) {
     await expect(count).toHaveText(all!);
     await expect(clear).toHaveCount(0);
     await expect(reset).toHaveCount(0);
-    await expect(tip).toBeVisible();
+    await expect(tip).toBeHidden();
+    await expect(search).toHaveAttribute('aria-describedby', /hint-tip/);
 
-    // With the hint open the first Escape closes the hint only and the words stay; the second empties the field.
+    // Tab brings the focus back to the field: its hint shows. With the hint open the first Escape closes the hint only
+    // and the words stay; the second empties the field.
+    await page.keyboard.press('Shift+Tab');
+    await page.keyboard.press('Tab');
+    await expect(search).toBeFocused();
+    await expect(tip).toBeVisible();
     await search.fill('lib.nvim/alpha');
     await expect(clear).toBeVisible();
     await page.keyboard.press('Escape');
