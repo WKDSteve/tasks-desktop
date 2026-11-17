@@ -331,6 +331,10 @@ export function env(config: string): NodeJS.ProcessEnv {
     TASKS_DESKTOP_PORT: String(port()),
     // Where the text snapshots of the test sheets are read from (see `prepareVault`).
     REPOS_DIR: join(config, '..', 'repos'),
+    // The family of this run, not of this machine: an ai-desktop installed or running here is not found (folders that
+    // do not exist, so nothing is ever written there).
+    APPKIT_FAMILY_DIR: join(config, '..', 'family'),
+    AI_DESKTOP_CONFIG_DIR: join(config, '..', 'ai-desktop'),
   };
 }
 

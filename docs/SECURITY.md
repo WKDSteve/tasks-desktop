@@ -444,8 +444,8 @@ the device routes). The order only keeps a hub running; it starts nothing and re
 ## ai-desktop on this machine (`GET /api/tasks/ai_desktop`)
 
 A session reads whether ai-desktop is installed and running (`{ "installed": bool, "running": bool }`, nothing else):
-no port, no path, no secret of the other app. The hub asks no other hub for it; it reads what the discovery of the
-family finds on this machine (until that is wired: not found). A paired phone does not reach the route (it is not one
+no port, no path, no secret of the other app. The hub asks no other hub for it; it reads the files the discovery of
+the family in appkit reads (the manifest of the installer, the `hub.json` of a running ai-desktop) and starts nothing. A paired phone does not reach the route (it is not one
 of the device routes), and nothing can be changed through it.
 
 ## Vaults (`/api/vaults`)

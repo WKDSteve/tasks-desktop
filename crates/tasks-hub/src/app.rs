@@ -832,8 +832,8 @@ pub async fn serve(opts: ServeOptions) -> Result<(), String> {
             crate::keeprunning::SettingsFile::new(dir.clone())
                 .with_gate(Arc::clone(&settings_gate)),
         )),
-        // Until the discovery of appkit (`family_apps()`) is wired: ai-desktop is not found.
-        family: Some(Arc::new(crate::family::NotWired)),
+        // ai-desktop as the discovery of appkit finds it (its manifest, its hub.json), read anew on each request.
+        family: Some(Arc::new(crate::family::Discovered::new(env.clone()))),
         all_vaults: Some(Arc::clone(&all_vaults)),
         sheet_run: Some(Arc::clone(&sheet_run)),
         testing: Some(Arc::clone(&testing)),
