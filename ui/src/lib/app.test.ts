@@ -2686,6 +2686,50 @@ describe('writing', () => {
       expect(app.toast?.undo).toBeUndefined();
     });
 
+    it('asks the id of a target task to make in the same dry run, and makes both in one request', async () => {
+      const { app, hub } = await ready();
+      const making = { ...form, targetNew: true };
+      const answer = await app.previewPlan(making);
+      expect(hub.sent[0]?.ops).toEqual([
+        { op: 'plan_new', area: 'pub', title: 'A plan', areas: ['pub'], phases: ['design', 'build'] },
+        { op: 'new', area: 'pub', title: app.planTargetTitle(making) },
+      ]);
+      expect(app.planTargetTitle(making)).toContain('A plan');
+      expect(answer).toEqual({ kind: 'ok', id: 'pub/made-plan', renamed: false, target: 'pub/created' });
+      app.openPlanWizard();
+      await app.createPlan(making, answer);
+      expect(hub.sent[1]?.dry_run).toBeUndefined();
+      expect(hub.sent[1]?.ops).toEqual([
+        { op: 'plan_new', area: 'pub', title: 'A plan', areas: ['pub'], phases: ['design', 'build'], target: 'pub/created' },
+        { op: 'new', area: 'pub', title: app.planTargetTitle(making), fields: { plan: 'pub/made-plan', phase: 'build' } },
+      ]);
+      // the task got the id the dry run named: nothing to point the plan at afterwards
+      expect(hub.sent).toHaveLength(2);
+      expect(app.planChoice).toBe('pub/made-plan');
+    });
+
+    it('points the plan at the target task when the engine gave it another id than the dry run', async () => {
+      const { app, hub } = await ready([], { capabilities: ['plan_new', 'plan_set'] });
+      const making = { ...form, targetNew: true, targetTitle: 'Ship it' };
+      await app.createPlan(making, { kind: 'ok', id: 'pub/made-plan', renamed: false, target: 'pub/ship-it' });
+      expect(hub.sent[0]?.ops[0]).toMatchObject({ op: 'plan_new', target: 'pub/ship-it' });
+      expect(hub.sent[1]?.ops).toEqual([{ op: 'plan_set', id: 'pub/made-plan', patch: { target: 'pub/created' } }]);
+    });
+
+    it('a refused target task refuses the form with its reason', async () => {
+      const { app, hub } = await ready();
+      hub.next_ops = {
+        kind: 'tasks.result',
+        ok: false,
+        dry_run: true,
+        results: [
+          { n: 1, op: 'plan_new', id: 'pub/made-plan', ok: true, outcome: 'would_create', changed_ids: [] },
+          { n: 2, op: 'new', ok: false, outcome: 'failed', changed_ids: [], error: { code: 'invalid_argument', message: 'title too long', retryable: false } },
+        ],
+      } as unknown as Result;
+      expect(await app.previewPlan({ ...form, targetNew: true })).toEqual({ kind: 'refused', message: 'title too long' });
+    });
+
     it('makes a project and shows its page in the plan view', async () => {
       const { app, hub } = await ready([], { capabilities: ['plan_new', 'project_new'] });
       app.openPlanWizard('project');

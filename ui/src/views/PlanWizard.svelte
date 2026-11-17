@@ -78,7 +78,7 @@
     if (busy || app.saving || !canCreate(form, preview)) return;
     busy = true;
     try {
-      await app.createPlan($state.snapshot(form) as PlanForm);
+      await app.createPlan($state.snapshot(form) as PlanForm, preview);
     } finally {
       busy = false;
     }
@@ -155,13 +155,45 @@
         {#each phases as phase, i (phase)}<span class="chip">{i + 1} {phase}</span>{/each}
       </p>
     {/if}
-    <label>
-      <span>{t('plan.new.target')}</span>
-      <input type="text" bind:value={form.target} list="plan-targets" placeholder="lib.nvim/alpha" />
-      <datalist id="plan-targets">
-        {#each targets as id (id)}<option value={id}></option>{/each}
-      </datalist>
-    </label>
+    <!-- The target: an existing task named, or a new one made with the plan in the same request. -->
+    <div class="field target">
+      {#if form.targetNew}
+        <label for="plan-target-title">{t('plan.new.target')}</label>
+        <div class="row">
+          <input
+            id="plan-target-title"
+            type="text"
+            bind:value={form.targetTitle}
+            maxlength="300"
+            placeholder={app.planTargetTitle({ ...form, targetTitle: '' })}
+            aria-describedby="plan-target-help"
+            aria-label={t('plan.new.target_title')}
+          />
+          <button type="button" onclick={() => (form.targetNew = false)}>{t('plan.new.target_pick')}</button>
+        </div>
+        <small class="hint" id="plan-target-help"
+          >{t(form.kind === 'project' ? 'plan.new.target_new_help_project' : 'plan.new.target_new_help')}
+          {#if preview?.kind === 'ok' && preview.target}{t('plan.new.target_will', { id: preview.target })}{/if}</small
+        >
+      {:else}
+        <label for="plan-target">{t('plan.new.target')}</label>
+        <div class="row">
+          <input
+            id="plan-target"
+            type="text"
+            bind:value={form.target}
+            list="plan-targets"
+            placeholder="lib.nvim/alpha"
+            aria-describedby="plan-target-help"
+          />
+          <button type="button" onclick={() => (form.targetNew = true)}>{t('plan.new.target_make')}</button>
+        </div>
+        <datalist id="plan-targets">
+          {#each targets as id (id)}<option value={id}></option>{/each}
+        </datalist>
+        <small class="hint" id="plan-target-help">{t('plan.new.target_help')}</small>
+      {/if}
+    </div>
     {#if form.kind === 'plan' && projects.length > 0}
       <label>
         <span>{t('plan.new.project')}</span>
@@ -192,7 +224,8 @@
     </label>
     <label>
       <span>{t('plan.new.summary')}</span>
-      <input type="text" bind:value={form.summary} maxlength="1000" />
+      <input type="text" bind:value={form.summary} maxlength="1000" aria-describedby="plan-summary-help" />
+      <small class="hint" id="plan-summary-help">{t('plan.new.summary_help')}</small>
     </label>
 
     <p class="preview" role="status" aria-live="polite">
@@ -265,6 +298,14 @@
   }
   .hint {
     color: var(--muted);
+  }
+  .target .row {
+    display: flex;
+    gap: 0.4rem;
+  }
+  .target .row input {
+    flex: 1;
+    min-width: 0;
   }
   .phases {
     display: flex;

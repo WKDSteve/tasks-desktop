@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { canCreate, emptyForm, parsePhases, planOp, type PlanForm } from './planwizard';
+import { canCreate, emptyForm, parsePhases, planOp, targetTaskOp, targetTitle, type PlanForm } from './planwizard';
 
 const form = (extra: Partial<PlanForm> = {}): PlanForm => ({ ...emptyForm('lib.nvim'), title: 'A plan', ...extra });
 
@@ -88,5 +88,47 @@ describe('canCreate', () => {
     expect(canCreate(form(), null)).toBe(false);
     expect(canCreate(form(), { kind: 'unknown' })).toBe(false);
     expect(canCreate(form(), { kind: 'refused', message: 'x' })).toBe(false);
+  });
+});
+
+describe('a target task made with the plan', () => {
+  it('the plan names the id the dry run gave the task, not the typed target', () => {
+    const op = planOp(form({ targetNew: true, target: 'lib.nvim/old' }), 'lib.nvim/done-a-plan');
+    expect(op).toMatchObject({ op: 'plan_new', target: 'lib.nvim/done-a-plan' });
+    expect(planOp(form({ targetNew: true, target: 'lib.nvim/old' }))).not.toHaveProperty('target');
+  });
+
+  it('the task goes into the plan and its last phase, a project task into the project; a dry run asks the bare id', () => {
+    const f = form({ phases: 'design, build, ship', targetNew: true });
+    expect(targetTaskOp(f, 'Done: A plan', 'lib.nvim/a-plan')).toEqual({
+      op: 'new',
+      area: 'lib.nvim',
+      title: 'Done: A plan',
+      fields: { plan: 'lib.nvim/a-plan', phase: 'ship' },
+    });
+    expect(targetTaskOp(form({ targetNew: true }), 'T', 'lib.nvim/a-plan')).toEqual({
+      op: 'new',
+      area: 'lib.nvim',
+      title: 'T',
+      fields: { plan: 'lib.nvim/a-plan' },
+    });
+    expect(targetTaskOp({ ...f, kind: 'project' }, 'T', 'lib.nvim/p')).toEqual({
+      op: 'new',
+      area: 'lib.nvim',
+      title: 'T',
+      fields: { project: 'lib.nvim/p' },
+    });
+    expect(targetTaskOp(f, 'T')).toEqual({ op: 'new', area: 'lib.nvim', title: 'T' });
+  });
+
+  it('the typed title wins over the offered one', () => {
+    expect(targetTitle(form({ targetTitle: '  Mine ' }), 'Done: A plan')).toBe('Mine');
+    expect(targetTitle(form(), ' Done: A plan ')).toBe('Done: A plan');
+  });
+
+  it('cannot be sent before the dry run gave the task its id', () => {
+    const f = form({ targetNew: true });
+    expect(canCreate(f, { kind: 'ok', id: 'lib.nvim/a-plan', renamed: false })).toBe(false);
+    expect(canCreate(f, { kind: 'ok', id: 'lib.nvim/a-plan', renamed: false, target: 'lib.nvim/t' })).toBe(true);
   });
 });

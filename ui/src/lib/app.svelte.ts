@@ -16,7 +16,7 @@ import {
   pruneMarks,
   toggleMark,
 } from './bulk';
-import { planOp, type PlanForm, type PlanKind, type PlanPreview } from './planwizard';
+import { planOp, targetTaskOp, targetTitle, type PlanForm, type PlanKind, type PlanPreview } from './planwizard';
 import { connectOp, edgeOp, parseGraphOrder, phaseOp, type DepEdge, type EdgeAction, type EdgeKind, type GraphOrder } from './depGraph';
 import { COLUMNS, columnsOf, isColumn, neighbourColumn, placeNear, stepInGroup, type Column, type Move } from './board';
 import { ApiError, type CheckAll, type SheetRunState, type Hub, type HubArea, type HubAreas, type SearchResult, type VaultList } from './api';
@@ -1426,14 +1426,24 @@ export class App {
    */
   async previewPlan(form: PlanForm, signal?: AbortSignal): Promise<PlanPreview> {
     if (form.title.trim() === '' || form.area === '' || this.readOnly) return { kind: 'unknown' };
+    // A target task made with the plan: the same dry run asks the id it would get (a bare `new`, see `targetTaskOp`).
+    const target = form.targetNew ? this.planTargetTitle(form) : '';
+    if (form.targetNew && target === '') return { kind: 'unknown' };
+    const ops = form.targetNew ? [planOp(form), targetTaskOp(form, target)] : [planOp(form)];
     try {
-      const result = await this.env.hub.ops(
-        { client_op_id: this.opId(), dry_run: true, ops: [planOp(form)] },
-        signal,
-      );
+      const result = await this.env.hub.ops({ client_op_id: this.opId(), dry_run: true, ops }, signal);
       const entry = result.results[0];
+      const made = result.results[1];
+      if (form.targetNew && !(made?.ok && typeof made.id === 'string')) {
+        return { kind: 'refused', message: made?.error?.message ?? '' };
+      }
       if (entry?.ok && typeof entry.id === 'string') {
-        return { kind: 'ok', id: entry.id, renamed: entry.renamed === true };
+        return {
+          kind: 'ok',
+          id: entry.id,
+          renamed: entry.renamed === true,
+          ...(form.targetNew && typeof made?.id === 'string' ? { target: made.id } : {}),
+        };
       }
       return { kind: 'refused', message: entry?.error?.message ?? '' };
     } catch (error) {
@@ -1444,11 +1454,32 @@ export class App {
     }
   }
 
-  /** Make the plan, show it in the plan view and choose it there. */
-  async createPlan(form: PlanForm): Promise<void> {
-    const result = await this.write([planOp(form)], { undoable: false });
-    const id = result?.results.find((r) => r.ok && r.outcome === 'created')?.id;
+  /** The title of the target task the wizard makes: the one typed, else "Done: <plan title>". */
+  planTargetTitle(form: PlanForm): string {
+    const title = form.title.trim();
+    return targetTitle(form, title === '' ? '' : translate(this.lang, 'plan.new.target_default', { title }));
+  }
+
+  /**
+   * Make the plan, show it in the plan view and choose it there. A target task to make goes in the same request,
+   * after the plan (so it can be in it): the plan names it by the id the dry run `preview` gave it; when the engine
+   * gave it another one meanwhile, the plan is pointed at that one.
+   */
+  async createPlan(form: PlanForm, preview?: PlanPreview | null): Promise<void> {
+    const planned = preview?.kind === 'ok' ? preview : undefined;
+    const making = form.targetNew && planned?.target !== undefined;
+    const ops =
+      making && planned
+        ? [planOp(form, planned.target), targetTaskOp(form, this.planTargetTitle(form), planned.id)]
+        : [planOp(form)];
+    const result = await this.write(ops, { undoable: false });
+    const first = result?.results[0];
+    const id = first?.ok && first.outcome === 'created' ? first.id : undefined;
     if (!id) return;
+    const made = making ? result?.results[1] : undefined;
+    if (made?.ok && typeof made.id === 'string' && made.id !== planned?.target) {
+      await this.setPlanFile(form.kind, id, { target: made.id });
+    }
     this.planning = false;
     if (form.kind === 'project') this.openProject(id);
     else this.openPlan(id);

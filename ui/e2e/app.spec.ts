@@ -90,7 +90,7 @@ async function capture(page: Page, title: string, { keep = false }: { keep?: boo
   }).toPass({ timeout: 10000 });
   await dialog.getByLabel('Title').fill(title);
   await dialog.locator('select').first().selectOption('lib.nvim');
-  await dialog.getByRole('button', { name: 'Create' }).click();
+  await dialog.getByRole('button', { name: 'Create', exact: true }).click();
   // The dialog closes when the write is answered and the list read again. The hub gives the engine 5 s for a call,
   // and a write may first wait for the engine behind another call: on a busy runner that is more than the 5 s of an
   // expect (CI, a8827db).
@@ -2392,7 +2392,7 @@ test('the start page has a small summary of today: tasks finished, made and chan
   const title = `Daily figures ${Date.now()}`;
   await dialog.getByLabel('Title').fill(title);
   await dialog.locator('select').first().selectOption('lib.nvim');
-  await dialog.getByRole('button', { name: 'Create' }).click();
+  await dialog.getByRole('button', { name: 'Create', exact: true }).click();
   await expect(dialog).toHaveCount(0);
   // Making a task shows it in the list, in its float: back to the start page.
   await closeFloat(page);
@@ -2578,7 +2578,7 @@ test('the capture dialog writes after, plan, phase, due and start into the file'
   await dialog.getByLabel('After').fill('lib.nvim/alpha');
   await dialog.getByLabel('Plan', { exact: true }).fill('lib.nvim/the-plan');
   await dialog.getByLabel('Phase').fill('build');
-  await dialog.getByRole('button', { name: 'Create' }).click();
+  await dialog.getByRole('button', { name: 'Create', exact: true }).click();
   await expect(dialog).toHaveCount(0, { timeout: WRITE_BUDGET });
   await expect(taskFloat(page).locator('aside.detail .task-title')).toHaveText(title, { timeout: WRITE_BUDGET });
   const dir = join(state().vault, 'lib.nvim', 'ROADMAP', 'tasks');
@@ -2742,7 +2742,7 @@ test('the capture dialog offers the acceptance lines of the choice and writes th
   const lines = dialog.locator('fieldset', { hasText: 'Acceptance lines for this choice' });
   await expect(lines.getByRole('checkbox')).toHaveCount(5);
   await lines.getByRole('checkbox', { name: 'README and docs updated' }).uncheck();
-  await dialog.getByRole('button', { name: 'Create' }).click();
+  await dialog.getByRole('button', { name: 'Create', exact: true }).click();
   await expect(dialog).toHaveCount(0, { timeout: WRITE_BUDGET });
   await expect(taskFloat(page).locator('aside.detail .task-title')).toHaveText(title, { timeout: WRITE_BUDGET });
   const dir = join(state().vault, 'lib.nvim', 'ROADMAP', 'tasks');
@@ -4306,7 +4306,7 @@ test('the plan wizard names the plan with a dry run, refuses what the engine ref
     await expect(dialog).toBeVisible();
   };
   await open();
-  const create = dialog.getByRole('button', { name: 'Create' });
+  const create = dialog.getByRole('button', { name: 'Create', exact: true });
   await expect(create).toBeDisabled();
   expect(await violations(page)).toEqual([]);
 
@@ -4325,10 +4325,10 @@ test('the plan wizard names the plan with a dry run, refuses what the engine ref
   await expect(dialog.getByRole('status')).toHaveText('The plan will be lib.nvim/wizard-e2e-plan');
   await expect(create).toBeEnabled();
 
-  await dialog.getByLabel('Target task').fill('lib.nvim/alpha');
+  await dialog.getByLabel('Target task (the last task)').fill('lib.nvim/alpha');
   await dialog.getByLabel('Status of the plan').selectOption('doing');
   await dialog.getByLabel(/Each phase waits/).check();
-  await dialog.getByLabel('One line about it').fill('Made by the browser test.');
+  await dialog.getByLabel('Short description (one sentence)').fill('Made by the browser test.');
   await expect(create).toBeEnabled();
   await create.click();
   await expect(dialog).toHaveCount(0);
@@ -4354,6 +4354,44 @@ test('the plan wizard names the plan with a dry run, refuses what the engine ref
   await dialog.getByRole('button', { name: 'Cancel' }).click();
   await expect(dialog).toHaveCount(0);
   expect(existsSync(join(state().vault, 'lib.nvim', 'ROADMAP', 'plans', 'wizard-e2e-plan-2.md'))).toBe(false);
+
+  expect(await violations(page)).toEqual([]);
+  expect(consoleProblems.get(page)).toEqual([]);
+});
+
+test('the plan wizard makes the target task with the plan, in its last phase, in one go', async ({ page }) => {
+  await watchViolations(page);
+  await pair(page);
+  await showList(page);
+
+  const dialog = page.getByRole('dialog', { name: 'Create a plan' });
+  await page.getByRole('menuitem', { name: 'Project', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Create a plan' }).click();
+  await expect(dialog).toBeVisible();
+  await dialog.getByLabel('Title', { exact: true }).fill('Target e2e plan');
+  await dialog.getByLabel('Area of the plan file').selectOption('lib.nvim');
+  await dialog.getByLabel(/Phases in order/).fill('build, ship');
+
+  // The target task does not exist yet: the wizard makes it, and the dry run names it before anything is written.
+  await dialog.getByRole('button', { name: 'Create target task' }).click();
+  const title = dialog.getByLabel('Title of the new target task');
+  await expect(title).toHaveAttribute('placeholder', 'Done: Target e2e plan');
+  await expect(dialog.getByText('The target task will be lib.nvim/done-target-e2e-plan')).toBeVisible();
+  await expect(dialog.getByRole('status')).toHaveText('The plan will be lib.nvim/target-e2e-plan');
+  const plan = join(state().vault, 'lib.nvim', 'ROADMAP', 'plans', 'target-e2e-plan.md');
+  const task = join(state().vault, 'lib.nvim', 'ROADMAP', 'tasks', 'done-target-e2e-plan.md');
+  expect(existsSync(plan)).toBe(false);
+  expect(existsSync(task)).toBe(false);
+  expect(await violations(page)).toEqual([]);
+
+  await dialog.getByRole('button', { name: 'Create', exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+
+  // Both files in one request: the plan aims at the task, the task is in the plan and its last phase.
+  expect(readFileSync(plan, 'utf8')).toContain('target: lib.nvim/done-target-e2e-plan');
+  const taskText = readFileSync(task, 'utf8');
+  expect(taskText).toContain('plan: lib.nvim/target-e2e-plan');
+  expect(taskText).toContain('phase: ship');
 
   expect(await violations(page)).toEqual([]);
   expect(consoleProblems.get(page)).toEqual([]);
@@ -4481,7 +4519,7 @@ test('the plan wizard does not make a plan from a name the engine has not confir
   await dialog.getByLabel('Title', { exact: true }).fill('Stale one');
   await dialog.getByLabel('Area of the plan file').selectOption('lib.nvim');
   await expect(dialog.getByRole('status')).toHaveText('The plan will be lib.nvim/stale-one');
-  const create = dialog.getByRole('button', { name: 'Create' });
+  const create = dialog.getByRole('button', { name: 'Create', exact: true });
   await expect(create).toBeEnabled();
   // The title changes: the answer on the screen is for the old one, and Create waits for the new one.
   await dialog.getByLabel('Title', { exact: true }).pressSequentially(' two');
@@ -6542,10 +6580,10 @@ test('a new task can be made with the fields the engine takes, and the file has 
   await expectAccessible(page, 'the new task dialog with its fields');
   // A tag the file could not hold is told, and nothing is written.
   await dialog.getByLabel(/^Tags/).fill('bad#tag');
-  await dialog.getByRole('button', { name: 'Create' }).click();
+  await dialog.getByRole('button', { name: 'Create', exact: true }).click();
   await expect(dialog.getByRole('alert')).toContainText('bad#tag');
   await dialog.getByLabel(/^Tags/).fill('ui, e2e');
-  await write(page, () => dialog.getByRole('button', { name: 'Create' }).click());
+  await write(page, () => dialog.getByRole('button', { name: 'Create', exact: true }).click());
   await expect(dialog).toHaveCount(0);
   const file = join(state().vault, 'lib.nvim', 'ROADMAP', 'tasks', 'capture-fields-r001.md');
   await expect.poll(() => existsSync(file), { timeout: WRITE_BUDGET }).toBe(true);
