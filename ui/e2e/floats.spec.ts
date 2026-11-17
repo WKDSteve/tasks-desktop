@@ -86,7 +86,10 @@ for (const scheme of ['light', 'dark'] as const) {
     await expect(f.getByRole('button', { name: 'Show in the list' })).toHaveCount(0);
     await expectAccessible(page, `the list with a task in its float (${scheme})`);
 
-    // Escape closes it; the row keeps the selection and gets the focus back.
+    // Escape closes it; the row keeps the selection and gets the focus back. The pointer leaves the float first: resting
+    // on a field of the task it would open that field's hint, and the first Escape would close the hint (WCAG 1.4.13).
+    await page.mouse.move(0, 0);
+    await expect(page.locator('#hint-tip')).toBeHidden();
     await page.keyboard.press('Escape');
     await expect(f).toHaveCount(0);
     await expect(row).toBeFocused();
@@ -434,6 +437,12 @@ test('the handle of a dialog comes first in the order of the focus without takin
     await expect(capture.getByRole('button', { name: 'Move or resize the window' })).toBeFocused();
     await page.keyboard.press('Tab');
     await expect(title).toBeFocused();
+    // Tab brought the focus to the field: its hint shows, and the first Escape closes the hint, the second the dialog.
+    const tip = page.locator('#hint-tip');
+    await expect(tip).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(tip).toBeHidden();
+    await expect(capture).toBeVisible();
     await page.keyboard.press('Escape');
     await expect(capture).toHaveCount(0);
 
