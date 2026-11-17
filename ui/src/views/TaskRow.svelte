@@ -87,6 +87,7 @@
   class="mark"
   checked={marked}
   aria-label={markLabel}
+  data-hint={translate(lang, 'hint.form.mark')}
   onchange={(e) => (e.currentTarget.checked = onmark(task.id))}
 />
 <!-- The mouseover only puts the whole text of a cut cell into its hint; the keyboard reaches the row as before. -->

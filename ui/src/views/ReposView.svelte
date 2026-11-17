@@ -137,15 +137,15 @@
 
     <div class="forms">
       <form onsubmit={(e) => (e.preventDefault(), void addGroup())}>
-        <label><span>{t('repos.group.new')}</span><input type="text" bind:value={newTitle} maxlength="80" /></label>
+        <label data-hint={t('hint.form.repos.group_new')}><span>{t('repos.group.new')}</span><input type="text" bind:value={newTitle} maxlength="80" /></label>
         <button type="submit" disabled={rs.saving || newTitle.trim() === ''}>{t('repos.group.add')}</button>
       </form>
       {#if groups.length > 0}
         <form onsubmit={(e) => (e.preventDefault(), void addRepo())}>
-          <label><span>{t('repos.add.path')}</span><input type="text" bind:value={path} maxlength="1024" /></label>
+          <label data-hint={t('hint.form.repos.path')}><span>{t('repos.add.path')}</span><input type="text" bind:value={path} maxlength="1024" /></label>
           <button type="button" onclick={() => void choose()}>{t('repos.add.choose')}</button>
-          <label><span>{t('repos.add.name')}</span><input type="text" bind:value={name} maxlength="80" /></label>
-          <label>
+          <label data-hint={t('hint.form.repos.name')}><span>{t('repos.add.name')}</span><input type="text" bind:value={name} maxlength="80" /></label>
+          <label data-hint={t('hint.form.repos.group')}>
             <span>{t('repos.add.group')}</span>
             <select bind:value={into}>{#each groups as g (g.id)}<option value={g.id}>{g.title}</option>{/each}</select>
           </label>
@@ -159,7 +159,7 @@
     {#snippet head(group: RepoGroup, g: number)}
       {#if renaming === group.id}
         <form class="inline" onsubmit={(e) => (e.preventDefault(), void renameGroup(group.id))}>
-          <label><span class="sr-only">{t('repos.group.title')}</span><input type="text" bind:value={renameTo} maxlength="80" /></label>
+          <label data-hint={t('hint.form.repos.group_title')}><span class="sr-only">{t('repos.group.title')}</span><input type="text" bind:value={renameTo} maxlength="80" /></label>
           <button type="submit" disabled={rs.saving}>{t('repos.group.rename.save')}</button>
           <button type="button" onclick={() => (renaming = null)}>{t('repos.cancel')}</button>
         </form>
@@ -202,12 +202,12 @@
         {#if menuOf?.id === id && menuOf.group === group.id}
           <div class="menu" role="group" aria-label={t('repos.tile.menu', { name: r?.name ?? id })}>
             <form class="inline" onsubmit={(e) => (e.preventDefault(), void act(() => rs.save(groups, { [id]: tileName.trim() })))}>
-              <label><span>{t('repos.tile.name')}</span><input type="text" bind:value={tileName} maxlength="80" /></label>
+              <label data-hint={t('hint.form.repos.tile_name')}><span>{t('repos.tile.name')}</span><input type="text" bind:value={tileName} maxlength="80" /></label>
               <button type="submit" disabled={rs.saving || tileName.trim() === ''}>{t('repos.tile.rename')}</button>
             </form>
             {#if groups.length > 1}
               <form class="inline" onsubmit={(e) => (e.preventDefault(), void act(() => rs.save(tileCopied(groups, id, copyTo))))}>
-                <label>
+                <label data-hint={t('hint.form.repos.copy_to')}>
                   <span>{t('repos.tile.copy_to')}</span>
                   <select bind:value={copyTo}>{#each groups.filter((g) => g.id !== group.id) as g (g.id)}<option value={g.id}>{g.title}</option>{/each}</select>
                 </label>

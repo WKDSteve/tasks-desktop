@@ -66,7 +66,7 @@
         </li>
       {/if}
     </ul>
-    <label class="remind">
+    <label class="remind" data-hint={t('hint.form.remind_after_finish')}>
       <span>{t('remind.after_finish')}</span>
       <select bind:value={remind}>
         <option value="">{t('remind.none')}</option>

@@ -80,7 +80,7 @@
 <section class="finished" aria-labelledby="finished-list-title">
   <div class="head">
     <h2 id="finished-list-title">{t('nav.done')}</h2>
-    <label
+    <label data-hint={t('hint.form.period')}
       >{t('done.period')}
       <select value={period} onchange={(e) => (period = e.currentTarget.value as Preset)}>
         {#each PERIODS as p (p)}

@@ -70,7 +70,7 @@
     <h2 id="drop-move-title">{t('drop.choose')}</h2>
     <p class="what">{markHidden(chosenTask?.title ?? choosing)}</p>
     <p class="id"><code>{choosing}</code></p>
-    <label class="pick">
+    <label class="pick" data-hint={t('hint.form.move_area')}>
       <span>{t('drop.choose_area')}</span>
       <select bind:value={area}>
         <option value="">{t('field.none')}</option>

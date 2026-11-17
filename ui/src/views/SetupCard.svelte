@@ -28,11 +28,11 @@
           <button type="button" class="primary" disabled={setup.busy} onclick={() => void setup.chooseVault(null)}
             >{t('setup.page.vault_choose')}</button
           >
-          <label><input type="checkbox" bind:checked={newVault} /> {t('setup.page.vault_new')}</label>
+          <label data-hint={t('hint.form.setup.vault_new')}><input type="checkbox" bind:checked={newVault} /> {t('setup.page.vault_new')}</label>
         </div>
         {#if newVault}
           <div class="row">
-            <label>{t('setup.page.vault_area')} <input type="text" bind:value={area} maxlength="128" /></label>
+            <label data-hint={t('hint.form.vaults.area')}>{t('setup.page.vault_area')} <input type="text" bind:value={area} maxlength="128" /></label>
             <button
               type="button"
               disabled={setup.busy || area.trim() === ''}
@@ -57,8 +57,8 @@
       <section aria-labelledby="setup-install">
         <h2 id="setup-install">{t('setup.page.install_title')}</h2>
         <p>{t(setup.info.install === 'replace' ? 'setup.page.replace_body' : 'setup.page.install_body')}</p>
-        <label><input type="checkbox" bind:checked={autostart} /> {t('setup.page.install_autostart')}</label>
-        <label><input type="checkbox" bind:checked={shortcut} /> {t('setup.page.install_shortcut')}</label>
+        <label data-hint={t('hint.item.menu.autostart')}><input type="checkbox" bind:checked={autostart} /> {t('setup.page.install_autostart')}</label>
+        <label data-hint={t('hint.form.setup.shortcut')}><input type="checkbox" bind:checked={shortcut} /> {t('setup.page.install_shortcut')}</label>
         <div class="row">
           <button type="button" disabled={setup.busy} onclick={() => void setup.install(autostart, shortcut)}
             >{t('setup.page.install')}</button

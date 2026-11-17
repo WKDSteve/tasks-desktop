@@ -99,7 +99,7 @@
       <Info hint={t('hint.done')} label={t('hint.about', { what: t('nav.done') })} />
     </div>
     <div class="bar">
-      <label class="field"
+      <label class="field" data-hint={t('hint.form.period')}
         >{t('done.period')}
         <select
           value={preset}
@@ -114,8 +114,8 @@
         </select>
       </label>
       {#if preset === 'custom' && !drill}
-        <label class="field">{t('done.from')} <input type="date" value={custom.from} oninput={(e) => remember({ from: e.currentTarget.value })} /></label>
-        <label class="field">{t('done.to')} <input type="date" value={custom.to} oninput={(e) => remember({ to: e.currentTarget.value })} /></label>
+        <label class="field" data-hint={t('hint.form.period.from')}>{t('done.from')} <input type="date" value={custom.from} oninput={(e) => remember({ from: e.currentTarget.value })} /></label>
+        <label class="field" data-hint={t('hint.form.period.to')}>{t('done.to')} <input type="date" value={custom.to} oninput={(e) => remember({ to: e.currentTarget.value })} /></label>
       {/if}
       {#if narrowed}
         <span class="muted">{t('done.showing', { what: narrowedText })}</span>
@@ -177,7 +177,7 @@
     <section class="card" aria-labelledby="done-over-time">
       <div class="headline">
         <h3 id="done-over-time">{t('done.over_time')}</h3>
-        <label class="field"
+        <label class="field" data-hint={t('hint.form.done.step')}
           >{t('done.step')}
           <select value={step} onchange={(e) => remember({ step: e.currentTarget.value === 'week' ? 'week' : 'month' })}>
             <option value="month">{t('done.step.month')}</option>

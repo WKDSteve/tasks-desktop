@@ -63,7 +63,7 @@
         void confirm(true);
       }}
     >
-      <label>
+      <label data-hint={t('hint.form.blocked_by')}>
         <span>{t('board.block.by')}</span>
         <input type="text" list="block-choices" bind:value={text} autocomplete="off" />
         <datalist id="block-choices">

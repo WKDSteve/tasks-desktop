@@ -68,7 +68,7 @@
 </script>
 
 {#if planId !== '' && app.can('finished')}
-  <label class="switch"><input type="checkbox" bind:checked={show} /> {t('plan.show_finished')}</label>
+  <label class="switch" data-hint={t('hint.form.plan.show_finished')}><input type="checkbox" bind:checked={show} /> {t('plan.show_finished')}</label>
   {#if show}
     <section class="card" aria-labelledby="plan-finished-title">
       <h2 id="plan-finished-title" class="eyebrow">

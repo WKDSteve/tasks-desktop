@@ -151,7 +151,7 @@
         <button type="button" onclick={() => go(1)}>{t('calendar.next')} ›</button>
       </div>
       <h3 class="when" aria-live="polite" data-calendar-heading>{heading}</h3>
-      <label class="mode">
+      <label class="mode" data-hint={t('hint.form.calendar.mode')}>
         <span>{t('calendar.mode')}</span>
         <select value={mode} onchange={(e) => setMode(e.currentTarget.value as CalendarMode)}>
           {#each CALENDAR_MODES as m (m)}<option value={m}>{t(`calendar.mode.${m}` as Key)}</option>{/each}

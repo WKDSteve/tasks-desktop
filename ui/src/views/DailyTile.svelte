@@ -272,13 +272,13 @@
       <fieldset>
         <legend class="muted">{t('daily.view')}</legend>
         {#each PERIOD_MODES as mode (mode)}
-          <label><input type="radio" name="daily-mode" value={mode} checked={prefs.mode === mode} onchange={() => pickMode(mode)} /> {t(`daily.mode.${mode}` as Key)}</label>
+          <label data-hint={t('hint.form.period')}><input type="radio" name="daily-mode" value={mode} checked={prefs.mode === mode} onchange={() => pickMode(mode)} /> {t(`daily.mode.${mode}` as Key)}</label>
         {/each}
       </fieldset>
       {#if prefs.mode === 'custom'}
         <div class="custom">
-          <label>{t('daily.from')} <input type="date" data-date="from" value={days.since} max={app.today} onchange={(e) => choose({ from: e.currentTarget.value, to: prefs.to ?? days.until })} /></label>
-          <label>{t('daily.to')} <input type="date" data-date="to" value={days.until} max={app.today} onchange={(e) => choose({ to: e.currentTarget.value, from: prefs.from ?? days.since })} /></label>
+          <label data-hint={t('hint.form.period.from')}>{t('daily.from')} <input type="date" data-date="from" value={days.since} max={app.today} onchange={(e) => choose({ from: e.currentTarget.value, to: prefs.to ?? days.until })} /></label>
+          <label data-hint={t('hint.form.period.to')}>{t('daily.to')} <input type="date" data-date="to" value={days.until} max={app.today} onchange={(e) => choose({ to: e.currentTarget.value, from: prefs.from ?? days.since })} /></label>
         </div>
       {/if}
     </div>

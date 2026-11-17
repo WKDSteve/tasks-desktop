@@ -45,9 +45,10 @@
 
     <fieldset>
       <legend>{t('defaults.sec.start')}</legend>
-      <label for="defaults-view">{t('defaults.start_view')}</label>
+      <label for="defaults-view" data-hint={t('hint.form.defaults.start_view')}>{t('defaults.start_view')}</label>
       <select
         id="defaults-view"
+        data-hint={t('hint.form.defaults.start_view')}
         value={app.defaults.startView}
         onchange={(e) => app.setDefaults({ startView: parseDefaults(JSON.stringify({ startView: e.currentTarget.value })).startView })}
       >
@@ -56,7 +57,7 @@
           <option value={view}>{t(`nav.${view}` as Key)}</option>
         {/each}
       </select>
-      <label class="check">
+      <label class="check" data-hint={t('hint.form.defaults.start_with')}>
         <input
           type="checkbox"
           checked={app.defaults.startWith === 'defaults'}
@@ -69,9 +70,10 @@
 
     <fieldset>
       <legend>{t('defaults.sec.list')}</legend>
-      <label for="defaults-sort">{t('defaults.sort')}</label>
+      <label for="defaults-sort" data-hint={t('hint.form.defaults.sort')}>{t('defaults.sort')}</label>
       <select
         id="defaults-sort"
+        data-hint={t('hint.form.defaults.sort')}
         value={app.defaults.sort}
         onchange={(e) => app.setDefaults({ sort: parseDefaults(JSON.stringify({ sort: e.currentTarget.value })).sort })}
       >
@@ -96,11 +98,11 @@
 
     <fieldset>
       <legend>{t('defaults.sec.show')}</legend>
-      <label class="check">
+      <label class="check" data-hint={t('hint.item.menu.area_counts')}>
         <input type="checkbox" checked={app.areaCountsShown} onchange={(e) => app.setAreaCounts(e.currentTarget.checked)} />
         {t('menu.area_counts')}
       </label>
-      <label class="check">
+      <label class="check" data-hint={t('hint.item.menu.short_areas')}>
         <input type="checkbox" checked={app.shortAreas} onchange={(e) => app.setShortAreas(e.currentTarget.checked)} />
         {t('menu.short_areas')}
       </label>
@@ -116,7 +118,7 @@
         <input type="checkbox" checked={app.barAreas} onchange={(e) => app.setBarAreas(e.currentTarget.checked)} />
         {t('menu.bar_areas')}
       </label>
-      <label class="check">
+      <label class="check" data-hint={t('hint.item.menu.save_manual')}>
         <input
           type="checkbox"
           checked={app.saveMode === 'manual'}
@@ -127,6 +129,7 @@
       <label for="defaults-claim-name" data-hint={t('hint.defaults.claim_name')}>{t('defaults.claim_name')}</label>
       <input
         id="defaults-claim-name"
+        data-hint={t('hint.defaults.claim_name')}
         type="text"
         value={app.claimName}
         placeholder={t('defaults.claim_name.none')}

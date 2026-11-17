@@ -137,6 +137,7 @@
     <div class="bar">
       <MultiSelect
         label={t('nav.areas')}
+        hint={t('hint.form.areas')}
         options={areaOptions}
         selected={chosen}
         onchange={(areas) => (app.filter = { ...app.filter, areas })}

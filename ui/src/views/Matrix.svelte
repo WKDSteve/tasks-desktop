@@ -63,6 +63,7 @@
               <td>
                 <select
                   aria-label={`${t('matrix.effort')}: ${task.id}`}
+                  data-hint={hintOf(app.lang, 'hint.field', 'effort')}
                   value={cell?.effort ?? ''}
                   disabled={app.locked}
                   onchange={(e) => app.setCell(task.id, 'effort', e.currentTarget.value === '' ? undefined : e.currentTarget.value)}
@@ -76,6 +77,7 @@
               <td>
                 <select
                   aria-label={`${t('matrix.value')}: ${task.id}`}
+                  data-hint={hintOf(app.lang, 'hint.field', 'value')}
                   value={cell?.value === undefined ? '' : String(cell.value)}
                   disabled={app.locked}
                   onchange={(e) => app.setCell(task.id, 'value', e.currentTarget.value === '' ? undefined : Number(e.currentTarget.value))}

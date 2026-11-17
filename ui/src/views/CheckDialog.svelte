@@ -45,7 +45,7 @@
     </div>
     <p class="help">{t('check.help')}</p>
     <div class="run">
-      <label><input type="checkbox" bind:checked={refs} disabled={running} /> {t('check.refs')}</label>
+      <label data-hint={t('hint.form.check.refs')}><input type="checkbox" bind:checked={refs} disabled={running} /> {t('check.refs')}</label>
       <button type="button" class="primary" disabled={running && !app.checkProblem} onclick={() => void app.runCheck(refs)}>{t('check.run')}</button>
     </div>
     <div class="state" role="status" aria-live="polite">

@@ -101,7 +101,7 @@
   {:else}
     <div class="pickers">
       {#if projects.length > 0}
-        <label class="pick">
+        <label class="pick" data-hint={t('hint.form.compare.project')}>
           <span>{t('project.which')}</span>
           <select bind:value={project} onchange={() => (chosen = [])}>
             <option value="">{t('compare.all_plans')}</option>

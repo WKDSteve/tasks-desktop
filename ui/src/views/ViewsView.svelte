@@ -348,7 +348,7 @@
 <div class="wrap" class:with-board={board}>
   <div class="bar" role="group" aria-label={t('views.bar')}>
     {#if saved.list.length > 0 || saved.draft || app.can('reorder')}
-      <label>
+      <label data-hint={t('hint.form.views.choose')}>
         {t('views.choose')}
         <select value={board ? BOARD_ID : (open?.id ?? '')} onchange={(e) => choose(e.currentTarget.value)}>
           <!-- The built-in view: the board. It is no file and cannot be deleted. -->
@@ -381,11 +381,11 @@
 
   {#if making}
     <form class="card form" aria-label={t('views.new')} onsubmit={(e) => void make(e)}>
-      <label>
+      <label data-hint={t('hint.form.views.title')}>
         {t('views.form.title')}
         <input bind:this={titleBox} bind:value={title} maxlength="300" required />
       </label>
-      <label>
+      <label data-hint={t('hint.form.views.area')}>
         {t('views.form.area')}
         <select bind:value={area}>
           {#each areas as name (name)}
@@ -393,7 +393,7 @@
           {/each}
         </select>
       </label>
-      <label>
+      <label data-hint={t('hint.form.views.group_by')}>
         {t('views.form.group_by')}
         <select bind:value={groupBy}>
           {#each fields as field (field)}
@@ -401,7 +401,7 @@
           {/each}
         </select>
       </label>
-      <label>
+      <label data-hint={t('hint.form.views.display')}>
         {t('views.form.display')}
         <select bind:value={display}>
           <option value="columns">{t('views.display.columns')}</option>
@@ -410,7 +410,7 @@
         </select>
       </label>
       {#if display === 'matrix'}
-        <label>
+        <label data-hint={t('hint.form.views.rows')}>
           {t('views.form.rows')}
           <select bind:value={groupBy2}>
             {#each fields.filter((f) => f !== groupBy) as field (field)}
@@ -420,7 +420,7 @@
         </label>
       {/if}
       {#if draftSelect === null}
-        <label class="check">
+        <label class="check" data-hint={t('hint.form.views.from_list')}>
           <input type="checkbox" bind:checked={fromList} />
           {t('views.form.from_list')}
         </label>
@@ -463,13 +463,13 @@
       <h2 bind:this={heading} tabindex="-1">{open.title}</h2>
       <div class="head">
         <form class="rename" onsubmit={(e) => void rename(e, open)}>
-          <label>
+          <label data-hint={t('hint.form.views.title')}>
             {t('views.form.title')}
             <input bind:value={renaming} maxlength="300" readonly={app.readOnly && open.id !== DRAFT_ID} />
           </label>
           <button type="submit" disabled={app.locked}>{t('views.rename')}</button>
         </form>
-        <label>
+        <label data-hint={t('hint.form.views.group_by')}>
           {t('views.form.group_by')}
           <select
             value={open.group_by}
@@ -481,7 +481,7 @@
             {/each}
           </select>
         </label>
-        <label>
+        <label data-hint={t('hint.form.views.display')}>
           {t('views.form.display')}
           <select value={open.display} disabled={open.id === DRAFT_ID ? app.saving : app.locked} onchange={(e) => setDisplay(open, e.currentTarget.value as View['display'])}>
             <option value="columns">{t('views.display.columns')}</option>
@@ -490,7 +490,7 @@
           </select>
         </label>
         {#if open.display === 'matrix'}
-          <label>
+          <label data-hint={t('hint.form.views.rows')}>
             {t('views.form.rows')}
             <select value={open.group_by2 ?? ''} disabled={open.id === DRAFT_ID ? app.saving : app.locked} onchange={(e) => save(open, { group_by2: e.currentTarget.value as GroupField })}>
               {#each fields.filter((f) => f !== open.group_by) as field (field)}

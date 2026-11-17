@@ -188,7 +188,7 @@
 {#snippet point(task: TaskEntry, doc: TaskDocument, item: Item)}
   {@const key = `${task.id}#${item.line}`}
   {@const here = cursor === key}
-  <label class:cursor={here} data-cursor={here ? 'true' : undefined}>
+  <label class:cursor={here} data-cursor={here ? 'true' : undefined} data-hint={t('hint.form.abnahme.tick')}>
     <input
       type="checkbox"
       checked={item.checked}

@@ -207,7 +207,7 @@
           >
         {/each}
       </div>
-      <label class="sort">
+      <label class="sort" data-hint={t('hint.form.stats.sort')}>
         <span class="muted">{t('stats.sort')}</span>
         <select
           value={app.statsSort}

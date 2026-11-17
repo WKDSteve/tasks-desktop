@@ -102,7 +102,7 @@
       {#if project.status}<span class="tag">{t(`plan.status.${project.status}` as Key)}</span>{/if}
       <span class="leave">
         {#if app.projects.length > 1}
-          <label class="pick">
+          <label class="pick" data-hint={t('hint.form.project.which')}>
             <span>{t('project.which')}</span>
             <select value={project.id} onchange={(e) => app.openProject(e.currentTarget.value)}>
               {#each app.projects as p (p.id)}<option value={p.id}>{markHidden(p.title)}</option>{/each}
@@ -133,7 +133,7 @@
     </p>
     <div class="toolbar">
       {#if app.can('project_set') && !app.readOnly && project.status !== 'done'}
-        <label class="pick">
+        <label class="pick" data-hint={t('hint.form.plan.status')}>
           <span>{t('project.status')}</span>
           <select
             value={project.status ?? 'planning'}
@@ -162,7 +162,7 @@
         >
       {/if}
       {#if canPlanSet && free.length > 0}
-        <label class="pick">
+        <label class="pick" data-hint={t('hint.form.project.attach')}>
           <span>{t('project.attach')}</span>
           <select bind:value={attachId}>
             <option value="">{t('project.attach_choose')}</option>

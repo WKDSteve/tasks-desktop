@@ -122,11 +122,11 @@
 
   <h3>{t('vaults.add_title')}</h3>
   <div class="add" role="group" aria-label={t('vaults.add_title')}>
-    <label>
+    <label data-hint={t('hint.form.vaults.name')}>
       <span>{t('vaults.name')} <small>({t('vaults.name_hint')})</small></span>
       <input type="text" bind:value={name} maxlength="40" disabled={app.vaultBusy} />
     </label>
-    <label>
+    <label data-hint={t('hint.form.vaults.path')}>
       <span>{t('vaults.path')} <small>({t('vaults.path_hint')})</small></span>
       <span class="path-row">
         <input type="text" bind:value={path} maxlength="1024" disabled={app.vaultBusy} />
@@ -139,12 +139,12 @@
         >
       </span>
     </label>
-    <label class="check">
+    <label class="check" data-hint={t('hint.form.vaults.create')}>
       <input type="checkbox" bind:checked={create} disabled={app.vaultBusy} />
       <span>{t('vaults.create')} <small>({t('vaults.create_hint')})</small></span>
     </label>
     {#if create}
-      <label>
+      <label data-hint={t('hint.form.vaults.area')}>
         <span>{t('vaults.area')} <small>({t('vaults.name_hint')})</small></span>
         <input type="text" bind:value={area} maxlength="128" disabled={app.vaultBusy} />
       </label>

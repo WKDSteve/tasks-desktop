@@ -479,6 +479,7 @@
         <input
           type="text"
           aria-label={t('lists.name')}
+          data-hint={t('hint.form.list.name')}
           placeholder={t('lists.name')}
           maxlength="40"
           bind:value={listName}
@@ -499,6 +500,7 @@
       {#each fieldChoices as f (f.key)}
         <MultiSelect
           label={fieldLabel(f.key)}
+          hint={hintOf(app.lang, 'hint.field', f.key) || t('hint.form.filter.field', { field: fieldLabel(f.key) })}
           options={f.options}
           selected={app.filter.fields[f.key] ?? []}
           onchange={(next) => (app.filter = { ...app.filter, fields: { ...app.filter.fields, [f.key]: next } })}
@@ -609,7 +611,7 @@
       {/if}
       {#each DATE_KEYS as key (key)}
         {#each ['from', 'to'] as const as end (end)}
-          <label class="pick">
+          <label class="pick" data-hint={t(`hint.form.filter.date.${end}` as Key, { field: t(`filter.date.${key}` as Key) })}>
             <span>{t(`filter.date.${end}` as Key, { field: t(`filter.date.${key}` as Key) })}</span>
             <input
               type="date"
@@ -655,28 +657,28 @@
   {#if app.marks.length > 0}
     <div class="bulk" role="group" aria-label={t('bulk.change')}>
       <strong aria-live="polite">{t('bulk.count', { n: app.marks.length })}</strong>
-      <label>
+      <label data-hint={hintOf(app.lang, 'hint.field', 'status')}>
         <span class="sr-only">{t('field.status')}</span>
         <select bind:value={draft.status} disabled={app.locked}>
           <option value="">{t('field.status')}: {t('bulk.keep')}</option>
           {#each statuses as s (s)}<option value={s}>{labelOf(app.lang, 'status', s)}</option>{/each}
         </select>
       </label>
-      <label>
+      <label data-hint={hintOf(app.lang, 'hint.field', 'prio')}>
         <span class="sr-only">{t('field.prio')}</span>
         <select bind:value={draft.prio} disabled={app.locked}>
           <option value="">{t('field.prio')}: {t('bulk.keep')}</option>
           {#each app.ranges.prios as p (p)}<option value={String(p)}>P{p}</option>{/each}
         </select>
       </label>
-      <label>
+      <label data-hint={hintOf(app.lang, 'hint.field', 'actor')}>
         <span class="sr-only">{t('field.actor')}</span>
         <select bind:value={draft.actor} disabled={app.locked}>
           <option value="">{t('field.actor')}: {t('bulk.keep')}</option>
           {#each app.ranges.actors as a (a)}<option value={a}>{labelOf(app.lang, 'actor', a)}</option>{/each}
         </select>
       </label>
-      <label>
+      <label data-hint={hintOf(app.lang, 'hint.field', 'effort')}>
         <span class="sr-only">{t('field.effort')}</span>
         <select bind:value={draft.effort} disabled={app.locked}>
           <option value="">{t('field.effort')}: {t('bulk.keep')}</option>
@@ -684,7 +686,7 @@
           {#each app.ranges.efforts as size (size)}<option value={size}>{size}</option>{/each}
         </select>
       </label>
-      <label>
+      <label data-hint={t('hint.form.remind')}>
         <span class="sr-only">{t('remind.field')}</span>
         <select bind:value={draft.remind} disabled={app.locked}>
           <option value="">{t('remind.field')}: {t('bulk.keep')}</option>
@@ -696,11 +698,11 @@
           {/each}
         </select>
       </label>
-      <label>
+      <label data-hint={t('hint.form.bulk.tags_add')}>
         <span class="sr-only">{t('bulk.tags_add')}</span>
         <input type="text" placeholder={t('bulk.tags_add')} bind:value={draft.addTags} disabled={app.locked} onkeydown={applyOnEnter} />
       </label>
-      <label>
+      <label data-hint={t('hint.form.bulk.tags_remove')}>
         <span class="sr-only">{t('bulk.tags_remove')}</span>
         <input type="text" placeholder={t('bulk.tags_remove')} bind:value={draft.removeTags} disabled={app.locked} onkeydown={applyOnEnter} />
       </label>
@@ -713,7 +715,7 @@
       <button type="button" onclick={() => app.clearMarks()}>{t('bulk.clear')}</button>
       {#if app.can('move_area')}
         <div class="bulk-move" role="group" aria-label={t('bulk.move_label')}>
-          <label>
+          <label data-hint={t('hint.form.move_area')}>
             <span class="sr-only">{t('bulk.move_label')}</span>
             <select bind:this={moveSelect} bind:value={moveTo} disabled={app.locked}>
               <option value="">{t('bulk.move_label')}: {t('bulk.keep')}</option>

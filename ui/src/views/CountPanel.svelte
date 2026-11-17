@@ -108,7 +108,7 @@
     <h2 class="eyebrow">{label} · {tasks.length}</h2>
     <div class="views" role="radiogroup" aria-label={t('count.views')}>
       {#each viewsOf(key) as v (v)}
-        <label class:on={v === view}>
+        <label class:on={v === view} data-hint={t('hint.form.count.view')}>
           <input
             type="radio"
             name={`count-view-${key}`}
