@@ -227,6 +227,10 @@ export type Snapshot = Head & {
      */
     etag?: string;
     valid: boolean;
+    links?: PlanLinks;
+    folder?: PlanFolder;
+    assets?: PlanAssets;
+    assets_truncated?: PlanAssetsTruncated;
   }[];
   /**
    * The open project files (capability `projects`): a project groups plans and may hold tasks of its own.
@@ -244,6 +248,10 @@ export type Snapshot = Head & {
      */
     etag?: string;
     valid: boolean;
+    links?: PlanLinks;
+    folder?: PlanFolder;
+    assets?: PlanAssets;
+    assets_truncated?: PlanAssetsTruncated;
     /**
      * The ids of the open plans of the project, sorted.
      */
@@ -286,6 +294,22 @@ export type Date = string;
  * The version of a file: `sha256:` and 16 hex digits of the hash of its bytes.
  */
 export type Etag = string;
+/**
+ * The web addresses of a plan or project file (`links:`, http/https only; capability `plan_links`). Absent when it has none.
+ */
+export type PlanLinks = string[];
+/**
+ * The plan or project file is in its folder form (`<slug>/<slug>.md`, made by `attach` or `folderize`): the other files of that folder are its assets. Absent for a plain file.
+ */
+export type PlanFolder = true;
+/**
+ * The files in the folder of a plan or project (folder form only), relative to that folder (`assets/screenshots/shot.png`), sorted; at most 100.
+ */
+export type PlanAssets = string[];
+/**
+ * The folder holds more than the 100 `assets` listed.
+ */
+export type PlanAssetsTruncated = true;
 /**
  * The statuses of a task in `ROADMAP/tasks`. `done` is only seen on a task that was left there after it was finished (listed under `unlisted`).
  */
@@ -1494,13 +1518,30 @@ export interface Inverse {
   if_match?: Etag;
 }
 /**
- * Why an operation did not happen. `details` names ids, keys and values (`expected` and `actual` of a conflict, the `problems` of a refused relation), never a path.
+ * Why an operation did not happen. `details` names ids, keys and values (`expected` and `actual` of a conflict, the `problems` of a refused relation, `field`/`value`/`char`/`suggestion` of a word that is no kebab-case word), never a path.
  */
 export interface OperationError {
   code: ErrorCode;
   message: string;
   retryable: boolean;
-  details?: {};
+  details?: {
+    /**
+     * A word that must be kebab-case (a phase, an entry of the phases) was not: the field it was given for (`phase`).
+     */
+    field?: string;
+    /**
+     * The word as it was given.
+     */
+    value?: string;
+    /**
+     * The first character that is not allowed (`-` when the hyphens are wrong); absent for an empty word.
+     */
+    char?: string;
+    /**
+     * A word that would do: umlauts and ß written out (`ü` -> `ue`), lower case, other characters as single hyphens. Absent when nothing usable is left.
+     */
+    suggestion?: string;
+  };
 }
 /**
  * What moving a task to another area would do and break (stage 1 of `move_area`: a report, nothing is written).
