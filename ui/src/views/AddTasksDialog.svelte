@@ -3,8 +3,7 @@
   // narrowed to the areas of the target at first. A task that belongs to another plan or project is marked and is moved
   // only after a question. One write for all of them (`App.addTasksTo`); what the engine refuses is listed task by task
   // with its words, the rest stays added, and the toast offers the way back. "New task in this plan" opens the capture
-  // form filled with the plan, the phase and the area of the plan's file (a plan only: the engine's `new` has no
-  // project).
+  // form filled with the plan, the phase and the area of the plan's file ("New task in this project": the project).
   import { closeOnBackdrop } from 'appkit-ui/backdrop';
   import type { App } from '../lib/app.svelte';
   import { labelOf, translate, type Key } from '../lib/i18n';
@@ -112,9 +111,12 @@
   }
 
   function newTask(): void {
-    if (target?.kind !== 'plan') return;
-    // The area of the plan's file (its id names it); the capture form opens with the plan and the phase.
-    const fill = { plan: target.id, ...(target.phase !== undefined ? { phase: target.phase } : {}) };
+    if (!target) return;
+    // The area of the target's file (its id names it); the capture form opens with the plan and the phase, or the project.
+    const fill =
+      target.kind === 'plan'
+        ? { plan: target.id, ...(target.phase !== undefined ? { phase: target.phase } : {}) }
+        : { project: target.id };
     const area = areaOfId(target.id);
     onclose();
     app.openCapture('', area, fill);
@@ -183,10 +185,9 @@
         disabled={chosen.length === 0 || busy || app.saving}
         onclick={apply}>{t('add.apply')}</button
       >
-      {#if target?.kind === 'plan'}
-        <!-- Only for a plan: the engine's `new` has no field for the project. -->
-        <button type="button" data-hint={t('hint.ui.add.new_task')} onclick={newTask}>{t('add.new_task')}</button>
-      {/if}
+      <button type="button" data-hint={t('hint.ui.add.new_task')} onclick={newTask}
+        >{t(target?.kind === 'project' ? 'add.new_task_project' : 'add.new_task')}</button
+      >
       <button type="button" onclick={() => dialog?.close()}>{t('dialog.cancel')}</button>
     </div>
   {/if}

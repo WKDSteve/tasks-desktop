@@ -189,6 +189,9 @@ describe('the app with the choices', () => {
     expect(m.app.capturing).toBe(true);
     expect(m.app.captureFill).toEqual({ plan: 'pub/p', phase: 'one' });
     m.app.closeCapture();
+    m.app.openCapture('', 'pub', { project: 'pub/proj' });
+    expect(m.app.captureFill).toEqual({ project: 'pub/proj' });
+    m.app.closeCapture();
     m.app.openCapture();
     expect(m.app.captureFill).toEqual({});
     m.app.stop();

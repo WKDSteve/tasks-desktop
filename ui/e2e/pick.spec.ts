@@ -186,3 +186,57 @@ test('tasks are put into a phase of a plan from the plan view, and a new task is
     rmSync(planFile(plan), { force: true });
   }
 });
+
+test.describe('on a touchscreen', () => {
+  test.use({ hasTouch: true });
+
+  test('tasks are added to a project with taps, and a new task is made in the project', async ({ page }) => {
+    test.slow();
+    const problems = await pair(page);
+    await chooseView(page, 'View', 'List');
+    const project = 'pick-e2e-touch-project';
+    const projectFile = join(state().vault, 'lib.nvim', 'ROADMAP', 'projects', `${project}.md`);
+    try {
+      await capture(page, 'Pick e2e touch r000');
+
+      // A project, made in the wizard: the plan view shows its page.
+      await chooseView(page, 'View', 'Plan');
+      await page.getByRole('button', { name: 'Create a project', exact: true }).tap();
+      const wizard = page.getByRole('dialog', { name: 'Create a project' });
+      await wizard.getByLabel('Title', { exact: true }).fill('Pick e2e touch project');
+      await wizard.locator('select').first().selectOption('lib.nvim');
+      await expect(wizard.getByRole('status')).toContainText(`lib.nvim/${project}`);
+      await wizard.getByRole('button', { name: 'Create', exact: true }).tap();
+      await expect(wizard).toHaveCount(0, { timeout: WRITE_BUDGET });
+      const head = page.locator(`section[data-project="lib.nvim/${project}"]`);
+      await expect(head).toBeVisible();
+
+      // Tapped, not clicked: the entry is chosen, and Add puts it into the project.
+      await head.locator('button[data-add="project"]').tap();
+      const dialog = page.getByRole('dialog', { name: 'Add tasks to Pick e2e touch project' });
+      await expect(dialog).toBeVisible();
+      await dialog.getByRole('combobox', { name: 'Search open tasks' }).fill('Pick e2e touch r000');
+      await dialog.getByRole('option').first().tap();
+      await expect(dialog.getByRole('status')).toHaveText('1 chosen');
+      await dialog.getByRole('button', { name: 'Add', exact: true }).tap();
+      await expect(dialog).toHaveCount(0, { timeout: WRITE_BUDGET });
+      await expect.poll(() => front('pick-e2e-touch-r000'), { timeout: WRITE_BUDGET }).toContain(`project: lib.nvim/${project}`);
+
+      // "New task in this project": the capture form opens with the project.
+      await head.locator('button[data-add="project"]').tap();
+      await page.getByRole('dialog', { name: 'Add tasks to Pick e2e touch project' }).getByRole('button', { name: 'New task in this project' }).tap();
+      const form = page.getByRole('dialog', { name: 'New task' });
+      await expect(form).toBeVisible();
+      await expect(form.locator('button[data-field="project"]')).toHaveText(/Pick e2e touch project/);
+      await form.getByLabel('Title').fill('Pick e2e touch new');
+      await form.getByRole('button', { name: 'Create', exact: true }).tap();
+      await expect(form).toHaveCount(0, { timeout: WRITE_BUDGET });
+      await expect.poll(() => front('pick-e2e-touch-new'), { timeout: WRITE_BUDGET }).toContain(`project: lib.nvim/${project}`);
+
+      expect(await violations(page)).toEqual([]);
+      expect(problems).toEqual([]);
+    } finally {
+      rmSync(projectFile, { force: true });
+    }
+  });
+});

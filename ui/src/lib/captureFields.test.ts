@@ -15,6 +15,7 @@ const FORM_FIELDS = [
   'phase',
   'plan',
   'prio',
+  'project',
   'refs',
   'scope',
   'severity',

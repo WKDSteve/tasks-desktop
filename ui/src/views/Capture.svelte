@@ -8,7 +8,7 @@
   import { badLink, badTag, bodyFromSections, parseList, parseTags, scaffoldRows, severityApplies, splitOther } from '../lib/fields';
   import { hintOf, labelOf, translate, type Key } from '../lib/i18n';
   import PickField from './PickField.svelte';
-  import { phaseOptions, planOptions } from '../lib/picker';
+  import { phaseOptions, planOptions, projectOptions } from '../lib/picker';
 
   let { app }: { app: App } = $props();
   const t = (key: Key, params: Record<string, string | number> = {}) =>
@@ -34,6 +34,7 @@
   let after = $state('');
   let plan = $state('');
   let phase = $state('');
+  let project = $state('');
   let due = $state('');
   let start = $state('');
   let extraAreas = $state<string[]>([]);
@@ -100,8 +101,9 @@
       after = '';
       plan = app.captureFill.plan ?? '';
       phase = app.captureFill.phase ?? '';
-      // A plan given from outside is shown, with the other fields it stands among.
-      more = plan !== '';
+      project = app.captureFill.project ?? '';
+      // A plan or project given from outside is shown, with the other fields it stands among.
+      more = plan !== '' || project !== '';
       due = '';
       start = '';
       extraAreas = [];
@@ -157,6 +159,7 @@
       if (afterList.length > 0) fields['after'] = afterList;
       if (plan.trim() !== '') fields['plan'] = plan.trim();
       if (phase.trim() !== '') fields['phase'] = phase.trim();
+      if (project !== '') fields['project'] = project;
       if (due !== '') fields['due'] = due;
       if (start !== '') fields['start'] = start;
       if (due !== '' && start !== '' && start > due) {
@@ -354,6 +357,21 @@
         onpick={(v) => (phase = v)}
         onaction={() => (phase = '')}
       />
+      {#if app.can('projects') || project !== ''}
+        <PickField
+          label={t('field.project')}
+          hint={hintOf(app.lang, 'hint.field', 'project')}
+          name="project"
+          value={project}
+          options={projectOptions(app.projects, area)}
+          actions={[{ id: 'none', label: t('pick.project.none') }]}
+          placeholder={t('pick.project.none')}
+          searchLabel={t('pick.project.search')}
+          emptyLabel={t('pick.empty')}
+          onpick={(v) => (project = v)}
+          onaction={() => (project = '')}
+        />
+      {/if}
     </details>
     <label>
       <span>{t('capture.context')} <small>({t('capture.sections_hint')})</small></span>

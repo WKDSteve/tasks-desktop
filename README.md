@@ -624,7 +624,7 @@ project is marked and moved only after a question). One write sets `plan` (and `
 version that was shown; what the engine refuses is listed task by task with its words, the rest stays, and the toast
 can take it back. *New task in this plan* opens the capture form with the plan, the phase and the area filled in. The
 page of a project offers the same for its own tasks and for each of its plans. In the detail and the capture form the
-fields *Plan* and *Phase* (in the detail also *Project*) are chosen the same way, from the engine's lists, with *No
+fields *Plan*, *Phase* and *Project* are chosen the same way, from the engine's lists, with *No
 plan* and *Create a plan ...* (the new plan is made in the task's area and given to the task).
 
 The choice *Compare* of the Plan view (kept over a reload) lays the open plans side by side in a table: tasks open

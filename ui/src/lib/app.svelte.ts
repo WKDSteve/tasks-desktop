@@ -132,11 +132,8 @@ import { TILES as TODAY_TILES, type OrderedTile, type Tile } from './tiles-list'
 export const LAYOUT_VIEWS = ['list', 'plan', 'stats', 'today'] as const;
 export type LayoutView = (typeof LAYOUT_VIEWS)[number];
 
-/**
- * What a new task is filled with when the capture form opens from a plan. No project: the engine's `new` (and so
- * `:Tasks new`) has no such field.
- */
-export type CaptureFill = { plan?: string; phase?: string };
+/** What a new task is filled with when the capture form opens from a plan or a project (fields of the engine's `new`). */
+export type CaptureFill = { plan?: string; phase?: string; project?: string };
 
 /** What the last write did, in one line; `undo` is the way back, when there is one. */
 export interface Toast {
@@ -452,7 +449,7 @@ export class App {
   captureTitle = $state('');
   /** The area the capture dialog opens with, for such a line: that of its task. */
   captureArea = $state<string | undefined>(undefined);
-  /** The plan and phase the capture dialog opens with (a new task made from a plan's page). */
+  /** The plan, phase or project the capture dialog opens with (a new task made from a plan's or a project's page). */
   captureFill = $state.raw<CaptureFill>({});
   /** A card dropped among cards of another priority, waiting for the person's answer. */
   repriority = $state.raw<{ id: string; from: string; prio: number; ops: Op[] } | null>(null);
