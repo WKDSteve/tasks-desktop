@@ -1508,10 +1508,7 @@ export class App {
     const first = result?.results[0];
     const id = first?.ok && first.outcome === 'created' ? first.id : undefined;
     if (!id) return undefined;
-    const made = making ? result?.results[1] : undefined;
-    if (made?.ok && typeof made.id === 'string' && made.id !== planned?.target) {
-      await this.setPlanFile(form.kind, id, { target: made.id });
-    }
+    if (making && planned) await this.settleTarget(form.kind, id, planned, result?.results[1]);
     const then = this.planningThen;
     this.planningThen = null;
     this.planning = false;
@@ -1519,6 +1516,32 @@ export class App {
     else if (form.kind === 'project') this.openProject(id);
     else this.openPlan(id);
     return id;
+  }
+
+  /**
+   * After a plan and its target task were made in one request, put right what moved between the dry run and the write
+   * (another session made a file meanwhile): the engine renames a plan whose name is taken, so the task, made for the
+   * id the dry run named, is moved to the plan that was made; a task the engine gave another id is named as the target;
+   * a task the engine refused leaves the plan without a target instead of one that names no task.
+   */
+  private async settleTarget(
+    kind: PlanKind,
+    id: string,
+    planned: { id: string; target?: string },
+    made: Result['results'][number] | undefined,
+  ): Promise<void> {
+    if (!made?.ok || typeof made.id !== 'string') {
+      await this.setPlanFile(kind, id, { target: null });
+      return;
+    }
+    if (id !== planned.id) {
+      const etag = typeof made.etag_after === 'string' ? made.etag_after : undefined;
+      await this.write(
+        [{ op: 'set', id: made.id, patch: kind === 'project' ? { project: id } : { plan: id }, ...(etag ? { if_match: etag } : {}) }],
+        { undoable: false },
+      );
+    }
+    if (made.id !== planned.target) await this.setPlanFile(kind, id, { target: made.id });
   }
 
   /**

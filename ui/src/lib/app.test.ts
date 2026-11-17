@@ -2745,6 +2745,39 @@ describe('writing', () => {
       });
     });
 
+    it('leaves the plan without a target when the engine refuses the target task in the write', async () => {
+      const { app, hub } = await ready([], { capabilities: ['plan_new', 'plan_set'] });
+      hub.next_ops = {
+        kind: 'tasks.result',
+        ok: false,
+        dry_run: false,
+        results: [
+          { n: 1, op: 'plan_new', id: 'pub/made-plan', ok: true, outcome: 'created', changed_ids: ['pub/made-plan'] },
+          { n: 2, op: 'new', ok: false, outcome: 'failed', changed_ids: [], error: { code: 'invalid_argument', message: 'x', retryable: false } },
+        ],
+      } as unknown as Result;
+      await app.createPlan({ ...form, targetNew: true }, { kind: 'ok', id: 'pub/made-plan', renamed: false, target: 'pub/t' });
+      expect(hub.sent[1]?.ops).toEqual([{ op: 'plan_set', id: 'pub/made-plan', patch: { target: null } }]);
+    });
+
+    it('moves the target task to the plan that was made when the engine renamed the plan meanwhile', async () => {
+      const { app, hub } = await ready([], { capabilities: ['plan_new', 'plan_set'] });
+      hub.next_ops = {
+        kind: 'tasks.result',
+        ok: true,
+        dry_run: false,
+        results: [
+          { n: 1, op: 'plan_new', id: 'pub/a-plan-2', ok: true, outcome: 'created', renamed: true, changed_ids: ['pub/a-plan-2'] },
+          { n: 2, op: 'new', id: 'pub/t', ok: true, outcome: 'created', changed_ids: ['pub/t'], etag_after: 'sha256:t' },
+        ],
+      } as unknown as Result;
+      await app.createPlan({ ...form, targetNew: true }, { kind: 'ok', id: 'pub/a-plan', renamed: false, target: 'pub/t' });
+      expect(hub.sent[1]?.ops).toEqual([{ op: 'set', id: 'pub/t', patch: { plan: 'pub/a-plan-2' }, if_match: 'sha256:t' }]);
+      // the task kept the id the plan names: nothing more to do
+      expect(hub.sent).toHaveLength(2);
+      expect(app.planChoice).toBe('pub/a-plan-2');
+    });
+
     it('a refused target task refuses the form with its reason', async () => {
       const { app, hub } = await ready();
       hub.next_ops = {
