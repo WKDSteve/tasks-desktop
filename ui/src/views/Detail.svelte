@@ -391,7 +391,7 @@
     <!-- The fields with a text of their own each take a whole line (a title, a summary is seldom short); the choices
          from a few values share the lines between them, each at a width its values fit in. -->
     <div class="edit" role="group" aria-label={t('detail.edit')}>
-      <label class="line">
+      <label class="line" data-hint={t('hint.form.task.title_edit')}>
         <span>{t('field.title')}</span>
         <input
           type="text"
@@ -411,7 +411,7 @@
           }}
         />
       </label>
-      <label class="line">
+      <label class="line" data-hint={hintOf(app.lang, 'hint.field', 'summary')}>
         <span>{t('field.summary')}</span>
         <!-- Several lines to read and write in; the engine keeps the summary as one line, so Enter writes it (as in a
              field of one line, the focus stays in it) and a line break that was pasted becomes a space. -->
@@ -432,8 +432,8 @@
         ></textarea>
       </label>
       <div class="picks">
-        <label>
-          <span data-hint={hintOf(app.lang, 'hint.field', 'status')}>{t('field.status')}</span>
+        <label data-hint={hintOf(app.lang, 'hint.field', 'status')}>
+          <span>{t('field.status')}</span>
           <select
             value={shown.status ?? ''}
             data-field="status"
@@ -449,8 +449,8 @@
             {/each}
           </select>
         </label>
-        <label>
-          <span data-hint={hintOf(app.lang, 'hint.field', 'prio')}>{t('field.prio')}</span>
+        <label data-hint={hintOf(app.lang, 'hint.field', 'prio')}>
+          <span>{t('field.prio')}</span>
           <select
             value={shown.prio === undefined ? '' : String(shown.prio)}
             data-field="prio"
@@ -471,8 +471,8 @@
             {/each}
           </select>
         </label>
-        <label>
-          <span data-hint={hintOf(app.lang, 'hint.field', 'actor')}>{t('field.actor')}</span>
+        <label data-hint={hintOf(app.lang, 'hint.field', 'actor')}>
+          <span>{t('field.actor')}</span>
           <select
             value={shown.actor ?? ''}
             data-field="actor"
@@ -489,8 +489,8 @@
             {/each}
           </select>
         </label>
-        <label>
-          <span data-hint={hintOf(app.lang, 'hint.field', 'kind')}>{t('field.kind')}</span>
+        <label data-hint={hintOf(app.lang, 'hint.field', 'kind')}>
+          <span>{t('field.kind')}</span>
           <select
             value={shown.kind ?? ''}
             data-field="kind"
@@ -504,8 +504,8 @@
             {/each}
           </select>
         </label>
-        <label>
-          <span data-hint={hintOf(app.lang, 'hint.field', 'effort')}>{t('field.effort')}</span>
+        <label data-hint={hintOf(app.lang, 'hint.field', 'effort')}>
+          <span>{t('field.effort')}</span>
           <select
             value={shown.effort ?? ''}
             data-field="effort"
@@ -522,8 +522,8 @@
             {/each}
           </select>
         </label>
-        <label>
-          <span data-hint={hintOf(app.lang, 'hint.field', 'value')}>{t('field.value')}</span>
+        <label data-hint={hintOf(app.lang, 'hint.field', 'value')}>
+          <span>{t('field.value')}</span>
           <select
             value={shown.value === undefined ? '' : String(shown.value)}
             data-field="value"
@@ -541,7 +541,7 @@
             {/each}
           </select>
         </label>
-        <label>
+        <label data-hint={t('hint.form.remind')}>
           <span>{t('remind.field')}</span>
           <select
             value={shown.remind ?? ''}
@@ -564,8 +564,8 @@
           </select>
         </label>
         {#if app.can('waits_for')}
-          <label>
-            <span data-hint={t('hint.field.waits_for')}>{t('field.waits_for')}</span>
+          <label data-hint={t('hint.field.waits_for')}>
+            <span>{t('field.waits_for')}</span>
             <!-- A reason parks the task, an empty field takes the reason away; the engine judges the word. -->
             <input
               type="text"
@@ -588,7 +588,7 @@
           </label>
         {/if}
         {#each ['due', 'start'] as const as key (key)}
-          <label>
+          <label data-hint={hintOf(app.lang, 'hint.field', key)}>
             <span>{t(`field.${key}`)}</span>
             <input
               type="date"
@@ -606,8 +606,8 @@
           <!-- A routine: the engine judges the interval (`8w`) and refuses anything else with a reason; an empty field
                ends the routine. Where the next round counts from is only asked of a routine (or shown to be taken
                away where a file carries it without one). -->
-          <label>
-            <span data-hint={t('hint.field.repeat')}>{t('field.repeat')}</span>
+          <label data-hint={t('hint.field.repeat')}>
+            <span>{t('field.repeat')}</span>
             <input
               type="text"
               value={shown.repeat ?? ''}
@@ -623,8 +623,8 @@
             />
           </label>
           {#if shown.repeat || shown.repeat_from}
-            <label>
-              <span data-hint={t('hint.field.repeat_from')}>{t('field.repeat_from')}</span>
+            <label data-hint={t('hint.field.repeat_from')}>
+              <span>{t('field.repeat_from')}</span>
               <select
                 value={shown.repeat_from ?? ''}
                 data-field="repeat_from"
@@ -643,8 +643,8 @@
             </label>
           {/if}
         {/if}
-        <label>
-          <span data-hint={hintOf(app.lang, 'hint.field', 'severity')}>
+        <label data-hint={hintOf(app.lang, 'hint.field', 'severity')}>
+          <span>
             {t('field.severity')}{#if !severityApplies(shown.kind ?? '', cats) && !shown.severity} <small>({t('field.severity_only')})</small>{/if}
           </span>
           <select
@@ -663,7 +663,7 @@
       <!-- The categories and the scopes: several each. The categories of the entry are the effective ones (a bug is
            always in `bug`, a tag spelled like a category counts for it), so those cannot be taken away here; the
            engine's answer is what the boxes show next. -->
-      <fieldset class="cats" data-field="category">
+      <fieldset class="cats" data-field="category" data-hint={hintOf(app.lang, 'hint.field', 'category')}>
         <legend>{t('field.category')}</legend>
         <div class="checks">
           {#each app.ranges.categories as c (c)}
@@ -685,7 +685,7 @@
         </div>
       </fieldset>
       {#if app.ranges.scopes.length > 0}
-        <fieldset class="cats" data-field="scope">
+        <fieldset class="cats" data-field="scope" data-hint={hintOf(app.lang, 'hint.field', 'scope')}>
           <legend>{t('field.scope')}</legend>
           <div class="checks">
             {#each app.ranges.scopes as c (c)}
@@ -751,8 +751,8 @@
           onaction={() => changeText('project', shown.project, '')}
         />
       {/if}
-      <label class="line">
-        <span data-hint={hintOf(app.lang, 'hint.field', 'tags')}>{t('field.tags')} <small>({t('field.tags_hint')})</small></span>
+      <label class="line" data-hint={hintOf(app.lang, 'hint.field', 'tags')}>
+        <span>{t('field.tags')} <small>({t('field.tags_hint')})</small></span>
         <input
           type="text"
           value={tagsText(shown.tags)}
@@ -775,8 +775,8 @@
           }}
         />
       </label>
-      <label class="line">
-        <span data-hint={hintOf(app.lang, 'hint.field', 'after')}>{t('field.after')} <small>({t('field.tags_hint')})</small></span>
+      <label class="line" data-hint={hintOf(app.lang, 'hint.field', 'after')}>
+        <span>{t('field.after')} <small>({t('field.tags_hint')})</small></span>
         <input
           type="text"
           value={tagsText(shown.after)}
@@ -787,8 +787,8 @@
           onchange={(e) => changeList('after', shown.after, e.currentTarget.value)}
         />
       </label>
-      <label class="line">
-        <span data-hint={hintOf(app.lang, 'hint.field', 'refs')}>{t('field.refs')} <small>({t('field.tags_hint')})</small></span>
+      <label class="line" data-hint={hintOf(app.lang, 'hint.field', 'refs')}>
+        <span>{t('field.refs')} <small>({t('field.tags_hint')})</small></span>
         <input
           type="text"
           value={tagsText(shown.refs)}
@@ -799,8 +799,8 @@
           onchange={(e) => changeList('refs', shown.refs, e.currentTarget.value)}
         />
       </label>
-      <label class="line">
-        <span data-hint={hintOf(app.lang, 'hint.field', 'links')}>{t('field.links')} <small>({t('field.tags_hint')})</small></span>
+      <label class="line" data-hint={hintOf(app.lang, 'hint.field', 'links')}>
+        <span>{t('field.links')} <small>({t('field.tags_hint')})</small></span>
         <input
           type="text"
           value={tagsText(shown.links)}
@@ -901,7 +901,7 @@
               {:else}
                 <!-- The box shows what the file says: a click asks the engine and the list is read again
                      (no optimistic display), so the click itself changes nothing on the page. -->
-                <label class="step">
+                <label class="step" data-hint={t('hint.form.detail.step_tick')}>
                   <input
                     type="checkbox"
                     checked={step.ticked}
@@ -928,7 +928,7 @@
       {/if}
       {#if app.can('add_steps')}
         <div class="note" role="group" aria-label={t('detail.step_label')}>
-          <label>
+          <label data-hint={t('hint.form.detail.step')}>
             <span>{t('detail.step_label')} <small>({t('detail.step_hint')})</small></span>
             <input
               type="text"
@@ -1035,7 +1035,7 @@
       <!-- The body is untrusted: it is read into a tree and drawn as
            elements; it never becomes an HTML string. -->
       {#if editing}
-        <label class="body-edit">
+        <label class="body-edit" data-hint={t('hint.form.detail.body')}>
           <span class="muted">{t('detail.body_label')} <small>({t('detail.body_hint')})</small></span>
           <textarea
             bind:value={draft}
@@ -1068,7 +1068,7 @@
       {#if app.can('append_note')}
         <!-- No <form> element: the page's own tests take a form in the text of a task for injected markup. -->
         <div class="note" role="group" aria-label={t('detail.note_label')}>
-          <label>
+          <label data-hint={t('hint.form.detail.note')}>
             <span>{t('detail.note_label')} <small>({t('detail.note_hint')})</small></span>
             <input
               type="text"
@@ -1098,7 +1098,7 @@
       {/if}
       {#if app.can('move_area') && task.status !== 'done'}
         <div class="note" role="group" aria-label={t('move.label')}>
-          <label>
+          <label data-hint={t('hint.form.move_area')}>
             <span>{t('move.label')}</span>
             <select
               bind:value={moveTo}
@@ -1143,7 +1143,7 @@
       {/if}
       {#if app.can('append_note') && app.can('ops') && task.status !== 'done' && task.status !== 'parked'}
         <div class="note" role="group" aria-label={t('discard.label')}>
-          <label>
+          <label data-hint={t('hint.form.detail.discard')}>
             <span
               >{t('discard.label')} <small>({t('discard.hint')}{#if task.repeat}; {t('discard.routine')}{/if})</small></span
             >

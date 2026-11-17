@@ -1889,6 +1889,12 @@ const en = {
   'hint.form.task.acceptance': 'When the task is done, one point per line, say Login works on Android. Each line becomes a checkbox.',
   'hint.form.task.notes': 'Anything else worth keeping: the section Notes of the file. Optional.',
   'hint.form.task.attach': 'Attaches a screenshot to the new task: the picture on the clipboard, else the newest screenshot of this computer.',
+  'hint.form.task.title_edit': 'The title of the task as it stands in every list. Changing it keeps the ID and the file name.',
+  'hint.form.detail.step_tick': 'Ticks this step in the task file (- [x]), or takes the tick away. The steps show how far the task is.',
+  'hint.form.detail.step': 'A new step at the end of the plan of the task, one line, say Write the test. Enter adds it as an open checkbox.',
+  'hint.form.detail.body': 'The whole text below the properties (Markdown): context, acceptance, plan, notes. Saving replaces all of it.',
+  'hint.form.detail.note': 'A line for the notes of the task, dated today, say Asked the reviewer. Enter adds it; nothing else changes.',
+  'hint.form.detail.discard': 'Why the task is dropped, say No longer needed. The reason goes into the notes and the task is parked; it does not count as done.',
 } as const;
 
 export type Key = keyof typeof en;
@@ -3778,6 +3784,12 @@ const de: Record<Key, string> = {
   'hint.form.task.acceptance': 'Wann die Task fertig ist, ein Punkt je Zeile, etwa Login klappt auf Android. Jede Zeile wird eine Checkbox.',
   'hint.form.task.notes': 'Alles Weitere, das man behalten will: der Abschnitt Notizen der Datei. Optional.',
   'hint.form.task.attach': 'Hängt einen Screenshot an die neue Task: das Bild in der Zwischenablage, sonst den neuesten Screenshot dieses Rechners.',
+  'hint.form.task.title_edit': 'Der Titel der Task, wie er in jeder Liste steht. Ihn zu ändern lässt die ID und den Dateinamen, wie sie sind.',
+  'hint.form.detail.step_tick': 'Hakt diesen Schritt in der Task-Datei ab (- [x]) oder nimmt den Haken weg. Die Schritte zeigen, wie weit die Task ist.',
+  'hint.form.detail.step': 'Ein neuer Schritt am Ende des Plans der Task, eine Zeile, etwa Test schreiben. Enter fügt ihn als offene Checkbox an.',
+  'hint.form.detail.body': 'Der ganze Text unter den Eigenschaften (Markdown): Kontext, Akzeptanz, Plan, Notizen. Speichern ersetzt ihn ganz.',
+  'hint.form.detail.note': 'Eine Zeile für die Notizen der Task, mit dem heutigen Datum, etwa Reviewer gefragt. Enter fügt sie an; sonst ändert sich nichts.',
+  'hint.form.detail.discard': 'Warum die Task fallen gelassen wird, etwa Nicht mehr nötig. Der Grund kommt in die Notizen und die Task wird geparkt; sie zählt nicht als erledigt.',
 };
 
 export const dictionaries: Record<Lang, Record<Key, string>> = { en, de };
