@@ -128,7 +128,7 @@
         onpointerdown={() => (inPick = true)}
         onfocusout={(e) => leftPick(e.relatedTarget)}
       >
-        <span class="muted" data-testid="tiles-hidden">{t('stats.tiles.hidden', { n: hidden })}</span>
+        <span class="hidden-n" data-testid="tiles-hidden">{t('stats.tiles.hidden', { n: hidden })}</span>
         <MultiSelect
           label={t('stats.tiles')}
           hint={t('hint.stats.tiles')}
@@ -270,6 +270,9 @@
     align-items: center;
     gap: 0.5rem;
     font-size: 0.85rem;
+  }
+  .hidden-n {
+    color: var(--muted);
   }
   .figures,
   .spreads {

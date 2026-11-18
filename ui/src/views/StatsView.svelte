@@ -55,19 +55,34 @@
   const source = $derived(app.can('estimate') ? effortSource(tasks, app.tasks) : null);
   const askKey = $derived(source?.from === 'engine' ? `${app.snapshot?.rev ?? ''}|${source.ids.join(',')}` : '');
   let asked = $state.raw<{ key: string; figure: Estimate } | null>(null);
+  // The first figure is asked at once. A change of the tasks waits a moment before it asks: the search of the filter
+  // bar changes them with every letter, and every question is one to the engine (stopping the request does not stop
+  // the engine).
+  const ASK_AFTER_MS = 300;
+  let askedOnce = false;
   $effect(() => {
     const key = askKey;
     if (key === '' || source?.from !== 'engine') return;
+    const ids = source.ids;
     const abort = new AbortController();
-    app.estimateOf(source.ids, abort.signal).then(
-      (figure) => {
-        if (!abort.signal.aborted) asked = { key, figure };
-      },
-      () => {
-        // No figure: the number is left out, the rest of the view stands.
-      },
-    );
-    return () => abort.abort();
+    const ask = (): void => {
+      askedOnce = true;
+      app.estimateOf(ids, abort.signal).then(
+        (figure) => {
+          if (!abort.signal.aborted) asked = { key, figure };
+        },
+        () => {
+          // No figure: the number is left out, the rest of the view stands.
+        },
+      );
+    };
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    if (askedOnce) timer = setTimeout(ask, ASK_AFTER_MS);
+    else ask();
+    return () => {
+      if (timer !== undefined) clearTimeout(timer);
+      abort.abort();
+    };
   });
   const effort = $derived.by((): { days: number; low?: number; high?: number; without: number } | null => {
     if (source?.from === 'snapshot') {

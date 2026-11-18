@@ -25,7 +25,8 @@
       onclick={() => app.setStatsFilterOpen(!open)}
       ><span class="chevron" aria-hidden="true">{open ? '▾' : '▸'}</span>{t('stats.filter')}</button
     >
-    <span class="muted" role="status" data-testid="stats-filter-count"
+    <!-- A live region only while the bar is unfolded: folded, the strip below says the same numbers and is one. -->
+    <span class="count" role={open ? 'status' : undefined} data-testid="stats-filter-count"
       >{t('stats.filter.count', { shown: app.shown.length, total: app.tasks.length })}</span
     >
   </div>
@@ -67,6 +68,9 @@
     cursor: pointer;
   }
   .chevron {
+    color: var(--muted);
+  }
+  .count {
     color: var(--muted);
   }
   .body {
