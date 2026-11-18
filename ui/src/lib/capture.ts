@@ -186,3 +186,13 @@ export async function handOver(host: CaptureHost, taken: Taken): Promise<Taken |
   if (host.uploading !== null) return taken;
   return (await host.attachFile(taken.task, taken.file, kindOf(taken.kind))) ? null : taken;
 }
+
+/**
+ * What is kept after `sent` went to the upload and `back` came back of it: `sent` leaves the list (attached, or kept
+ * anew as `back`), every other recording that was kept stays. A capture that attaches does not take an earlier one
+ * that is still waiting with it.
+ */
+export function keepAfter(kept: readonly Taken[], sent: Taken, back: Taken | null): Taken[] {
+  const rest = kept.filter((k) => k.file !== sent.file);
+  return back === null ? rest : [...rest, back];
+}

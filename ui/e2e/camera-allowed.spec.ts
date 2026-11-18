@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { openTask, WRITE_BUDGET } from './camera';
 import { expect, test } from './fixtures';
@@ -43,9 +43,12 @@ test('a video is recorded with the camera of the browser and attached, and a pho
   expect(problems).toEqual([]);
 });
 
+/** How many pictures the task folder holds (none while it has no folder of pictures yet). */
+const images = (dir: string): number => (existsSync(join(dir, 'assets', 'images')) ? readdirSync(join(dir, 'assets', 'images')).length : 0);
+
 test('a recording whose upload fails is kept, and is attached when it is sent again', async ({ page }) => {
   test.slow();
-  const { float, dir, attached } = await openTask(page, 'Attach browser kept');
+  const { float, dir } = await openTask(page, 'Attach browser kept');
   // The first upload is refused as with a full disk; the next ones go through.
   let refused = 0;
   await page.route('**/api/tasks/upload**', async (route) => {
@@ -62,8 +65,14 @@ test('a recording whose upload fails is kept, and is attached when it is sent ag
   const kept = float.locator('[data-kept="photo"]');
   await expect(kept).toContainText(/photo-\d{8}-\d{6}\.png/, { timeout: WRITE_BUDGET });
   expect(refused).toBe(1);
+  // A second photo that is attached leaves the kept one where it is.
+  await bar.locator('details[data-choice="image"] summary').click();
+  await page.getByRole('group', { name: 'Image' }).getByRole('button', { name: 'Take a photo' }).click();
+  await expect(photo.getByRole('status')).toContainText('The camera is on', { timeout: 15_000 });
+  await photo.getByRole('button', { name: 'Take the photo' }).click();
+  await expect.poll(() => images(dir), { timeout: WRITE_BUDGET }).toBe(1);
+  await expect(kept).toHaveCount(1);
   await kept.getByRole('button', { name: 'Send again' }).click();
-  await expect(attached).toHaveValue(/^!\[photo-\d{8}-\d{6}\.png\]\(assets\/images\/photo-\d{8}-\d{6}\.png\)$/, { timeout: WRITE_BUDGET });
+  await expect.poll(() => images(dir), { timeout: WRITE_BUDGET }).toBe(2);
   await expect(kept).toHaveCount(0);
-  expect(readdirSync(join(dir, 'assets', 'images'))).toHaveLength(1);
 });

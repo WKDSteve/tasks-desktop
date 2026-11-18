@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { captureBlocked, captureFailure, captureName, handOver, kindOf, kindOfFile, openCamera, stopStream, videoFormat, type MediaEnv } from './capture';
+import { captureBlocked, captureFailure, captureName, handOver, keepAfter, kindOf, kindOfFile, openCamera, stopStream, videoFormat, type MediaEnv } from './capture';
 
 const env = (over: Partial<MediaEnv> = {}): MediaEnv => ({
   devices: { getUserMedia: async () => ({}) as MediaStream, getDisplayMedia: async () => ({}) as MediaStream },
@@ -153,5 +153,23 @@ describe('handOver', () => {
     expect(await handOver(failing, taken)).toBe(taken);
     const busy = { uploading: 'a/other', attachFile: async () => true };
     expect(await handOver(busy, taken)).toBe(taken);
+  });
+});
+
+describe('keepAfter', () => {
+  const video = { task: 'a/t', file: new File(['v'], 'video.webm'), kind: 'video' as const };
+  const photo = { task: 'a/t', file: new File(['p'], 'photo.png'), kind: 'photo' as const };
+
+  it('keeps an earlier recording when a later capture attaches or fails', () => {
+    // The video failed and is kept; a photo that attaches leaves it there.
+    expect(keepAfter([video], photo, null)).toEqual([video]);
+    // A photo that fails as well is kept beside it, not in its place.
+    expect(keepAfter([video], photo, photo)).toEqual([video, photo]);
+  });
+
+  it('takes a recording off the list once it is attached, and keeps it once when it fails again', () => {
+    expect(keepAfter([video, photo], video, null)).toEqual([photo]);
+    expect(keepAfter([video, photo], video, video)).toEqual([photo, video]);
+    expect(keepAfter([], video, video)).toEqual([video]);
   });
 });

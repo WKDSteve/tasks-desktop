@@ -12,6 +12,7 @@
     captureName,
     frameOf,
     handOver,
+    keepAfter,
     kindOfFile,
     mediaEnv,
     openCamera,
@@ -94,19 +95,23 @@
     if (why !== 'cancelled') app.tell('error', `attach.capture.${why}` as Key);
   }
 
-  // What was taken and is not attached (another upload ran, the upload failed): kept here to be sent again or saved.
-  let kept = $state<Taken | null>(null);
+  // What was taken and is not attached (another upload ran, the upload failed): kept here to be sent again or saved,
+  // each until it is attached or discarded.
+  let kept = $state<Taken[]>([]);
 
   /** What was taken becomes a file of the task it was taken for; one file at a time. What is not attached is kept. */
   async function attach(task: string, file: File, kind: Capture): Promise<void> {
     const busyNow = app.uploading !== null;
-    kept = await handOver(app, { task, file, kind });
+    const taken: Taken = { task, file, kind };
+    const back = await handOver(app, taken);
+    // Read after the upload: another capture may have been kept meanwhile.
+    kept = keepAfter(kept, taken, back);
     // A failed upload said why already; a second one beside a running upload is not sent at all.
-    if (kept !== null && busyNow) app.tell('error', 'attach.capture.busy');
+    if (back !== null && busyNow) app.tell('error', 'attach.capture.busy');
   }
 
-  function saveKept(): void {
-    if (kept !== null && !saveBlob(document, kept.file.name, kept.file)) app.tell('error', 'attach.capture.failed');
+  function saveKept(one: Taken): void {
+    if (!saveBlob(document, one.file.name, one.file)) app.tell('error', 'attach.capture.failed');
   }
 
   /** The camera, shown in the panel: for a photo, or with a recorder that runs from now on for a video. */
@@ -289,17 +294,21 @@
     onchange={(e) => picked(e.currentTarget, 'image')}
   />
 </span>
-{#if kept !== null && taking === null}
-  <div class="taking" role="group" aria-label={t('attach.capture.kept')} data-kept={kept.kind}>
-    <p class="state">{t('attach.capture.kept')} <code>{kept.file.name}</code></p>
-    <p class="actions">
-      <button type="button" class="attach go" disabled={busy} onclick={() => kept && void attach(kept.task, kept.file, kept.kind)}
-        >{t('attach.capture.retry')}</button
-      >
-      <button type="button" class="attach" onclick={saveKept}>{t('attach.capture.save')}</button>
-      <button type="button" class="attach" onclick={() => (kept = null)}>{t('attach.capture.discard')}</button>
-    </p>
-  </div>
+{#if taking === null}
+  {#each kept as one (one.file)}
+    <div class="taking" role="group" aria-label={t('attach.capture.kept')} data-kept={one.kind}>
+      <p class="state">{t('attach.capture.kept')} <code>{one.file.name}</code></p>
+      <p class="actions">
+        <button type="button" class="attach go" disabled={busy} onclick={() => void attach(one.task, one.file, one.kind)}
+          >{t('attach.capture.retry')}</button
+        >
+        <button type="button" class="attach" onclick={() => saveKept(one)}>{t('attach.capture.save')}</button>
+        <button type="button" class="attach" onclick={() => (kept = kept.filter((k) => k !== one))}
+          >{t('attach.capture.discard')}</button
+        >
+      </p>
+    </div>
+  {/each}
 {/if}
 {#if taking}
   <div class="taking" role="group" aria-label={t(taking.kind === 'video' ? 'attach.video.record' : 'attach.image.photo')} data-taking={taking.kind}>
