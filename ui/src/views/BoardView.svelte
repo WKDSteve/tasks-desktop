@@ -8,6 +8,7 @@
   import type { App } from '../lib/app.svelte';
   import { COLUMNS, COLUMN_FIRST, groupLabel, placeOf, runKey, stageOf, type Column } from '../lib/board';
   import { boardTargetAt, createGrip, farEnough, type BoardTarget, type PointerDragEvent } from '../lib/pointerDrag';
+  import { isLearning } from '../lib/learning';
   import { hintOf, labelOf, translate, type Key } from '../lib/i18n';
   import Info from 'appkit-ui/Info.svelte';
   import { marksLegend } from '../lib/legend';
@@ -304,6 +305,7 @@
                   >
                   <span class="id">{card.id}</span>
                   <ClaimTag task={card} lang={app.lang} me={app.claimName} />
+                  {#if isLearning(card)}<span class="tag soft" data-learning data-hint={t('hint.learning')}>{t('mark.learning')}</span>{/if}
                   {#if Object.keys(app.draftOf(card.id)).length > 0}
                     {@const n = Object.keys(app.draftOf(card.id)).length}
                     <span class="tag draft" data-hint={t('mark.draft', { n })}><span aria-hidden="true">✎ {n}</span><span class="sr-only">{t('mark.draft', { n })}</span></span>

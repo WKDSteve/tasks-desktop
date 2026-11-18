@@ -2262,6 +2262,12 @@ const en = {
   'hint.ui.tags.plus': 'Choose tags for this task from the ones the open tasks carry, or type a new one.',
   'tags.chips': 'What this task is tagged with',
   'palette.tag': 'Tag: show all with {tag}',
+  // Learning tasks (lib/learning.ts): the category `learning` of the engine.
+  'mark.learning': 'learning',
+  'hint.learning': 'A learning task: work done to learn and get better, not out of need (the category learning). The filter of the list finds them under More filters > Category.',
+  'menu.hide_learning': 'Hide learning tasks in the views and the overview',
+  'hint.item.menu.hide_learning': 'The saved views and the lists of tasks of the overview leave out the tasks of the category learning. The list keeps them: its filter by category shows or hides them there.',
+  'today.next.learning': 'The next task of the engine is a learning task. Learning tasks are hidden here (Options): the other tasks below are not.',
 } as const;
 
 export type Key = keyof typeof en;
@@ -4523,6 +4529,12 @@ const de: Record<Key, string> = {
   'hint.ui.tags.plus': 'Tags für diesen Task aus denen wählen, die die offenen Tasks tragen, oder einen neuen tippen.',
   'tags.chips': 'Womit dieser Task getaggt ist',
   'palette.tag': 'Tag: alle mit {tag} zeigen',
+  // Learning tasks (lib/learning.ts): the category `learning` of the engine.
+  'mark.learning': 'Lernen',
+  'hint.learning': 'Ein Lern-Task: Arbeit, um zu lernen und besser zu werden, nicht aus Bedarf (die Kategorie learning). Der Filter der Liste findet sie unter Weitere Filter > Kategorie.',
+  'menu.hide_learning': 'Lern-Tasks in den Ansichten und im Überblick ausblenden',
+  'hint.item.menu.hide_learning': 'Die gespeicherten Ansichten und die Task-Listen des Überblicks lassen die Tasks der Kategorie learning weg. Die Liste behält sie: ihr Filter nach Kategorie zeigt oder verbirgt sie dort.',
+  'today.next.learning': 'Der nächste Task der Engine ist ein Lern-Task. Lern-Tasks sind hier ausgeblendet (Optionen): die anderen Tasks darunter nicht.',
 };
 
 export const dictionaries: Record<Lang, Record<Key, string>> = { en, de };

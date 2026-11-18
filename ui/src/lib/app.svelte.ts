@@ -139,6 +139,7 @@ import {
   type ListMemory,
   type NamedList,
 } from './lists';
+import { LEARNING, learningIds, withoutLearning } from './learning';
 import { localToday } from './remind';
 import type { RemindersMail } from './reminders';
 import { DEFAULT_ROW_ACTIONS, parseRowActions, serializeRowActions, type RowActionPrefs } from './rowActions';
@@ -148,6 +149,9 @@ import { COLUMN_KEYS, defaultColumns, parseColumns, serializeColumns, type ListC
 import { emptyFolds, foldOf, parseFolds, serializeFolds, type FoldMemory, type Folds, type FoldView } from './fold';
 import { parseSizes, serializeSizes, withSize, type Size, type Sizes } from './sizes';
 import { taskRoute, viewRoute } from './route';
+
+/** No task: the learning tasks that are hidden while none is. */
+const NO_IDS: ReadonlySet<string> = new Set();
 
 /** The longest line of the notes the engine takes (`append_note`), in characters. */
 const NOTE_MAX = 1000;
@@ -414,6 +418,8 @@ export class App {
   groupAreas = $state(false);
   /** Every second row of a list on a quieter ground. */
   zebra = $state(false);
+  /** The saved views and the lists of tasks of the overview leave out the learning tasks (`lib/learning.ts`). */
+  learningHidden = $state(false);
   /** The actions at the end of a row of a list, and whether every row shows them all the time (`lib/rowActions.ts`). */
   rowActions = $state.raw<RowActionPrefs>(DEFAULT_ROW_ACTIONS);
   /** The choice of the areas also stands in the bar at the top, for every view (a trial). */
@@ -861,6 +867,7 @@ export class App {
     this.areaCountsShown = safe(() => env.prefs.getItem('tasks-desktop.area-counts')) !== 'off';
     this.areaSplit = safe(() => env.prefs.getItem('tasks-desktop.area-split')) !== 'off';
     this.zebra = safe(() => env.prefs.getItem('tasks-desktop.zebra')) === 'on';
+    this.learningHidden = safe(() => env.prefs.getItem('tasks-desktop.hide-learning')) === 'on';
     this.rowActions = parseRowActions(safe(() => env.prefs.getItem('tasks-desktop.row-actions')) ?? null);
     this.groupAreas = safe(() => env.prefs.getItem('tasks-desktop.group-areas')) === 'on';
     this.barAreas = safe(() => env.prefs.getItem('tasks-desktop.bar-areas')) === 'on';
@@ -935,6 +942,7 @@ export class App {
     this.setAreaCounts(true);
     this.setAreaSplit(true);
     this.setZebra(false);
+    this.setLearningHidden(false);
     this.setRowActions(DEFAULT_ROW_ACTIONS);
     this.setGroupAreas(false);
     this.setBarAreas(false);
@@ -1108,7 +1116,9 @@ export class App {
 
   /** The open tasks a saved view shows: its selection found the way the list finds its filter. */
   tasksOfView(view: SavedView): TaskEntry[] {
-    return applyFilter(this.tasks, this.matchFilter(filterOfSelect(view.select)), this.today, this.crossIndex, this.quickWinSet, this.projectOf);
+    const tasks = applyFilter(this.tasks, this.matchFilter(filterOfSelect(view.select)), this.today, this.crossIndex, this.quickWinSet, this.projectOf);
+    // A view that asks for the learning tasks by name (its selection names the tag `learning`) keeps them.
+    return withoutLearning(tasks, this.learningHidden && !(view.select.tags ?? []).includes(LEARNING));
   }
 
   /**
@@ -3530,6 +3540,19 @@ export class App {
   setRowActions(prefs: RowActionPrefs): void {
     this.rowActions = prefs;
     safe(() => this.env.prefs.setItem('tasks-desktop.row-actions', serializeRowActions(prefs)));
+  }
+
+  /**
+   * The ids of the learning tasks while they are hidden, else none: what a list of the engine that names tasks by id
+   * (the next tasks of the overview) is narrowed with.
+   */
+  get hiddenLearning(): ReadonlySet<string> {
+    return this.learningHidden ? learningIds(this.tasks) : NO_IDS;
+  }
+
+  setLearningHidden(on: boolean): void {
+    this.learningHidden = on;
+    safe(() => this.env.prefs.setItem('tasks-desktop.hide-learning', on ? 'on' : 'off'));
   }
 
   setBarAreas(on: boolean): void {

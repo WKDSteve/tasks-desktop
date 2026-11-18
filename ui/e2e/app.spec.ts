@@ -7954,6 +7954,50 @@ test('tags are given from the context menu: one that exists to three marked task
   for (const n of [1, 2, 3, 4]) removeFile(file(n));
 });
 
+test('a learning task carries its mark in the list and on the board, the filter finds it by its category, and the switch that hides it is kept', async ({ page }) => {
+  const slug = 'learnq-e2e';
+  const file = join(state().vault, 'lib.nvim', 'ROADMAP', 'tasks', `${slug}.md`);
+  writeFileSync(file, `---\ntitle: Learnq l001\nstatus: open\nkind: task\ncategory: [learning]\n---\n\nDone to learn, not out of need.\n`);
+  await pair(page);
+  await showList(page);
+  const search = page.getByRole('searchbox', { name: /search/i }).first();
+  await search.fill('Learnq l001');
+  const row = page.locator('.rows .row-host', { hasText: 'Learnq l001' });
+  await expect(row.locator('[data-learning]')).toHaveText('learning');
+  await expectAccessible(page, 'a learning task in the list');
+  // The same mark on its card of the board.
+  await chooseView(page, 'View', 'Board');
+  await expect(page.locator('.card', { hasText: 'Learnq l001' }).locator('[data-learning]')).toHaveText('learning');
+  await showList(page);
+  await search.fill('');
+
+  // The filter by category: learning is one of its values, and what it leaves are the learning tasks.
+  await page.getByText('More filters', { exact: false }).first().click();
+  await page.getByRole('button', { name: 'Category', exact: true }).click();
+  await page.getByRole('group', { name: 'Category' }).getByRole('checkbox', { name: /^learning/ }).check();
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('list', { name: 'Filters that are on' })).toContainText('Category');
+  await expect(page.locator('button.row', { hasText: 'Learnq l001' })).toBeVisible();
+  const rows = await page.locator('.rows .row-host').count();
+  expect(rows).toBeGreaterThan(0);
+  expect(await page.locator('.rows .row-host [data-learning]').count()).toBe(rows);
+
+  // Hidden in the views and the overview is a switch of Options, off as the page comes and kept in the browser.
+  const options = page.getByRole('menuitem', { name: 'Options', exact: true });
+  const hide = page.getByRole('menuitemcheckbox', { name: 'Hide learning tasks in the views and the overview' });
+  await options.click();
+  await expect(hide).toHaveAttribute('aria-checked', 'false');
+  await hide.click();
+  // The list keeps them: its own filter says what it shows.
+  await expect(page.locator('button.row', { hasText: 'Learnq l001' })).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole('menubar')).toBeVisible();
+  await options.click();
+  await expect(hide).toHaveAttribute('aria-checked', 'true');
+  await page.keyboard.press('Escape');
+  removeFile(file);
+});
+
 test('with the option to save with a button, the fields of a task are held until Save or Ctrl+S, and Discard brings the file back', async ({ page }) => {
   await watchViolations(page);
   await pair(page);

@@ -640,6 +640,13 @@
           },
           {
             kind: 'check',
+            label: t('menu.hide_learning'),
+            hint: t('hint.item.menu.hide_learning'),
+            checked: app.learningHidden,
+            onselect: () => app.setLearningHidden(!app.learningHidden),
+          },
+          {
+            kind: 'check',
             label: t('menu.bar_areas'),
             hint: t('hint.item.menu.bar_areas'),
             checked: app.barAreas,

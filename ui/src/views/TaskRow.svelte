@@ -8,6 +8,7 @@
   import { isDue, isOverdue } from '../lib/remind';
   import type { StampKind } from '../lib/sort';
   import { markGesture, type Marker } from '../lib/markDom';
+  import { isLearning } from '../lib/learning';
   import type { Snippet } from 'svelte';
 
   let {
@@ -117,6 +118,7 @@
     {#if crossAreas.length >= 2}<span class="tag soft" data-hint={crossTitle}><span aria-hidden="true">↔ {crossAreas.length}</span><span class="sr-only">{translate(lang, 'mark.cross', { n: crossAreas.length })}</span></span>{/if}
     {#if drafted > 0}<span class="tag draft" data-hint={translate(lang, 'mark.draft', { n: drafted })}><span aria-hidden="true">✎ {drafted}</span><span class="sr-only">{translate(lang, 'mark.draft', { n: drafted })}</span></span>{/if}
     <ClaimTag {task} {lang} me={claimant} />
+    {#if isLearning(task)}<span class="tag soft" data-learning data-hint={translate(lang, 'hint.learning')}>{translate(lang, 'mark.learning')}</span>{/if}
     {#if overdue}<span class="tag overdue" data-hint={translate(lang, 'overdue.hint', { date: task.due ?? '' })}><span aria-hidden="true">⚑ {task.due}</span><span class="sr-only">{translate(lang, 'mark.overdue', { date: task.due ?? '' })}</span></span>{/if}
     {#if due}<span class="tag due" data-hint={translate(lang, 'remind.due', { date: task.remind ?? '' })}><span aria-hidden="true">⏰ {task.remind}</span><span class="sr-only">{translate(lang, 'mark.due', { date: task.remind ?? '' })}</span></span>{/if}
     <!-- The due date and the reminder are there already when they are late or due. -->

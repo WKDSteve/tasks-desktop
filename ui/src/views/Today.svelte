@@ -34,8 +34,11 @@
   // The filter of the list narrows the blocks of tasks; the next task is the engine's answer and stays.
   const filtered = $derived(narrows(app.filter));
   const shownIds = $derived(new Set(app.shown.map((x) => x.id)));
-  const cdx = $derived((next?.cdx ?? []).filter((b) => !filtered || shownIds.has(b.id)));
-  const alternatives = $derived((next?.alternatives ?? []).filter((b) => !filtered || shownIds.has(b.id)));
+  // Learning tasks are left out of these lists when they are hidden (Options). The next task itself is the engine's
+  // answer and stays; a note says when it is one of them.
+  const learning = $derived(app.hiddenLearning);
+  const cdx = $derived((next?.cdx ?? []).filter((b) => (!filtered || shownIds.has(b.id)) && !learning.has(b.id)));
+  const alternatives = $derived((next?.alternatives ?? []).filter((b) => (!filtered || shownIds.has(b.id)) && !learning.has(b.id)));
   const waiting = $derived(waitingForMe(app.shown).slice(0, 8));
   const empty = $derived(next?.empty);
   // A finished task is not in the list, so no filter can match it.
@@ -318,6 +321,7 @@
             <span data-hint={hintOf(app.lang, 'hint', 'effort')}>{effortWords(app.lang, next.task.effort)}</span>
             {#if why(next.task)} · {why(next.task)}{/if}
           </p>
+          {#if learning.has(next.task.id)}<p class="muted" data-learning-note role="note">{t('today.next.learning')}</p>{/if}
           {#if alternatives.length > 0}
             <h2 class="eyebrow" data-hint={t('hint.ui.today.alternatives')}>{t('today.alternatives')}</h2>
             <ul class="plain">
