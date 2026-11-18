@@ -1,9 +1,11 @@
 -- The hand check of the attach buttons of a task's detail (and of a plan or project, and of the forms that attach once
 -- the thing is made) with what no test sees: the browser's own choice of a screen,
 -- a real camera and microphone, real files and the Tauri window. What a machine checks runs elsewhere: ui/e2e (a
--- drawing surface stands for camera and screen, the buttons, the files in assets/, the refusals). Video and photo are
--- only choosable once the guard lets the hub's page use the camera
--- (tasks-desktop/anhang-video-aufnehmen-und-bild-aufnehmen-freischalten-kamer); skip those steps until then.
+-- drawing surface stands for camera and screen, the buttons, the files in assets/, the refusals; and Chrome's own
+-- stand-in camera with its question allowed and refused, camera-allowed.spec.ts and camera-refused.spec.ts). The guard
+-- lets the hub's page use the camera and the microphone since appkit v0.67.0
+-- (tasks-desktop/anhang-video-aufnehmen-und-bild-aufnehmen-freischalten-kamer): the steps of the camera need a build
+-- from then on.
 --   testing sheets step attach-hardware-live
 return {
   id = "tasks-desktop.attach-hardware-live",
@@ -36,18 +38,22 @@ return {
         .. " both lie in the plan's assets/, and a clipboard without an image takes the newest screenshot or says so?",
     },
     {
-      ask = "Once the camera is released: Record a video with a real camera and microphone (the browser asks, the"
+      ask = "Video > Record a video with a real camera and microphone (the browser asks, the"
         .. " preview, Stop and attach); the file in assets/videos/ plays with sound?",
     },
     {
-      ask = "Once the camera is released: Take a photo (preview, picture, file in assets/images/)?",
+      ask = "Image > Take a photo (the browser asks once per origin; preview, picture, file in assets/images/)?",
     },
     {
-      ask = "Once the camera is released: the request refused, the camera unplugged while recording, a machine"
+      ask = "The answer taken back in the browser (the lock or camera sign in the address bar, 'Block'): Record a video"
+        .. " and Take a photo say that the camera was not allowed, and allowing it again makes them work?",
+    },
+    {
+      ask = "The request refused, the camera unplugged while recording, a machine"
         .. " without a microphone: the message each time, or a recording without sound?",
     },
     {
-      ask = "Once the camera is released: the light of the camera goes out after Discard, after attaching and after"
+      ask = "The light of the camera goes out after Discard, after attaching and after"
         .. " the float is closed?",
     },
   },

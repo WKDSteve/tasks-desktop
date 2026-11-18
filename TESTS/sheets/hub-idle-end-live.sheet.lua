@@ -27,6 +27,20 @@ return {
         .. " does the page still live (write down if it loads into nothing)?",
     },
     {
+      ask = "A tab left open while the hub ended (tasks-hub stop in a terminal is enough): above the view the page says"
+        .. ' that the hub is not running any more and how to start it (Start menu "Tasks", tasks-hub start --open),'
+        .. " the list stays, a title typed into the new-task form stays, and no error toast repeats?",
+    },
+    {
+      ask = "Then start the hub from the Start menu (it opens a new tab). Back in the OLD tab: it says that the hub was"
+        .. " started anew, and within a moment of getting the focus it takes the session of the new tab over: the"
+        .. " line goes, the list is fresh, and what was typed is still there and can be saved?",
+    },
+    {
+      ask = "The same, but the new tab closed before going back: the old tab keeps its line; the link of tasks-hub"
+        .. " open pasted into its address bar pairs it where it stands (nothing typed is lost)?",
+    },
+    {
       ask = "With a paired phone (tasks-hub devices shows one): tab closed, after 15 minutes the hub still runs and"
         .. " the phone reaches it?",
     },
