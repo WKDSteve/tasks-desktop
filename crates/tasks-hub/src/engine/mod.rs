@@ -17,10 +17,11 @@ use crate::discovery::{engine_script, Setup};
 /// The contract version this hub speaks.
 pub const SCHEMA: u64 = 1;
 
-/// What the read side of the app needs from the engine.
 /// The most items one page of a list call of the engine holds (`LIMITS.list_items` of tasks.nvim's contract): a larger
 /// `limit` is refused.
 pub const LIST_PAGE: u64 = 100;
+
+/// What the read side of the app needs from the engine.
 pub const REQUIRED_CAPABILITIES: &[&str] = &["hello", "snapshot", "list", "task", "next", "areas"];
 
 /// What the seam must know about the tasks engine.
