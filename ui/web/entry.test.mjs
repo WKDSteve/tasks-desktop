@@ -218,11 +218,13 @@ test('a switch to a folder whose access is gone again, or that is gone, waits on
   await recent.remember(handle('asks', { perm: 'prompt' }), 3);
   await recent.remember(handle('refused', { perm: 'denied' }), 2);
   const opened = [];
-  for (const [id, notice] of [['r1', null], ['r2', 'denied'], ['nope', 'gone']]) {
+  for (const [id, notice, detail] of [['r1', 'switch_allow', 'asks'], ['r2', 'denied'], ['nope', 'gone']]) {
     const { entry } = entryOver({ win: SECURE(async () => handle('x')), recent, pending: () => id, open: async (h) => (opened.push(h.name), { files: 1, skipped: [] }) });
     await entry.start();
     assert.equal(entry.state.step, 'choose', id);
     assert.equal(entry.state.notice?.code ?? null, notice, id);
+    // The folder that only needs a click is named: the click on "Allow access" finishes the switch.
+    assert.equal(entry.state.notice?.detail, detail, id);
   }
   assert.deepEqual(opened, [], 'nothing is read without the access');
 });

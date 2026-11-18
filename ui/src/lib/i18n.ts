@@ -1157,6 +1157,7 @@ const en = {
   'web.entry.notice.failed': 'The folder could not be opened: {detail}',
   'web.entry.notice.denied': 'Access was not allowed. Allow it, or choose the folder again.',
   'web.entry.notice.gone': 'The folder is not there any more. Choose it again.',
+  'web.entry.notice.switch_allow': 'The browser asks again for "{detail}". One click on "Allow access" in its row opens it.',
   'web.entry.notice.limit': 'The folder is too large to read: {detail}',
   'web.entry.notice.no_areas':
     'This folder holds no area (a folder with ROADMAP or Backlog in it), so there would be nothing to show. Choose the vault folder itself, the one that holds the areas.',
@@ -3291,6 +3292,7 @@ const de: Record<Key, string> = {
   'web.entry.notice.failed': 'Der Ordner ließ sich nicht öffnen: {detail}',
   'web.entry.notice.denied': 'Der Zugriff wurde nicht erlaubt. Erlaube ihn oder wähle den Ordner neu.',
   'web.entry.notice.gone': 'Der Ordner ist nicht mehr da. Wähle ihn neu.',
+  'web.entry.notice.switch_allow': 'Der Browser fragt für „{detail}“ erneut. Ein Klick auf „Zugriff erlauben“ in seiner Zeile öffnet ihn.',
   'web.entry.notice.limit': 'Der Ordner ist zu groß zum Lesen: {detail}',
   'web.entry.notice.no_areas':
     'Dieser Ordner enthält keinen Bereich (einen Ordner mit ROADMAP oder Backlog darin), es gäbe also nichts anzuzeigen. Wähle den Vault-Ordner selbst, den, der die Bereiche enthält.',

@@ -25,10 +25,23 @@ export interface RecentView {
 
 /**
  * Why the last attempt did not lead into a vault. `detail` is a short plain line of the browser or the reader; for
- * `no_areas_below` it is the name of the folder inside the chosen one that looks like the vault.
+ * `no_areas_below` it is the name of the folder inside the chosen one that looks like the vault, for `switch_allow` the
+ * name of the folder the switch asked for.
  */
 export interface Notice {
-  code: 'cancelled' | 'empty' | 'no_paths' | 'blocked' | 'failed' | 'denied' | 'gone' | 'limit' | 'no_areas' | 'no_areas_below';
+  code:
+    | 'cancelled'
+    | 'empty'
+    | 'no_paths'
+    | 'blocked'
+    | 'failed'
+    | 'denied'
+    | 'gone'
+    | 'limit'
+    | 'no_areas'
+    | 'no_areas_below'
+    /** A switch in the menu asked for this folder, and the browser wants to be asked again; `detail` is its name. */
+    | 'switch_allow';
   detail?: string;
 }
 
@@ -140,6 +153,9 @@ export class Entry {
       const access = recent.find((r) => r.id === pending)?.access;
       if (access === undefined || access === 'gone') notice = { code: 'gone' };
       else if (access === 'denied') notice = { code: 'denied' };
+      // The browser wants a click of its own before it hands the folder out again: say which folder the click opens,
+      // the general line "Allow access" in its row does not say that the switch is still under way.
+      else if (access === 'prompt') notice = { code: 'switch_allow', detail: chosen?.name ?? '' };
     }
     this.set({ step: 'choose', recent, notice, readOnly: false });
   }
