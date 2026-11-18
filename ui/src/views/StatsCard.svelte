@@ -26,7 +26,7 @@
     title: string;
     /** The tables of the card as they are exported. */
     tables: () => CardTable[];
-    /** The drawing of the card as an SVG file; left out where the card has none, null while none is drawn. */
+    /** The drawing of the card as an SVG file; left out while the card draws none (the menu then offers no SVG). */
     svg?: () => string | null;
     /** More of the head, after the name (a hint, a way back). */
     head?: Snippet;

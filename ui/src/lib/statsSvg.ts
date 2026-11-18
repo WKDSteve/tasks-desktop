@@ -2,7 +2,7 @@
 // SVG file. The colours of the file are the ones the page computed (the tokens of the theme shown), written into it:
 // a file read elsewhere knows no tokens.
 
-import { clearPrintPages } from './exportDom';
+import { clearPrintPages, undoAtNextPrint } from './exportDom';
 
 /** The class on the root while one card is printed; the print rules (StatsCard) hide everything else. */
 export const PRINT_CARD_CLASS = 'print-card';
@@ -11,23 +11,28 @@ export const PRINT_CARD_ATTR = 'data-print-card';
 
 /**
  * Print the card `el` alone: everything else of the page is left off the paper, and the light theme is used for it
- * (paper is white). Both go when the dialog is done (`afterprint`).
+ * (paper is white). Both go when the dialog is done (`afterprint`), or when the next print starts: a dialog that sent
+ * no `afterprint` leaves them, and the theme read then would be the light one of the paper, not the person's.
  */
 export function printCard(doc: Document, win: Pick<Window, 'print' | 'addEventListener'>, el: HTMLElement): boolean {
   const root = doc.documentElement;
+  // what an earlier print left is undone first: the theme read now is the person's
+  clearPrintPages(doc);
   const theme = root.getAttribute('data-theme');
+  let undone = false;
   const undo = (): void => {
+    if (undone) return;
+    undone = true;
     el.removeAttribute(PRINT_CARD_ATTR);
     root.classList.remove(PRINT_CARD_CLASS);
     if (theme === null) root.removeAttribute('data-theme');
     else root.setAttribute('data-theme', theme);
   };
   try {
-    clearPrintPages(doc);
-    for (const other of doc.querySelectorAll(`[${PRINT_CARD_ATTR}]`)) other.removeAttribute(PRINT_CARD_ATTR);
     el.setAttribute(PRINT_CARD_ATTR, '');
     root.classList.add(PRINT_CARD_CLASS);
     root.setAttribute('data-theme', 'light');
+    undoAtNextPrint(undo);
     win.addEventListener('afterprint', undo, { once: true });
     win.print();
     return true;
@@ -81,24 +86,25 @@ export function svgFileOf(svg: SVGSVGElement, background: string, title: string)
 
 /**
  * The bars per area (drawn with boxes, not as a drawing) as an SVG file: each part of a bar a rectangle where it
- * stands, in its colour, the names of the areas and the totals as text.
+ * stands, in its colour, the names of the areas (as `areaName` writes them: an area that may not leave the app is not
+ * named) and the totals as text.
  */
-export function barsSvgOf(chart: HTMLElement, background: string, title: string): string {
+export function barsSvgOf(chart: HTMLElement, background: string, title: string, areaName: (el: Element) => string): string {
   const frame = chart.getBoundingClientRect();
   const width = Math.ceil(frame.width);
   const height = Math.ceil(frame.height);
   const at = (el: Element): DOMRect => el.getBoundingClientRect();
   const parts: string[] = [];
-  const text = (el: Element, anchor: 'start' | 'end'): void => {
+  const text = (el: Element, anchor: 'start' | 'end', label: string): void => {
     const r = at(el);
     const style = getComputedStyle(el);
     const x = anchor === 'end' ? r.right - frame.left : r.left - frame.left;
     const y = r.top - frame.top + r.height / 2;
     parts.push(
-      `<text x="${x.toFixed(1)}" y="${y.toFixed(1)}" text-anchor="${anchor}" dominant-baseline="middle" fill="${xmlText(style.color)}" font-size="${xmlText(style.fontSize)}" font-family="${xmlText(style.fontFamily)}">${xmlText(el.textContent?.trim() ?? '')}</text>`,
+      `<text x="${x.toFixed(1)}" y="${y.toFixed(1)}" text-anchor="${anchor}" dominant-baseline="middle" fill="${xmlText(style.color)}" font-size="${xmlText(style.fontSize)}" font-family="${xmlText(style.fontFamily)}">${xmlText(label)}</text>`,
     );
   };
-  for (const el of chart.querySelectorAll('.area')) text(el, 'end');
+  for (const el of chart.querySelectorAll('.area')) text(el, 'end', areaName(el));
   for (const el of chart.querySelectorAll<HTMLElement>('.seg')) {
     const r = at(el);
     const fill = getComputedStyle(el).backgroundColor;
@@ -106,7 +112,7 @@ export function barsSvgOf(chart: HTMLElement, background: string, title: string)
       `<rect x="${(r.left - frame.left).toFixed(1)}" y="${(r.top - frame.top).toFixed(1)}" width="${r.width.toFixed(1)}" height="${r.height.toFixed(1)}" fill="${xmlText(fill)}"><title>${xmlText(el.title)}</title></rect>`,
     );
   }
-  for (const el of chart.querySelectorAll('.total')) text(el, 'start');
+  for (const el of chart.querySelectorAll('.total')) text(el, 'start', el.textContent?.trim() ?? '');
   return (
     `<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="${SVG_NS}" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">` +
     `<title>${xmlText(title)}</title><rect width="100%" height="100%" fill="${xmlText(background)}"/>${parts.join('')}</svg>\n`

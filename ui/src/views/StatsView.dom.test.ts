@@ -185,4 +185,50 @@ describe('StatsView, the cards', () => {
     expect(md).toContain('| Open | 2 |');
     expect(md).toContain('| By Status | doing | 1 |');
   });
+
+  it('offer no drawing to save while they draw none (no bars without a task)', async () => {
+    const m = make({ token: 't' });
+    made = m;
+    m.hub.doc = snapshot([]);
+    await m.app.start(null);
+    const page = document.createElement('div');
+    document.body.append(page);
+    mounted = mount(StatsView, { target: page, props: { app: m.app } });
+    flushSync();
+    await settle();
+    expect(page.querySelector('[data-card="chart"] .chart')).toBeNull();
+    page.querySelector<HTMLElement>('[data-card="chart"] [data-tool="menu"]')?.click();
+    await settle();
+    expect(page.querySelector('[data-card="chart"] [data-out="csv"]')).not.toBeNull();
+    expect(page.querySelector('[data-card="chart"] [data-out="svg"]')).toBeNull();
+  });
+});
+
+describe('StatsView, the bars as SVG', () => {
+  it('do not name an area whose class keeps it in the app, as the table does not', async () => {
+    const m = make({ token: 't' });
+    made = m;
+    m.hub.doc = snapshot([task('pub/alpha', { status: 'open' }), task('secret/beta', { status: 'doing' })]);
+    m.hub.areaList = [
+      { name: 'pub', data_class: 'public' },
+      { name: 'secret', data_class: 'private' },
+    ];
+    await m.app.start(null);
+    m.app.setLang('en');
+    const page = document.createElement('div');
+    document.body.append(page);
+    mounted = mount(StatsView, { target: page, props: { app: m.app } });
+    flushSync();
+    await settle();
+    expect(page.querySelector('[data-card="chart"] .area[data-area="secret"]')).not.toBeNull();
+    page.querySelector<HTMLElement>('[data-card="chart"] [data-tool="menu"]')?.click();
+    await settle();
+    page.querySelector<HTMLButtonElement>('[data-card="chart"] [data-out="svg"]')?.click();
+    await settle();
+    const svg = m.files.at(-1);
+    expect(svg?.name).toMatch(/^tasks-stats-chart-.*\.svg$/);
+    expect(svg?.text).toContain('>pub</text>');
+    expect(svg?.text).toContain('(area not exported)');
+    expect(svg?.text).not.toContain('secret');
+  });
 });

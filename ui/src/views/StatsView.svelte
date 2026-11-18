@@ -166,7 +166,7 @@
   let figuresCard: HTMLElement | undefined = $state();
   const backgroundOf = (el: HTMLElement | undefined): string => (el ? getComputedStyle(el).backgroundColor : 'transparent');
   function chartSvg(): string | null {
-    return chartEl ? barsSvgOf(chartEl, backgroundOf(chartCard), t('stats.chart')) : null;
+    return chartEl ? barsSvgOf(chartEl, backgroundOf(chartCard), t('stats.chart'), (el) => exportArea(el.getAttribute('data-area') ?? '')) : null;
   }
   /** The headline numbers and the tiles of the fields as they are shown. */
   function figuresTables(): CardTable[] {
@@ -216,7 +216,7 @@
   {/if}
 
   {#if shows('chart')}
-    <StatsCard {app} card="chart" title={t('stats.chart')} tables={() => areaTable(false)} svg={chartSvg} bind:section={chartCard}>
+    <StatsCard {app} card="chart" title={t('stats.chart')} tables={() => areaTable(false)} svg={legend.rows.length > 0 ? chartSvg : undefined} bind:section={chartCard}>
       <div class="bar">
         <div class="dims" role="group" aria-label={t('stats.by')}>
           <span class="muted">{t('stats.by')}</span>
@@ -273,7 +273,7 @@
              the tab order. -->
         <div class="chart dim-{app.statsDim}" aria-hidden="true" bind:this={chartEl}>
           {#each stats.rows as row (row.area)}
-            <button type="button" class="area" tabindex="-1" title={row.area} onclick={() => open(null, row.area)}
+            <button type="button" class="area" tabindex="-1" title={row.area} data-area={row.area} onclick={() => open(null, row.area)}
               >{markHidden(nameOf(row.area))}</button
             >
             <div class="track">

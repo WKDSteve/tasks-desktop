@@ -39,8 +39,8 @@ export interface CardRoute {
 
 /**
  * The fragment of a window that shows one card alone: the view, the card, the field and order of the statistics and
- * the filter (a filter of nothing, or one too long for an address, is left out: the window then takes the filter it
- * remembers, which is the one of this browser).
+ * the filter (a filter of nothing is left out: the window then takes the filter it remembers, which is the one of this
+ * browser).
  */
 export function cardRoute(card: StatsCard, dim: StatDim, sort: StatSort, filter: string): string {
   return routeHash({ view: 'stats', card, stats: `${dim}:${sort}`, ...(filter !== '{}' && filter !== '' ? { filter } : {}) });

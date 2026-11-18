@@ -15,15 +15,24 @@ const PRINT_PAGES = [
   ['daily-print', 'print-daily'],
 ] as const;
 
+/** What a print made elsewhere (a card of the statistics, lib/statsSvg.ts) leaves to undo when the next one starts. */
+const leftovers: (() => void)[] = [];
+
+/** Undo `undo` when the next print starts, should its own dialog send no `afterprint`; `undo` may run twice. */
+export function undoAtNextPrint(undo: () => void): void {
+  leftovers.push(undo);
+}
+
 /**
- * Take away every page for the printer that still stands, with its class: a dialog that sent no `afterprint` (printing
- * switched off) leaves its page, and two of them would hide each other on paper.
+ * Take away every page for the printer that still stands, with its class, and undo what another print left: a dialog
+ * that sent no `afterprint` (printing switched off) leaves its page, and two of them would hide each other on paper.
  */
 export function clearPrintPages(doc: Document): void {
   for (const [id, cls] of PRINT_PAGES) {
     doc.getElementById?.(id)?.remove();
     doc.documentElement.classList.remove(cls);
   }
+  for (const undo of leftovers.splice(0)) undo();
 }
 
 /** The sheet as elements. Text only, set with `textContent`: a title is never read as markup. */

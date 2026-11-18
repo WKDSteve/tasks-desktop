@@ -206,7 +206,7 @@
 </script>
 
 {#if app.can('history')}
-  <StatsCard {app} card="history" title={t('stats.history')} tables={() => (doc && !empty && !problem ? [table] : [])} svg={svgFile} bind:section>
+  <StatsCard {app} card="history" title={t('stats.history')} tables={() => (doc && !empty && !problem ? [table] : [])} svg={doc && !empty && !problem ? svgFile : undefined} bind:section>
     {#snippet head()}
       <Info hint={t('hint.stats.history')} label={t('hint.about', { what: t('stats.history') })} />
       {#if app.historyFrom}
