@@ -1,4 +1,4 @@
-<script lang="ts">
+<script lang="ts" generics="Extra extends Record<string, unknown> = Record<never, never>">
   // A view or dialog that most sessions never open, loaded when it is first wanted (`when`), and kept from then on: a
   // dialog that goes away with its element would not give the focus back.
   import type { Component } from 'svelte';
@@ -9,31 +9,45 @@
     app,
     load,
     when = true,
-  }: { app: App; load: () => Promise<{ default: Component<{ app: App }> }>; when?: boolean } = $props();
+    extra,
+    onfailed,
+  }: {
+    app: App;
+    load: () => Promise<{ default: Component<{ app: App } & Extra> }>;
+    when?: boolean;
+    /** What the loaded component takes besides `app` (a dialog whose state the page holds: `open`, `onclose`). */
+    extra?: Extra;
+    /** The chunk did not come: whoever holds the state that wanted it takes it back, so that asking again loads again. */
+    onfailed?: () => void;
+  } = $props();
 
-  let Loaded = $state.raw<Component<{ app: App }> | null>(null);
+  let Loaded = $state.raw<Component<{ app: App } & Extra> | null>(null);
   // The hub may have been stopped or replaced since the page came (the name of a chunk is that of its build): only
   // loading the page anew helps, and the page says so instead of staying empty.
   let failed = $state(false);
   $effect(() => {
     if (!when || Loaded) return;
+    // Wanted (again): a notice of an earlier attempt goes, this one writes its own.
+    failed = false;
     load().then(
       (module) => {
         Loaded = module.default;
       },
       () => {
         failed = true;
+        onfailed?.();
       },
     );
   });
 </script>
 
 {#if Loaded}
-  <Loaded {app} />
+  <Loaded {app} {...(extra ?? ({} as Extra))} />
 {:else if failed}
   <p class="failed" role="alert">
     {translate(app.lang, 'lazy.failed')}
     <button type="button" onclick={() => location.reload()}>{translate(app.lang, 'lazy.reload')}</button>
+    <button type="button" class="dismiss" onclick={() => (failed = false)}>{translate(app.lang, 'kit.dismiss')}</button>
   </p>
 {/if}
 

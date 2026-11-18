@@ -54,9 +54,7 @@
   let shortcutOpen = $state(false);
   let installOpen = $state(false);
   let defaultsOpen = $state(false);
-  // The dialogs below are loaded when they are first wanted (the main chunk has a budget) and kept from then on: a
-  // dialog that goes away with its element would not give the focus back.
-  let wanted = $state({ shortcut: false, defaults: false, update: false });
+  // These dialogs are loaded when they are first opened (the main chunk has a budget) and kept from then on (`Lazy`).
   let updateOpen = $state(false);
   // A view of the menu is a link to its place: the browser's context menu (and Shift+click) opens it in a new tab, which
   // takes the session of an open tab. A middle click, Ctrl+click or Ctrl+Enter opens it in a new tab from here, with
@@ -571,7 +569,7 @@
             kind: 'action',
             label: t('menu.defaults'),
             hint: t('hint.item.menu.defaults'),
-            onselect: () => ((wanted.defaults = true), (defaultsOpen = true)),
+            onselect: () => (defaultsOpen = true),
           },
           {
             kind: 'check',
@@ -676,13 +674,13 @@
                   kind: 'action' as const,
                   label: t('menu.shortcut'),
                   hint: t('hint.item.menu.shortcut'),
-                  onselect: () => ((wanted.shortcut = true), (shortcutOpen = true)),
+                  onselect: () => (shortcutOpen = true),
                 },
                 {
                   kind: 'action' as const,
                   label: t('menu.update'),
                   hint: t('hint.item.menu.update'),
-                  onselect: () => ((wanted.update = true), (updateOpen = true)),
+                  onselect: () => (updateOpen = true),
                 },
               ]
             : []),
@@ -928,10 +926,10 @@
   </main>
   {#if app.phase === 'ready'}
     <Capture {app} />
-    <Lazy {app} when={app.planning} load={() => import('./views/PlanWizard.svelte')} />
+    <Lazy {app} when={app.planning} load={() => import('./views/PlanWizard.svelte')} onfailed={() => app.closePlanWizard()} />
     <DoneDialog {app} />
     <PrioDialog {app} />
-    <Lazy {app} when={app.matrix !== null} load={() => import('./views/Matrix.svelte')} />
+    <Lazy {app} when={app.matrix !== null} load={() => import('./views/Matrix.svelte')} onfailed={() => app.closeMatrix()} />
     <TaskDialog {app} />
     <FinishedDialog {app} />
     <CheckDialog {app} />
@@ -955,65 +953,48 @@
       }}
     />
     <ConflictCenter {app} />
-    <Lazy {app} when={app.managingVaults} load={() => import('./views/VaultsDialog.svelte')} />
-    <Lazy {app} when={app.agentFor !== null} load={() => import('./views/AgentDialog.svelte')} />
-    <Lazy {app} when={app.splitFor !== null} load={() => import('./views/SplitDialog.svelte')} />
-    <Lazy {app} when={app.answer !== null} load={() => import('./views/AnswerDialog.svelte')} />
+    <Lazy {app} when={app.managingVaults} load={() => import('./views/VaultsDialog.svelte')} onfailed={() => app.closeVaults()} />
+    <Lazy {app} when={app.agentFor !== null} load={() => import('./views/AgentDialog.svelte')} onfailed={() => app.closeAgent()} />
+    <Lazy {app} when={app.splitFor !== null} load={() => import('./views/SplitDialog.svelte')} onfailed={() => app.closeSplit()} />
+    <Lazy {app} when={app.answer !== null} load={() => import('./views/AnswerDialog.svelte')} onfailed={() => app.closeAnswer()} />
   {/if}
   <!-- Outside the ready block: the Info dialog and its report are there when the engine is not (app.canAbout). -->
-  <Lazy {app} when={app.about.state !== 'closed'} load={() => import('./views/AboutDialog.svelte')} />
-  {#if fromDisk && wanted.shortcut}
-    {#await import('./views/ShortcutDialog.svelte') then { default: ShortcutDialog }}
-      <ShortcutDialog {app} open={shortcutOpen} onclose={() => (shortcutOpen = false)} />
-    {:catch}
-      {@render lazyFailed()}
-    {/await}
-  {/if}
-  {#if installOpen}
-    {#await import('./views/InstallDialog.svelte') then { default: InstallDialog }}
-      <InstallDialog {app} open={installOpen} onclose={() => (installOpen = false)} />
-    {:catch}
-      {@render lazyFailed()}
-    {/await}
-  {/if}
-  {#if wanted.defaults}
-    {#await import('./views/DefaultsDialog.svelte') then { default: DefaultsDialog }}
-      <DefaultsDialog {app} open={defaultsOpen} onclose={() => (defaultsOpen = false)} />
-    {:catch}
-      {@render lazyFailed()}
-    {/await}
-  {/if}
-  {#if fromDisk && wanted.update}
-    {#await import('./views/UpdateDialog.svelte') then { default: UpdateDialog }}
-      <UpdateDialog {app} open={updateOpen} onclose={() => (updateOpen = false)} />
-    {:catch}
-      {@render lazyFailed()}
-    {/await}
-  {/if}
-  {#snippet lazyFailed()}
-    <p class="lazy-failed" role="alert">
-      {t('lazy.failed')} <button type="button" onclick={() => location.reload()}>{t('lazy.reload')}</button>
-    </p>
-  {/snippet}
+  <Lazy {app} when={app.about.state !== 'closed'} load={() => import('./views/AboutDialog.svelte')} onfailed={() => app.closeAbout()} />
+  <!-- A chunk that did not come takes the dialog's state back: the entry of the menu then loads it again. -->
+  <Lazy
+    {app}
+    when={fromDisk && shortcutOpen}
+    load={() => import('./views/ShortcutDialog.svelte')}
+    extra={{ open: shortcutOpen, onclose: () => (shortcutOpen = false) }}
+    onfailed={() => (shortcutOpen = false)}
+  />
+  <Lazy
+    {app}
+    when={installOpen}
+    load={() => import('./views/InstallDialog.svelte')}
+    extra={{ open: installOpen, onclose: () => (installOpen = false) }}
+    onfailed={() => (installOpen = false)}
+  />
+  <Lazy
+    {app}
+    when={defaultsOpen}
+    load={() => import('./views/DefaultsDialog.svelte')}
+    extra={{ open: defaultsOpen, onclose: () => (defaultsOpen = false) }}
+    onfailed={() => (defaultsOpen = false)}
+  />
+  <Lazy
+    {app}
+    when={fromDisk && updateOpen}
+    load={() => import('./views/UpdateDialog.svelte')}
+    extra={{ open: updateOpen, onclose: () => (updateOpen = false) }}
+    onfailed={() => (updateOpen = false)}
+  />
   <!-- While the float of a task is open the toast is drawn inside it: the float is modal, and the Undo out here could not
        be reached. -->
   {#if !app.taskFloatOpen}<Toast {app} />{/if}
 </div>
 
 <style>
-  /* As in Lazy.svelte: a dialog whose chunk could not be loaded says so. */
-  .lazy-failed {
-    margin: 1rem;
-    color: var(--text);
-  }
-  .lazy-failed button {
-    background: var(--surface-2);
-    color: var(--text);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 0.2rem 0.6rem;
-    cursor: pointer;
-  }
   .brand-mark {
     display: inline-flex;
     align-items: center;
