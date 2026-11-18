@@ -16,7 +16,7 @@ pub struct Tasks;
 /// devices kept in a scratch folder of its own (removed when the value is dropped).
 pub struct TasksWithPhonePage {
     dir: crate::scratch::Scratch,
-    tailnet: Option<String>,
+    tailnet: Option<&'static str>,
 }
 
 impl TasksWithPhonePage {
@@ -30,9 +30,9 @@ impl TasksWithPhonePage {
 
     /// The same hub, also reached through Tailscale Serve under `name` (`TASKS_DESKTOP_TAILNET`).
     #[must_use]
-    pub fn through_tailnet(name: &str) -> Self {
+    pub fn through_tailnet(name: &'static str) -> Self {
         Self {
-            tailnet: Some(name.to_owned()),
+            tailnet: Some(name),
             ..Self::new()
         }
     }
@@ -119,18 +119,32 @@ impl Subject for TasksWithPhonePage {
                 ("m/manifest.webmanifest", "application/manifest+json", b"{}"),
             ]),
             Some(self.dir.join("devices.json")),
-            self.tailnet.clone(),
+            self.tailnet.map(str::to_owned),
         )
     }
 
     fn data_routes(&self) -> Vec<&'static str> {
         DATA_ROUTES.to_vec()
     }
+
+    // The hub lets the desktop page use the camera and the microphone (`GuardRules::with_page_capture`).
+    fn page_may_capture(&self) -> bool {
+        true
+    }
+
+    fn tailnet_name(&self) -> Option<&'static str> {
+        self.tailnet
+    }
 }
 
 impl Subject for Tasks {
     fn identity(&self) -> &'static AppIdentity {
         &tasks_hub::IDENTITY
+    }
+
+    // The hub lets the desktop page use the camera and the microphone (`GuardRules::with_page_capture`).
+    fn page_may_capture(&self) -> bool {
+        true
     }
 
     fn start(&self, cfg: StartConfig) -> BoxFuture<'_, std::io::Result<RunningServer>> {
