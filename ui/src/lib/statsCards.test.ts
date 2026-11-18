@@ -4,7 +4,7 @@ import { cardFileName, cardText } from './statsExport';
 
 describe('the cards of the statistics', () => {
   it('stand in the order: the headline numbers, bars per area, history, the table', () => {
-    expect(STATS_CARDS).toEqual(['figures', 'chart', 'history', 'table']);
+    expect(STATS_CARDS).toEqual(['chart', 'figures', 'history', 'table']);
   });
 
   it('remember the folded ones as a list of names; anything else is none folded', () => {
@@ -12,12 +12,12 @@ describe('the cards of the statistics', () => {
     expect(parseCardFolds('not json')).toEqual([]);
     expect(parseCardFolds('{"chart":true}')).toEqual([]);
     // unknown names are dropped, the order is the cards'
-    expect(parseCardFolds('["figures","nope","chart"]')).toEqual(['figures', 'chart']);
+    expect(parseCardFolds('["figures","nope","chart"]')).toEqual(['chart', 'figures']);
   });
 
   it('fold and unfold one card, the others stay as they are', () => {
     expect(withCardFolded([], 'table', true)).toEqual(['table']);
-    expect(withCardFolded(['figures'], 'chart', true)).toEqual(['figures', 'chart']);
+    expect(withCardFolded(['figures'], 'chart', true)).toEqual(['chart', 'figures']);
     expect(withCardFolded(['figures', 'chart'], 'chart', false)).toEqual(['figures']);
     expect(withCardFolded(['chart'], 'chart', true)).toEqual(['chart']);
   });

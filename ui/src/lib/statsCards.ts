@@ -5,10 +5,10 @@ import { readRoute, routeHash } from 'appkit-ui/route';
 import { STAT_DIMS, STAT_SORTS, type StatDim, type StatSort } from './stats';
 
 /**
- * The cards below the filter, in the order they stand: the headline numbers, the bars per area with the field they
- * are cut up by, the history, and the table of the bars.
+ * The cards below the filter, in the order they stand: the bars per area with the field they are cut up by, the
+ * headline numbers, the history, and the table of the bars.
  */
-export const STATS_CARDS = ['figures', 'chart', 'history', 'table'] as const;
+export const STATS_CARDS = ['chart', 'figures', 'history', 'table'] as const;
 export type StatsCard = (typeof STATS_CARDS)[number];
 
 export const isStatsCard = (value: unknown): value is StatsCard => (STATS_CARDS as readonly unknown[]).includes(value);

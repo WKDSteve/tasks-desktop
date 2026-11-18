@@ -105,7 +105,7 @@ describe('StatsView, the cards', () => {
 
   it('stand below the filter in their order, and "Cut up by" stands in the card of the bars, over them', async () => {
     const { page } = await shown();
-    expect(cards(page)).toEqual(['figures', 'chart', 'history', 'table']);
+    expect(cards(page)).toEqual(['chart', 'figures', 'history', 'table']);
     const chart = page.querySelector('[data-card="chart"]');
     const dims = chart?.querySelector('[role="group"][aria-label="Cut up by"]');
     expect(dims).not.toBeNull();
@@ -149,7 +149,7 @@ describe('StatsView, the cards', () => {
     expect(page.querySelector('#stats-table')?.tagName).toBe('SPAN');
     [...page.querySelectorAll<HTMLButtonElement>('button')].find((b) => b.textContent === 'Show all statistics')?.click();
     await settle();
-    expect(cards(page)).toEqual(['figures', 'chart', 'history', 'table']);
+    expect(cards(page)).toEqual(['chart', 'figures', 'history', 'table']);
   });
 
   it('have no window button where the page cannot open a window', async () => {

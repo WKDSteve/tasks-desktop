@@ -206,15 +206,6 @@
     </div>
   {/if}
 
-  {#if shows('figures')}
-    <StatsCard {app} card="figures" title={t('stats.figures')} tables={figuresTables} drawnTables bind:section={figuresCard}>
-      {#snippet head()}
-        <Info hint={t('hint.stats')} label={t('hint.about', { what: t('nav.stats') })} />
-      {/snippet}
-      <StatsTiles {app} {tasks} {figures} {finished} {effort} onfinished={openFinished} />
-    </StatsCard>
-  {/if}
-
   {#if shows('chart')}
     <StatsCard {app} card="chart" title={t('stats.chart')} tables={() => areaTable(false)} svg={legend.rows.length > 0 ? chartSvg : undefined} bind:section={chartCard}>
       <div class="bar">
@@ -297,6 +288,15 @@
           {/each}
         </div>
       {/if}
+    </StatsCard>
+  {/if}
+
+  {#if shows('figures')}
+    <StatsCard {app} card="figures" title={t('stats.figures')} tables={figuresTables} drawnTables bind:section={figuresCard}>
+      {#snippet head()}
+        <Info hint={t('hint.stats')} label={t('hint.about', { what: t('nav.stats') })} />
+      {/snippet}
+      <StatsTiles {app} {tasks} {figures} {finished} {effort} onfinished={openFinished} />
     </StatsCard>
   {/if}
 
