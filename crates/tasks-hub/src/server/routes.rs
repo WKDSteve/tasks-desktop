@@ -2221,7 +2221,7 @@ pub(super) async fn split_job(State(st): State<Arc<Shared>>, body: Bytes) -> Res
             "this hub hands no task to an agent",
         );
     };
-    match intake.job(&id).await {
+    match own_job(&intake, &id, &["split-plan"], false).await {
         Ok(doc) => {
             let mut out = serde_json::Map::new();
             for key in ["status", "error", "note", "private"] {
@@ -2250,7 +2250,7 @@ pub(super) async fn split_job(State(st): State<Arc<Shared>>, body: Bytes) -> Res
             }
             axum::Json(serde_json::Value::Object(out)).into_response()
         }
-        Err(refusal) => agent_refusal(&refusal),
+        Err(r) => r,
     }
 }
 

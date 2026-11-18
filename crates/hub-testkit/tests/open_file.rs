@@ -578,6 +578,8 @@ async fn a_plan_goes_to_be_split_with_its_tasks_and_only_the_block_comes_back() 
     // The block of the answer, nothing else of it.
     *fake.doc.lock().unwrap() = serde_json::json!({
         "id": "0123456789abcdef",
+        "source": "tasks-desktop",
+        "kind": "split-plan",
         "status": "done",
         "markdown": "the plan",
         "output": "Thinking.\n<!-- split:begin -->\n{\"tasks\":[]}\n<!-- split:end -->\nmore\n<!-- split:begin -->\n{\"tasks\":[{\"title\":\"B\"}]}\n<!-- split:end -->"
@@ -598,7 +600,7 @@ async fn a_plan_goes_to_be_split_with_its_tasks_and_only_the_block_comes_back() 
         doc.get("output").is_none() && doc.get("markdown").is_none(),
         "{doc}"
     );
-    *fake.doc.lock().unwrap() = serde_json::json!({"status": "done", "output": "no block"});
+    *fake.doc.lock().unwrap() = serde_json::json!({"source": "tasks-desktop", "kind": "split-plan", "status": "done", "output": "no block"});
     let (_, doc) = post(
         &r,
         "/api/tasks/split_job",
@@ -610,7 +612,7 @@ async fn a_plan_goes_to_be_split_with_its_tasks_and_only_the_block_comes_back() 
         doc["block"].is_null() && doc["block_error"].is_string(),
         "{doc}"
     );
-    *fake.doc.lock().unwrap() = serde_json::json!({"status": "running", "output": "<!-- split:begin -->{}<!-- split:end -->"});
+    *fake.doc.lock().unwrap() = serde_json::json!({"source": "tasks-desktop", "kind": "split-plan", "status": "running", "output": "<!-- split:begin -->{}<!-- split:end -->"});
     let (_, doc) = post(
         &r,
         "/api/tasks/split_job",
@@ -619,6 +621,29 @@ async fn a_plan_goes_to_be_split_with_its_tasks_and_only_the_block_comes_back() 
     )
     .await;
     assert!(doc["block"].is_null(), "no block before it is done: {doc}");
+    // A job this hub did not send as a split (a review the page knows the id of) is not shown through this route.
+    for other in [
+        serde_json::json!({"source": "tasks-desktop", "kind": "review-done", "status": "done", "note": "n",
+            "output": "<!-- split:begin -->{\"tasks\":[]}<!-- split:end -->"}),
+        serde_json::json!({"source": "another", "kind": "split-plan", "status": "done",
+            "output": "<!-- split:begin -->{\"tasks\":[]}<!-- split:end -->"}),
+    ] {
+        *fake.doc.lock().unwrap() = other.clone();
+        let (status, doc) = post(
+            &r,
+            "/api/tasks/split_job",
+            r#"{"job":"0123456789abcdef"}"#,
+            true,
+        )
+        .await;
+        assert_eq!(
+            (status, doc["error"]["code"].as_str()),
+            (409, Some("not_own_job")),
+            "{other} {doc}"
+        );
+    }
+    *fake.doc.lock().unwrap() =
+        serde_json::json!({"source": "tasks-desktop", "kind": "split-plan", "status": "running"});
     // A split that runs already is not run a second time; one that waits for a yes is.
     let (status, _) = post(
         &r,
