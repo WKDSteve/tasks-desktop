@@ -1,5 +1,35 @@
 import { describe, expect, it } from 'vitest';
-import { areaAt, boardTargetAt, createGrip, farEnough, GRAB, placeAt, startsOnGrip, type PointerDragEvent } from './pointerDrag';
+import {
+  areaAt,
+  boardTargetAt,
+  calendarTargetAt,
+  createGrip,
+  farEnough,
+  GRAB,
+  placeAt,
+  startsOnGrip,
+  type PointerDragEvent,
+} from './pointerDrag';
+
+describe('the place of the calendar under a finger', () => {
+  /** An element inside a day (`day`), inside the list without a date (`loose`), or in neither. */
+  const at = (day: string | null, loose = false): Element =>
+    ({
+      closest: (sel: string) =>
+        sel === '[data-day]' && day !== null ? { getAttribute: () => day } : sel === '[data-loose]' && loose ? {} : null,
+    }) as unknown as Element;
+
+  it('is the day the point is in, before the list around it', () => {
+    expect(calendarTargetAt({ elementFromPoint: () => at('2026-11-18') }, 0, 0)).toEqual({ kind: 'day', day: '2026-11-18' });
+    expect(calendarTargetAt({ elementFromPoint: () => at('2026-11-18', true) }, 0, 0)).toEqual({ kind: 'day', day: '2026-11-18' });
+  });
+
+  it('is the list of the tasks without a date, and nothing anywhere else or off the page', () => {
+    expect(calendarTargetAt({ elementFromPoint: () => at(null, true) }, 0, 0)).toEqual({ kind: 'loose' });
+    expect(calendarTargetAt({ elementFromPoint: () => at(null) }, 0, 0)).toBeNull();
+    expect(calendarTargetAt({ elementFromPoint: () => null }, 0, 0)).toBeNull();
+  });
+});
 
 /** An element that answers `closest` for the places to drop, as the document does. */
 function place(area: string | null, inside = false): Element {

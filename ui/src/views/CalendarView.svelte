@@ -2,11 +2,15 @@
   // The calendar: the open tasks on their days, a month or a week (see `lib/calendar.ts`). A task stands on its due
   // day; with a start date also on the days from start to due. Dragging a task onto a day sets its due date, dragging
   // it to the list of the tasks without a date takes the date away; both go through the engine (`App.dropOnDay`), which
-  // judges them. The detail sets the dates without dragging, so the drag is not the only way. Overdue is shown as the
-  // list shows it (`isOverdue`); the page works out nothing more than where a task stands.
+  // judges them. A finger drags by the grip of a task, and the keys do the same without dragging (the arrows go over
+  // the days, `m` picks a task up and Enter puts it on the day); the detail sets the dates as well. Overdue is shown
+  // as the list shows it (`isOverdue`); the page works out nothing more than where a task stands.
   import type { App } from '../lib/app.svelte';
+  import { tick } from 'svelte';
   import {
     CALENDAR_MODES,
+    cursorDay,
+    dayAfterKey,
     daysOf,
     marksByDay,
     parseDate,
@@ -16,6 +20,7 @@
     undated,
     type CalendarMode,
   } from '../lib/calendar';
+  import { calendarTargetAt, createGrip, farEnough, type CalendarTarget, type PointerDragEvent } from '../lib/pointerDrag';
   import { isOverdue } from '../lib/remind';
   import { translate, type Key } from '../lib/i18n';
   import Info from 'appkit-ui/Info.svelte';
@@ -97,6 +102,158 @@
     if (id !== null) await app.dropOnDay(id, null);
   }
 
+  // A finger or a pen drags a task by its grip (HTML5 drag does not start on a touch screen), as on the board: the
+  // places count only once the finger has gone a stretch, and the drop goes to the day or the list it moved onto.
+  let from = { x: 0, y: 0 };
+  let fingerAt: CalendarTarget | null = null;
+  const grip = createGrip(
+    () => onPointerDrag,
+    () => app.locked,
+  );
+  function onPointerDrag(e: PointerDragEvent): void {
+    if (e.phase === 'start') {
+      dragging = e.id;
+      from = { x: e.x, y: e.y };
+      fingerAt = null;
+      return;
+    }
+    if (dragging !== e.id) return;
+    if (e.phase === 'move') {
+      fingerAt = farEnough(from, e) ? calendarTargetAt(document, e.x, e.y) : null;
+      overDay = fingerAt?.kind === 'day' ? fingerAt.day : null;
+      overLoose = fingerAt?.kind === 'loose';
+      return;
+    }
+    const target = e.phase === 'end' ? fingerAt : null;
+    onDragEnd();
+    fingerAt = null;
+    if (target !== null) void app.dropOnDay(e.id, target.kind === 'day' ? target.day : null);
+  }
+
+  // The keys: one day of the grid takes Tab (the others are reached with the arrows), and a task is moved without
+  // dragging: `m` on a task picks it up, the arrows choose the day, Enter puts it there; Shift with an arrow moves
+  // the due date of the task under the focus; Delete takes the date away.
+  let root = $state<HTMLElement | null>(null);
+  let chosen = $state<string | null>(null);
+  const cursor = $derived(cursorDay(mode, days, anchor, app.today, chosen));
+  // The task picked up with `m`, until it is put down or given up.
+  let carried = $state<string | null>(null);
+  const carriedTitle = $derived(carried === null ? '' : (app.tasks.find((x) => x.id === carried)?.title ?? carried));
+
+  /** The chip of a task that can be moved: on its due day, or in the list without a date. */
+  function movableChip(id: string): HTMLElement | null {
+    const chips = root?.querySelectorAll<HTMLElement>('.chip[data-task]') ?? [];
+    for (const el of chips) if (el.dataset.task === id && (el.dataset.kind ?? 'due') === 'due') return el;
+    return null;
+  }
+  /** The cursor goes to `day` (the grid follows to its month or week) and the day takes the focus. */
+  async function focusDay(day: string): Promise<void> {
+    chosen = day;
+    if (!days.includes(day)) {
+      picked = day;
+      opened = null;
+    }
+    await tick();
+    root?.querySelector<HTMLElement>(`td[data-day="${day}"]`)?.focus();
+  }
+  /** After a write the task is found again where it stands now; hidden behind "+n more", its day keeps the focus. */
+  async function focusTask(id: string): Promise<void> {
+    await tick();
+    movableChip(id)?.focus();
+  }
+  function pickUp(id: string): void {
+    if (app.locked) return;
+    carried = id;
+    void focusDay(cursor);
+  }
+  async function putDown(day: string | null): Promise<void> {
+    const id = carried;
+    carried = null;
+    if (id === null) return;
+    await app.dropOnDay(id, day);
+    await focusTask(id);
+  }
+  function giveUp(): void {
+    const id = carried;
+    carried = null;
+    if (id !== null) void focusTask(id);
+  }
+  /** The key as the handlers read it: a letter in lower case (CapsLock turns a plain m into 'M'). */
+  const keyOf = (event: KeyboardEvent): string => (event.key.length === 1 ? event.key.toLowerCase() : event.key);
+  /** The task whose movable chip has the focus. */
+  function taskUnder(target: EventTarget | null): string | null {
+    const el = target instanceof HTMLElement ? target.closest<HTMLElement>('.chip[data-task]') : null;
+    return el && (el.dataset.kind ?? 'due') === 'due' ? (el.dataset.task ?? null) : null;
+  }
+  function onGridKey(event: KeyboardEvent): void {
+    if (event.ctrlKey || event.metaKey || event.altKey) return;
+    const day = event.target instanceof HTMLElement ? event.target.closest<HTMLElement>('td[data-day]')?.dataset.day : undefined;
+    if (day === undefined) return;
+    const key = keyOf(event);
+    const id = taskUnder(event.target);
+    const next = dayAfterKey(mode, day, key);
+    if (next !== null) {
+      if (event.shiftKey) {
+        // Shift moves the due date of the task under the focus, not the cursor.
+        if (id === null || carried !== null) return;
+        event.preventDefault();
+        if (event.repeat) return;
+        void (async () => {
+          chosen = next;
+          if (!days.includes(next)) picked = next;
+          await app.dropOnDay(id, next);
+          await focusTask(id);
+        })();
+        return;
+      }
+      event.preventDefault();
+      void focusDay(next);
+      return;
+    }
+    if (event.shiftKey) return;
+    if (carried !== null) {
+      if (key === 'Enter' || key === ' ') {
+        event.preventDefault();
+        if (!event.repeat) void putDown(day);
+      } else if (key === 'Delete' || key === 'Backspace') {
+        event.preventDefault();
+        if (!event.repeat) void putDown(null);
+      } else if (key === 'Escape') {
+        event.preventDefault();
+        giveUp();
+      }
+      return;
+    }
+    if (id === null || event.repeat) return;
+    if (key === 'm') {
+      event.preventDefault();
+      chosen = day;
+      pickUp(id);
+    } else if (key === 'Delete' || key === 'Backspace') {
+      event.preventDefault();
+      void (async () => {
+        await app.dropOnDay(id, null);
+        await focusTask(id);
+      })();
+    }
+  }
+  function onLooseKey(event: KeyboardEvent): void {
+    if (event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return;
+    const key = keyOf(event);
+    if (carried !== null) {
+      if (key === 'Escape') {
+        event.preventDefault();
+        giveUp();
+      }
+      return;
+    }
+    const id = taskUnder(event.target);
+    if (id !== null && key === 'm' && !event.repeat) {
+      event.preventDefault();
+      pickUp(id);
+    }
+  }
+
   function go(direction: 1 | -1): void {
     picked = step(mode, anchor, direction);
     opened = null;
@@ -124,6 +281,7 @@
     class:overdue={m.kind === 'due' && task.status !== 'parked' && isOverdue(task.due, app.today)}
     class:selected={app.selectedId === task.id}
     class:dragging={dragging === task.id}
+    class:carried={carried === task.id}
     draggable={m.kind === 'due' && !app.locked}
     data-task={task.id}
     data-kind={m.kind}
@@ -137,7 +295,21 @@
   </button>
 {/snippet}
 
-<section class="calendar" aria-label={t('nav.calendar')}>
+<!-- A finger drags by this grip (the keys and a screen reader have `m` and the arrows). -->
+{#snippet handle(id: string)}
+  <span
+    class="grip"
+    data-hint={t('hint.ui.calendar.grip')}
+    role="presentation"
+    aria-hidden="true"
+    onpointerdown={(e) => grip(e, id, 'start')}
+    onpointermove={(e) => grip(e, id, 'move')}
+    onpointerup={(e) => grip(e, id, 'end')}
+    onpointercancel={(e) => grip(e, id, 'cancel')}>⠿</span
+  >
+{/snippet}
+
+<section class="calendar" aria-label={t('nav.calendar')} bind:this={root}>
   <FilterNote {app} />
   <header class="intro">
     <div class="head">
@@ -158,10 +330,19 @@
         </select>
       </label>
     </div>
+    <p class="help">{t('calendar.help')}</p>
+    <!-- Always in the page, so that a screen reader hears it fill. -->
+    <p class="carry" role="status" data-calendar-carry>
+      {#if carried !== null}
+        <span>{t('calendar.carry', { title: carriedTitle })}</span>
+        <button type="button" onclick={giveUp}>{t('calendar.carry_stop')}</button>
+      {/if}
+    </p>
   </header>
 
   <div class="layout">
-    <table class="grid" class:week={mode === 'week'}>
+    <!-- svelte-ignore a11y_no_noninteractive_element_to_interactive_role -->
+    <table class="grid" class:week={mode === 'week'} role="grid" aria-label={heading} onkeydown={onGridKey}>
       <thead>
         <tr>{#each weekdays as name, i (i)}<th scope="col">{name}</th>{/each}</tr>
       </thead>
@@ -171,9 +352,11 @@
             {#each week as day (day)}
               {@const here = marks.get(day) ?? []}
               <td
+                role="gridcell"
+                tabindex={day === cursor ? 0 : -1}
                 class:today={day === app.today}
                 class:dim={mode === 'month' && !sameMonth(day, anchor)}
-                class:over={overDay === day && dragging !== null}
+                class:over={(overDay === day && dragging !== null) || (carried !== null && day === cursor)}
                 data-day={day}
                 aria-label={t('calendar.day', { date: day, n: here.length })}
                 ondragover={(e) => onDayOver(e, day)}
@@ -182,7 +365,10 @@
                 <span class="num" aria-hidden="true">{Number(day.slice(8))}</span>
                 <ul>
                   {#each here.slice(0, limitOf(day, here.length)) as m (`${m.task.id}:${m.kind}`)}
-                    <li>{@render chip(m)}</li>
+                    <li>
+                      {#if m.kind === 'due' && !app.locked}{@render handle(m.task.id)}{/if}
+                      {@render chip(m)}
+                    </li>
                   {/each}
                 </ul>
                 {#if here.length > limitOf(day, here.length)}
@@ -201,6 +387,7 @@
       class="loose"
       class:over={overLoose && dragging !== null}
       aria-label={t('calendar.undated')}
+      data-loose
       ondragover={onLooseOver}
       ondrop={(e) => void onLooseDrop(e)}
     >
@@ -212,16 +399,19 @@
         <ul>
           {#each loose.slice(0, 200) as task (task.id)}
             <li>
+              {#if !app.locked}{@render handle(task.id)}{/if}
               <button
                 type="button"
                 class="chip loose-chip"
                 class:selected={app.selectedId === task.id}
                 class:dragging={dragging === task.id}
+                class:carried={carried === task.id}
                 draggable={!app.locked}
                 data-task={task.id}
                 title={task.title}
                 ondragstart={(e) => onDragStart(e, task.id)}
                 ondragend={onDragEnd}
+                onkeydown={onLooseKey}
                 onclick={() => app.peek(task.id)}
               >
                 <span class="chip-title">{markHidden(task.title)}</span>
@@ -335,7 +525,48 @@
     flex-direction: column;
     gap: 0.12rem;
   }
+  li {
+    display: flex;
+    align-items: center;
+    gap: 0.1rem;
+    min-width: 0;
+  }
+  .grip {
+    flex: none;
+    min-width: 1.1rem;
+    text-align: center;
+    cursor: grab;
+    color: var(--muted);
+    font-size: 0.8rem;
+    touch-action: none;
+    user-select: none;
+  }
+  td:focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: -2px;
+  }
+  .help,
+  .carry {
+    color: var(--muted);
+    font-size: 0.85rem;
+    margin: 0.3rem 0 0;
+  }
+  .carry {
+    color: var(--text);
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .carry:empty {
+    display: none;
+  }
+  .chip.carried {
+    outline: 2px dashed var(--accent);
+  }
   .chip {
+    flex: 1;
+    min-width: 0;
     width: 100%;
     text-align: left;
     padding: 0.05rem 0.3rem;

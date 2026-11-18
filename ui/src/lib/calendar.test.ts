@@ -1,5 +1,61 @@
 import { describe, expect, it } from 'vitest';
-import { addDays, addMonths, daysOf, marksByDay, parseDate, sameMonth, startOfWeek, step, undated } from './calendar';
+import {
+  addDays,
+  addMonths,
+  cursorDay,
+  dayAfterKey,
+  daysOf,
+  marksByDay,
+  parseDate,
+  sameMonth,
+  startOfWeek,
+  step,
+  undated,
+} from './calendar';
+
+describe('the keys of the calendar', () => {
+  it('go a day or a week with the arrows and with h, j, k, l, over the end of a month', () => {
+    expect(dayAfterKey('month', '2026-11-30', 'ArrowRight')).toBe('2026-12-01');
+    expect(dayAfterKey('month', '2026-11-01', 'ArrowLeft')).toBe('2026-10-31');
+    expect(dayAfterKey('month', '2026-11-18', 'ArrowUp')).toBe('2026-11-11');
+    expect(dayAfterKey('month', '2026-11-18', 'ArrowDown')).toBe('2026-11-25');
+    expect(dayAfterKey('week', '2026-11-18', 'h')).toBe('2026-11-17');
+    expect(dayAfterKey('week', '2026-11-18', 'l')).toBe('2026-11-19');
+    expect(dayAfterKey('week', '2026-11-18', 'k')).toBe('2026-11-11');
+    expect(dayAfterKey('week', '2026-11-18', 'j')).toBe('2026-11-25');
+  });
+
+  it('go to the ends of the week, and a month on (a week in the week view), staying inside a shorter month', () => {
+    expect(dayAfterKey('month', '2026-11-18', 'Home')).toBe('2026-11-16');
+    expect(dayAfterKey('month', '2026-11-18', 'End')).toBe('2026-11-22');
+    expect(dayAfterKey('month', '2026-11-18', 'PageDown')).toBe('2026-12-18');
+    expect(dayAfterKey('month', '2026-11-18', 'PageUp')).toBe('2026-10-18');
+    expect(dayAfterKey('month', '2027-01-31', 'PageDown')).toBe('2027-02-28');
+    expect(dayAfterKey('month', '2026-03-31', 'PageUp')).toBe('2026-02-28');
+    expect(dayAfterKey('week', '2026-11-18', 'PageDown')).toBe('2026-11-25');
+    expect(dayAfterKey('week', '2026-11-18', 'PageUp')).toBe('2026-11-11');
+  });
+
+  it('lead nowhere for any other key, and from text that is no date', () => {
+    expect(dayAfterKey('month', '2026-11-18', 'Enter')).toBeNull();
+    expect(dayAfterKey('month', '2026-11-18', 'm')).toBeNull();
+    expect(dayAfterKey('month', 'soon', 'ArrowLeft')).toBeNull();
+  });
+
+  it('start from the chosen day, else from today, else from the first day of what is shown', () => {
+    const nov = daysOf('month', '2026-11-18');
+    expect(cursorDay('month', nov, '2026-11-18', '2026-11-18', '2026-11-05')).toBe('2026-11-05');
+    expect(cursorDay('month', nov, '2026-11-18', '2026-11-18', null)).toBe('2026-11-18');
+    // A chosen day the grid no longer shows does not count.
+    expect(cursorDay('month', nov, '2026-11-18', '2026-11-18', '2027-01-05')).toBe('2026-11-18');
+    // Today is elsewhere: the first of the month (not the Monday of the month before that the grid starts with).
+    const jan = daysOf('month', '2027-01-15');
+    expect(jan[0]).toBe('2026-12-28');
+    expect(cursorDay('month', jan, '2027-01-15', '2026-11-18', null)).toBe('2027-01-01');
+    const week = daysOf('week', '2027-01-15');
+    expect(cursorDay('week', week, '2027-01-15', '2026-11-18', null)).toBe('2027-01-11');
+  });
+});
 import { task } from './fixtures';
 
 describe('calendar dates', () => {

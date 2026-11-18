@@ -5444,6 +5444,59 @@ test('the calendar shows a task on its due day; dragging sets the date, dragging
   expect(await violations(page)).toEqual([]);
 });
 
+test('the calendar is worked with the keys: m and Enter put a task on a day, Shift with an arrow moves it, Delete takes the date away', async ({ page }) => {
+  await watchViolations(page);
+  await pair(page);
+  const title = `Calendar keys ${Date.now()}`;
+  await capture(page, title);
+  await chooseView(page, 'View', 'Calendar');
+  // A week shows every task of a day (a month hides those after the fourth, and the tests share the vault).
+  await page.locator('label.mode select').selectOption('week');
+  const today = page.locator('td.today');
+  await expect(today).toHaveCount(1);
+  const day = (await today.getAttribute('data-day')) ?? '';
+  const next = new Date(Date.parse(`${day}T00:00:00Z`) + 86_400_000).toISOString().slice(0, 10);
+
+  const dir = join(state().vault, 'lib.nvim', 'ROADMAP', 'tasks');
+  const fileOf = () => readdirSync(dir).find((name) => readFileSync(join(dir, name), 'utf8').includes(`title: ${title}`));
+  const answered = async (step: () => Promise<unknown>) => {
+    const answer = nextAnswer(page);
+    await step();
+    await answer;
+  };
+
+  // One day takes Tab: today. The task without a date is picked up, and the day the keys are on takes the focus.
+  await expect(page.locator('td[data-day][tabindex="0"]')).toHaveCount(1);
+  const loose = page.locator('aside.loose').locator('.chip', { hasText: title });
+  await loose.focus();
+  await page.keyboard.press('m');
+  await expect(today).toBeFocused();
+  await expect(page.locator('[data-calendar-carry]')).toContainText(title);
+  expect(await violations(page)).toEqual([]);
+
+  // The arrow goes to tomorrow (into the next week, on a Sunday), Enter puts the task there.
+  await page.keyboard.press('ArrowRight');
+  const tomorrow = page.locator(`td[data-day="${next}"]`);
+  await expect(tomorrow).toBeFocused();
+  await answered(() => page.keyboard.press('Enter'));
+  expect(fileOf(), 'the task file').toBeDefined();
+  await expect.poll(() => readFileSync(join(dir, fileOf()!), 'utf8'), { timeout: WRITE_BUDGET }).toContain(`due: ${next}`);
+  await expect(tomorrow.locator('.chip.due', { hasText: title })).toBeFocused();
+  await expect(page.locator('[data-calendar-carry]')).toBeEmpty();
+
+  // Shift with the arrow moves the due date a day back, and the focus goes with the task.
+  await answered(() => page.keyboard.press('Shift+ArrowLeft'));
+  await expect.poll(() => readFileSync(join(dir, fileOf()!), 'utf8'), { timeout: WRITE_BUDGET }).toContain(`due: ${day}`);
+  await expect(page.locator(`td[data-day="${day}"] .chip.due`, { hasText: title })).toBeFocused();
+
+  // Delete takes the date away: the task is in the list without a date again.
+  await answered(() => page.keyboard.press('Delete'));
+  await expect.poll(() => readFileSync(join(dir, fileOf()!), 'utf8'), { timeout: WRITE_BUDGET }).not.toContain('due:');
+  await expect(loose).toBeFocused();
+  expect(await violations(page)).toEqual([]);
+  expect(consoleProblems.get(page)).toEqual([]);
+});
+
 test('a task past its due date is marked on its board card and found by the overdue filter', async ({ page }) => {
   await watchViolations(page);
   await pair(page);
@@ -7372,6 +7425,68 @@ test.describe('a finger', () => {
     const gone = nextAnswer(page);
     await page.getByRole('button', { name: 'Delete view' }).click();
     await gone;
+    removeFile(file);
+  });
+
+  test('drags a task of the calendar by its grip onto a day and back to the list: the due date is set and taken away', async ({ page }) => {
+    const slug = 'calendar-touch-e2e';
+    const file = join(state().vault, 'lib.nvim', 'ROADMAP', 'tasks', `${slug}.md`);
+    writeFileSync(file, `---\ntitle: Calendar finger e2e\nstatus: open\nkind: task\n---\n\nTo be moved by a finger.\n`);
+    await watchViolations(page);
+    await pair(page);
+    await chooseView(page, 'View', 'Calendar');
+    await page.locator('label.mode select').selectOption('week');
+    const today = page.locator('td.today');
+    const day = (await today.getAttribute('data-day')) ?? '';
+    const loose = page.locator('aside.loose');
+    const row = loose.locator('li', { hasText: 'Calendar finger e2e' });
+    await expect(row).toBeVisible();
+
+    const cdp = await page.context().newCDPSession(page);
+    const touch = (type: 'touchStart' | 'touchMove' | 'touchEnd' | 'touchCancel', at?: { x: number; y: number }) =>
+      cdp.send('Input.dispatchTouchEvent', { type, touchPoints: at ? [{ x: at.x, y: at.y }] : [] });
+    const centre = async (target: ReturnType<typeof page.locator>) => {
+      await target.scrollIntoViewIfNeeded();
+      const box = (await target.boundingBox())!;
+      return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+    };
+
+    // The calendar has no card that tells a write is over: its answer is waited for (the grip is back after it).
+    const answered = async (step: () => Promise<unknown>) => {
+      const answer = nextAnswer(page);
+      await step();
+      await answer;
+    };
+
+    // A short drag (the finger hardly moves) drops nothing.
+    const grip = await centre(row.locator('.grip'));
+    await touch('touchStart', grip);
+    await touch('touchMove', { x: grip.x + 6, y: grip.y + 6 });
+    await touch('touchEnd');
+    await expect(row).toBeVisible();
+    expect(readFileSync(file, 'utf8')).not.toContain('due:');
+
+    // Down on the grip, a little aside, then over today and up: the due date is written.
+    const again = await centre(row.locator('.grip'));
+    await touch('touchStart', again);
+    await touch('touchMove', { x: again.x + 8, y: again.y + 8 });
+    await touch('touchMove', await centre(today.locator('.num')));
+    await expect(today).toHaveClass(/over/);
+    await answered(() => touch('touchEnd'));
+    await expect.poll(() => readFileSync(file, 'utf8'), { timeout: WRITE_BUDGET }).toContain(`due: ${day}`);
+    const placed = today.locator('li', { hasText: 'Calendar finger e2e' });
+    await expect(placed.locator('.grip')).toBeVisible({ timeout: WRITE_BUDGET });
+
+    // And back onto the list of the tasks without a date: the date is gone.
+    const back = await centre(placed.locator('.grip'));
+    await touch('touchStart', back);
+    await touch('touchMove', { x: back.x + 8, y: back.y + 8 });
+    await touch('touchMove', await centre(loose.locator('h3')));
+    await expect(loose).toHaveClass(/over/);
+    await answered(() => touch('touchEnd'));
+    await expect.poll(() => readFileSync(file, 'utf8'), { timeout: WRITE_BUDGET }).not.toContain('due:');
+    await expect(row).toBeVisible();
+    expect(await violations(page)).toEqual([]);
     removeFile(file);
   });
 

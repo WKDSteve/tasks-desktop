@@ -42,3 +42,15 @@ export function boardTargetAt(doc: PointSource, x: number, y: number): BoardTarg
   const column = el.closest('[data-column]')?.getAttribute('data-column');
   return column ? { kind: 'column', column } : null;
 }
+
+/** What a point of the calendar is over: a day of the grid, or the list of the tasks without a date. */
+export type CalendarTarget = { kind: 'day'; day: string } | { kind: 'loose' };
+
+/** The day or the list without a date that the point is on (a day carries `data-day`, the list `data-loose`). */
+export function calendarTargetAt(doc: PointSource, x: number, y: number): CalendarTarget | null {
+  const el = doc.elementFromPoint(x, y);
+  if (!el) return null;
+  const day = el.closest('[data-day]')?.getAttribute('data-day');
+  if (day) return { kind: 'day', day };
+  return el.closest('[data-loose]') ? { kind: 'loose' } : null;
+}

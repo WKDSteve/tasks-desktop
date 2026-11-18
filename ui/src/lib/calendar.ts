@@ -116,3 +116,61 @@ export function undated(tasks: readonly TaskEntry[]): TaskEntry[] {
 export function sameMonth(date: string, anchor: string): boolean {
   return date.slice(0, 7) === anchor.slice(0, 7);
 }
+
+/** The day of the month of `date` in the month `months` away, or the last day of that month when it is shorter. */
+function sameDayOfMonth(date: string, months: number): string {
+  const first = addMonths(date, months);
+  const last = addDays(addMonths(first, 1), -1);
+  const wanted = `${first.slice(0, 8)}${date.slice(8)}`;
+  return wanted > last ? last : wanted;
+}
+
+/**
+ * The day a key leads to from `day`, or null for a key that leads nowhere: the arrows (and h, j, k, l) go a day or a
+ * week, Home and End to the Monday and the Sunday of the week, PageUp and PageDown a month (in a week: a week). `key`
+ * is the key as the event names it; a single letter is expected in lower case.
+ */
+export function dayAfterKey(mode: CalendarMode, day: string, key: string): string | null {
+  if (!parseDate(day)) return null;
+  switch (key) {
+    case 'ArrowLeft':
+    case 'h':
+      return addDays(day, -1);
+    case 'ArrowRight':
+    case 'l':
+      return addDays(day, 1);
+    case 'ArrowUp':
+    case 'k':
+      return addDays(day, -7);
+    case 'ArrowDown':
+    case 'j':
+      return addDays(day, 7);
+    case 'Home':
+      return startOfWeek(day);
+    case 'End':
+      return addDays(startOfWeek(day), 6);
+    case 'PageUp':
+      return mode === 'week' ? addDays(day, -7) : sameDayOfMonth(day, -1);
+    case 'PageDown':
+      return mode === 'week' ? addDays(day, 7) : sameDayOfMonth(day, 1);
+    default:
+      return null;
+  }
+}
+
+/**
+ * The day the keys start from when none was chosen yet (or the chosen one is not in the grid): today when the grid
+ * shows it, else the first day of the month on view, or of the week.
+ */
+export function cursorDay(
+  mode: CalendarMode,
+  days: readonly string[],
+  anchor: string,
+  today: string,
+  chosen: string | null,
+): string {
+  if (chosen !== null && days.includes(chosen)) return chosen;
+  if (days.includes(today)) return today;
+  const first = mode === 'month' ? addMonths(anchor, 0) : days[0];
+  return first !== undefined && days.includes(first) ? first : (days[0] ?? anchor);
+}
