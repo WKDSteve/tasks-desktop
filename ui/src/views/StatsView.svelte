@@ -207,7 +207,7 @@
   {/if}
 
   {#if shows('figures')}
-    <StatsCard {app} card="figures" title={t('stats.figures')} tables={figuresTables} bind:section={figuresCard}>
+    <StatsCard {app} card="figures" title={t('stats.figures')} tables={figuresTables} drawnTables bind:section={figuresCard}>
       {#snippet head()}
         <Info hint={t('hint.stats')} label={t('hint.about', { what: t('nav.stats') })} />
       {/snippet}

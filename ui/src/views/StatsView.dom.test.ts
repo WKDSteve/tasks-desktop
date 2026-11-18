@@ -186,6 +186,28 @@ describe('StatsView, the cards', () => {
     expect(md).toContain('| By Status | doing | 1 |');
   });
 
+  it('folded, offer no print of the head alone and no export of numbers read from a body not drawn', async () => {
+    const { m, page } = await shown();
+    m.app.setStatsCardOpen('figures', false);
+    m.app.setStatsCardOpen('table', false);
+    await settle();
+    // the headline numbers are read from the drawn tiles: folded, the card has nothing to put out
+    expect(page.querySelector('[data-card="figures"] [data-tool="menu"]')).toBeNull();
+    // the table of the bars is counted, not read: it is still exported, but a print would show the head alone
+    page.querySelector<HTMLElement>('[data-card="table"] [data-tool="menu"]')?.click();
+    await settle();
+    expect(page.querySelector('[data-card="table"] [data-out="csv"]')).not.toBeNull();
+    expect(page.querySelector('[data-card="table"] [data-out="print"]')).toBeNull();
+    m.app.setStatsCardOpen('figures', true);
+    await settle();
+    page.querySelector<HTMLElement>('[data-card="figures"] [data-tool="menu"]')?.click();
+    await settle();
+    expect(page.querySelector('[data-card="figures"] [data-out="print"]')).not.toBeNull();
+    page.querySelector<HTMLButtonElement>('[data-card="figures"] [data-out="copy"]')?.click();
+    await settle();
+    expect(m.copied.at(-1)).toContain('| Open | 2 |');
+  });
+
   it('offer no drawing to save while they draw none (no bars without a task)', async () => {
     const m = make({ token: 't' });
     made = m;

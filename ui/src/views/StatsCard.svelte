@@ -17,6 +17,7 @@
     title,
     tables,
     svg,
+    drawnTables = false,
     head,
     children,
     section = $bindable(),
@@ -28,6 +29,8 @@
     tables: () => CardTable[];
     /** The drawing of the card as an SVG file; left out while the card draws none (the menu then offers no SVG). */
     svg?: () => string | null;
+    /** The tables are read from the drawn body (the headline numbers): a folded card has none to export. */
+    drawnTables?: boolean;
     /** More of the head, after the name (a hint, a way back). */
     head?: Snippet;
     children: Snippet;
@@ -38,6 +41,8 @@
   const alone = $derived(app.statsCard === card);
   const open = $derived(alone || !app.statsFolded.includes(card));
   const id = $derived(`stats-${card}`);
+  // A folded card draws no body: nothing of it to print, and no tables where they are read from the drawing.
+  const tablesOffered = $derived(open || !drawnTables);
 
   let menuOpen = $state(false);
   let details: HTMLDetailsElement | undefined = $state();
@@ -112,29 +117,33 @@
           onclick={() => app.openCardApart(card)}><span aria-hidden="true">⧉</span></button
         >
       {/if}
-      <details class="menu" bind:open={menuOpen} bind:this={details}>
-        <summary
-          class="tool"
-          data-tool="menu"
-          aria-label={t('stats.card.menu', { card: title })}
-          data-hint={t('hint.stats.card.menu')}
-          bind:this={summary}
-          onkeydown={onKey}><span aria-hidden="true">⤓</span></summary
-        >
-        <div class="popup" role="group" aria-label={t('stats.card.menu', { card: title })}>
-          <button type="button" data-out="print" onkeydown={onKey} onclick={print}>{t('stats.card.print')}</button>
-          <button type="button" data-out="csv" onkeydown={onKey} onclick={() => put('csv', 'save')}>{t('export.save', { format: 'CSV' })}</button>
-          <button type="button" data-out="markdown" onkeydown={onKey} onclick={() => put('markdown', 'save')}
-            >{t('export.save', { format: 'Markdown' })}</button
+      {#if tablesOffered}
+        <details class="menu" bind:open={menuOpen} bind:this={details}>
+          <summary
+            class="tool"
+            data-tool="menu"
+            aria-label={t('stats.card.menu', { card: title })}
+            data-hint={t('hint.stats.card.menu')}
+            bind:this={summary}
+            onkeydown={onKey}><span aria-hidden="true">⤓</span></summary
           >
-          <button type="button" data-out="copy" onkeydown={onKey} onclick={() => put('markdown', 'copy')}
-            >{t('export.copy', { format: 'Markdown' })}</button
-          >
-          {#if svg && open}
-            <button type="button" data-out="svg" onkeydown={onKey} onclick={saveSvg}>{t('export.save', { format: 'SVG' })}</button>
-          {/if}
-        </div>
-      </details>
+          <div class="popup" role="group" aria-label={t('stats.card.menu', { card: title })}>
+            {#if open}
+              <button type="button" data-out="print" onkeydown={onKey} onclick={print}>{t('stats.card.print')}</button>
+            {/if}
+            <button type="button" data-out="csv" onkeydown={onKey} onclick={() => put('csv', 'save')}>{t('export.save', { format: 'CSV' })}</button>
+            <button type="button" data-out="markdown" onkeydown={onKey} onclick={() => put('markdown', 'save')}
+              >{t('export.save', { format: 'Markdown' })}</button
+            >
+            <button type="button" data-out="copy" onkeydown={onKey} onclick={() => put('markdown', 'copy')}
+              >{t('export.copy', { format: 'Markdown' })}</button
+            >
+            {#if svg && open}
+              <button type="button" data-out="svg" onkeydown={onKey} onclick={saveSvg}>{t('export.save', { format: 'SVG' })}</button>
+            {/if}
+          </div>
+        </details>
+      {/if}
     </div>
   </div>
   {#if open}
