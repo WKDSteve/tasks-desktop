@@ -36,7 +36,7 @@
     stepTitle,
   } from '../lib/fields';
   import Blocks from 'appkit-ui/Blocks.svelte';
-  import { parseSheets } from '../lib/abnahme';
+  import { parseSheets } from '../lib/sheets';
 
   let { app }: { app: App } = $props();
   // The detail can stand twice at once (the float and the side): each has its own list of the reasons.

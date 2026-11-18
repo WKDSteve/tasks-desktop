@@ -16,7 +16,6 @@
   import ConflictsButton from './views/ConflictsButton.svelte';
   import FinishedDialog from './views/FinishedDialog.svelte';
   import Detail from './views/Detail.svelte';
-  import CheckDialog from './views/CheckDialog.svelte';
   import { triageKey } from './lib/inbox';
   import { copyText } from './lib/exportDom';
   import Brand from 'appkit-ui/Brand.svelte';
@@ -38,7 +37,6 @@
   import { installTaskApart } from './lib/taskApart';
   import { createContextRegistry, taskTarget, viewTarget } from './lib/context';
   import { vaultMenuItems, vaultMenuOpened } from './lib/vaultMenu';
-  import ConflictCenter from './views/ConflictCenter.svelte';
   import SetupCard from './views/SetupCard.svelte';
   import HubNotice from './views/HubNotice.svelte';
   import Toast from './views/Toast.svelte';
@@ -983,7 +981,7 @@
     <Lazy {app} when={app.matrix !== null} load={() => import('./views/Matrix.svelte')} onfailed={() => app.closeMatrix()} />
     <TaskDialog {app} />
     <FinishedDialog {app} />
-    <CheckDialog {app} />
+    <Lazy {app} when={app.checking} load={() => import('./views/CheckDialog.svelte')} onfailed={() => app.closeChecks()} />
     <BlockDialog {app} />
     <DropMoveDialog {app} />
     <Palette {app} />
@@ -1003,7 +1001,7 @@
         close: t('kit.dismiss'),
       }}
     />
-    <ConflictCenter {app} />
+    <Lazy {app} when={app.conflictsOpen} load={() => import('./views/ConflictCenter.svelte')} onfailed={() => app.closeConflicts()} />
     <Lazy {app} when={app.managingVaults} load={() => import('./views/VaultsDialog.svelte')} onfailed={() => app.closeVaults()} />
     <Lazy {app} when={app.agentFor !== null} load={() => import('./views/AgentDialog.svelte')} onfailed={() => app.closeAgent()} />
     <Lazy {app} when={app.splitFor !== null} load={() => import('./views/SplitDialog.svelte')} onfailed={() => app.closeSplit()} />
