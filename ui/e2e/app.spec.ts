@@ -7868,6 +7868,92 @@ test('the actions of a row: only on the row under the pointer or with the focus,
   removeFile(file);
 });
 
+test('tags are given from the context menu: one that exists to three marked tasks at once, a new one typed, one taken away, and all with a tag are shown', async ({ page }) => {
+  test.slow();
+  const dir = join(state().vault, 'lib.nvim', 'ROADMAP', 'tasks');
+  const file = (n: number) => join(dir, `tagq-${n}.md`);
+  for (const n of [1, 2, 3]) writeFileSync(file(n), `---\ntitle: Tagq t00${n}\nstatus: open\nkind: task\n---\n\nTo be tagged.\n`);
+  writeFileSync(file(4), `---\ntitle: Tagq t004\nstatus: open\nkind: task\ntags: [tagq-have]\n---\n\nTagged already.\n`);
+  await pair(page);
+  await showList(page);
+  await page.getByRole('searchbox', { name: /search/i }).first().fill('Tagq t00');
+  const rows = page.locator('button.row', { hasText: 'Tagq t00' });
+  await expect(rows).toHaveCount(4);
+  const row = (n: number) => page.locator('button.row', { hasText: `Tagq t00${n}` });
+  const menu = page.getByRole('menu', { name: 'Context menu' });
+
+  // Three tasks marked: a right click on one of them gives the tag to all three, in one write.
+  for (const n of [1, 2, 3]) await page.getByRole('checkbox', { name: `Mark lib.nvim/tagq-${n}` }).check();
+  await expect(page.getByText('3 marked')).toBeVisible();
+  await row(2).click({ button: 'right' });
+  await menu.getByRole('menuitem', { name: 'Add tag ...' }).click();
+  const adding = page.getByRole('dialog', { name: 'Add tags to 3 tasks' });
+  await expect(adding).toBeVisible();
+  const search = adding.getByRole('combobox', { name: 'Search the tags, or type a new one' });
+  await expect(search).toBeFocused();
+  await expectAccessible(page, 'the choice of tags for three marked tasks');
+  // The tag another task carries is in the list, with how many carry it.
+  await search.fill('tagq-ha');
+  await expect(adding.getByRole('option', { name: /tagq-have/ })).toContainText('on 1 tasks');
+  await page.keyboard.press('Enter');
+  await expect(adding.getByRole('status')).toHaveText('Chosen: tagq-have');
+  const added = nextAnswer(page);
+  await adding.getByRole('button', { name: 'Add (changes 3)' }).click();
+  await added;
+  await expect(adding).toHaveCount(0);
+  for (const n of [1, 2, 3]) expect(readFileSync(file(n), 'utf8'), `task ${n}`).toMatch(/^tags: \[?tagq-have\]?$/m);
+  await expect(page.getByText('Saved: 3.')).toBeVisible();
+
+  // All with this tag: the chip of the tag in the detail of a task shows exactly the four that carry it.
+  await page.getByRole('searchbox', { name: /search/i }).first().fill('');
+  await open(page, 'lib.nvim/tagq-1');
+  await taskFloat(page).getByRole('button', { name: 'Show all with the tag tagq-have' }).click();
+  await expect(taskFloat(page)).toHaveCount(0);
+  await expect(page.locator('button.row')).toHaveCount(4);
+  await expect(page.locator('button.row', { hasText: 'Tagq t00' })).toHaveCount(4);
+
+  // A new tag, typed: the "+" beside the tags of a task opens the same choice for that task alone.
+  for (const box of await page.locator('.rows').getByRole('checkbox').all()) await box.uncheck();
+  await open(page, 'lib.nvim/tagq-4');
+  await taskFloat(page).getByRole('button', { name: 'Add a tag from a list' }).click();
+  const one = page.getByRole('dialog', { name: 'Add tags to: Tagq t004' });
+  await one.getByRole('combobox').fill('tagq-new');
+  await expect(one.getByRole('option')).toHaveCount(1);
+  await expect(one.getByRole('option', { name: 'New tag: tagq-new' })).toBeVisible();
+  await page.keyboard.press('Enter');
+  await expect(one.getByRole('status')).toHaveText('Chosen: tagq-new');
+  const made = nextAnswer(page);
+  await one.getByRole('button', { name: 'Add (changes 1)' }).click();
+  await made;
+  await expect(one).toHaveCount(0);
+  expect(readFileSync(file(4), 'utf8')).toMatch(/tagq-have/);
+  expect(readFileSync(file(4), 'utf8')).toMatch(/tagq-new/);
+  await closeFloat(page);
+
+  // Taken away again, by the context menu of the row (the keys: the menu key opens it).
+  await row(4).focus();
+  await page.keyboard.press('Shift+F10');
+  await menu.getByRole('menuitem', { name: 'Remove tag ...' }).click();
+  const removing = page.getByRole('dialog', { name: 'Remove tags from: Tagq t004' });
+  await expect(removing.getByRole('option')).toHaveCount(2);
+  await removing.getByRole('option', { name: /tagq-new/ }).click();
+  const gone = nextAnswer(page);
+  await removing.getByRole('button', { name: 'Remove (changes 1)' }).click();
+  await gone;
+  await expect(removing).toHaveCount(0);
+  expect(readFileSync(file(4), 'utf8')).not.toMatch(/tagq-new/);
+  expect(readFileSync(file(4), 'utf8')).toMatch(/tagq-have/);
+
+  // The palette shows all with a tag as well.
+  await page.getByRole('searchbox', { name: /search/i }).first().fill('');
+  await page.keyboard.press('Control+k');
+  await page.getByRole('dialog').getByRole('combobox').fill('tag tagq-have');
+  await page.keyboard.press('Enter');
+  await expect(page.locator('button.row', { hasText: 'Tagq t00' })).toHaveCount(4);
+  await expect(page.locator('button.row')).toHaveCount(4);
+  for (const n of [1, 2, 3, 4]) removeFile(file(n));
+});
+
 test('with the option to save with a button, the fields of a task are held until Save or Ctrl+S, and Discard brings the file back', async ({ page }) => {
   await watchViolations(page);
   await pair(page);

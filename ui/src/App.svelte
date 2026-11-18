@@ -1003,6 +1003,7 @@
     <Lazy {app} when={app.agentFor !== null} load={() => import('./views/AgentDialog.svelte')} onfailed={() => app.closeAgent()} />
     <Lazy {app} when={app.splitFor !== null} load={() => import('./views/SplitDialog.svelte')} onfailed={() => app.closeSplit()} />
     <Lazy {app} when={app.answer !== null} load={() => import('./views/AnswerDialog.svelte')} onfailed={() => app.closeAnswer()} />
+    <Lazy {app} when={app.tagging !== null} load={() => import('./views/TagDialog.svelte')} onfailed={() => app.closeTagging()} />
   {/if}
   <!-- Outside the ready block: the Info dialog and its report are there when the engine is not (app.canAbout). -->
   <Lazy {app} when={app.about.state !== 'closed'} load={() => import('./views/AboutDialog.svelte')} onfailed={() => app.closeAbout()} />

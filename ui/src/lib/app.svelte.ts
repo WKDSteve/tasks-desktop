@@ -141,6 +141,7 @@ import { localToday } from './remind';
 import type { RemindersMail } from './reminders';
 import { DEFAULT_ROW_ACTIONS, parseRowActions, serializeRowActions, type RowActionPrefs } from './rowActions';
 import type { RepoStatus } from './repoStatus';
+import { tagTargets } from './tagging';
 import { COLUMN_KEYS, defaultColumns, parseColumns, serializeColumns, type ListColumns } from './columns';
 import { emptyFolds, foldOf, parseFolds, serializeFolds, type FoldMemory, type Folds, type FoldView } from './fold';
 import { parseSizes, serializeSizes, withSize, type Size, type Sizes } from './sizes';
@@ -2475,6 +2476,66 @@ export class App {
       return;
     }
     await this.write(ops, { ...(tags ? { tags } : {}), onAnswer: this.batchAnswer(ops) });
+  }
+
+  /** The choice of tags that is open (`TagDialog.svelte`): for which tasks, and whether tags are added or taken away. */
+  tagging = $state.raw<{ ids: readonly string[]; mode: 'add' | 'remove' } | null>(null);
+
+  /**
+   * Open the choice of tags for the task `id`, or for all the marked tasks when it is one of them (as the context menu
+   * of a marked row works on the selection).
+   */
+  openTagging(id: string, mode: 'add' | 'remove'): void {
+    if (this.refusedReadOnly() || !this.can('ops') || this.phase !== 'ready') return;
+    const ids = tagTargets(id, this.marks, this.tasks);
+    if (ids.length > 0) this.tagging = { ids, mode };
+  }
+
+  closeTagging(): void {
+    this.tagging = null;
+  }
+
+  /**
+   * Add tags to the tasks `ids` and take others away: one batch of `set`, each task with the version that was shown
+   * (`if_match`) and its own list of tags worked out from what it has; a task that has what was asked for already is
+   * left out. One message with the way back. What the engine refuses (a tag it does not take, a task that changed
+   * meanwhile) fails alone and is handed back with the engine's words. Null: nothing was sent or no answer came.
+   */
+  async editTags(
+    ids: readonly string[],
+    edit: TagEdit,
+  ): Promise<{ changed: number; failed: { id: string; message: string }[] } | null> {
+    const ops = bulkSetOps(this.tasks, ids, {}, edit);
+    if (ops.length === 0) {
+      this.say('ok', 'bulk.nothing');
+      return { changed: 0, failed: [] };
+    }
+    let failed: { id: string; message: string }[] = [];
+    const onAnswer = (result: Result): boolean => {
+      failed = [];
+      for (const r of result.results) {
+        if (r.ok) continue;
+        const id = ops[r.n - 1]?.id ?? (r.error?.details as { id?: unknown } | undefined)?.id;
+        failed.push({ id: typeof id === 'string' ? id : '?', message: r.error?.message ?? r.error?.code ?? 'failed' });
+      }
+      const undo = this.inverseOf(result);
+      if (failed.length === 0) this.say('ok', 'bulk.saved', { n: ops.length }, undo);
+      else this.say('error', 'tags.partial', { done: ops.length - failed.length, failed: failed.length }, undo);
+      return true;
+    };
+    const result = await this.write(ops, { tags: edit, onAnswer });
+    if (!result) return null;
+    return { changed: ops.length - failed.length, failed };
+  }
+
+  /** Every open task that carries `tag`, in the list, without other filters (a click on a tag). */
+  showTag(tag: string): void {
+    this.closeTagging();
+    this.peeking = false;
+    this.filter = { ...freshFilter(), fields: { tag: [tag] } };
+    // The text search belongs to the words that are gone.
+    this.scheduleTextSearch('', 0);
+    this.setView('list');
   }
 
   /**

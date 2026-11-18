@@ -27,6 +27,11 @@ export function taskTarget(task: TaskEntry): ContextTarget {
   return { kind: 'task', id: task.id, data: task };
 }
 
+/** A tag shown as a chip (the detail of a task): "show all with this tag". */
+export function tagTarget(tag: string): ContextTarget {
+  return { kind: 'tag', id: tag };
+}
+
 /** The view that is shown, as the target of everything on it that is no target of its own. */
 export function viewTarget(view: string): ContextTarget {
   return { kind: 'view', id: view };
@@ -132,10 +137,22 @@ export function createContextRegistry(app: App): ContextRegistry {
         });
       }
     }
+    // The tags: a searchable choice of the ones the open tasks carry (`TagDialog`), for this task or, when it is one
+    // of the marked ones, for all of them.
+    if (app.can('ops')) {
+      items.push({ kind: 'section', label: t('field.tags') });
+      items.push({ kind: 'action', label: t('tags.add'), hint: t('hint.ctx.tags.add'), disabled: app.locked, onselect: () => app.openTagging(task.id, 'add') });
+      items.push({ kind: 'action', label: t('tags.remove'), hint: t('hint.ctx.tags.remove'), disabled: app.locked, onselect: () => app.openTagging(task.id, 'remove') });
+    }
     // The task, or the marked ones of the list when it is one of them (`selection`), each as the list holds it now.
     const ids = env.selection.map((s) => s.id);
     const chosen = () => app.tasks.filter((entry) => ids.includes(entry.id));
     return [...items, ...copyEntries(chosen), ...app.viewMenuEntries(task.area, { areas: [task.area] })];
+  });
+
+  registry.provide('tag', (target) => {
+    const tag = target.id ?? '';
+    return tag === '' ? [] : [{ kind: 'action', label: t('tags.show', { tag }), hint: t('hint.ui.tags.show'), onselect: () => app.showTag(tag) }];
   });
 
   registry.provide('view', (target) => {

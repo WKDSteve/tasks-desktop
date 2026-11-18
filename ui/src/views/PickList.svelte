@@ -21,6 +21,8 @@
     onpick,
     onaction = () => undefined,
     onescape = () => undefined,
+    createLabel = undefined,
+    oncreate = () => undefined,
   }: {
     options: readonly PickOption[];
     actions?: readonly PickAction[];
@@ -39,6 +41,13 @@
     onpick: (value: string) => void;
     onaction?: (id: string) => void;
     onescape?: () => void;
+    /**
+     * A choice that takes a value that is not in the list (a new tag): the words of the entry that offers the typed
+     * text, or null when it offers nothing for it (nothing typed, or a value that is listed). The entry stands last.
+     */
+    createLabel?: ((typed: string) => string | null) | undefined;
+    /** The entry of `createLabel` was chosen, with the text as it was typed. The field is emptied. */
+    oncreate?: (typed: string) => void;
   } = $props();
 
   const uid = $props.id();
@@ -50,7 +59,8 @@
   const shown = $derived(filterOptions(options, needle));
   // The actions stay while nothing is typed; a typed word looks for values.
   const shownActions = $derived(needle.trim() === '' ? actions : []);
-  const count = $derived(shownActions.length + shown.length);
+  const created = $derived(createLabel?.(needle) ?? null);
+  const count = $derived(shownActions.length + shown.length + (created === null ? 0 : 1));
   const activeIndex = $derived(count === 0 ? -1 : Math.min(active, count - 1));
   const idOf = (i: number): string => `${uid}-o${i}`;
 
@@ -66,6 +76,12 @@
     }
     const option = shown[i - shownActions.length];
     if (option) onpick(option.value);
+    else if (created !== null && i === count - 1) {
+      const typed = needle;
+      needle = '';
+      active = 0;
+      oncreate(typed);
+    }
   }
 
   async function move(to: number): Promise<void> {
@@ -171,6 +187,21 @@
         </span>
       </li>
     {/each}
+    {#if created !== null}
+      <li
+        id={idOf(count - 1)}
+        role="option"
+        class="action"
+        class:active={count - 1 === activeIndex}
+        aria-selected="false"
+        data-action="create"
+        onpointerdown={(e) => e.preventDefault()}
+        onclick={() => choose(count - 1)}
+        onkeydown={() => undefined}
+      >
+        {markHidden(created)}
+      </li>
+    {/if}
   </ul>
   {#if count === 0}
     <p class="empty" role="status">{emptyLabel}</p>

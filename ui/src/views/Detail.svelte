@@ -1,6 +1,9 @@
 <script lang="ts">
   import ClaimTag from './ClaimTag.svelte';
   import { agentJob } from '../lib/claims';
+  import { contextTarget } from 'appkit-ui/contextmenu';
+  import { tagTarget } from '../lib/context';
+  import { ownTags } from '../lib/tagging';
   import { tick } from 'svelte';
   import type { App } from '../lib/app.svelte';
   import { formatNumber, hintOf, labelOf, translate, type Key } from '../lib/i18n';
@@ -776,6 +779,15 @@
           }}
         />
       </label>
+      <!-- The tags as chips: a press shows every task with that tag; the "+" opens the choice of the tags there are. -->
+      <div class="tag-chips" role="group" aria-label={t('tags.chips')}>
+        {#each ownTags(shown) as tag (tag)}
+          <button type="button" class="tag-chip" data-tag={tag} data-hint={t('hint.ui.tags.show')} aria-label={t('tags.show', { tag })} use:contextTarget={tagTarget(tag)} onclick={() => app.showTag(tag)}>{tag}</button>
+        {/each}
+        {#if app.can('ops')}
+          <button type="button" class="tag-plus" aria-label={t('tags.plus')} data-hint={t('hint.ui.tags.plus')} disabled={app.locked || !listEditable(shown.tags)} onclick={() => app.openTagging(shown.id, 'add')}>+</button>
+        {/if}
+      </div>
       <label class="line" data-hint={hintOf(app.lang, 'hint.field', 'after')}>
         <span>{t('field.after')} <small>({t('field.tags_hint')})</small></span>
         <input
@@ -1256,6 +1268,33 @@
 </aside>
 
 <style>
+  /* The tags of the task as chips under their field: a press shows every task with that tag. */
+  .tag-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.3rem;
+    margin: 0.2rem 0 0.5rem;
+  }
+  .tag-chip,
+  .tag-plus {
+    background: var(--surface-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    font: inherit;
+    font-size: 0.8rem;
+    padding: 0 0.55rem;
+    cursor: pointer;
+    overflow-wrap: anywhere;
+  }
+  .tag-plus {
+    background: none;
+    min-width: 1.6rem;
+  }
+  .tag-plus:disabled {
+    cursor: default;
+    opacity: 0.55;
+  }
   .cats {
     border: 0;
     padding: 0;

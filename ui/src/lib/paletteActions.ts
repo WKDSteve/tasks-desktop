@@ -6,6 +6,7 @@ import { labelOf, translate, type Key } from './i18n';
 import { isColumn } from './board';
 import type { PaletteAction } from 'appkit-ui/palette';
 import { selectOfFilter } from './views';
+import { tagCounts } from './tagging';
 
 
 export function paletteActions(app: App): PaletteAction[] {
@@ -36,6 +37,9 @@ export function paletteActions(app: App): PaletteAction[] {
       add(`task.prio.${prio}`, t('palette.prio', { prio }), () => app.setField(id, 'prio', prio), id);
     }
   }
+
+  // Every tag the open tasks carry: the list filtered by it.
+  for (const { tag, count } of tagCounts(app.tasks)) add(`tag.${tag}`, t('palette.tag', { tag }), () => app.showTag(tag), t('tags.count', { n: count }));
 
   add('go.today', t('palette.go', { view: t('nav.today') }), () => app.setView('today'));
   add('go.list', t('palette.go', { view: t('nav.list') }), () => app.setView('list'));

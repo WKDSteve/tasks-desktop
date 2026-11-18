@@ -92,6 +92,51 @@ describe('PickList', () => {
     flushSync();
     expect(toggled).toEqual(['pub/one', 'ops/three']);
   });
+
+  it('offers a typed word that is no entry as a new one, last in the list, and empties the field when it is taken', () => {
+    const picked: string[] = [];
+    const made: string[] = [];
+    // jsdom has no layout: the entry the arrows reach is "scrolled into view" by a stand-in.
+    Element.prototype.scrollIntoView = () => undefined;
+    mounted = mount(PickList, {
+      target: document.body,
+      props: {
+        options,
+        multiple: true,
+        searchLabel: 'Search',
+        emptyLabel: 'Nothing',
+        onpick: (v: string) => picked.push(v),
+        createLabel: (typed: string) => (typed.trim() === '' || typed === 'Mobile app' ? null : `New: ${typed.trim()}`),
+        oncreate: (typed: string) => made.push(typed),
+      },
+    });
+    flushSync();
+    const input = document.querySelector('input[role="combobox"]') as HTMLInputElement;
+    // Nothing typed: nothing is offered beside the entries.
+    expect(document.querySelector('[data-action="create"]')).toBeNull();
+    type(input, 'release');
+    const options3 = [...document.querySelectorAll('[role="option"]')];
+    expect(options3).toHaveLength(3);
+    expect(options3[2]?.getAttribute('data-action')).toBe('create');
+    expect(options3[2]?.textContent?.trim()).toBe('New: release');
+    // The entries that match come first: Enter takes the first of them, the new one is reached with the arrows.
+    key(input, 'ArrowDown');
+    key(input, 'ArrowDown');
+    expect(input.getAttribute('aria-activedescendant')).toBe(options3[2]?.id);
+    key(input, 'Enter');
+    expect(made).toEqual(['release']);
+    expect(picked).toEqual([]);
+    expect(input.value).toBe('');
+    // A word nothing matches: the new entry is the only one, and no "nothing matches" stands beside it.
+    type(input, 'on-ohana');
+    expect(document.querySelectorAll('[role="option"]')).toHaveLength(1);
+    expect(document.querySelector('[role="status"]')).toBeNull();
+    key(input, 'Enter');
+    expect(made).toEqual(['release', 'on-ohana']);
+    // A word the caller offers nothing for (it is an entry): only the entry.
+    type(input, 'Mobile app');
+    expect(document.querySelector('[data-action="create"]')).toBeNull();
+  });
 });
 
 describe('PickField', () => {
