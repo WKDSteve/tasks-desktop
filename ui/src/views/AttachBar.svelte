@@ -95,9 +95,9 @@
     if (why !== 'cancelled') app.tell('error', `attach.capture.${why}` as Key);
   }
 
-  // What was taken and is not attached (another upload ran, the upload failed): kept here to be sent again or saved,
-  // each until it is attached or discarded.
-  let kept = $state<Taken[]>([]);
+  // What was taken for this task and is not attached (another upload ran, the upload failed): kept by the page
+  // (`app.keptCaptures`), shown here to be sent again or saved, each until it is attached or discarded.
+  const kept = $derived(app.keptCaptures.filter((k) => k.task === id));
 
   /** What was taken becomes a file of the task it was taken for; one file at a time. What is not attached is kept. */
   async function attach(task: string, file: File, kind: Capture): Promise<void> {
@@ -105,7 +105,7 @@
     const taken: Taken = { task, file, kind };
     const back = await handOver(app, taken);
     // Read after the upload: another capture may have been kept meanwhile.
-    kept = keepAfter(kept, taken, back);
+    app.keptCaptures = keepAfter(app.keptCaptures, taken, back);
     // A failed upload said why already; a second one beside a running upload is not sent at all.
     if (back !== null && busyNow) app.tell('error', 'attach.capture.busy');
   }
@@ -303,7 +303,7 @@
           >{t('attach.capture.retry')}</button
         >
         <button type="button" class="attach" onclick={() => saveKept(one)}>{t('attach.capture.save')}</button>
-        <button type="button" class="attach" onclick={() => (kept = kept.filter((k) => k !== one))}
+        <button type="button" class="attach" onclick={() => (app.keptCaptures = app.keptCaptures.filter((k) => k !== one))}
           >{t('attach.capture.discard')}</button
         >
       </p>

@@ -65,6 +65,11 @@ test('a recording whose upload fails is kept, and is attached when it is sent ag
   const kept = float.locator('[data-kept="photo"]');
   await expect(kept).toContainText(/photo-\d{8}-\d{6}\.png/, { timeout: WRITE_BUDGET });
   expect(refused).toBe(1);
+  // The detail closed and opened again: the recording is still kept.
+  await page.keyboard.press('Escape');
+  await expect(float).toBeHidden();
+  await page.locator('button.row', { hasText: 'Attach browser kept' }).click();
+  await expect(kept).toContainText(/photo-\d{8}-\d{6}\.png/);
   // A second photo that is attached leaves the kept one where it is.
   await bar.locator('details[data-choice="image"] summary').click();
   await page.getByRole('group', { name: 'Image' }).getByRole('button', { name: 'Take a photo' }).click();

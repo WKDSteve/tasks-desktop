@@ -73,7 +73,7 @@ import { cleanClaimName, agentNews, type AgentNews } from './claims';
 export type PlanDisplay = 'stages' | 'graph' | 'compare';
 import { parsePrefs, type Prefs as FinishedPrefs } from './finished';
 import { groupedByArea } from './areaBands';
-import { kindOfFile, type AssetKind } from './capture';
+import { kindOfFile, type AssetKind, type Taken } from './capture';
 import { activeFilters, applyFilter, areaCounts, filterOfText, filterText, filterVaultOf, freshFilter, moveSelection, NONE as NO_VALUE, parseFilter, serializeFilter, type Filter } from './filter';
 import { chipLabel } from './filter-chips';
 import { inboxOf, triageKey } from './inbox';
@@ -3287,6 +3287,12 @@ export class App {
 
   /** The task a file is on its way to, while one is. */
   uploading = $state<string | null>(null);
+
+  /**
+   * What the camera or the screen took and is not attached yet (`AttachBar`): kept by the page, not by the bar, so that
+   * closing the detail or opening another task does not lose a recording. Gone with the tab.
+   */
+  keptCaptures = $state<Taken[]>([]);
 
   /**
    * Attach a file from this computer to `id`: it goes through the hub, and the engine makes it an asset of the task (a
