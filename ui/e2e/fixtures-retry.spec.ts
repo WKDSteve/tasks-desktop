@@ -1,11 +1,24 @@
 // The retry of `fixtures.ts`: a test runs again only after a first attempt that failed while the machine broke its
 // connections. The fault the runner saw (a change of the network interfaces) cannot be made on purpose, so the watch is
 // shown with another fault in its place.
-import { readdirSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { removeTree, tempDir } from '../web/tmp.mjs';
-import { contextMaker, expect, isMachineFault, loadWhole, machineFaultNote, noteMachineFaults, retryRefusal, test, watchMachineFaults } from './fixtures';
+import type { BrowserContext, TestInfo } from '@playwright/test';
+import {
+  type AttemptInfo,
+  contextMaker,
+  expect,
+  fixtures,
+  isMachineFault,
+  loadWhole,
+  machineFaultNote,
+  noteMachineFaults,
+  retryRefusal,
+  test,
+  watchMachineFaults,
+} from './fixtures';
 
 const ORIGIN = 'http://machine-faults.invalid';
 
@@ -91,6 +104,56 @@ test('a context the test left open is closed by the maker', async ({ browser }) 
   await maker.close();
   expect(browser.contexts()).not.toContain(context);
   await maker.close();
+});
+
+// A close that hangs runs out the time of the teardown, and Playwright skips every teardown after it, that of
+// `machineFaults` too: the note for the retry is written by the teardown of `context` before the close.
+type ContextFixture = (
+  args: { context: BrowserContext; machineFaults: string[]; vaultClean: () => void },
+  use: (context: BrowserContext) => Promise<void>,
+  info: TestInfo,
+) => Promise<void>;
+
+test('a failed attempt leaves its note before its context closes', async ({ browser }) => {
+  const dir = tempDir('e2e-note-before-close');
+  const maker = contextMaker(browser);
+  try {
+    const context = await maker.make();
+    const attempt: AttemptInfo = {
+      status: 'failed',
+      expectedStatus: 'passed',
+      errors: [],
+      testId: 'note-before-close',
+      project: { outputDir: dir },
+    };
+    const note = machineFaultNote(dir, attempt.testId);
+    let noteAtClean = false;
+    const fixture = fixtures.context as unknown as ContextFixture;
+    await fixture(
+      { context, machineFaults: [`${ORIGIN}/api (net::ERR_NETWORK_CHANGED)`], vaultClean: () => (noteAtClean = existsSync(note)) },
+      async () => {},
+      attempt as unknown as TestInfo,
+    );
+    expect(noteAtClean).toBe(true);
+    expect(readFileSync(note, 'utf8')).toContain('net::ERR_NETWORK_CHANGED');
+  } finally {
+    await maker.close();
+    removeTree(dir);
+  }
+});
+
+test('an attempt that passed leaves no note, faults or not', async ({ browser }) => {
+  const dir = tempDir('e2e-no-note');
+  const maker = contextMaker(browser);
+  try {
+    const attempt: AttemptInfo = { status: 'passed', expectedStatus: 'passed', errors: [], testId: 'passed', project: { outputDir: dir } };
+    const fixture = fixtures.context as unknown as ContextFixture;
+    await fixture({ context: await maker.make(), machineFaults: ['x (net::ERR_NETWORK_CHANGED)'], vaultClean: () => {} }, async () => {}, attempt as unknown as TestInfo);
+    expect(existsSync(machineFaultNote(dir, attempt.testId))).toBe(false);
+  } finally {
+    await maker.close();
+    removeTree(dir);
+  }
 });
 
 // Only the self tests of the watch make a bare context (they watch it themselves); any other file takes `newContext`

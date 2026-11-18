@@ -18,6 +18,7 @@ import {
   type Page,
   type Request,
   type Response,
+  type TestInfo,
 } from '@playwright/test';
 import { STATE } from './global';
 import { removeFile } from './hub';
@@ -178,6 +179,30 @@ export function noteMachineFaults(note: string, seen: readonly string[]): void {
   writeFileSync(note, seen.map((line) => `${line}\n`).join(''));
 }
 
+/** What of `TestInfo` the note of an attempt reads. */
+export type AttemptInfo = Pick<TestInfo, 'status' | 'expectedStatus' | 'errors' | 'testId'> & { project: Pick<TestInfo['project'], 'outputDir'> };
+
+/**
+ * Leave the note for the retry if this attempt failed (`failed`, by default its status) while the machine broke its
+ * requests or a load gave up. Written by the teardown of `context`/`newContext` before the context closes, and again by
+ * that of `machineFaults` with every error of the attempt: a close that hangs runs out the time of the teardown, and
+ * Playwright then skips every later teardown, that of `machineFaults` too (the fault behind the hang got no retry).
+ */
+export function noteFailedAttempt(info: AttemptInfo, seen: readonly string[], failed = info.status !== info.expectedStatus): void {
+  const gaveUp = info.errors.filter((error) => error.message?.includes(LOAD_GAVE_UP)).map((error) => error.message ?? '');
+  if (failed && seen.length + gaveUp.length > 0) noteMachineFaults(machineFaultNote(info.project.outputDir, info.testId), [...seen, ...gaveUp]);
+}
+
+/** Run the check of `guardPages`/`contextMaker` now and give back its error, to be thrown after the note is written. */
+function checkError(check: () => void): unknown {
+  try {
+    check();
+    return undefined;
+  } catch (error) {
+    return error;
+  }
+}
+
 /**
  * Why a retry must not run, or null when it may. The config gives every test one retry, but only an attempt that failed
  * while the machine broke its connections earns it: any other failure is the test's or the page's, and a second run that
@@ -212,8 +237,7 @@ export const fixtures: Fixtures<E2eFixtures, object, PlaywrightTestArgs & Playwr
       if (testInfo.retry > 0) console.warn(`run again after a fault of the machine: ${readFileSync(note, 'utf8').trim()}`);
       const seen: string[] = [];
       await use(seen);
-      const gaveUp = testInfo.errors.filter((error) => error.message?.includes(LOAD_GAVE_UP)).map((error) => error.message ?? '');
-      if (testInfo.status !== testInfo.expectedStatus && seen.length + gaveUp.length > 0) noteMachineFaults(note, [...seen, ...gaveUp]);
+      noteFailedAttempt(testInfo, seen);
     },
     { auto: true },
   ],
@@ -221,29 +245,36 @@ export const fixtures: Fixtures<E2eFixtures, object, PlaywrightTestArgs & Playwr
   // still on its way) runs out the time of the teardown, and Playwright then skips every teardown after it, the one of
   // vaultClean too. The tasks of a test that timed out stayed, and every repetition after it found them (app.spec "a
   // task moved between the groups", 14 of 30 red after one timeout).
-  context: async ({ context, machineFaults, vaultClean }, use) => {
+  // The note of a fault of the machine is written here as well, before the close, for the same reason.
+  context: async ({ context, machineFaults, vaultClean }, use, testInfo) => {
     const check = guardPages(context);
     const seen = watchMachineFaults(context);
+    let lost: unknown;
     try {
       await use(context);
     } finally {
       machineFaults.push(...seen);
+      lost = checkError(check);
+      noteFailedAttempt(testInfo, machineFaults, testInfo.status !== testInfo.expectedStatus || lost !== undefined);
       vaultClean();
     }
-    check();
+    if (lost !== undefined) throw lost;
   },
   // Like `context`: the vault is cleaned before the contexts close (a close that hangs skips every later teardown), and
   // a context the test left open (it ran out of time before its `finally`) is closed here, not left writing.
-  newContext: async ({ browser, machineFaults, vaultClean }, use) => {
+  newContext: async ({ browser, machineFaults, vaultClean }, use, testInfo) => {
     const maker = contextMaker(browser);
+    let lost: unknown;
     try {
       await use(maker.make);
     } finally {
       machineFaults.push(...maker.seen());
+      lost = checkError(maker.check);
+      noteFailedAttempt(testInfo, machineFaults, testInfo.status !== testInfo.expectedStatus || lost !== undefined);
       vaultClean();
       await maker.close();
     }
-    maker.check();
+    if (lost !== undefined) throw lost;
   },
   vaultClean: [
     // eslint-disable-next-line no-empty-pattern -- Playwright asks for a destructured first argument

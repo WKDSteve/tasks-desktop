@@ -129,7 +129,10 @@ pnpm web:build && PLAYWRIGHT_BROWSERS_PATH="$PWD/node_modules/.cache/ms-playwrig
   Rechner Verbindungen abbrach (`MACHINE_FAULTS` in `ui/e2e/fixtures.ts`, etwa `ERR_NETWORK_CHANGED`, wenn ein
   WLAN-Adapter neben dem Kabel kommt und geht). Sonst scheitert der zweite Versuch sofort mit "not run again"; der Fehler
   steht im ersten. Was ein Test in `ROADMAP/tasks`, `Backlog/TASKS` oder `ROADMAP/views` anlegt, räumt die Fixture weg,
-  schon bevor sie den Kontext schließt (hängt das Schließen, überspringt Playwright alle späteren Teardowns).
+  schon bevor sie den Kontext schließt (hängt das Schließen, überspringt Playwright alle späteren Teardowns); ebenso
+  schreibt sie dort schon die Notiz der Maschinenfehler für den zweiten Versuch (`noteFailedAttempt`). Den Kontext
+  selbst früher (mit eigener Zeitgrenze) zu schließen geht nicht: erst die Basis-Fixture hält den Trace eines roten
+  Tests an (`trace: 'retain-on-failure'`).
   Einen eigenen Kontext (ein zweites Gerät, ein eigenes Profil) holt ein Test über die Fixture `newContext`, nie
   `browser.newContext()`: nur deren Kontexte werden beobachtet (ein Wächter in `fixtures-retry.spec.ts` prüft das).
 - Einen roten Browsertest der CI erst lesen (Artefakt `playwright-traces`), dann wiederholen: Schritte im
