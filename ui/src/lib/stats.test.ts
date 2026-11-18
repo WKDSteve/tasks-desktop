@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { TaskEntry } from './contract';
 import { task } from './fixtures';
-import { applyFilter, freshFilter, NONE } from './filter';
-import { bucketOf, chosenBuckets, DAYS, effortSource, ESTIMATE_MAX, figureFilter, figuresOf, filterFor, finishedPerArea, parseStatsPrefs, STAT_DIMS, statsOf, toggledBucket, withoutDim } from './stats';
+import { applyFilter, freshFilter, NO_ACTOR, NONE } from './filter';
+import { bucketOf, chosenBuckets, cutOf, DAYS, OTHER, STAT_MULTI, TOP, effortSource, ESTIMATE_MAX, figureFilter, figuresOf, filterFor, finishedPerArea, parseStatsPrefs, STAT_DIMS, statsOf, toggledBucket, withoutDim } from './stats';
 
 const state = (s: string) => ({ state: s, rank: 1, leverage: 0, open_blockers: [] }) as unknown as TaskEntry['readiness'];
 
@@ -164,6 +164,117 @@ describe('a click on the legend', () => {
     const f = toggledBucket(base, 'prio', '2', tasks);
     expect(statsOf(applyFilter(tasks, withoutDim(f, 'prio')), 'prio').buckets).toEqual(['1', '2', '4', NONE]);
     expect(withoutDim(toggledBucket(base, 'status', 'open', tasks), 'status').statuses).toEqual([]);
+  });
+});
+
+// Tasks with the fields beyond the first five: who, value, severity, and the list fields (category, scope, tag).
+const rich: TaskEntry[] = [
+  task('a/r1', { actor: 'me', value: 5, severity: 'high', category: ['bug', 'security'], scope: ['ui'], tags: ['x', 'y'], plan: 'a/p1', phase: 'one' }),
+  task('a/r2', { actor: 'cdx', value: 3, category: ['docs'], scope: ['ui', 'docs'], tags: ['x'], plan: 'a/p1', phase: 'two', project: 'a/proj' }),
+  task('b/r3', { actor: 'cdx', category: ['bug'], tags: ['z'], plan: 'b/p2' }),
+  task('b/r4', { actor: 'pair', value: 3, severity: 'low' }),
+  task('b/r5', {}),
+];
+
+describe('the further fields', () => {
+  it('count who does a task, with the tasks nobody was named for', () => {
+    const stats = statsOf(rich, 'actor');
+    expect(stats.buckets).toEqual(['me', 'pair', 'cdx', NONE]);
+    expect(stats.totals).toEqual({ me: 1, pair: 1, cdx: 2, [NONE]: 1 });
+    expect(bucketOf('actor', rich[4]!)).toBe(NONE);
+  });
+
+  it('count the value from the highest down and the severity from the worst down', () => {
+    expect(statsOf(rich, 'value').buckets).toEqual(['5', '3', NONE]);
+    expect(statsOf(rich, 'value').totals).toEqual({ '5': 1, '3': 2, [NONE]: 2 });
+    expect(statsOf(rich, 'severity').buckets).toEqual(['high', 'low', NONE]);
+  });
+
+  it('count a task of a list field in every value it has: the stacks add up to more than the tasks, the rows do not', () => {
+    for (const dim of STAT_MULTI) {
+      const stats = statsOf(rich, cutOf(rich, dim));
+      expect(stats.total, dim).toBe(rich.length);
+      expect(stats.rows.reduce((n, r) => n + r.total, 0), dim).toBe(rich.length);
+      expect(Object.values(stats.totals).reduce((n, v) => n + v, 0), dim).toBeGreaterThan(rich.length);
+    }
+    const byCategory = statsOf(rich, cutOf(rich, 'category'));
+    expect(byCategory.totals).toEqual({ bug: 2, security: 1, docs: 1, [NONE]: 2 });
+    expect(byCategory.rows.find((r) => r.area === 'a')).toEqual({ area: 'a', total: 2, counts: { bug: 1, security: 1, docs: 1 } });
+    expect(statsOf(rich, cutOf(rich, 'scope')).totals).toEqual({ ui: 2, docs: 1, [NONE]: 3 });
+    expect(statsOf(rich, cutOf(rich, 'tag')).totals).toEqual({ x: 2, y: 1, z: 1, [NONE]: 2 });
+  });
+
+  it('a task that names a value twice counts once in it', () => {
+    const twice = [task('a/t', { tags: ['x', 'x'] })];
+    expect(statsOf(twice, cutOf(twice, 'tag')).totals).toEqual({ x: 1 });
+  });
+
+  it('name the most frequent values of a field the tasks name freely, the most frequent first and a tie by name, none last', () => {
+    expect(cutOf(rich, 'tag').named).toEqual(['x', 'y', 'z']);
+    expect(statsOf(rich, cutOf(rich, 'tag')).buckets).toEqual(['x', 'y', 'z', NONE]);
+    expect(cutOf(rich, 'plan').named).toEqual(['a/p1', 'b/p2']);
+    expect(cutOf(rich, 'status').named).toBeNull();
+  });
+
+  it('put the values beyond the named ones into one stack, and a task with two of them once', () => {
+    const cut = cutOf(rich, 'tag', undefined, 1);
+    expect(cut.named).toEqual(['x']);
+    const stats = statsOf(rich, cut);
+    expect(stats.buckets).toEqual(['x', OTHER, NONE]);
+    // r1 has x and y (one in "further"), r3 has z; a task with y and z would still be one.
+    expect(stats.totals).toEqual({ x: 2, [OTHER]: 2, [NONE]: 2 });
+    const both = [...rich, task('c/r6', { tags: ['y', 'z'] })];
+    expect(statsOf(both, cut).totals[OTHER]).toBe(3);
+  });
+
+  it('take the project of a task from where the page finds it (its plan), when told how', () => {
+    const projectOf = (t: TaskEntry) => (t.plan === 'a/p1' ? 'a/proj' : t.project);
+    expect(statsOf(rich, cutOf(rich, 'project')).totals).toEqual({ 'a/proj': 1, [NONE]: 4 });
+    expect(statsOf(rich, cutOf(rich, 'project', projectOf)).totals).toEqual({ 'a/proj': 2, [NONE]: 3 });
+  });
+
+  it('a click on a stack opens in the list the tasks the stack counts, for every field, stack and area, also with "further"', () => {
+    for (const dim of STAT_DIMS) {
+      for (const top of [TOP, 1]) {
+        const cut = cutOf(rich, dim, undefined, top);
+        const stats = statsOf(rich, cut);
+        for (const row of stats.rows) {
+          for (const [bucket, n] of Object.entries(row.counts)) {
+            const filter = filterFor(freshFilter(), cut, bucket, row.area, rich);
+            expect(applyFilter(rich, filter, '2026-11-01').length, `${dim} ${top} ${row.area} ${bucket}`).toBe(n);
+          }
+        }
+        for (const bucket of stats.buckets) {
+          const filter = filterFor(freshFilter(), cut, bucket, null, rich);
+          expect(applyFilter(rich, filter, '2026-11-01').length, `${dim} ${top} ${bucket}`).toBe(stats.totals[bucket]);
+        }
+      }
+    }
+  });
+
+  it('who is chosen in the filter of the list by its own field, "nobody" by its word', () => {
+    expect(filterFor(freshFilter(), 'actor', 'cdx', null, rich).actors).toEqual(['cdx']);
+    expect(filterFor(freshFilter(), 'actor', NONE, null, rich).actors).toEqual([NO_ACTOR]);
+    expect(chosenBuckets({ ...freshFilter(), actors: [NO_ACTOR, 'me'] }, 'actor')).toEqual(new Set([NONE, 'me']));
+    expect(withoutDim({ ...freshFilter(), actors: ['me'] }, 'actor').actors).toEqual([]);
+    expect(toggledBucket({ ...freshFilter(), actors: ['me'] }, 'actor', 'me', rich).actors).toEqual([]);
+  });
+
+  it('the legend takes the values of "further" together and gives them back together, the named ones stay', () => {
+    const cut = cutOf(rich, 'tag', undefined, 1);
+    const on = toggledBucket({ ...freshFilter(), fields: { tag: ['x'] } }, cut, OTHER, rich);
+    expect([...(on.fields.tag ?? [])].sort()).toEqual(['x', 'y', 'z']);
+    expect(chosenBuckets(on, cut)).toEqual(new Set(['x', OTHER]));
+    expect(toggledBucket(on, cut, OTHER, rich).fields.tag).toEqual(['x']);
+    // The last value taken away leaves no empty choice behind.
+    expect(toggledBucket({ ...freshFilter(), fields: { tag: ['x'] } }, cut, 'x', rich).fields).toEqual({});
+  });
+
+  it('a value that is chosen is in the filter of the list under its own field, also the scope', () => {
+    const scoped = applyFilter(rich, { ...freshFilter(), fields: { scope: ['docs'] } }, '2026-11-01');
+    expect(scoped.map((t) => t.id)).toEqual(['a/r2']);
+    const without = applyFilter(rich, { ...freshFilter(), fields: { scope: [NONE] } }, '2026-11-01');
+    expect(without.map((t) => t.id)).toEqual(['b/r3', 'b/r4', 'b/r5']);
   });
 });
 

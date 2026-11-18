@@ -75,3 +75,72 @@ test('the numbers per area: the row under the pointer and the row with the focus
   expect(await violations(page)).toEqual([]);
   expect(problems).toEqual([]);
 });
+
+test('cut up by who: the stacks are the people, a number opens exactly those tasks in the list, and the choice outlives a reload', async ({
+  page,
+}) => {
+  const problems = await pair(page, '/#view=stats');
+  const table = page.getByRole('table', { name: 'The numbers per area' });
+  await expect(table).toBeVisible();
+  const dims = page.getByRole('group', { name: 'Cut up by' });
+  // Every field explains itself, and a field the tasks name freely says how many values it names.
+  expect(await dims.getByRole('button').count()).toBe(14);
+  await expect(dims.getByRole('button', { name: 'Who' })).toHaveAttribute('data-hint', /by Who: one stack per value\.$/);
+  await expect(dims.getByRole('button', { name: 'Tag' })).toHaveAttribute('data-hint', /counts in each of them\. The 10 most frequent/);
+
+  const who = dims.getByRole('button', { name: 'Who' });
+  await who.click();
+  await expect(who).toHaveAttribute('aria-pressed', 'true');
+  // The stacks carry the words of the page for who does a task, not the engine's.
+  const heads = (await table.locator('thead th').allTextContents()).slice(2);
+  expect(heads.length).toBeGreaterThan(0);
+  for (const head of heads) expect(['Me', 'Together', 'AI', 'Unassigned', 'Finished (30 days)']).toContain(head);
+  // Every task has one who: the stacks add up to the open tasks, and no note says otherwise.
+  await expect(page.locator('[data-note="multi"]')).toHaveCount(0);
+  await expectAccessible(page, 'statistics cut up by who');
+
+  // The sum of a stack over all areas opens the list with that who chosen, and the list counts as many.
+  const sum = table.locator('tfoot').getByRole('button', { name: /^All areas, [^:]+: \d+ - show in the list$/ }).first();
+  const label = (await sum.getAttribute('aria-label')) ?? '';
+  const [, name = '', n = ''] = /^All areas, ([^:]+): (\d+) /.exec(label) ?? [];
+  const word = { Me: 'me', Together: 'pair', AI: 'cdx', Unassigned: 'none' }[name];
+  expect(word, label).toBeDefined();
+  await sum.click();
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('List');
+  const filter = await page.evaluate(() => JSON.parse(localStorage.getItem('tasks-desktop.filter') ?? '{}') as { actors?: string[] });
+  expect(filter.actors).toEqual([word]);
+  await expect(page.locator('.count [role="status"]')).toHaveText(new RegExp(`^${n} of \\d+$`));
+
+  // Back in the statistics the field is still the one chosen, and after a reload too.
+  await page.goto('/#view=stats');
+  await expect(page.getByRole('group', { name: 'Cut up by' }).getByRole('button', { name: 'Who' })).toHaveAttribute('aria-pressed', 'true');
+  await page.reload();
+  await expect(page.getByRole('group', { name: 'Cut up by' }).getByRole('button', { name: 'Who' })).toHaveAttribute('aria-pressed', 'true');
+  await page.getByRole('button', { name: 'Clear all filters' }).click();
+  await page.evaluate(() => localStorage.removeItem('tasks-desktop.stats'));
+  expect(await violations(page)).toEqual([]);
+  expect(problems).toEqual([]);
+});
+
+test('cut up by a list field: a task counts in each of its values and the view says so; the fields fit a narrow window', async ({ page }) => {
+  await page.setViewportSize({ width: 380, height: 800 });
+  const problems = await pair(page, '/#view=stats');
+  const table = page.getByRole('table', { name: 'The numbers per area' });
+  await expect(table).toBeVisible();
+  const dims = page.getByRole('group', { name: 'Cut up by' });
+  // Fourteen fields wrap: the page does not scroll sideways for them.
+  const overflow = () => page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+  expect(await overflow()).toBeLessThanOrEqual(0);
+
+  await dims.getByRole('button', { name: 'Tag' }).click();
+  await expect(dims.getByRole('button', { name: 'Tag' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('[data-note="multi"]')).toContainText('counts in each of them');
+  // The total of the table stays the number of tasks, whatever the stacks add up to.
+  const open = page.locator('button.figure[data-figure="open"] .n');
+  await expect(table.locator('tfoot td').first()).toHaveText((await open.textContent()) ?? '');
+  expect(await overflow()).toBeLessThanOrEqual(0);
+  await expectAccessible(page, 'statistics cut up by tag, narrow');
+  await page.evaluate(() => localStorage.removeItem('tasks-desktop.stats'));
+  expect(await violations(page)).toEqual([]);
+  expect(problems).toEqual([]);
+});

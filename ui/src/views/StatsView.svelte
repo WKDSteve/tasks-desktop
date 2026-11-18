@@ -7,19 +7,24 @@
   import type { Estimate } from '../lib/contract';
   import { areaLabel, NONE } from '../lib/filter';
   import { rangeOf } from '../lib/finished';
-  import { formatNumber, translate, type Key } from '../lib/i18n';
+  import { formatNumber, labelOf, translate, type Key } from '../lib/i18n';
   import {
     chosenBuckets,
+    cutOf,
     DAYS,
     effortSource,
     figureFilter,
     figuresOf,
     filterFor,
     finishedPerArea,
+    isMultiDim,
+    isOpenDim,
+    OTHER,
     STAT_DIMS,
     STAT_SORTS,
     statsOf,
     toggledBucket,
+    TOP,
     withoutDim,
     type Figure,
     type StatDim,
@@ -32,12 +37,15 @@
   const t = (key: Key, params: Record<string, string | number> = {}) => translate(app.lang, key, params);
 
   const tasks = $derived(app.shown);
-  const stats = $derived(statsOf(tasks, app.statsDim, app.statsSort, (area) => nameOf(area)));
-  const figures = $derived(figuresOf(tasks, app.quickWinSet));
   // The legend counts as if the field it cuts by had no choice: the values not chosen stay there, to be added.
   const legendTasks = $derived(app.tasksKeptBy(withoutDim(app.filter, app.statsDim)));
-  const legend = $derived(statsOf(legendTasks, app.statsDim, app.statsSort, (area) => nameOf(area)));
-  const chosen = $derived(chosenBuckets(app.filter, app.statsDim));
+  // One cut for the bars, the legend and a click: which values of a field with many are named is settled once, from
+  // the tasks of the legend, so a choice in it does not move a value into "further".
+  const cut = $derived(cutOf(legendTasks, app.statsDim, app.projectOf));
+  const stats = $derived(statsOf(tasks, cut, app.statsSort, (area) => nameOf(area)));
+  const figures = $derived(figuresOf(tasks, app.quickWinSet));
+  const legend = $derived(statsOf(legendTasks, cut, app.statsSort, (area) => nameOf(area)));
+  const chosen = $derived(chosenBuckets(app.filter, cut));
   const widest = $derived(Math.max(1, ...stats.rows.map((r) => r.total)));
 
   const FIGURE_KEYS: Record<Figure, Key> = {
@@ -57,7 +65,10 @@
 
   /** The word of a stack: a status and a readiness in the page's words, "none" and "in days", else the value. */
   function bucketLabel(dim: StatDim, bucket: string): string {
-    if (bucket === NONE) return t('stats.none');
+    if (bucket === NONE) return dim === 'actor' ? t('actor.none') : t('stats.none');
+    if (bucket === OTHER) return t('stats.other');
+    if (dim === 'actor') return labelOf(app.lang, 'actor', bucket);
+    if (isOpenDim(dim)) return markHidden(bucket);
     if (dim === 'effort' && bucket === DAYS) return t('stats.days');
     if (dim === 'status' || dim === 'state') {
       // a value this page has no word for shows as it is
@@ -71,7 +82,19 @@
   /** The class that colours a stack (a value the page does not know is "other"). */
   function bucketClass(bucket: string): string {
     if (bucket === NONE) return 'none';
+    if (bucket === OTHER) return 'other';
+    // A value of a field the tasks name freely has no colour of its own: it takes the series of its place.
+    if (cut.named !== null) return `s-${Math.max(0, cut.named.indexOf(bucket)) % SERIES}`;
     return /^[A-Za-z0-9]+$/.test(bucket) ? `v-${bucket}` : 'other';
+  }
+  /** How many colours the series of the named values has (`.s-0` ...); `TOP` values are named, so none is used twice. */
+  const SERIES = 10;
+  /** The name of a stack in the markup, for the tests and the styles. */
+  const bucketName = (bucket: string): string => (bucket === NONE ? 'none' : bucket === OTHER ? 'other' : bucket);
+  function dimHint(dim: StatDim): string {
+    const field = t(`stats.dim.${dim}` as Key);
+    const base = t(isMultiDim(dim) ? 'hint.stats.dim.multi' : 'hint.stats.dim', { field });
+    return isOpenDim(dim) ? `${base} ${t('hint.stats.dim.open', { n: TOP })}` : base;
   }
   const nameOf = (area: string) => areaLabel(area, app.allAreaNames);
 
@@ -129,7 +152,7 @@
   const days = (n: number) => formatNumber(app.lang, Math.round(n * 10) / 10);
 
   function open(bucket: string | null, area: string | null): void {
-    app.openStatsInList(filterFor(app.filter, app.statsDim, bucket, area, tasks));
+    app.openStatsInList(filterFor(app.filter, cut, bucket, area, tasks));
   }
 </script>
 
@@ -203,6 +226,8 @@
             type="button"
             class="dim"
             aria-pressed={app.statsDim === dim}
+            data-dim={dim}
+            data-hint={dimHint(dim)}
             onclick={() => app.setStats(dim, app.statsSort)}>{t(`stats.dim.${dim}` as Key)}</button
           >
         {/each}
@@ -232,10 +257,10 @@
             <button
               type="button"
               class="entry"
-              data-bucket={bucket === NONE ? 'none' : bucket}
+              data-bucket={bucketName(bucket)}
               aria-pressed={chosen.has(bucket)}
               aria-label={t('stats.legend_entry', { bucket: bucketLabel(app.statsDim, bucket), n: legend.totals[bucket] ?? 0 })}
-              onclick={() => app.narrowStats(toggledBucket(app.filter, app.statsDim, bucket, legendTasks))}
+              onclick={() => app.narrowStats(toggledBucket(app.filter, cut, bucket, legendTasks))}
             >
               <span class="swatch {bucketClass(bucket)}" aria-hidden="true"></span>{bucketLabel(app.statsDim, bucket)}
               <span class="muted">{legend.totals[bucket]}</span>
@@ -243,6 +268,12 @@
           </li>
         {/each}
       </ul>
+      {#if isMultiDim(app.statsDim)}
+        <p class="note" data-note="multi">{t('stats.multi_note', { n: stats.total })}</p>
+      {/if}
+      {#if legend.totals[OTHER]}
+        <p class="note" data-note="other">{t('stats.other_note', { n: TOP })}</p>
+      {/if}
       <!-- The bars repeat the table below for the eye; their buttons are for the pointer and out of the tab order. -->
       <div class="chart dim-{app.statsDim}" aria-hidden="true">
         {#each stats.rows as row (row.area)}
@@ -257,7 +288,7 @@
                     type="button"
                     tabindex="-1"
                     class="seg {bucketClass(bucket)}"
-                    data-bucket={bucket === NONE ? 'none' : bucket}
+                    data-bucket={bucketName(bucket)}
                     style:flex-grow={row.counts[bucket]}
                     title="{bucketLabel(app.statsDim, bucket)}: {row.counts[bucket]}"
                     onclick={() => open(bucket, row.area)}
@@ -481,7 +512,13 @@
   .narrowed .entry[aria-pressed='false'] .swatch {
     opacity: 0.35;
   }
+  .note {
+    margin: -0.4rem 0 0.8rem;
+    color: var(--muted);
+    font-size: 0.85rem;
+  }
   .swatch {
+    flex: none;
     width: 0.7rem;
     height: 0.7rem;
     border-radius: 2px;
@@ -659,5 +696,74 @@
   .dim-state .v-parked,
   .dim-state .v-unknown {
     background: var(--muted);
+  }
+  .dim-actor .v-me {
+    background: var(--chart-1);
+  }
+  .dim-actor .v-pair {
+    background: var(--chart-3);
+  }
+  .dim-actor .v-cdx {
+    background: var(--chart-2);
+  }
+  .dim-value .v-5 {
+    background: color-mix(in srgb, var(--accent) 60%, var(--text));
+  }
+  .dim-value .v-4 {
+    background: var(--accent);
+  }
+  .dim-value .v-3 {
+    background: color-mix(in srgb, var(--accent) 70%, var(--surface));
+  }
+  .dim-value .v-2 {
+    background: color-mix(in srgb, var(--accent) 50%, var(--surface));
+  }
+  .dim-value .v-1 {
+    background: color-mix(in srgb, var(--accent) 30%, var(--surface));
+  }
+  .dim-severity .v-critical {
+    background: var(--bad);
+  }
+  .dim-severity .v-high {
+    background: color-mix(in srgb, var(--bad) 55%, var(--warn));
+  }
+  .dim-severity .v-medium {
+    background: var(--warn);
+  }
+  .dim-severity .v-low {
+    background: var(--chart-2);
+  }
+  /* The values of a field the tasks name freely (category, scope, tag, plan, phase, project) have no meaning the page
+     knows: the most frequent take the series of the palette in their order, the next four the same hues mixed with
+     the surface. */
+  .s-0 {
+    background: var(--chart-1);
+  }
+  .s-1 {
+    background: var(--chart-2);
+  }
+  .s-2 {
+    background: var(--chart-3);
+  }
+  .s-3 {
+    background: var(--chart-4);
+  }
+  .s-4 {
+    background: var(--chart-5);
+  }
+  .s-5 {
+    background: var(--chart-6);
+  }
+  .s-6 {
+    background: color-mix(in srgb, var(--chart-1) 50%, var(--surface));
+  }
+  .s-7 {
+    background: color-mix(in srgb, var(--chart-2) 50%, var(--surface));
+  }
+  .s-8 {
+    background: color-mix(in srgb, var(--chart-3) 50%, var(--surface));
+  }
+  .s-9 {
+    background: color-mix(in srgb, var(--chart-4) 50%, var(--surface));
   }
 </style>

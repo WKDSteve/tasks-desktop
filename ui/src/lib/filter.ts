@@ -14,6 +14,7 @@ export const FIELD_KEYS = [
   'value',
   'tag',
   'category',
+  'scope',
   'severity',
   'state',
   'plan',
@@ -27,7 +28,7 @@ export type FieldKey = (typeof FIELD_KEYS)[number];
  * The fields a task can hold several values of. Only for these can "all of the chosen values" differ from "any of
  * them"; a task has one area, one status, one kind, so there every choice of several values means "any of them".
  */
-export const MULTI_KEYS = ['tag', 'category'] as const;
+export const MULTI_KEYS = ['tag', 'category', 'scope'] as const;
 export type MultiKey = (typeof MULTI_KEYS)[number];
 export const isMultiKey = (key: string): key is MultiKey => (MULTI_KEYS as readonly string[]).includes(key);
 
@@ -160,6 +161,8 @@ export function fieldValues(task: TaskEntry, key: FieldKey, projectOf?: ProjectO
       return task.tags.length > 0 ? task.tags : [NONE];
     case 'category':
       return task.category.length > 0 ? task.category.map(String) : [NONE];
+    case 'scope':
+      return task.scope !== undefined && task.scope.length > 0 ? task.scope.map(String) : [NONE];
   }
 }
 
