@@ -313,10 +313,10 @@
   div.figure {
     cursor: default;
   }
-  /* The figure of the tasks before, while the one for the tasks of now is asked. */
-  .figure.waiting .n,
-  .figure.waiting .sub {
-    opacity: 0.55;
+  /* The figure of the tasks before, while the one for the tasks of now is asked: said by the edge of the tile, not by
+     paler text (a dimmed number falls below the contrast a text needs). */
+  .figure.waiting {
+    border-style: dashed;
   }
   button.figure:hover {
     border-color: var(--accent);

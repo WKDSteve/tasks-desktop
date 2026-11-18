@@ -305,3 +305,38 @@ test('the filter bar of the list stands over the statistics: a status chosen the
   expect(await violations(page)).toEqual([]);
   expect(problems).toEqual([]);
 });
+
+test('the effort tile keeps its figure readable while the next one is asked: marked as waiting, with its contrast', async ({ page }) => {
+  // The answer of the engine is held, the tile is looked at twice in two themes: more than a few steps.
+  test.slow();
+  const problems = await pair(page, '/#view=stats');
+  await expect(page.getByRole('table', { name: 'The numbers per area' })).toBeVisible();
+  const tile = page.locator('[data-figure="effort"]');
+  await expect(tile).toBeVisible();
+  await expect(tile).not.toHaveAttribute('aria-busy', 'true');
+
+  // The next question of the effort does not come back until the test lets it.
+  let release: () => void = () => undefined;
+  const held = new Promise<void>((resolve) => (release = resolve));
+  await page.route('**/api/tasks/estimate', async (route) => {
+    await held;
+    await route.continue().catch(() => undefined);
+  });
+  try {
+    // An entry of the legend narrows what is counted: the figure of before stays, marked as waiting.
+    await page.locator('.legend .entry').first().click();
+    await expect(tile).toHaveAttribute('aria-busy', 'true');
+    await expect(tile.locator('.n')).toHaveText(/^[\d.,]+ d$/);
+    for (const scheme of ['light', 'dark'] as const) {
+      await page.emulateMedia({ colorScheme: scheme });
+      await expectAccessible(page, `statistics with the effort tile waiting, ${scheme}`);
+    }
+  } finally {
+    release();
+  }
+  await expect(tile).not.toHaveAttribute('aria-busy', 'true');
+  await page.unroute('**/api/tasks/estimate');
+  await page.getByRole('button', { name: 'Clear all filters' }).click();
+  expect(await violations(page)).toEqual([]);
+  expect(problems).toEqual([]);
+});
