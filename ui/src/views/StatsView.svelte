@@ -559,6 +559,12 @@
     text-align: right;
     font-variant-numeric: tabular-nums;
   }
+  /* The row under the pointer, or the one a cell of which has the focus, stands out: across many columns the eye
+     keeps its line. The head and the sums stay as they are. */
+  tbody tr:hover,
+  tbody tr:focus-within {
+    background: var(--surface-2);
+  }
   tfoot th,
   tfoot td {
     border-bottom: 0;
