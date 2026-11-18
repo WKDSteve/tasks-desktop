@@ -472,7 +472,7 @@ A review (`review-done`) is of a finished task: `POST /api/tasks/agent` asks the
 engine names its file in the Backlog of its area (the hub checks that it lies in the vault, as above). The job runs at
 once. `POST /api/tasks/agent_result { "job", "id", "kind" }` (`kind` `review-done` or `prepare-decision`, nothing
 else) reads where it stands (`GET /jobs/<id>` of ai-desktop, no secret; a job holds its text and the output of its run,
-so the hub reads up to 2 MiB of it, not the 64 KiB of the kit's client): while it runs only `status`, `error`, `note`
+so the hub reads it with the kit's client raised to 2 MiB and 10 s, not its default 64 KiB): while it runs only `status`, `error`, `note`
 and `private` pass; once it is done, the hub gives the end of ai-desktop's answer (at most 64 KiB, cut at a character:
 the block is the last thing in it) to the engine (`agent_answer`), which takes it apart by its rules and refuses an
 answer that breaks one. Only the engine's `sections`, `follow_up` and `questions_added` reach the page, never the
