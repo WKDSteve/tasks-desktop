@@ -171,7 +171,7 @@
         <div class="empty" data-history-empty="no-series">
           <p>{t('stats.history.none')}</p>
           {#if !app.readOnly}
-            <button type="button" disabled={recording} data-hint={t('hint.stats.history.record')} onclick={() => void record()}
+            <button type="button" class="start" disabled={recording} data-hint={t('hint.stats.history.record')} onclick={() => void record()}
               >{t('stats.history.record')}</button
             >
           {/if}
@@ -245,8 +245,34 @@
     align-items: center;
     gap: 0.5rem;
   }
+  /* The colours of both buttons are the tokens': a button without them takes the browser's own, which the dark scheme
+     of the page does not match (grey on grey). */
+  .linkish {
+    background: none;
+    border: 0;
+    padding: 0;
+    color: var(--accent);
+    font: inherit;
+    cursor: pointer;
+  }
   .back {
     margin-inline-start: auto;
+  }
+  .start {
+    padding: 0.35rem 0.75rem;
+    border: 1px solid var(--accent);
+    border-radius: 0.4rem;
+    background: var(--accent);
+    color: var(--accent-text);
+    font: inherit;
+    cursor: pointer;
+  }
+  .start:hover {
+    background: var(--accent-hover);
+  }
+  .start:disabled {
+    cursor: default;
+    opacity: 0.6;
   }
   .bar {
     display: flex;
