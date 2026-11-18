@@ -270,6 +270,46 @@ describe('the further fields', () => {
     expect(toggledBucket({ ...freshFilter(), fields: { tag: ['x'] } }, cut, 'x', rich).fields).toEqual({});
   });
 
+  it('a click on a stack of a list field keeps a choice that is on: the list shows the tasks the stack counted', () => {
+    // One value chosen (any of one is all of one): the stack's value joins it, and all are asked for.
+    const base = { ...freshFilter(), fields: { tag: ['x'] } };
+    const kept = applyFilter(rich, base, '2026-11-01');
+    const cut = cutOf(rich, 'tag');
+    const stats = statsOf(kept, cut);
+    expect(stats.totals).toEqual({ x: 2, y: 1 });
+    for (const bucket of stats.buckets) {
+      const filter = filterFor(base, cut, bucket, null, kept);
+      expect(applyFilter(rich, filter, '2026-11-01').length, bucket).toBe(stats.totals[bucket]);
+    }
+    expect(filterFor(base, cut, 'y', null, kept)).toMatchObject({ fields: { tag: ['x', 'y'] }, matchAll: ['tag'] });
+    expect(base.matchAll).toEqual([]);
+    // "All of them" on: the same, with every chosen value kept.
+    const all = { ...freshFilter(), fields: { category: ['bug'] }, matchAll: ['category' as const] };
+    const both = filterFor(all, cutOf(rich, 'category'), 'security', null, rich);
+    expect(applyFilter(rich, both, '2026-11-01').map((t) => t.id)).toEqual(['a/r1']);
+    // The stack of the tasks without a value cannot join a value: it is chosen alone.
+    expect(filterFor(base, cut, NONE, null, rich)).toMatchObject({ fields: { tag: [NONE] }, matchAll: [] });
+  });
+
+  it('"all of them" left on from an earlier choice does not empty the list when "further" is clicked or added in the legend', () => {
+    // The person once asked for all of the chosen tags and took the tags away: the switch stays in the filter.
+    const stale = { ...freshFilter(), matchAll: ['tag' as const] };
+    const cut = cutOf(rich, 'tag', undefined, 1);
+    const stats = statsOf(rich, cut);
+    const clicked = filterFor(stale, cut, OTHER, null, rich);
+    expect(clicked.matchAll).toEqual([]);
+    expect(applyFilter(rich, clicked, '2026-11-01').length).toBe(stats.totals[OTHER]);
+    const legend = toggledBucket(stale, cut, OTHER, rich);
+    expect(legend.matchAll).toEqual([]);
+    expect(applyFilter(rich, legend, '2026-11-01').length).toBe(stats.totals[OTHER]);
+    // The first value added in the legend starts a choice of "any of them" too; a second one then adds its tasks.
+    const one = toggledBucket(stale, cut, 'x', rich);
+    expect(one.matchAll).toEqual([]);
+    // A choice of "all of them" that has values is the person's and stays.
+    const meant = { ...freshFilter(), fields: { tag: ['x'] }, matchAll: ['tag' as const] };
+    expect(toggledBucket(meant, cutOf(rich, 'tag'), 'y', rich).matchAll).toEqual(['tag']);
+  });
+
   it('a value that is chosen is in the filter of the list under its own field, also the scope', () => {
     const scoped = applyFilter(rich, { ...freshFilter(), fields: { scope: ['docs'] } }, '2026-11-01');
     expect(scoped.map((t) => t.id)).toEqual(['a/r2']);

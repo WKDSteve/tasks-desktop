@@ -177,9 +177,9 @@ test('the tiles of the vault in numbers: one is hidden with its x, the choice br
   await hide.click();
   await expect(tile('n:ready')).toHaveCount(0);
   await expect(hiddenNote).toHaveText('9 hidden');
-  // The focus is on the choice that brings the tile back, not lost with the x.
+  // The focus is not lost with the x: it is on the x of the tile that took the place, so the next can go at once.
+  await expect(tile('n:doing').getByRole('button', { name: 'Hide Doing' })).toBeFocused();
   const pick = page.locator('.pick').getByRole('button', { name: /^Tiles: \d+$/ });
-  await expect(pick).toBeFocused();
 
   await page.reload();
   await expect(tile('d:status')).toBeVisible();

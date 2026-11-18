@@ -80,14 +80,29 @@
 
   let root: HTMLElement | undefined = $state();
   // The choice stays while the person is in it: ticking the last hidden tile must not take it from under the pointer.
+  // A press of the pointer counts like the focus: not every browser gives a button or a box the focus on a click.
   let inPick = $state(false);
-  /** Take a tile out of the view; the focus goes to the choice that brings it back (the x that had it is gone). */
+  let pick: HTMLElement | undefined = $state();
+  function leftPick(to: EventTarget | null): void {
+    if (to instanceof Node && pick && !pick.contains(to)) inPick = false;
+  }
+  /**
+   * Take a tile out of the view. The x that had the focus is gone: the focus goes to the x of the tile that took its
+   * place (the next one can be hidden right away), else to the choice that brings tiles back. The page does not
+   * scroll for it: the person stays where the tile was.
+   */
   async function hide(id: TileId): Promise<void> {
+    const crosses = (): HTMLButtonElement[] => [...(root?.querySelectorAll<HTMLButtonElement>('.tile .hide') ?? [])];
+    const at = crosses().findIndex((x) => x.closest('[data-tile]')?.getAttribute('data-tile') === id);
     app.setStatsTiles(withTile(app.statsTiles, id, false));
     await tick();
-    root?.querySelector<HTMLButtonElement>('.pick button')?.focus();
+    const left = crosses();
+    const next = left[Math.min(Math.max(at, 0), left.length - 1)] ?? root?.querySelector<HTMLButtonElement>('.pick button');
+    next?.focus({ preventScroll: true });
   }
 </script>
+
+<svelte:window onpointerdown={(e) => leftPick(e.target)} />
 
 {#snippet cross(id: TileId)}
   <button
@@ -104,12 +119,14 @@
     <h2 id="stats-figures" class="eyebrow">{t('stats.figures')}</h2>
     <Info hint={t('hint.stats')} label={t('hint.about', { what: t('nav.stats') })} />
     {#if hidden > 0 || inPick}
+      <!-- The listeners only note that the person is in the choice; the box itself is not interactive. -->
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
       <div
         class="pick"
+        bind:this={pick}
         onfocusin={() => (inPick = true)}
-        onfocusout={(e) => {
-          if (!(e.relatedTarget instanceof Node && e.currentTarget.contains(e.relatedTarget))) inPick = false;
-        }}
+        onpointerdown={() => (inPick = true)}
+        onfocusout={(e) => leftPick(e.relatedTarget)}
       >
         <span class="muted" data-testid="tiles-hidden">{t('stats.tiles.hidden', { n: hidden })}</span>
         <MultiSelect
@@ -380,7 +397,8 @@
     border-radius: 2px;
   }
   /* The x of a tile: in its corner, there for the pointer over the tile and for the focus inside it. A touch screen
-     has no pointer to rest on a tile: the x is always there. */
+     has no pointer to rest on a tile, and a device with a finger and a mouse may be used with the finger: the x is
+     always there. */
   .hide {
     position: absolute;
     top: 0.2rem;
@@ -401,7 +419,7 @@
   .tile:focus-within .hide {
     opacity: 1;
   }
-  @media (hover: none) {
+  @media (hover: none), (any-pointer: coarse) {
     .hide {
       opacity: 1;
     }

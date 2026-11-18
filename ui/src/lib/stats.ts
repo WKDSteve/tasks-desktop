@@ -5,7 +5,7 @@
 // are reckoned from today, and the filter of the list can only say "overdue".
 
 import type { TaskEntry } from './contract';
-import { fieldValues, NO_ACTOR, NONE, toggled, type FieldKey, type Filter, type ProjectOf } from './filter';
+import { fieldValues, isMultiKey, NO_ACTOR, NONE, toggled, wantsAll, withMatch, type FieldKey, type Filter, type ProjectOf } from './filter';
 
 export const STAT_DIMS = [
   'status',
@@ -251,21 +251,31 @@ function chosenValues(base: Filter, dim: StatDim): string[] {
   return base.fields[dim] ?? [];
 }
 
-/** The filter with the choice of `dim` set to `values` (stack values; none takes the choice away). */
-function withChosen(base: Filter, dim: StatDim, values: readonly string[]): Filter {
+/**
+ * The filter with the choice of `dim` set to `values` (stack values; none takes the choice away). For a list field
+ * `match` also says whether a task must hold all of them or any one; left out, that stays as it is.
+ */
+function withChosen(base: Filter, dim: StatDim, values: readonly string[], match?: 'any' | 'all'): Filter {
   if (dim === 'status') return { ...base, statuses: values.map((v) => (v === NONE ? '' : v)) };
   if (dim === 'actor') return { ...base, actors: values.map((v) => (v === NONE ? NO_ACTOR : v)) };
   const key: FieldKey = dim;
   const fields = { ...base.fields };
   if (values.length === 0) delete fields[key];
   else fields[key] = [...values];
-  return { ...base, fields };
+  const out = { ...base, fields };
+  return match !== undefined && isMultiKey(key) ? withMatch(out, key, match) : out;
 }
 
 /**
  * The filter that shows the tasks of one stack (and of one area, when given) in the list: the filter that is on,
  * with the area and the field of the stack set to what was clicked. A stack that stands for several values (the day
  * values, the values beyond the named ones) sets the ones the tasks have (the filter chooses written values).
+ *
+ * A list field (category, scope, tag) may already have a choice, and the tasks a stack counts then hold the value of
+ * the stack AND pass that choice. Where the filter can say that, it does: with one value chosen, or with "all of
+ * them" on, the value of the stack joins the choice and all of them are asked for. Where it cannot (several values
+ * of which any one is enough, or the stack of the further values), the stack alone is chosen, any of its values: the
+ * list then shows every task of the stack, which can be more than the stack counted under the choice.
  */
 export function filterFor(
   base: Filter,
@@ -278,7 +288,12 @@ export function filterFor(
   const out: Filter = { ...base, fields: { ...base.fields } };
   if (area !== null) out.areas = [area];
   if (bucket === null) return out;
-  return withChosen(out, c.dim, isFolded(bucket) ? writtenIn(c, bucket, tasks, area) : [bucket]);
+  const values = isFolded(bucket) ? writtenIn(c, bucket, tasks, area) : [bucket];
+  if (!isMultiDim(c.dim)) return withChosen(out, c.dim, values);
+  const chosen = chosenValues(base, c.dim);
+  const joins =
+    !isFolded(bucket) && bucket !== NONE && chosen.length > 0 && !chosen.includes(NONE) && (chosen.length === 1 || wantsAll(base, c.dim as FieldKey));
+  return joins ? withChosen(out, c.dim, [...new Set([...chosen, bucket])], 'all') : withChosen(out, c.dim, values, 'any');
 }
 
 /** The filter that is on without the choice of `dim`: what the legend counts, so the other values stay there to be added. */
@@ -294,14 +309,18 @@ export function chosenBuckets(base: Filter, of: StatDim | StatCut): Set<string> 
 
 /**
  * A click on a stack of the legend: the filter with that stack added, or taken away when it was chosen; the other
- * values of the field stay. A stack that stands for several values stands for the ones `tasks` have.
+ * values of the field stay. A stack that stands for several values stands for the ones `tasks` have. "All of them"
+ * of a list field is taken away where it cannot be meant: left on from an earlier choice with nothing chosen now (it
+ * would turn the second click into a narrowing nobody asked for), and with the stack of the further values (no task
+ * holds all of those).
  */
 export function toggledBucket(base: Filter, of: StatDim | StatCut, bucket: string, tasks: readonly TaskEntry[]): Filter {
   const c = cut(of);
   const chosen = chosenValues(base, c.dim);
-  if (!isFolded(bucket)) return withChosen(base, c.dim, toggled(chosen, bucket));
+  if (!isFolded(bucket)) return withChosen(base, c.dim, toggled(chosen, bucket), chosen.length === 0 ? 'any' : undefined);
   const rest = chosen.filter((v) => bucketOfValue(c, v) !== bucket);
-  return withChosen(base, c.dim, rest.length !== chosen.length ? rest : [...rest, ...writtenIn(c, bucket, tasks, null)]);
+  if (rest.length !== chosen.length) return withChosen(base, c.dim, rest);
+  return withChosen(base, c.dim, [...rest, ...writtenIn(c, bucket, tasks, null)], 'any');
 }
 
 /**

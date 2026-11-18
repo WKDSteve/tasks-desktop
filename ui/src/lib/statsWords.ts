@@ -1,5 +1,7 @@
 // The words and the colour classes of the statistics: what a stack is called and which class colours it. Shared by
-// the view (bars, legend, table) and the tiles of the fields, so a value has one name and one colour in both.
+// the view (bars, legend, table) and the tiles of the fields, so a value has one name in both. A value with a meaning
+// has one colour too; a value the tasks name freely takes the colour of its place among the named ones of the count
+// it is drawn in (a tile counts the tasks the filter keeps, the legend counts as if its field had no choice).
 
 import { NONE } from './filter';
 import { labelOf, translate, type Key, type Lang } from './i18n';
