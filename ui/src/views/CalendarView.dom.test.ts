@@ -3,7 +3,7 @@
 // is picked up with `m` and put on a day with Enter, Shift with an arrow moves its due date, Delete takes it away. What
 // is written is read from the hub of the tests; the drag with a finger and the real engine are the browser tests'.
 import { flushSync, mount, tick, unmount } from 'svelte';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { make, snapshot } from '../lib/appDouble';
 import { addDays, addMonths } from '../lib/calendar';
 import { task } from '../lib/fixtures';
@@ -46,7 +46,15 @@ const chipOf = (root: HTMLElement, id: string): HTMLElement =>
 const sent = (m: Made): string[] =>
   m.hub.sent.flatMap((r) => r.ops.map((op) => (op.op === 'set' ? `${op.id} ${JSON.stringify(op.patch)}` : op.op)));
 
+// A day in the middle of a month: a week on and a week back are in the grid of that month. (With the clock of the
+// machine the tests would turn red in a week at the end of a month, when a step leaves the grid.)
+beforeEach(() => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(new Date(2026, 10, 18, 12, 0, 0));
+});
+
 afterEach(() => {
+  vi.useRealTimers();
   if (mounted) void unmount(mounted);
   mounted = undefined;
   made?.app.stop();
@@ -119,6 +127,37 @@ describe('CalendarView, the keys', () => {
     press(chipOf(root, 'pub/dated'), 'Delete');
     await settle();
     expect(sent(m)).toEqual([`pub/dated {"due":"${addDays(today, 7)}"}`, 'pub/dated {"due":null}']);
+  });
+
+  it('leaves g and the key after it to the page: g h and g l are Today and the list, not steps over the days', async () => {
+    const { root, today } = await show();
+    const day = cell(root, today);
+    day.focus();
+    expect(press(day, 'g'), 'g is the page\'s').toBe(true);
+    expect(press(day, 'l'), 'and so is the key after it').toBe(true);
+    await settle();
+    expect(document.activeElement).toBe(day);
+    // Without a g before it, l is a step to the next day.
+    expect(press(day, 'l')).toBe(false);
+    await settle();
+    expect(document.activeElement).toBe(cell(root, addDays(today, 1)));
+  });
+
+  it('stays on the month and gives the focus a place when a move is refused or the task cannot take the focus', async () => {
+    const { m, root, today } = await show();
+    expect(today).toBe('2026-11-18');
+    const heading = () => root.querySelector('[data-calendar-heading]')?.textContent;
+    const before = heading();
+    // The hub of the tests writes nothing into its list: the task stays where it is, as after a refusal. A move
+    // out of the month (three weeks on) must not turn the page to a month the task is not in.
+    const dated = chipOf(root, 'pub/dated');
+    dated.focus();
+    press(dated, 'PageDown', { shiftKey: true });
+    await settle();
+    expect(sent(m)).toEqual([`pub/dated {"due":"2026-12-18"}`]);
+    expect(heading(), 'the grid still shows the month of the task').toBe(before);
+    expect(document.activeElement).toBe(chipOf(root, 'pub/dated'));
+    expect(document.activeElement).not.toBe(document.body);
   });
 
   it('picks nothing up and offers no grip in a vault that is read only', async () => {

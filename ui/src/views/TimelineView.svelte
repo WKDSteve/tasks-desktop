@@ -11,6 +11,7 @@
   import type { TaskEntry } from '../lib/contract';
   import { isOverdue } from '../lib/remind';
   import { translate, type Key } from '../lib/i18n';
+  import { chordWatch } from '../lib/keymap';
   import {
     arrowPath,
     barsOf,
@@ -75,9 +76,11 @@
   const say = (date: string): string => dayName.format(parseDate(date) ?? new Date());
 
   // A part of a bar on its way: by a pointer, or by the keys while Shift is held. Drawn where it would land.
-  let move = $state<{ id: string; part: BarPart; days: number; by: 'pointer' | 'keys' } | null>(null);
+  let move = $state<{ id: string; part: BarPart; days: number; by: 'pointer' | 'keys'; from?: Column } | null>(null);
+  // Only the bar that moves reads the move: a step of a drag draws one bar again, not every bar of the picture.
+  const movingId = $derived(move?.id ?? null);
   const placed = (bar: Bar): { from: string; to: string } =>
-    move !== null && move.id === bar.task.id ? movedBar(bar, move.part, move.days) : bar;
+    movingId === bar.task.id && move !== null ? movedBar(bar, move.part, move.days) : bar;
   /** Where a span lies in the track, or null outside of the days shown. */
   function box(span: { from: string; to: string }): { left: number; width: number; cutLeft: boolean; cutRight: boolean } | null {
     const part = clip(span, range);
@@ -135,11 +138,20 @@
     const bar = barOfId.get(now.id);
     const patch = bar ? patchOf(bar, now.part, now.days) : null;
     if (patch !== null) await app.setDates(now.id, patch);
+    // The new dates may put the row elsewhere, and a row that moves loses the focus: the keys get it back.
+    if (now.by === 'keys' && now.from !== undefined) {
+      await tick();
+      if (!scroller?.contains(document.activeElement)) await focusOn(now.id, now.from);
+    }
   }
 
   // The pointer: the mouse takes a bar anywhere, a finger or a pen the grip of the row or an end of the bar (a
-  // finger on the bar itself scrolls the page). The pointer is followed on the element it went down on.
-  let held: { pointer: number; x: number; dragged: boolean; on: Element } | null = null;
+  // finger on the bar itself scrolls the page). The pointer is followed on the window from the moment it goes down:
+  // let go anywhere (off the bar, off the picture, on another bar), the drag ends there, and a pointer that is lost
+  // (the window loses the focus, the pointer is cancelled) gives it up. Nothing of a drag outlives its pointer.
+  let held: { pointer: number; x: number; dragged: boolean; on: Element; slack: number } | null = null;
+  /** How far a pointer goes before a press is a drag (a click that wobbles, a tap on a grip, is none), in pixels. */
+  const SLACK = { mouse: 6, other: 12 } as const;
   let clickEaten = false;
   function capture(on: Element, pointer: number): void {
     try {
@@ -151,8 +163,15 @@
   function onDown(event: PointerEvent, bar: Bar, part: BarPart, grab: boolean): void {
     if (app.locked || event.button !== 0 || held !== null) return;
     if (event.pointerType !== 'mouse' && !grab) return;
-    held = { pointer: event.pointerId, x: event.clientX, dragged: false, on: event.currentTarget as Element };
+    held = {
+      pointer: event.pointerId,
+      x: event.clientX,
+      dragged: false,
+      on: event.currentTarget as Element,
+      slack: event.pointerType === 'mouse' ? SLACK.mouse : SLACK.other,
+    };
     move = { id: bar.task.id, part, days: 0, by: 'pointer' };
+    follow(true);
     // A grip or an end is followed from the start. The bar itself only once it is dragged: a pointer captured at
     // once would take the click that opens the task away from the bar.
     if (grab) {
@@ -164,7 +183,10 @@
   }
   function onMove(event: PointerEvent): void {
     if (held === null || move === null || event.pointerId !== held.pointer) return;
-    const days = Math.round((event.clientX - held.x) / dayWidth);
+    const way = event.clientX - held.x;
+    // Not a drag yet: in a narrow zoom half a day is a few pixels, less than a hand wobbles while it clicks.
+    if (!held.dragged && Math.abs(way) < held.slack) return;
+    const days = Math.round(way / dayWidth);
     if (days !== 0 && !held.dragged) {
       held.dragged = true;
       capture(held.on, held.pointer);
@@ -176,10 +198,30 @@
     // The click that ends a drag is not a click on the bar.
     clickEaten = held.dragged;
     if (clickEaten) setTimeout(() => (clickEaten = false), 0);
-    held = null;
+    letGo();
     if (cancelled) move = null;
     else void commit();
   }
+  const onCancel = (event: PointerEvent): void => onUp(event, true);
+  /** The pointer is gone without a word (the window lost the focus): the drag is given up, nothing is written. */
+  function onLost(): void {
+    if (held === null) return;
+    letGo();
+    move = null;
+  }
+  function letGo(): void {
+    held = null;
+    follow(false);
+  }
+  function follow(on: boolean): void {
+    const change = on ? window.addEventListener : window.removeEventListener;
+    change.call(window, 'pointermove', onMove as EventListener);
+    change.call(window, 'pointerup', onUp as EventListener);
+    change.call(window, 'pointercancel', onCancel as EventListener);
+    change.call(window, 'blur', onLost);
+  }
+  // A view that goes away while a pointer is held leaves no listener behind.
+  $effect(() => () => follow(false));
   function open(id: string): void {
     if (clickEaten) {
       clickEaten = false;
@@ -192,13 +234,18 @@
   let root = $state<HTMLElement | null>(null);
   type Column = 'name' | BarPart;
   let chosen = $state<{ id: string; column: Column } | null>(null);
+  /** The controls a row has: its name, and the parts of its bar when the bar is in the days shown. */
+  const columnsOf = (bar: Bar): Column[] => (clip(bar, range) ? ['name', ...partsOf(bar)] : ['name']);
   const cursor = $derived.by((): { id: string; column: Column } | null => {
-    if (chosen !== null && rowOf.has(chosen.id)) return chosen;
+    const bar = chosen === null ? undefined : barOfId.get(chosen.id);
+    if (chosen !== null && bar && rowOf.has(chosen.id)) {
+      // A part that is not drawn (any more) cannot take Tab: the name of the row does.
+      return columnsOf(bar).includes(chosen.column) ? chosen : { id: chosen.id, column: 'name' };
+    }
     const first = taskRows[0];
     return first ? { id: first.task.id, column: 'name' } : null;
   });
   const tabs = (id: string, column: Column): 0 | -1 => (cursor !== null && cursor.id === id && cursor.column === column ? 0 : -1);
-  const columnsOf = (bar: Bar): Column[] => ['name', ...partsOf(bar)];
   async function focusOn(id: string, column: Column): Promise<void> {
     chosen = { id, column };
     await tick();
@@ -209,7 +256,10 @@
       }
     }
   }
+  // `g h` and `g l` are the page's (Today, the list): the letters after a `g` are not taken as steps.
+  const ofChord = chordWatch();
   function onKey(event: KeyboardEvent): void {
+    if (ofChord(event)) return;
     if (event.ctrlKey || event.metaKey || event.altKey) return;
     const el = event.target instanceof HTMLElement ? event.target.closest<HTMLElement>('[data-column][data-task]') : null;
     const id = el?.dataset.task;
@@ -232,7 +282,7 @@
       event.preventDefault();
       const part: BarPart = column === 'name' || !partsOf(bar).includes(column) ? 'body' : column;
       const before = move !== null && move.id === id && move.part === part && move.by === 'keys' ? move.days : 0;
-      move = { id, part, days: before + days, by: 'keys' };
+      move = { id, part, days: before + days, by: 'keys', from: column };
       return;
     }
     if (sideways !== 0) {
@@ -246,7 +296,10 @@
     if (down !== 0) {
       const next = taskRows[taskRows.findIndex((b) => b.task.id === id) + down];
       event.preventDefault();
-      if (next) void focusOn(next.task.id, columnsOf(next).includes(column) ? column : 'body');
+      if (next) {
+        const columns = columnsOf(next);
+        void focusOn(next.task.id, columns.includes(column) ? column : columns.includes('body') ? 'body' : 'name');
+      }
     }
   }
   function onKeyUp(event: KeyboardEvent): void {
@@ -254,8 +307,9 @@
   }
   function onFocusOut(event: FocusEvent): void {
     // The focus leaves the picture with a move by the keys still open: it is given up, not written behind the back.
+    // "The picture" is what hears the keys: in the tools or the table a Shift let go would not be heard any more.
     if (move === null || move.by !== 'keys') return;
-    if (event.relatedTarget instanceof Node && root?.contains(event.relatedTarget)) return;
+    if (event.relatedTarget instanceof Node && scroller?.contains(event.relatedTarget)) return;
     move = null;
   }
 
@@ -277,13 +331,23 @@
     untrack(toToday);
   });
 
-  async function setDate(field: HTMLInputElement, task: TaskEntry, key: 'start' | 'due'): Promise<void> {
+  /**
+   * A date field of the table writes when it is left, or on Enter: while a date is typed the browser passes through
+   * dates nobody meant (the year 2027 is 0002, 0020, 0202 on its way, each one a valid date and a `change`).
+   */
+  async function setDate(field: HTMLInputElement, id: string, key: 'start' | 'due'): Promise<void> {
+    const task = app.tasks.find((x) => x.id === id);
     const value = field.value;
-    if ((task[key] ?? '') === value) return;
-    await app.setDates(task.id, { [key]: value === '' ? null : value });
+    if (!task || (task[key] ?? '') === value) return;
+    await app.setDates(id, { [key]: value === '' ? null : value });
     await tick();
     // A date the engine refused does not stay in the field as if it were the task's.
-    field.value = app.tasks.find((x) => x.id === task.id)?.[key] ?? '';
+    field.value = app.tasks.find((x) => x.id === id)?.[key] ?? '';
+  }
+  function onDateKey(event: KeyboardEvent, id: string, key: 'start' | 'due'): void {
+    if (event.key !== 'Enter' || event.repeat) return;
+    event.preventDefault();
+    void setDate(event.currentTarget as HTMLInputElement, id, key);
   }
 </script>
 
@@ -291,13 +355,13 @@
 
 {#snippet barOf(bar: Bar)}
   {@const task = bar.task}
-  {@const at = box(placed(bar))}
+  {@const at = box(placed(bar)) ?? (movingId === task.id ? box(bar) : null)}
   {#if at}
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div
       class="bar {bar.kind}"
       class:overdue={bar.kind !== 'start' && task.status !== 'parked' && isOverdue(task.due, app.today)}
-      class:moving={move?.id === task.id}
+      class:moving={movingId === task.id}
       class:cut-left={at.cutLeft}
       class:cut-right={at.cutRight}
       class:selected={app.selectedId === task.id}
@@ -307,9 +371,6 @@
       data-from={placed(bar).from}
       data-to={placed(bar).to}
       onpointerdown={(e) => onDown(e, bar, 'body', false)}
-      onpointermove={onMove}
-      onpointerup={(e) => onUp(e)}
-      onpointercancel={(e) => onUp(e, true)}
     >
       {#if bar.kind === 'bar'}
         <button
@@ -321,9 +382,6 @@
           data-hint={t('hint.ui.timeline.end')}
           aria-label={t('timeline.part.start', { title: task.title, date: say(placed(bar).from) })}
           onpointerdown={(e) => onDown(e, bar, 'start', true)}
-          onpointermove={onMove}
-          onpointerup={(e) => onUp(e)}
-          onpointercancel={(e) => onUp(e, true)}
         ></button>
       {/if}
       <button
@@ -348,9 +406,6 @@
           data-hint={t('hint.ui.timeline.end')}
           aria-label={t('timeline.part.end', { title: task.title, date: say(placed(bar).to) })}
           onpointerdown={(e) => onDown(e, bar, 'end', true)}
-          onpointermove={onMove}
-          onpointerup={(e) => onUp(e)}
-          onpointercancel={(e) => onUp(e, true)}
         ></button>
       {/if}
     </div>
@@ -448,10 +503,7 @@
                       data-hint={t('hint.ui.timeline.grip')}
                       role="presentation"
                       aria-hidden="true"
-                      onpointerdown={(e) => onDown(e, bar, 'body', true)}
-                      onpointermove={onMove}
-                      onpointerup={(e) => onUp(e)}
-                      onpointercancel={(e) => onUp(e, true)}>⠿</span
+                      onpointerdown={(e) => onDown(e, bar, 'body', true)}>⠿</span
                     >
                   {/if}
                   <button
@@ -523,7 +575,8 @@
                 max={task.due ?? undefined}
                 disabled={app.locked}
                 aria-label={t('timeline.field.start', { title: task.title })}
-                onchange={(e) => void setDate(e.currentTarget, task, 'start')}
+                onblur={(e) => void setDate(e.currentTarget, task.id, 'start')}
+                onkeydown={(e) => onDateKey(e, task.id, 'start')}
               />
             </td>
             <td data-hint={t('hint.form.timeline.due')}>
@@ -532,7 +585,8 @@
                 value={task.due ?? ''}
                 disabled={app.locked}
                 aria-label={t('timeline.field.due', { title: task.title })}
-                onchange={(e) => void setDate(e.currentTarget, task, 'due')}
+                onblur={(e) => void setDate(e.currentTarget, task.id, 'due')}
+                onkeydown={(e) => onDateKey(e, task.id, 'due')}
               />
             </td>
             <td>

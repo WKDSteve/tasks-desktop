@@ -224,7 +224,7 @@ function spanOf(bars: readonly Bar[]): { from: string; to: string } {
 /**
  * The rows: by area, or by plan (the tasks of no plan last, as their own group). With projects, a project is a row
  * above its plans and its own tasks, and its bar spans them all. A group in `folded` shows its head only. Groups are
- * in the order of their first day, then by name.
+ * in the order of their first day, then by name. Every group row has a key of its own.
  */
 export function rowsOf(bars: readonly Bar[], grouping: TimelineGrouping, names: Names, folded: ReadonlySet<string>): Row[] {
   const top = new Map<string, Node>();
@@ -244,7 +244,12 @@ export function rowsOf(bars: readonly Bar[], grouping: TimelineGrouping, names: 
     }
     const project = names.projectOf(task);
     const home = project === undefined ? null : node(top, `project:${project}`, 'project', names.project(project));
-    if (task.plan) node(home ? home.groups : top, `plan:${task.plan}`, 'plan', names.plan(task.plan)).bars.push(bar);
+    // A plan under a project is keyed with it: tasks of one plan can stand under two parents (a task that names a
+    // project of its own, beside the one of its plan), and each row needs a key of its own.
+    if (task.plan) {
+      const key = home ? `${home.key}/plan:${task.plan}` : `plan:${task.plan}`;
+      node(home ? home.groups : top, key, 'plan', names.plan(task.plan)).bars.push(bar);
+    }
     else if (home) home.bars.push(bar);
     else node(top, 'none', 'none', '').bars.push(bar);
   }

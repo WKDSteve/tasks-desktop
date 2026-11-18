@@ -163,7 +163,7 @@ describe('the rows', () => {
     const rows = rowsOf(barsOf(tasks), 'plan', withProjects, new Set());
     expect(text(rows)).toEqual([
       '[project:lib/big] 2026-10-01..2026-11-12 (3)',
-      '  [plan:lib/p1] 2026-11-05..2026-11-12 (2)',
+      '  [project:lib/big/plan:lib/p1] 2026-11-05..2026-11-12 (2)',
       '    lib/b',
       '    lib/a',
       '  app/d',
@@ -177,6 +177,25 @@ describe('the rows', () => {
       '[plan:app/p2] 2026-11-01..2026-11-01 (1)',
       '  app/c',
     ]);
+  });
+});
+
+describe('the keys of the rows', () => {
+  it('are all different, also when the tasks of one plan stand under two projects and under none', () => {
+    const split = [
+      task('lib/a', { title: 'A', plan: 'lib/p1', due: '2026-11-10' }),
+      task('lib/b', { title: 'B', plan: 'lib/p1', due: '2026-11-11' }),
+      task('lib/c', { title: 'C', plan: 'lib/p1', due: '2026-11-12' }),
+    ];
+    const rows = rowsOf(
+      barsOf(split),
+      'plan',
+      { ...names, projectOf: (t) => (t.id === 'lib/a' ? 'lib/one' : t.id === 'lib/b' ? 'lib/two' : undefined) },
+      new Set(),
+    );
+    const keys = rows.map((r) => (r.type === 'group' ? r.key : r.bar.task.id));
+    expect(new Set(keys).size).toBe(keys.length);
+    expect(keys.filter((k) => k.endsWith('plan:lib/p1'))).toEqual(['project:lib/one/plan:lib/p1', 'project:lib/two/plan:lib/p1', 'plan:lib/p1']);
   });
 });
 

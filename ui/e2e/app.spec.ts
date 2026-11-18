@@ -5494,6 +5494,12 @@ test('the calendar is worked with the keys: m and Enter put a task on a day, Shi
   await expect.poll(() => readFileSync(join(dir, fileOf()!), 'utf8'), { timeout: WRITE_BUDGET }).not.toContain('due:');
   await expect(loose).toBeFocused();
   expect(await violations(page)).toEqual([]);
+
+  // The chord of the page still works from a day of the grid: g l is the list, not a step to the next day.
+  await today.focus();
+  await page.keyboard.press('g');
+  await page.keyboard.press('l');
+  await expect(page.getByRole('heading', { level: 1, name: 'List' })).toBeVisible();
   expect(consoleProblems.get(page)).toEqual([]);
 });
 
@@ -5560,13 +5566,17 @@ test('the timeline shows a task as a bar from start to due; the keys, a drag and
   expect(readFileSync(file, 'utf8')).toContain(`due: ${localDay(7)}`);
   await expect(taskFloat(page)).toHaveCount(0);
 
-  // The table sets a date in a field; a start after the due date is refused by the engine and not kept in the field.
+  // The table sets a date in a field, when the field is left or on Enter (typing a date passes through others); a
+  // start after the due date is refused by the engine and not kept in the field.
   await page.getByText('As a list, with the dates in fields').click();
   const start = page.getByLabel('Start of Timeline bar e2e', { exact: true });
-  await answered(() => start.fill(localDay(1)));
+  await start.fill(localDay(1));
+  expect(readFileSync(file, 'utf8'), 'nothing is written before the field is left').toContain(`start: ${localDay(2)}`);
+  await answered(() => start.press('Enter'));
   await expect.poll(() => readFileSync(file, 'utf8'), { timeout: WRITE_BUDGET }).toContain(`start: ${localDay(1)}`);
   const refused = nextAnswer(page);
   await start.fill(localDay(9));
+  await page.getByLabel('Due date of Timeline bar e2e', { exact: true }).focus();
   await refused;
   await expect(page.getByRole('alert').first()).toBeVisible();
   await expect(start).toHaveValue(localDay(1));

@@ -23,6 +23,7 @@
   import { calendarTargetAt, createGrip, farEnough, type CalendarTarget, type PointerDragEvent } from '../lib/pointerDrag';
   import { isOverdue } from '../lib/remind';
   import { translate, type Key } from '../lib/i18n';
+  import { chordWatch } from '../lib/keymap';
   import Info from 'appkit-ui/Info.svelte';
   import { markHidden } from '../lib/text';
   import FilterNote from './FilterNote.svelte';
@@ -156,10 +157,29 @@
     await tick();
     root?.querySelector<HTMLElement>(`td[data-day="${day}"]`)?.focus();
   }
-  /** After a write the task is found again where it stands now; hidden behind "+n more", its day keeps the focus. */
-  async function focusTask(id: string): Promise<void> {
+  /**
+   * After a write the task is found again where it stands now. Where it cannot take the focus (hidden behind
+   * "+n more", only a start left, a write the engine refused that took it out of the grid) the day `fallback` does:
+   * the focus is never left on nothing.
+   */
+  async function focusTask(id: string, fallback: string = cursor): Promise<void> {
     await tick();
-    movableChip(id)?.focus();
+    const chip = movableChip(id);
+    if (chip) chip.focus();
+    else await focusDay(days.includes(fallback) ? fallback : cursor);
+  }
+  /** The due date of `id` goes to `day` (null: away). The cursor and the grid follow only a date that was written. */
+  async function moveDue(id: string, day: string | null, from: string): Promise<void> {
+    await app.dropOnDay(id, day);
+    const now = app.tasks.find((x) => x.id === id)?.due ?? null;
+    if (day !== null && now === day) {
+      chosen = day;
+      if (!days.includes(day)) {
+        picked = day;
+        opened = null;
+      }
+    }
+    await focusTask(id, day !== null && now === day ? day : from);
   }
   function pickUp(id: string): void {
     if (app.locked) return;
@@ -185,7 +205,10 @@
     const el = target instanceof HTMLElement ? target.closest<HTMLElement>('.chip[data-task]') : null;
     return el && (el.dataset.kind ?? 'due') === 'due' ? (el.dataset.task ?? null) : null;
   }
+  // `g h` and `g l` are the page's (Today, the list): the letters after a `g` are not taken as steps over the days.
+  const ofChord = chordWatch();
   function onGridKey(event: KeyboardEvent): void {
+    if (ofChord(event)) return;
     if (event.ctrlKey || event.metaKey || event.altKey) return;
     const day = event.target instanceof HTMLElement ? event.target.closest<HTMLElement>('td[data-day]')?.dataset.day : undefined;
     if (day === undefined) return;
@@ -198,12 +221,7 @@
         if (id === null || carried !== null) return;
         event.preventDefault();
         if (event.repeat) return;
-        void (async () => {
-          chosen = next;
-          if (!days.includes(next)) picked = next;
-          await app.dropOnDay(id, next);
-          await focusTask(id);
-        })();
+        void moveDue(id, next, day);
         return;
       }
       event.preventDefault();
@@ -231,13 +249,11 @@
       pickUp(id);
     } else if (key === 'Delete' || key === 'Backspace') {
       event.preventDefault();
-      void (async () => {
-        await app.dropOnDay(id, null);
-        await focusTask(id);
-      })();
+      void moveDue(id, null, day);
     }
   }
   function onLooseKey(event: KeyboardEvent): void {
+    if (ofChord(event)) return;
     if (event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return;
     const key = keyOf(event);
     if (carried !== null) {
