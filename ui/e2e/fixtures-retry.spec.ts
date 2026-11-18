@@ -1,11 +1,11 @@
 // The retry of `fixtures.ts`: a test runs again only after a first attempt that failed while the machine broke its
 // connections. The fault the runner saw (a change of the network interfaces) cannot be made on purpose, so the watch is
 // shown with another fault in its place.
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { removeTree, tempDir } from '../web/tmp.mjs';
-import type { BrowserContext, TestInfo } from '@playwright/test';
+import type { Browser, BrowserContext, BrowserContextOptions, TestInfo } from '@playwright/test';
 import {
   type AttemptInfo,
   contextMaker,
@@ -138,6 +138,73 @@ test('a failed attempt leaves its note before its context closes', async ({ brow
     expect(readFileSync(note, 'utf8')).toContain('net::ERR_NETWORK_CHANGED');
   } finally {
     await maker.close();
+    removeTree(dir);
+  }
+});
+
+test('a note that cannot be written costs neither the cleaning of the vault nor the end of the teardown', async ({ browser }) => {
+  const dir = tempDir('e2e-note-unwritable');
+  const maker = contextMaker(browser);
+  try {
+    // The folder of the note is a file: making it fails, as a folder a scanner holds does.
+    const blocked = join(dir, 'blocked');
+    writeFileSync(blocked, 'not a folder');
+    const attempt: AttemptInfo = { status: 'failed', expectedStatus: 'passed', errors: [], testId: 'x', project: { outputDir: blocked } };
+    let cleaned = false;
+    const fixture = fixtures.context as unknown as ContextFixture;
+    await fixture(
+      { context: await maker.make(), machineFaults: ['x (net::ERR_NETWORK_CHANGED)'], vaultClean: () => (cleaned = true) },
+      async () => {},
+      attempt as unknown as TestInfo,
+    );
+    expect(cleaned).toBe(true);
+  } finally {
+    await maker.close();
+    removeTree(dir);
+  }
+});
+
+type NewContextFixture = (
+  args: { browser: Browser; machineFaults: string[]; vaultClean: () => void },
+  use: (make: (options?: BrowserContextOptions) => Promise<BrowserContext>) => Promise<void>,
+  info: TestInfo,
+) => Promise<void>;
+
+test('a context of newContext whose close hangs still leaves the note of a failed attempt', async ({ browser }) => {
+  const dir = tempDir('e2e-note-new-context');
+  const real: BrowserContext[] = [];
+  // The contexts this browser makes never finish closing, as the one under load did.
+  const hanging = {
+    newContext: async (options?: BrowserContextOptions): Promise<BrowserContext> => {
+      const context = await browser.newContext(options);
+      real.push(context);
+      return new Proxy(context, {
+        get(target, prop) {
+          if (prop === 'close') return () => new Promise<void>(() => {});
+          const value: unknown = Reflect.get(target, prop);
+          return typeof value === 'function' ? (value as (...a: unknown[]) => unknown).bind(target) : value;
+        },
+      });
+    },
+  } as unknown as Browser;
+  try {
+    const attempt: AttemptInfo = { status: 'failed', expectedStatus: 'passed', errors: [], testId: 'new-context', project: { outputDir: dir } };
+    const note = machineFaultNote(dir, attempt.testId);
+    let noteAtClean = false;
+    const fixture = fixtures.newContext as unknown as NewContextFixture;
+    const teardown = fixture(
+      { browser: hanging, machineFaults: [`${ORIGIN}/api (net::ERR_NETWORK_CHANGED)`], vaultClean: () => (noteAtClean = existsSync(note)) },
+      async (make) => {
+        await make();
+      },
+      attempt as unknown as TestInfo,
+    );
+    // The teardown never ends (the close hangs): the note must be there all the same.
+    await Promise.race([teardown, new Promise((resolve) => setTimeout(resolve, 2000))]);
+    expect(noteAtClean).toBe(true);
+    expect(readFileSync(note, 'utf8')).toContain('net::ERR_NETWORK_CHANGED');
+  } finally {
+    await Promise.all(real.map((c) => c.close().catch(() => undefined)));
     removeTree(dir);
   }
 });

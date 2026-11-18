@@ -193,6 +193,18 @@ export function noteFailedAttempt(info: AttemptInfo, seen: readonly string[], fa
   if (failed && seen.length + gaveUp.length > 0) noteMachineFaults(machineFaultNote(info.project.outputDir, info.testId), [...seen, ...gaveUp]);
 }
 
+/**
+ * `noteFailedAttempt` in a teardown, before the vault is cleaned and the contexts close: a note that cannot be written (a
+ * scanner or indexer holds the folder, EPERM/EBUSY) is said on the console and costs neither the cleaning nor the close.
+ */
+export function noteBeforeClose(info: AttemptInfo, seen: readonly string[], failed: boolean): void {
+  try {
+    noteFailedAttempt(info, seen, failed);
+  } catch (error) {
+    console.warn(`the note for a retry was not written: ${String(error)}`);
+  }
+}
+
 /** Run the check of `guardPages`/`contextMaker` now and give back its error, to be thrown after the note is written. */
 function checkError(check: () => void): unknown {
   try {
@@ -255,7 +267,7 @@ export const fixtures: Fixtures<E2eFixtures, object, PlaywrightTestArgs & Playwr
     } finally {
       machineFaults.push(...seen);
       lost = checkError(check);
-      noteFailedAttempt(testInfo, machineFaults, testInfo.status !== testInfo.expectedStatus || lost !== undefined);
+      noteBeforeClose(testInfo, machineFaults, testInfo.status !== testInfo.expectedStatus || lost !== undefined);
       vaultClean();
     }
     if (lost !== undefined) throw lost;
@@ -270,7 +282,7 @@ export const fixtures: Fixtures<E2eFixtures, object, PlaywrightTestArgs & Playwr
     } finally {
       machineFaults.push(...maker.seen());
       lost = checkError(maker.check);
-      noteFailedAttempt(testInfo, machineFaults, testInfo.status !== testInfo.expectedStatus || lost !== undefined);
+      noteBeforeClose(testInfo, machineFaults, testInfo.status !== testInfo.expectedStatus || lost !== undefined);
       vaultClean();
       await maker.close();
     }
