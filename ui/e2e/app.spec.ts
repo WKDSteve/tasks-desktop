@@ -9121,8 +9121,12 @@ test('"Split into tasks": the plan and its tasks go to ai-desktop, only the tick
   };
   const ai = await aiDesktopDouble((_, path) => {
     if (path === '/jobs') return { status: 201, body: { job_id: '0123456789abcdef', status: 'running', private: false } };
+    // The hub shows only a split it sent itself (`own_job`): ai-desktop names the source and kind of every job.
     if (path === '/jobs/0123456789abcdef') {
-      return { status: 200, body: { id: '0123456789abcdef', status: 'done', output: `Read it.\n<!-- split:begin -->\n${JSON.stringify(drafts)}\n<!-- split:end -->` } };
+      return {
+        status: 200,
+        body: { id: '0123456789abcdef', source: 'tasks-desktop', kind: 'split-plan', status: 'done', output: `Read it.\n<!-- split:begin -->\n${JSON.stringify(drafts)}\n<!-- split:end -->` },
+      };
     }
     return { status: 404, body: { error: { message: 'no such route' } } };
   });
