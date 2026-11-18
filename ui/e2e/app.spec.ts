@@ -8630,6 +8630,81 @@ test('a finished task is checked against its acceptance: the review comes back a
   }
 });
 
+test('a task that waits for a decision is prepared by an agent: proposal and questions on adopt, the status stays', async ({
+  page,
+}) => {
+  const file = join(state().vault, 'lib.nvim', 'ROADMAP', 'tasks', 'gamma.md');
+  const original = readFileSync(file, 'utf8');
+  let asked = 0;
+  const ai = await aiDesktopDouble((_, path) => {
+    if (path === '/jobs') return { status: 201, body: { job_id: 'fedcba9876543210', status: 'running', private: false } };
+    if (path === '/jobs/fedcba9876543210') {
+      asked += 1;
+      return asked < 2
+        ? { status: 200, body: { id: 'fedcba9876543210', status: 'running' } }
+        : {
+            status: 200,
+            body: {
+              id: 'fedcba9876543210',
+              status: 'done',
+              output: [
+                '<!-- decision:begin -->',
+                '## Vorschlag',
+                '',
+                '### Optionen',
+                '',
+                '1. Keep it',
+                '2. Drop it',
+                '',
+                '### Empfehlung',
+                '',
+                'Keep it: nothing depends on dropping it.',
+                '',
+                '## Offene Fragen',
+                '',
+                '### Keep gamma? [q1]',
+                '',
+                '- [ ] Keep it (empfohlen)',
+                '- [ ] Drop it',
+                '<!-- decision:end -->',
+              ].join('\n'),
+            },
+          };
+    }
+    return { status: 404, body: { error: { message: 'no such route' } } };
+  });
+  try {
+    await watchViolations(page);
+    await pair(page);
+    await showList(page);
+    await open(page, 'lib.nvim/gamma');
+    await page.locator('aside.detail').getByRole('button', { name: 'Prepare the decision ...' }).click();
+    const answer = page.getByRole('dialog', { name: 'Prepared decision' });
+    await expect(answer.getByTestId('answer-body')).toContainText('Keep gamma?', { timeout: 15_000 });
+    expect(await violations(page)).toEqual([]);
+    const job = ai.seen.find((r) => r.path === '/jobs')!;
+    expect(job.body).toMatchObject({ kind: 'prepare-decision', mode: 'run', task_id: 'lib.nvim/gamma' });
+    expect(readFileSync(file, 'utf8')).toBe(original);
+
+    await answer.getByRole('button', { name: 'Adopt', exact: true }).click();
+    await expect(answer).toContainText('Adopted into the task');
+    const written = readFileSync(file, 'utf8');
+    expect(written).toContain('\n## Vorschlag\n\n### Optionen\n');
+    expect(written).toContain('\n## Offene Fragen\n\n### Keep gamma? [q1]\n');
+    expect(written).toContain('status: decision');
+    expect(written).toContain('A summary line for gamma.');
+    await answer.getByRole('button', { name: 'Close', exact: true }).click();
+    await expect(answer).toBeHidden();
+    // The questions of the task offer its options now; the person decides there.
+    const question = page.locator('aside.detail').getByRole('region', { name: /Keep gamma\?/ });
+    await expect(question).toContainText('Keep it', { timeout: 15_000 });
+    await expect(question).toContainText('Drop it');
+  } finally {
+    await ai.close();
+    writeFileSync(file, original);
+  }
+});
+
 test('the switch "Show AI functions" off: no AI place in the task, kept over a reload', async ({ page }) => {
   await page.route('**/api/tasks/ai_desktop', (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: '{"installed":true,"running":true}' }),

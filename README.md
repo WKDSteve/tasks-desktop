@@ -881,6 +881,15 @@ message. A follow-up task the review proposes is created only with *Create the f
 same area. The engine checks the answer (`agent_answer`, the rules of `:Tasks agent` in tasks.nvim): a block of
 another kind, a second section of the task's level or a control character is refused with its reason.
 
+**Prepare the decision.** A task that waits for a decision (`status: decision`) has *Prepare the decision ...* in its
+detail and its context menu while the AI functions are shown. Its file goes to ai-desktop as a job of the kind
+`prepare-decision` that runs at once; the agent only reads (`docs/JOBS.md` of ai-desktop, "Decisions"). The dialog
+*Prepared decision* shows the proposal (options with their consequences, a recommendation, open assumptions) and the
+questions as a proposal; *Adopt* writes `## Vorschlag` (an earlier one is replaced) and `## Offene Fragen` only when the
+task has no questions of its own (the dialog says so otherwise), through `set_section`. The status stays `decision`:
+you decide in the questions of the task, as always; no button decides for you. The engine checks the answer the same
+way (a proposal first, then only questions that read as questions of the engine).
+
 <!-- connections:begin (written by the app-icons tool of the workshop; change integrations.json there, not this block) -->
 ## Connections
 

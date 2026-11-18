@@ -62,6 +62,16 @@ describe('the place of the AI functions in the detail', () => {
     app.marks = ['pub/a', 'pub/b'];
     expect(detail(app)).toMatch(/data-hint="Only one task at a time goes to an agent[^"]*" disabled="">Hand to an agent/);
   });
+
+  it('offers "Prepare the decision" only for a task that waits for a decision, and only with the AI functions', () => {
+    const app = page(false);
+    app.tasks = [task('pub/a', { status: 'decision' })];
+    expect(detail(app)).not.toContain('Prepare the decision');
+    app.aiDesktop = { installed: true, running: true };
+    expect(detail(app)).toMatch(/<button type="button" class="open-editor[^"]*" data-hint="An agent of ai-desktop prepares this decision[^"]*">Prepare the decision \.\.\.<\/button>/);
+    app.tasks = [task('pub/a', { status: 'open' })];
+    expect(detail(app)).not.toContain('Prepare the decision');
+  });
 });
 
 describe('the fields of the detail', () => {

@@ -1217,6 +1217,15 @@
             disabled={app.agentBlocked !== null}
             onclick={() => app.openAgent(task.id)}>{t('agent.button')}</button
           >
+          {#if task.status === 'decision'}
+            <!-- A task that waits for a decision: an agent prepares it, the person decides in the questions. -->
+            <button
+              type="button"
+              class="open-editor"
+              data-hint={t('hint.ui.detail.decision')}
+              onclick={() => app.startAnswer(task.id, 'prepare-decision', task.title)}>{t('answer.decision')}</button
+            >
+          {/if}
         </span>
       {/if}
       {#if app.canAttach}
