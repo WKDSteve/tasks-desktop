@@ -20,7 +20,7 @@ import type {
   Waits,
 } from './contract';
 import type { ViewForm } from './views';
-import { parseRepos, type HubRepos, type RepoGroup } from './repos';
+import { parseRepos, parseSuggestions, type HubRepos, type RepoGroup } from './repos';
 import { parseRemindersMail, type RemindersMail } from './reminders';
 import type { About } from './about';
 import { ApiError, failure, HubClient, textOf, type Hello, type SnapshotResult as KitSnapshotResult } from 'appkit-ui/client';
@@ -308,6 +308,11 @@ export class Hub extends HubClient<Snapshot> {
   /** The repo tiles of this device (`hub.repos`): no path, ever. */
   async repos(): Promise<HubRepos> {
     return parseRepos(await this.json<unknown>('/api/tasks/repos'));
+  }
+
+  /** The folders below `REPOS_DIR` that are no tile yet, by name: what the form of a new tile offers. */
+  async repoSuggest(): Promise<string[]> {
+    return parseSuggestions(await this.json<unknown>('/api/tasks/repos/suggest'));
   }
 
   /** A folder as a tile of a group; the answer is the new document. */

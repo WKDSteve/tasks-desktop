@@ -541,6 +541,7 @@ export class App {
   readonly reposState = new ReposState({
     repos: () => this.env.hub.repos(),
     repoAdd: (body) => this.env.hub.repoAdd(body),
+    repoSuggest: () => this.env.hub.repoSuggest(),
     repoSave: (body) => this.env.hub.repoSave(body),
   });
 

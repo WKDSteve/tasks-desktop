@@ -349,7 +349,32 @@ describe('the repo tiles', () => {
     repos: vi.fn(async () => doc('r1')),
     repoAdd: vi.fn(async () => doc('r2')),
     repoSave: vi.fn(async () => doc('r3')),
+    repoSuggest: vi.fn(async () => ['appkit', 'lib.nvim']),
     ...over,
+  });
+
+  it('offers the folders the hub suggests, reads them again once one became a tile, and offers none when the hub does not say', async () => {
+    let left = ['appkit', 'lib.nvim'];
+    const h = host({ repoSuggest: vi.fn(async () => left) });
+    const state = new ReposState(h);
+    expect(state.suggestions).toEqual([]);
+    await state.load();
+    await vi.waitFor(() => expect(state.suggestions).toEqual(['appkit', 'lib.nvim']));
+    // A name of the list goes as the path: the hub knows the folder, the page no path.
+    left = ['lib.nvim'];
+    expect(await state.add('appkit', 'gggg0001')).toBe(true);
+    expect(h.repoAdd).toHaveBeenCalledWith({ path: 'appkit', group: 'gggg0001' });
+    await vi.waitFor(() => expect(state.suggestions).toEqual(['lib.nvim']));
+    // A change that was refused made no tile: nothing is read again.
+    const asked = vi.mocked(h.repoSuggest).mock.calls.length;
+    h.repoAdd = vi.fn(async () => Promise.reject(new ApiError(400, 'bad_folder', 'no')));
+    expect(await state.add('nope', 'gggg0001')).toBe(false);
+    expect(vi.mocked(h.repoSuggest).mock.calls.length).toBe(asked);
+    // A hub that does not answer: no list, and the tiles are read all the same.
+    const quiet = new ReposState(host({ repoSuggest: vi.fn(async () => Promise.reject(new Error('down'))) }));
+    await quiet.load();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect([quiet.read, quiet.suggestions]).toEqual(['ready', []]);
   });
 
   it('reads the document, and a hub that keeps none is told apart from one that did not answer', async () => {

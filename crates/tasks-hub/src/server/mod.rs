@@ -443,6 +443,7 @@ fn app_routes(core: &Arc<Shared>) -> Router<Arc<Shared>> {
         )
         .route(&r("repos"), get(self::repos::repos))
         .route(&r("repos/image"), get(self::repos::repo_image))
+        .route(&r("repos/suggest"), get(self::repos::repo_suggest))
         .route(
             &r("repos/add"),
             post(self::repos::repo_add).layer(DefaultBodyLimit::max(4 * 1024)),

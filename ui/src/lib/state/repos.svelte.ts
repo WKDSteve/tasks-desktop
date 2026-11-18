@@ -9,6 +9,8 @@ import { saveBody, type HubRepos, type RepoGroup } from '../repos';
 export interface ReposHost {
   repos(): Promise<HubRepos>;
   repoAdd(body: { path: string; name?: string; group: string }): Promise<HubRepos>;
+  /** The names of the folders below `REPOS_DIR` that are no tile yet. */
+  repoSuggest(): Promise<string[]>;
   repoSave(body: { rev: string; groups: RepoGroup[]; names: Record<string, string> }): Promise<HubRepos>;
 }
 
@@ -23,7 +25,13 @@ export class ReposState {
   saving = $state(false);
   /** Why the last change was not made, in the hub's words (`stale`: the tiles changed meanwhile, read again). */
   problem = $state<string | null>(null);
+  /**
+   * The folders the form of a new tile offers: the names of those below `REPOS_DIR` that are no tile yet. A name of
+   * this list, sent as the path, is the folder of that name there (the hub resolves it; the page knows no path).
+   */
+  suggestions = $state.raw<string[]>([]);
   private seq = 0;
+  private suggestSeq = 0;
 
   constructor(private readonly host: ReposHost) {}
 
@@ -36,10 +44,24 @@ export class ReposState {
       if (seq !== this.seq) return;
       this.doc = doc;
       this.read = 'ready';
+      void this.loadSuggestions();
     } catch (error) {
       if (seq !== this.seq) return;
       this.read = error instanceof ApiError && error.code === 'repos_unavailable' ? 'unavailable' : 'failed';
     }
+  }
+
+  /** Read the suggestions; they are a convenience, so a hub that does not answer simply offers none. */
+  async loadSuggestions(): Promise<void> {
+    this.suggestSeq += 1;
+    const seq = this.suggestSeq;
+    let names: string[];
+    try {
+      names = await this.host.repoSuggest();
+    } catch {
+      names = [];
+    }
+    if (seq === this.suggestSeq) this.suggestions = names;
   }
 
   /** One change: what it answered becomes the document; a refusal is said, and a clash of states reads it again. */
@@ -68,7 +90,11 @@ export class ReposState {
   /** A folder as a tile of a group (its name from the folder unless one is given). */
   add(path: string, group: string, name?: string): Promise<boolean> {
     const body = { path, group, ...(name !== undefined && name.trim() !== '' ? { name: name.trim() } : {}) };
-    return this.change(() => this.host.repoAdd(body));
+    return this.change(() => this.host.repoAdd(body)).then((done) => {
+      // The folder that became a tile is not offered again.
+      if (done) void this.loadSuggestions();
+      return done;
+    });
   }
 
   /** The groups as the page worked them out, and new names, on the state read. */

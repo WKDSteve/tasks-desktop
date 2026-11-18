@@ -9857,6 +9857,10 @@ test('repo tiles: groups and tiles are made, an image or a letter, moved with th
   const lib = folder('lib.nvim', { 'logo.svg': svg });
   const plain = folder(`plain-${tag}`);
   const hostile = folder(`hostile-${tag}`, { 'logo.svg': '<svg><script>alert(1)</script></svg>' });
+  // A folder below REPOS_DIR of the hub of the tests (hub.ts `env`): the form suggests it by its name.
+  const suggested = `suggested-${tag}`;
+  const below = join(state().config, '..', 'repos', suggested);
+  mkdirSync(below, { recursive: true });
   try {
     await pair(page);
     await chooseView(page, 'View', 'Repos');
@@ -9918,6 +9922,18 @@ test('repo tiles: groups and tiles are made, an image or a letter, moved with th
     await tab.getByRole('button', { name: 'Open the folder' }).click();
     await expect.poll(() => (existsSync(log) ? readFileSync(log, 'utf8') : '')).toContain(`plain-${tag}`);
 
+    // The folders below REPOS_DIR of the hub are suggested by name (read with the tiles: the reload above saw the new
+    // folder); a name of the list is the folder of that name there, and a folder that became a tile is offered no more.
+    const field = tab.getByLabel('Folder of the repo');
+    const offered = page.locator(`datalist[id="${await field.getAttribute('list')}"] option`);
+    await expect(offered.and(page.locator(`[value="${suggested}"]`))).toBeAttached();
+    await field.fill(suggested);
+    await tab.getByLabel('Into the group').selectOption({ label: `UI ${tag}` });
+    await tab.getByRole('button', { name: 'Add the repo' }).click();
+    await expect(face(suggested)).toBeVisible();
+    await expect(page.locator(`datalist option[value="${suggested}"]`)).toHaveCount(0);
+    expect(readFileSync(join(state().config, 'repos.json'), 'utf8')).toContain(suggested);
+
     // A tile of an area opens the tasks of that area.
     await face('lib.nvim').click();
     await expect(page.getByRole('heading', { level: 1, name: 'List' })).toBeVisible();
@@ -9926,6 +9942,7 @@ test('repo tiles: groups and tiles are made, an image or a letter, moved with th
     expect((consoleProblems.get(page) ?? []).filter((m) => !m.includes('status of 400'))).toEqual([]);
   } finally {
     rmSync(root, { recursive: true, force: true });
+    rmSync(below, { recursive: true, force: true });
   }
 });
 

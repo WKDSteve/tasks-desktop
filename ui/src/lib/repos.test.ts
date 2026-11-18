@@ -8,8 +8,10 @@ import {
   initial,
   newId,
   parseRepos,
+  parseSuggestions,
   repoRemoved,
   saveBody,
+  SUGGEST_MAX,
   tileCopied,
   tileMoved,
   tileTaken,
@@ -124,5 +126,13 @@ describe('what a tile needs', () => {
   it('sends the groups and the names on the state it read', () => {
     const read = parseRepos(doc);
     expect(saveBody(read, read.groups, { aaaa0002: 'Lib' })).toEqual({ rev: 'fnv1a:1', groups: read.groups, names: { aaaa0002: 'Lib' } });
+  });
+
+  it('takes the suggested folders as plain names, each once, and nothing that looks like a path', () => {
+    const answer = (folders: unknown) => ({ schema: 1, kind: 'hub.repo_suggestions', folders, truncated: false });
+    expect(parseSuggestions(answer(['appkit', 'lib.nvim', 'appkit', 'with space']))).toEqual(['appkit', 'lib.nvim', 'with space']);
+    expect(parseSuggestions(answer(['ok', 'E:/repos/x', 'a\\b', 'C:', '.git', '', 7, null, 'x'.repeat(300)]))).toEqual(['ok']);
+    expect(parseSuggestions(answer(Array.from({ length: 600 }, (_, i) => `r${i}`)))).toHaveLength(SUGGEST_MAX);
+    for (const none of [null, 'x', {}, { kind: 'hub.repos', folders: ['a'] }, answer('a')]) expect(parseSuggestions(none)).toEqual([]);
   });
 });

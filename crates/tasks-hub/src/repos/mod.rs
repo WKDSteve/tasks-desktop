@@ -415,6 +415,13 @@ impl Store {
     /// # Errors
     ///
     /// [`Refused`]: no such group, a name that is not one, a limit, the file.
+    /// The folders that are a tile already.
+    #[must_use]
+    pub fn folders(&self) -> Vec<PathBuf> {
+        let (file, _) = self.current();
+        file.repos.into_values().map(|r| r.path).collect()
+    }
+
     pub fn add(&self, folder: &Path, name: Option<&str>, group: &str) -> Result<(), Refused> {
         let _one = self
             .one

@@ -46,6 +46,15 @@ async fn rig(name: &str) -> Rig {
 }
 
 async fn rig_with(name: &str, opener: Option<Arc<dyn FileOpener>>) -> Rig {
+    rig_below(name, opener, None).await
+}
+
+/// A hub whose `REPOS_DIR` is `repos_dir` (none: it knows no such folder).
+async fn rig_below(
+    name: &str,
+    opener: Option<Arc<dyn FileOpener>>,
+    repos_dir: Option<std::path::PathBuf>,
+) -> Rig {
     let config = Scratch::new(&format!("repos-route-{name}"));
     let control = Secret::generate(TOKEN_BYTES).unwrap();
     let server = start_with(
@@ -74,6 +83,7 @@ async fn rig_with(name: &str, opener: Option<Arc<dyn FileOpener>>) -> Rig {
         Extras {
             repos: Some(Arc::new(Store::open(&config))),
             opener,
+            snapshot_root: repos_dir,
             ..Extras::default()
         },
     )
@@ -356,4 +366,90 @@ async fn a_tile_opens_its_folder_or_neovim_in_it_by_its_id_and_never_by_a_path()
         400
     );
     assert_eq!(seen.0.lock().unwrap().len(), 2, "nothing else was started");
+}
+
+#[tokio::test]
+async fn the_folders_below_repos_dir_are_suggested_by_name_and_a_name_adds_that_folder() {
+    let below = Scratch::new("repos-route-suggest");
+    for name in ["tasks.nvim", "Appkit", "lib.nvim", ".hidden", "with space"] {
+        std::fs::create_dir_all(below.join(name)).unwrap();
+    }
+    std::fs::write(below.join("a-file.txt"), "x").unwrap();
+    let root = below.to_path_buf();
+    let r = rig_below("suggest", None, Some(root.clone())).await;
+
+    let listed = get(&r, "/api/tasks/repos/suggest").await;
+    assert_eq!(listed.status, 200, "{}", listed.body);
+    let doc: Value = serde_json::from_str(&listed.body).unwrap();
+    assert_eq!(doc["kind"], "hub.repo_suggestions");
+    assert_eq!(
+        doc["folders"],
+        json!(["Appkit", "lib.nvim", "tasks.nvim", "with space"]),
+        "folders only, no hidden one, sorted without regard to case"
+    );
+    assert_eq!(doc["truncated"], false);
+    let whole = root.to_string_lossy().into_owned();
+    assert!(
+        !listed.body.contains(&whole) && !listed.body.contains(&whole.replace('\\', "\\\\")),
+        "names, never the path: {}",
+        listed.body
+    );
+    assert_eq!(get(&r, "/api/tasks/repos/suggest?x=1").await.status, 400);
+
+    // A name of the list is the folder of that name below REPOS_DIR.
+    let first = get(&r, "/api/tasks/repos").await;
+    let doc: Value = serde_json::from_str(&first.body).unwrap();
+    let (status, doc, _) = post(&r, "/api/tasks/repos/save", &json!({
+        "rev": doc["rev"], "groups": [{ "id": "gggg0001", "title": "UI", "tiles": [] }], "names": {}
+    }))
+    .await;
+    assert_eq!(status, 200, "{doc}");
+    let (status, doc, body) = post(
+        &r,
+        "/api/tasks/repos/add",
+        &json!({ "path": "tasks.nvim", "group": "gggg0001" }),
+    )
+    .await;
+    assert_eq!(status, 200, "{doc}");
+    assert!(
+        !body.contains(&whole),
+        "the path is never sent back: {body}"
+    );
+    let tile = doc["repos"].as_object().unwrap().values().next().unwrap();
+    assert_eq!(tile["label"], "tasks.nvim");
+
+    // It is a tile now, so it is not suggested any more.
+    let listed = get(&r, "/api/tasks/repos/suggest").await;
+    let doc: Value = serde_json::from_str(&listed.body).unwrap();
+    assert_eq!(doc["folders"], json!(["Appkit", "lib.nvim", "with space"]));
+
+    // A name that is no folder there, or that would leave the folder, adds nothing.
+    for bad in ["nothere", "..", "../outside", "a-file.txt", ".hidden/x"] {
+        let (status, doc, _) = post(
+            &r,
+            "/api/tasks/repos/add",
+            &json!({ "path": bad, "group": "gggg0001" }),
+        )
+        .await;
+        assert_eq!(status, 400, "{bad}: {doc}");
+    }
+
+    // A hub that knows no REPOS_DIR suggests nothing, and takes a plain name for no folder.
+    let none = rig("suggest-none").await;
+    let listed = get(&none, "/api/tasks/repos/suggest").await;
+    let doc: Value = serde_json::from_str(&listed.body).unwrap();
+    assert_eq!((listed.status, &doc["folders"]), (200, &json!([])));
+    let first = get(&none, "/api/tasks/repos").await;
+    let doc: Value = serde_json::from_str(&first.body).unwrap();
+    post(&none, "/api/tasks/repos/save", &json!({
+        "rev": doc["rev"], "groups": [{ "id": "gggg0001", "title": "UI", "tiles": [] }], "names": {}
+    }))
+    .await;
+    let (status, _, _) = post(
+        &none,
+        "/api/tasks/repos/add",
+        &json!({ "path": "tasks.nvim", "group": "gggg0001" }),
+    )
+    .await;
+    assert_eq!(status, 400);
 }

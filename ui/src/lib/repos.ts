@@ -44,6 +44,23 @@ const isText = (v: unknown): v is string => typeof v === 'string';
  * is not whole is dropped, a tile of a repo that is not there is dropped. Anything that is no document at all is an
  * empty one that says it is broken.
  */
+/** The most folder names the form offers (the hub names no more). */
+export const SUGGEST_MAX = 500;
+
+/**
+ * The folders the hub suggests for a new tile (`hub.repo_suggestions`): names of folders below `REPOS_DIR`, never a
+ * path. Anything that is no such document, and any entry that is no plain name, gives nothing: the form then simply
+ * offers no list.
+ */
+export function parseSuggestions(value: unknown): string[] {
+  if (typeof value !== 'object' || value === null) return [];
+  const doc = value as Record<string, unknown>;
+  if (doc['kind'] !== 'hub.repo_suggestions' || !Array.isArray(doc['folders'])) return [];
+  const plain = (name: unknown): name is string =>
+    isText(name) && name !== '' && name.length <= 255 && !name.includes('/') && !name.includes('\\') && !name.includes(':') && !name.startsWith('.');
+  return [...new Set(doc['folders'].filter(plain))].slice(0, SUGGEST_MAX);
+}
+
 export function parseRepos(value: unknown): HubRepos {
   const broken: HubRepos = { kind: 'hub.repos', rev: '', repos: {}, groups: [], problem: 'invalid' };
   if (typeof value !== 'object' || value === null) return broken;

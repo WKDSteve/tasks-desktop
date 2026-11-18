@@ -79,6 +79,8 @@
   }
 
   // -- adding a repo --
+  const uid = $props.id();
+  const suggestId = `${uid}-suggest`;
   let path = $state('');
   let name = $state('');
   let into = $state('');
@@ -142,7 +144,13 @@
       </form>
       {#if groups.length > 0}
         <form onsubmit={(e) => (e.preventDefault(), void addRepo())}>
-          <label data-hint={t('hint.form.repos.path')}><span>{t('repos.add.path')}</span><input type="text" bind:value={path} maxlength="1024" /></label>
+          <label data-hint={t('hint.form.repos.path')}
+            ><span>{t('repos.add.path')}</span><input type="text" bind:value={path} maxlength="1024" list={rs.suggestions.length > 0 ? suggestId : undefined} autocomplete="off" /></label
+          >
+          {#if rs.suggestions.length > 0}
+            <!-- The folders below REPOS_DIR of the hub, by name: choosing one fills the field, the hub knows the folder. -->
+            <datalist id={suggestId}>{#each rs.suggestions as folder (folder)}<option value={folder}></option>{/each}</datalist>
+          {/if}
           <button type="button" onclick={() => void choose()}>{t('repos.add.choose')}</button>
           <label data-hint={t('hint.form.repos.name')}><span>{t('repos.add.name')}</span><input type="text" bind:value={name} maxlength="80" /></label>
           <label data-hint={t('hint.form.repos.group')}>

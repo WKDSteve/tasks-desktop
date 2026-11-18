@@ -632,7 +632,7 @@ folder (never a file, never a folder with something in it: nothing is merged or 
 name. It makes `<path>/<area>/ROADMAP/tasks`, the folders the engine looks for, and does not register the vault: the page
 then calls `vaults/add` as for any folder. All three routes need a session and count as mutations.
 
-## Repository folders (`/api/tasks/repos`, `repos/image`, `repos/add`, `repos/save`, `repos/open`)
+## Repository folders (`/api/tasks/repos`, `repos/image`, `repos/suggest`, `repos/add`, `repos/save`, `repos/open`)
 
 The repo tiles are of this device: `repos.json` in the config folder (beside `config.json`), written by the hub alone,
 whole and atomically (a temporary file and a rename). The page sends ids and texts; a path only when a folder is added
@@ -643,10 +643,19 @@ page read (`rev`); another state is a 409 with the document as it is now. `repos
 folder of a tile, or Neovim in it, with the folder as the one argument (no shell); the page names the tile, never a
 folder.
 
+`repos/suggest` (`hub.repo_suggestions`) lists the folders directly below `REPOS_DIR` of the hub's environment that
+are no tile yet, for the form of a new tile: their names only, never the path of `REPOS_DIR`; folders only (no file,
+no name with a leading dot or a character a folder name cannot hold), sorted, at most 500 (`truncated` says that there
+were more). This is the one place where the hub lists a folder for the page, and it is one level of one folder the
+person named in their environment; a hub without `REPOS_DIR` answers with an empty list. `repos/add` takes such a name
+in place of a path: a `path` that is one plain name is the folder of that name below `REPOS_DIR` and is checked like
+any other (a name that is no folder there is a `400`); anything with a separator or a drive is a path as before, so a
+name cannot climb out of `REPOS_DIR`. A paired phone reaches neither route.
+
 What the hub reads in a repository folder is the image of its tile, and only what a fixed table names, in this order:
 `logo.*` and `icon.*` in the root, then in `assets/`, `docs/` and `.github/`, then `favicon.*`, each with the
 extensions `svg`, `png`, `webp`, `jpg`, `jpeg`; last the first image the `README.md` names, only as a plain relative path
-(no `..`, no scheme, no query) and only from its first 64 KiB. No folder is listed. A candidate is read only as a regular
+(no `..`, no scheme, no query) and only from its first 64 KiB. No folder of a repository is listed. A candidate is read only as a regular
 file (a link is not followed), of at most 512 KiB (looked at before and while reading), whose real path lies under the
 real path of the repository, and whose first bytes are what its extension says; an SVG that holds a script is refused.
 The image route (`repos/image?id=`) needs a session like every data route and answers with the type of the image,

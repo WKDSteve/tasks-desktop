@@ -1,6 +1,7 @@
 //! The routes of the repo tiles (`crate::repos`): the document, the image of a tile, adding a folder and saving the
 //! groups. The page sends ids and texts, a path only when a folder is added (checked as a vault folder is, never sent
-//! back); every answer of a write is the new document.
+//! back); every answer of a write is the new document. The folders below `REPOS_DIR` are suggested by name
+//! (`repo_suggest`), and a name of that list stands for the folder of that name there.
 
 use std::collections::BTreeMap;
 
@@ -117,8 +118,91 @@ pub(super) async fn repo_image(
     response
 }
 
+/// The most folders the suggestions name.
+const SUGGEST_MAX: usize = 500;
+
+/// Is `name` the name of a folder a suggestion may be, and `repo_add` takes for the folder of that name below
+/// `REPOS_DIR`: one plain part of a path (no separator, no drive, not `.` or `..`, no leading dot, no control
+/// character), at most 255 bytes?
+fn suggestion_name(name: &str) -> bool {
+    !name.is_empty()
+        && name.len() <= 255
+        && !name.starts_with('.')
+        && !name.ends_with(['.', ' '])
+        && !name.contains(['/', '\\', ':', '*', '?', '"', '<', '>', '|'])
+        && !name.chars().any(char::is_control)
+}
+
+/// The names of the folders directly below `root` that are no tile yet (`taken`), sorted without regard to case, at
+/// most `SUGGEST_MAX`; the flag says that there were more. Files, hidden folders and names `suggestion_name` refuses
+/// are left out. A folder that cannot be read gives none.
+fn suggestions(root: &std::path::Path, taken: &[PathBuf]) -> (Vec<String>, bool) {
+    let Ok(entries) = std::fs::read_dir(root) else {
+        return (Vec::new(), false);
+    };
+    let mut names: Vec<String> = entries
+        .filter_map(Result::ok)
+        .filter(|e| e.file_type().is_ok_and(|t| t.is_dir()))
+        .filter_map(|e| e.file_name().into_string().ok())
+        .filter(|name| suggestion_name(name))
+        .filter(|name| {
+            let folder = root.join(name);
+            !taken.iter().any(|t| same_folder(t, &folder))
+        })
+        .collect();
+    names.sort_by_key(|n| n.to_lowercase());
+    let more = names.len() > SUGGEST_MAX;
+    names.truncate(SUGGEST_MAX);
+    (names, more)
+}
+
+/// Whether two paths name one folder as the person writes them: the separators and, on Windows, the case of the
+/// letters do not tell them apart. (No look at the disk: a tile keeps the path it was added with.)
+fn same_folder(a: &std::path::Path, b: &std::path::Path) -> bool {
+    let plain = |p: &std::path::Path| {
+        let text = p.to_string_lossy().replace('\\', "/");
+        let text = text.trim_end_matches('/').to_owned();
+        if cfg!(windows) {
+            text.to_lowercase()
+        } else {
+            text
+        }
+    };
+    plain(a) == plain(b)
+}
+
+/// `GET /api/tasks/repos/suggest`: the folders below `REPOS_DIR` that are no tile yet, by name (`hub.repo_suggestions`:
+/// `folders`, `truncated`). Names only, never a path; a hub that knows no `REPOS_DIR` answers with an empty list.
+pub(super) async fn repo_suggest(
+    State(st): State<Arc<Shared>>,
+    RawQuery(query): RawQuery,
+) -> Response {
+    if let Some(response) = no_query(query.as_deref()) {
+        return response;
+    }
+    let rt = st.rt();
+    let Some(store) = rt.repos.clone() else {
+        return unavailable();
+    };
+    let root = rt.snapshot_root.clone();
+    let listed = tokio::task::spawn_blocking(move || match root {
+        Some(root) => suggestions(&root, &store.folders()),
+        None => (Vec::new(), false),
+    })
+    .await
+    .unwrap_or_default();
+    let body = json!({
+        "schema": 1,
+        "kind": "hub.repo_suggestions",
+        "folders": listed.0,
+        "truncated": listed.1,
+    });
+    json_response(StatusCode::OK, body.to_string(), None)
+}
+
 /// `POST /api/tasks/repos/add` `{ "path", "name"?, "group" }`: a folder as a tile of a group. The path is checked as a
-/// vault folder is (whole, local, there) and never sent back, not in an error either.
+/// vault folder is (whole, local, there) and never sent back, not in an error either. A `path` that is one plain name
+/// (`suggestion_name`, what `repo_suggest` lists) is the folder of that name below `REPOS_DIR`.
 pub(super) async fn repo_add(State(st): State<Arc<Shared>>, body: Bytes) -> Response {
     let Some(store) = st.rt().repos.clone() else {
         return unavailable();
@@ -142,6 +226,10 @@ pub(super) async fn repo_add(State(st): State<Arc<Shared>>, body: Bytes) -> Resp
         }
     } else {
         None
+    };
+    let path = match st.rt().snapshot_root.as_deref() {
+        Some(root) if suggestion_name(&path) => root.join(&path).to_string_lossy().into_owned(),
+        _ => path,
     };
     let folder = match crate::app::checked_folder(&path) {
         Ok(f) => f,

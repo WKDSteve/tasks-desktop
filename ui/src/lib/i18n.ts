@@ -2056,7 +2056,8 @@ const en = {
   'hint.form.setup.vault_new': 'On: the folder you choose next becomes a new vault, with the first area named below. Off: the folder is an existing vault.',
   'hint.form.setup.shortcut': 'Besides the link in the Start menu, also put one on the desktop that opens this page.',
   'hint.form.repos.group_new': 'The title of a new group of repo tiles, say Work or Plugins.',
-  'hint.form.repos.path': 'The folder of the git repo the tile opens, say E:/repos/tasks.nvim. Its area is the one that names the repo.',
+  'hint.form.repos.path':
+    'The folder of the git repo the tile opens, say E:/repos/tasks.nvim. The field suggests the folders below REPOS_DIR of the hub that are no tile yet: a name from that list is the folder of that name there. Its area is the one that names the repo.',
   'hint.form.repos.name': 'The name on the tile. Empty: the name of the folder.',
   'hint.form.repos.group': 'The group the new tile goes into, at its end.',
   'hint.form.repos.group_title': 'The new title of this group.',
@@ -4196,7 +4197,8 @@ const de: Record<Key, string> = {
   'hint.form.setup.vault_new': 'An: der Ordner, den du als Nächstes wählst, wird ein neuer Vault mit dem unten genannten ersten Bereich. Aus: der Ordner ist ein bestehender Vault.',
   'hint.form.setup.shortcut': 'Neben dem Link im Startmenü auch einen auf dem Desktop anlegen, der diese Seite öffnet.',
   'hint.form.repos.group_new': 'Der Titel einer neuen Gruppe von Repo-Kacheln, etwa Arbeit oder Plugins.',
-  'hint.form.repos.path': 'Der Ordner des Git-Repos, das die Kachel öffnet, etwa E:/repos/tasks.nvim. Sein Bereich ist der, der das Repo nennt.',
+  'hint.form.repos.path':
+    'Der Ordner des Git-Repos, das die Kachel öffnet, etwa E:/repos/tasks.nvim. Das Feld schlägt die Ordner unter REPOS_DIR des Hubs vor, die noch keine Kachel sind: ein Name aus dieser Liste ist der Ordner dieses Namens dort. Sein Bereich ist der, der das Repo nennt.',
   'hint.form.repos.name': 'Der Name auf der Kachel. Leer: der Name des Ordners.',
   'hint.form.repos.group': 'Die Gruppe, in die die neue Kachel kommt, an ihr Ende.',
   'hint.form.repos.group_title': 'Der neue Titel dieser Gruppe.',
