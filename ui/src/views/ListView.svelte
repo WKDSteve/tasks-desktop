@@ -451,7 +451,10 @@
     columns={app.listColumns}
     onlive={(columns) => (app.listColumns = columns)}
     oncommit={(columns) => app.setListColumns(columns)}
-  />
+  >
+    <!-- The place the bar of a row takes, kept in the head too (never drawn, never reached). -->
+    {#snippet tail()}{#if shown[0]}<span class="actions-space" aria-hidden="true" inert><RowActions {app} task={shown[0]} /></span>{/if}{/snippet}
+  </ListColumnsHead>
   <div class="rows" class:zebra={app.zebra} data-areas={layout}>
     {#snippet row(task: TaskEntry, band: boolean)}
       <TaskRow
@@ -514,6 +517,11 @@
 </section>
 
 <style>
+  /* The place of a row's bar of actions in the head of the list: as wide, never drawn. */
+  .actions-space {
+    flex: none;
+    display: inline-flex;
+  }
   /* As high as the main area, and higher when its bars and a few rows do not fit in it (a short or narrow window, the
      more filters open): the main area scrolls then, the rows never shrink to nothing. */
   .list {

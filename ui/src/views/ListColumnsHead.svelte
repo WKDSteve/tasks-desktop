@@ -1,7 +1,7 @@
 <script lang="ts">
   // The head of the list: the names of its columns and the edges that set their widths. An edge is dragged with the
   // mouse or moved with the arrow keys; a double click or Enter gives the column its default width back.
-  import { untrack } from 'svelte';
+  import { untrack, type Snippet } from 'svelte';
   import { COLUMN_KEYS, COLUMN_LIMITS, COLUMN_STEP, draggedWidth, withWidth, type ColumnKey, type ListColumns } from '../lib/columns';
   import { translate, type Key, type Lang } from '../lib/i18n';
 
@@ -10,6 +10,7 @@
     columns,
     onlive,
     oncommit,
+    tail,
   }: {
     lang: Lang;
     columns: ListColumns;
@@ -17,6 +18,8 @@
     onlive: (columns: ListColumns) => void;
     /** The widths when an edge is let go (remembered). */
     oncommit: (columns: ListColumns) => void;
+    /** What the rows have after their columns (the bar of actions), as an empty place of the same width. */
+    tail?: Snippet;
   } = $props();
 
   const t = (key: Key, params: Record<string, string | number> = {}) => translate(lang, key, params);
@@ -141,6 +144,7 @@
       {t('list.col.meta')}
     </span>
   </div>
+  {@render tail?.()}
 </div>
 
 <style>

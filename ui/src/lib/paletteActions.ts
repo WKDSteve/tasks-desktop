@@ -39,9 +39,6 @@ export function paletteActions(app: App): PaletteAction[] {
     }
   }
 
-  // Every tag the open tasks carry: the list filtered by it.
-  for (const { tag, count } of tagCounts(app.tasks)) add(`tag.${tag}`, t('palette.tag', { tag }), () => app.showTag(tag), t('tags.count', { n: count }));
-
   add('go.today', t('palette.go', { view: t('nav.today') }), () => app.setView('today'));
   add('go.list', t('palette.go', { view: t('nav.list') }), () => app.setView('list'));
   if (app.can('reorder')) add('go.board', t('palette.go', { view: t('nav.board') }), () => app.setView('board'));
@@ -116,5 +113,8 @@ export function paletteActions(app: App): PaletteAction[] {
   for (const theme of ['auto', 'light', 'dark'] as const) {
     add(`theme.${theme}`, t('palette.theme', { name: t(`theme.${theme}` as Key) }), () => app.setTheme(theme));
   }
+  // Every tag the open tasks carry: the list filtered by it. Last: an empty palette shows its first entries only,
+  // and a vault has many tags.
+  for (const { tag, count } of tagCounts(app.tasks)) add(`tag.${tag}`, t('palette.tag', { tag }), () => app.showTag(tag), t('tags.count', { n: count }));
   return out;
 }

@@ -2286,7 +2286,7 @@ const en = {
   'mark.learning': 'learning',
   'hint.learning': 'A learning task: work done to learn and get better, not out of need (the category learning). The filter of the list finds them under More filters > Category.',
   'menu.hide_learning': 'Hide learning tasks in the views and the overview',
-  'hint.item.menu.hide_learning': 'The saved views and the lists of tasks of the overview leave out the tasks of the category learning. The list keeps them: its filter by category shows or hides them there.',
+  'hint.item.menu.hide_learning': 'The saved views and the next tasks of the overview (for an agent, the alternatives) leave out the tasks of the category learning. The list, the numbers of the overview and what waits for you keep them.',
   'today.next.learning': 'The next task of the engine is a learning task. Learning tasks are hidden here (Options): the other tasks below are not.',
 } as const;
 
@@ -4573,7 +4573,7 @@ const de: Record<Key, string> = {
   'mark.learning': 'Lernen',
   'hint.learning': 'Ein Lern-Task: Arbeit, um zu lernen und besser zu werden, nicht aus Bedarf (die Kategorie learning). Der Filter der Liste findet sie unter Weitere Filter > Kategorie.',
   'menu.hide_learning': 'Lern-Tasks in den Ansichten und im Überblick ausblenden',
-  'hint.item.menu.hide_learning': 'Die gespeicherten Ansichten und die Task-Listen des Überblicks lassen die Tasks der Kategorie learning weg. Die Liste behält sie: ihr Filter nach Kategorie zeigt oder verbirgt sie dort.',
+  'hint.item.menu.hide_learning': 'Die gespeicherten Ansichten und die nächsten Tasks des Überblicks (für einen Agenten, die Alternativen) lassen die Tasks der Kategorie learning weg. Die Liste, die Zahlen des Überblicks und was auf dich wartet behalten sie.',
   'today.next.learning': 'Der nächste Task der Engine ist ein Lern-Task. Lern-Tasks sind hier ausgeblendet (Optionen): die anderen Tasks darunter nicht.',
 };
 

@@ -31,11 +31,12 @@ export function tagCounts(tasks: readonly Tagged[]): TagCount[] {
 
 /**
  * The tasks a tag menu works on: the marked ones when the task it was opened on is one of them (as a right click on a
- * marked row works on all of them), else that task alone. Only tasks the list still holds.
+ * marked row works on all of them), else that task alone; `alone`: that task whatever is marked (the "+" of its
+ * detail, which says "this task"). Only tasks the list still holds.
  */
-export function tagTargets(id: string, marks: readonly string[], tasks: readonly Pick<TaskEntry, 'id'>[]): string[] {
+export function tagTargets(id: string, marks: readonly string[], tasks: readonly Pick<TaskEntry, 'id'>[], alone = false): string[] {
   const known = new Set(tasks.map((t) => t.id));
-  const ids = marks.includes(id) ? marks : [id];
+  const ids = !alone && marks.includes(id) ? marks : [id];
   return ids.filter((x) => known.has(x));
 }
 
@@ -84,6 +85,12 @@ export function removeTagOptions(chosen: readonly Tagged[], texts: TagTexts): Pi
 export function typedTag(typed: string, listed: readonly string[]): string | null {
   const tag = typed.trim();
   return tag === '' || listed.includes(tag) ? null : tag;
+}
+
+/** The tags of `made` (typed as new ones) that no task carries yet, each once: the others are in the list of the vault. */
+export function newTags(made: readonly string[], all: readonly TagCount[]): string[] {
+  const known = new Set(all.map((c) => c.tag));
+  return [...new Set(made)].filter((tag) => !known.has(tag));
 }
 
 /** The ids of `ids` that change when `tags` are added or removed: the others have what was asked for already. */

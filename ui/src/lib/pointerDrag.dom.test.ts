@@ -16,8 +16,8 @@ function gripOn(blocked = false) {
     () => (ev) => seen.push(ev),
     () => blocked,
   );
-  const pointer = (pointerType: string, x: number, y: number): PointerEvent =>
-    ({ pointerType, pointerId: 7, clientX: x, clientY: y, currentTarget: el, preventDefault: () => undefined }) as unknown as PointerEvent;
+  const pointer = (pointerType: string, x: number, y: number, pointerId = 7): PointerEvent =>
+    ({ pointerType, pointerId, clientX: x, clientY: y, currentTarget: el, preventDefault: () => undefined }) as unknown as PointerEvent;
   /** The `touchstart` the browser sends after the `pointerdown` of a finger; whether the page took it. */
   const touchstart = (): boolean => {
     const touch = new Event('touchstart', { bubbles: true, cancelable: true });
@@ -60,6 +60,16 @@ describe('the grip, held by a finger', () => {
     g.grip(g.pointer('touch', 10, 10), 'a', 'start');
     g.touchstart();
     g.grip(g.pointer('touch', 10, 10), 'a', 'cancel');
+    expect(g.clicks).toHaveLength(1);
+  });
+
+  it('keeps the hold of its finger when another finger lifts elsewhere', () => {
+    const g = gripOn();
+    g.grip(g.pointer('touch', 10, 10, 7), 'a', 'start');
+    g.touchstart();
+    // A second finger ends on another grip of the view: not this touch.
+    g.grip(g.pointer('touch', 200, 200, 8), 'b', 'end');
+    g.grip(g.pointer('touch', 11, 10, 7), 'a', 'end');
     expect(g.clicks).toHaveLength(1);
   });
 

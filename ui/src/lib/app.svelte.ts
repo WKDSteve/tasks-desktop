@@ -2525,11 +2525,11 @@ export class App {
 
   /**
    * Open the choice of tags for the task `id`, or for all the marked tasks when it is one of them (as the context menu
-   * of a marked row works on the selection).
+   * of a marked row works on the selection); `alone`: for that task whatever is marked (the "+" of its detail).
    */
-  openTagging(id: string, mode: 'add' | 'remove'): void {
+  openTagging(id: string, mode: 'add' | 'remove', alone = false): void {
     if (this.refusedReadOnly() || !this.can('ops') || this.phase !== 'ready') return;
-    const ids = tagTargets(id, this.marks, this.tasks);
+    const ids = tagTargets(id, this.marks, this.tasks, alone);
     if (ids.length > 0) this.tagging = { ids, mode };
   }
 

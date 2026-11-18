@@ -4,7 +4,7 @@
   // one; onto the free space of a row: to its end), a finger by its grip, and Shift with the arrow keys moves the tile
   // under the cursor (left and right in its row, up and down into the row above or below). Nothing here knows a repo.
   import type { Snippet } from 'svelte';
-  import { createGrip, farEnough, placeAt, type PointerDragEvent } from 'appkit-ui/pointerDrag';
+  import { createGrip, farEnough, placeAt, type PointerDragEvent } from '../lib/pointerDrag';
   import { dropIndex } from '../lib/repos';
 
   interface TileGroup {

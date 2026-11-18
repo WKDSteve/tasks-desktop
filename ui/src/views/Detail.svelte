@@ -785,7 +785,7 @@
           <button type="button" class="tag-chip" data-tag={tag} data-hint={t('hint.ui.tags.show')} aria-label={t('tags.show', { tag })} use:contextTarget={tagTarget(tag)} onclick={() => app.showTag(tag)}>{tag}</button>
         {/each}
         {#if app.can('ops')}
-          <button type="button" class="tag-plus" aria-label={t('tags.plus')} data-hint={t('hint.ui.tags.plus')} disabled={app.locked || !listEditable(shown.tags)} onclick={() => app.openTagging(shown.id, 'add')}>+</button>
+          <button type="button" class="tag-plus" aria-label={t('tags.plus')} data-hint={t('hint.ui.tags.plus')} disabled={app.locked || !listEditable(shown.tags)} onclick={() => app.openTagging(shown.id, 'add', true)}>+</button>
         {/if}
       </div>
       <label class="line" data-hint={hintOf(app.lang, 'hint.field', 'after')}>

@@ -7,6 +7,9 @@
   import type { TaskEntry } from '../lib/contract';
   import { translate, type Key } from '../lib/i18n';
   import { barShown, offeredRowActions } from '../lib/rowActions';
+  import { copyText } from '../lib/exportDom';
+  import { labelOf } from '../lib/i18n';
+  import { tick } from 'svelte';
 
   let { app, task, selected = false }: { app: App; task: TaskEntry; selected?: boolean } = $props();
 
@@ -18,11 +21,26 @@
   const status = $derived(task.status ?? '');
   const statuses = $derived(app.ranges.statuses.includes(status) ? app.ranges.statuses : [status, ...app.ranges.statuses]);
 
-  function copyId(): void {
-    void navigator.clipboard.writeText(task.id).then(
-      () => app.tell('ok', 'ctx.copied', { id: task.id }),
-      () => app.tell('error', 'about.copy_failed'),
-    );
+  const prios = $derived(task.prio === undefined || app.ranges.prios.includes(task.prio) ? app.ranges.prios : [task.prio, ...app.ranges.prios]);
+
+  // A page that is not served securely has no clipboard: the helper says so instead of throwing.
+  async function copyId(): Promise<void> {
+    if (await copyText(navigator.clipboard, task.id)) app.tell('ok', 'ctx.copied', { id: task.id });
+    else app.tell('error', 'about.copy_failed');
+  }
+
+  /**
+   * A choice of the row is written at once. The choice is held back while the write is on its way, which takes the
+   * focus from it; and a write that did not go through (a conflict, nothing sent) leaves the task as it was, while the
+   * element still shows what was chosen. Afterwards it shows what the task has, and has the focus again if nothing
+   * else took it.
+   */
+  async function choose(el: HTMLSelectElement, key: 'status' | 'prio', value: string | number, shows: () => string): Promise<void> {
+    await app.setField(task.id, key, value);
+    await tick();
+    if (!el.isConnected) return;
+    el.value = shows();
+    if (!el.disabled && (document.activeElement === document.body || document.activeElement === null)) el.focus();
   }
 </script>
 
@@ -45,9 +63,9 @@
             data-row-action="status"
             value={status}
             disabled={app.locked}
-            onchange={(e) => void app.setField(task.id, 'status', e.currentTarget.value)}
+            onchange={(e) => void choose(e.currentTarget, 'status', e.currentTarget.value, () => task.status ?? '')}
           >
-            {#each statuses as choice (choice)}<option value={choice}>{t(`status.${choice}` as Key)}</option>{/each}
+            {#each statuses as choice (choice)}<option value={choice}>{labelOf(app.lang, 'status', choice)}</option>{/each}
           </select>
         </label>
       {:else if action === 'prio'}
@@ -58,11 +76,11 @@
             value={task.prio === undefined ? '' : String(task.prio)}
             disabled={app.locked}
             onchange={(e) => {
-              if (e.currentTarget.value !== '') void app.setField(task.id, 'prio', Number(e.currentTarget.value));
+              if (e.currentTarget.value !== '') void choose(e.currentTarget, 'prio', Number(e.currentTarget.value), () => (task.prio === undefined ? '' : String(task.prio)));
             }}
           >
             {#if task.prio === undefined}<option value="">{t('rowact.no_prio')}</option>{/if}
-            {#each app.ranges.prios as prio (prio)}<option value={String(prio)}>P{prio}</option>{/each}
+            {#each prios as prio (prio)}<option value={String(prio)}>P{prio}</option>{/each}
           </select>
         </label>
       {:else if action === 'finish'}
@@ -80,7 +98,7 @@
           data-row-action="copy"
           aria-label={t('rowact.copy', { id: task.id })}
           data-hint={t('hint.ui.rowact.copy')}
-          onclick={copyId}>⧉</button
+          onclick={() => void copyId()}>⧉</button
         >
       {:else if action === 'editor'}
         <button

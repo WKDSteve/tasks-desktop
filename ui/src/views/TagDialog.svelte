@@ -6,7 +6,7 @@
   import { closeOnBackdrop } from 'appkit-ui/backdrop';
   import type { App } from '../lib/app.svelte';
   import { translate, type Key } from '../lib/i18n';
-  import { addTagOptions, changedBy, removeTagOptions, tagCounts, typedTag, type TagTexts } from '../lib/tagging';
+  import { addTagOptions, changedBy, newTags, removeTagOptions, tagCounts, typedTag, type TagTexts } from '../lib/tagging';
   import { markHidden } from '../lib/text';
   import PickList from './PickList.svelte';
 
@@ -28,12 +28,13 @@
     all: t('tags.held_all'),
     some: (n, of) => t('tags.held_some', { n, m: of }),
   };
+  const all = $derived(tagCounts(app.tasks));
+  // A tag typed here is listed as new only until a task carries it (after a write that went through for some of the
+  // tasks the dialog stays open, and the list of the vault names the tag itself): every entry once.
+  const fresh = $derived(newTags(made, all));
   const options = $derived(
     mode === 'add'
-      ? [
-          ...made.map((tag) => ({ value: tag, label: tag, detail: t('tags.new_mark'), near: true })),
-          ...addTagOptions(tagCounts(app.tasks), tasks, texts),
-        ]
+      ? [...fresh.map((tag) => ({ value: tag, label: tag, detail: t('tags.new_mark'), near: true })), ...addTagOptions(all, tasks, texts)]
       : removeTagOptions(tasks, texts),
   );
   const listed = $derived(options.map((o) => o.value));

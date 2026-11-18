@@ -35,7 +35,8 @@ function dialogOf(chunk: { gone: boolean }) {
   let loads = 0;
   const target = document.createElement('div');
   document.body.append(target);
-  mounted = mount(Lazy<{ open: boolean; onclose: () => void }>, {
+  // Not `Lazy<...>`: a plain `tsc` reads a `.svelte` file through the shim, which knows no generics of a component.
+  mounted = mount(Lazy as never, {
     target,
     props: {
       app: made.app,

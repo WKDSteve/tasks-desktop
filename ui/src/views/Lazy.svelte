@@ -47,7 +47,8 @@
   <p class="failed" role="alert">
     {translate(app.lang, 'lazy.failed')}
     <button type="button" onclick={() => location.reload()}>{translate(app.lang, 'lazy.reload')}</button>
-    <button type="button" class="dismiss" onclick={() => (failed = false)}>{translate(app.lang, 'kit.dismiss')}</button>
+    <!-- Closed only where somebody takes the state back: a view that did not load would stay empty without a word. -->
+    {#if onfailed}<button type="button" class="dismiss" onclick={() => (failed = false)}>{translate(app.lang, 'kit.dismiss')}</button>{/if}
   </p>
 {/if}
 

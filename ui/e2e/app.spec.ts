@@ -7818,6 +7818,12 @@ test('the actions of a row: only on the row under the pointer or with the focus,
   const title = await hosts.nth(1).locator('.title').boundingBox();
   await hosts.nth(1).hover();
   expect(await drawn()).toEqual([`${await idOf(1)}:move`]);
+  // The head keeps the place of the bar too: its columns end where those of a row end.
+  const edge = async (target: Locator) => {
+    const box = (await target.boundingBox())!;
+    return Math.round(box.x + box.width);
+  };
+  expect(await edge(page.locator('.table .head .cols'))).toBe(await edge(hosts.nth(1).locator('button.row')));
   expect(await hosts.nth(1).boundingBox()).toEqual(before);
   expect(await hosts.nth(1).locator('.title').boundingBox()).toEqual(title);
   await hosts.nth(2).hover();
@@ -7961,6 +7967,8 @@ test('tags are given from the context menu: one that exists to three marked task
   await page.keyboard.press('Enter');
   await expect(page.locator('button.row', { hasText: 'Tagq t00' })).toHaveCount(4);
   await expect(page.locator('button.row')).toHaveCount(4);
+  // Nothing of it broke the page: a list drawn with the same entry twice would say so here.
+  expect(consoleProblems.get(page)).toEqual([]);
   for (const n of [1, 2, 3, 4]) removeFile(file(n));
 });
 

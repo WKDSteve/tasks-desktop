@@ -14,6 +14,7 @@ export { farEnough, GRAB, placeAt, startsOnGrip, type PointerDragEvent, type Poi
 
 /** The touch a grip is held by, from its `pointerdown` to the end of the drag. */
 interface Held {
+  pointerId: number;
   el: Element;
   x: number;
   y: number;
@@ -47,12 +48,13 @@ export function createGrip(
         touch.preventDefault();
         now.taken = true;
       };
-      const now: Held = { el, x: e.clientX, y: e.clientY, taken: false, drop: () => el.removeEventListener('touchstart', take) };
+      const now: Held = { pointerId: e.pointerId, el, x: e.clientX, y: e.clientY, taken: false, drop: () => el.removeEventListener('touchstart', take) };
       el.addEventListener('touchstart', take, { passive: false, once: true });
       held = now;
     }
     grip(e, id, phase);
-    if ((phase === 'end' || phase === 'cancel') && held !== null) {
+    // Only the finger that holds the grip ends its hold: a second finger that lifts elsewhere is not this touch.
+    if ((phase === 'end' || phase === 'cancel') && held !== null && held.pointerId === e.pointerId) {
       const was = held;
       held = null;
       was.drop();

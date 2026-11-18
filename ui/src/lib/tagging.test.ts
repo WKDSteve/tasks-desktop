@@ -6,7 +6,7 @@ import type { Result, Snapshot } from './contract';
 import { task } from './fixtures';
 import { translate } from './i18n';
 import { paletteActions } from './paletteActions';
-import { addTagOptions, changedBy, ownTags, removeTagOptions, tagCounts, tagTargets, typedTag, type TagTexts } from './tagging';
+import { addTagOptions, changedBy, newTags, ownTags, removeTagOptions, tagCounts, tagTargets, typedTag, type TagTexts } from './tagging';
 
 const texts: TagTexts = { count: (n) => `on ${n}`, all: 'all', some: (n, of) => `${n}/${of}` };
 const a = task('pub/a', { tags: ['ui', 'web'], etag: 'ea' });
@@ -42,6 +42,15 @@ describe('the tags of the open tasks', () => {
     // A mark on a task the list no longer holds is not written to; a task that is gone is no target.
     expect(tagTargets('pub/a', ['pub/a', 'pub/gone'], tasks)).toEqual(['pub/a']);
     expect(tagTargets('pub/gone', [], tasks)).toEqual([]);
+    // The "+" of a detail says "this task": that task alone, whatever is marked.
+    expect(tagTargets('pub/a', ['pub/a', 'pub/c'], tasks, true)).toEqual(['pub/a']);
+  });
+
+  it('a tag typed as new is listed as new only until a task carries it, and once', () => {
+    const all = tagCounts([a, b]);
+    expect(newTags(['zzz', 'zzz', 'ui'], all)).toEqual(['zzz']);
+    // Written for some of the tasks: the vault names it now, the entry "new" goes (no value twice in the list).
+    expect(newTags(['zzz'], tagCounts([a, task('pub/z', { tags: ['zzz'] })]))).toEqual([]);
   });
 });
 
@@ -100,6 +109,8 @@ describe('the page gives tags', () => {
     expect(m.app.tagging).toEqual({ ids: ['pub/a', 'pub/c'], mode: 'remove' });
     m.app.closeTagging();
     expect(m.app.tagging).toBeNull();
+    m.app.openTagging('pub/c', 'add', true);
+    expect(m.app.tagging).toEqual({ ids: ['pub/c'], mode: 'add' });
   });
 
   it('writes one set per task that changes, each with the version shown and its own list, and offers the way back', async () => {
@@ -181,6 +192,8 @@ describe('the page gives tags', () => {
 
     const palette = paletteActions(m.app).filter((x) => x.key.startsWith('tag.'));
     expect(palette.map((x) => x.key)).toEqual(['tag.ui', 'tag.on-ohana', 'tag.web']);
+    // Last in the list: an empty palette shows its first entries, and those are the ways through the page.
+    expect(paletteActions(m.app).slice(-3).map((x) => x.key)).toEqual(['tag.ui', 'tag.on-ohana', 'tag.web']);
     await palette[1]?.run();
     expect(m.app.shown.map((x) => x.id)).toEqual(['ops/d']);
   });
