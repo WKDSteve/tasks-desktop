@@ -15,6 +15,7 @@ import { paletteActions } from './paletteActions';
 import { emptySelect, formOf, type ViewForm } from './views';
 import type { Grouping } from './groups';
 import { DRAFT_ID } from './state/views.svelte';
+import { vaultMenuItems, vaultMenuOpened } from './vaultMenu';
 import { FakeHub, make, snapshot } from './appDouble';
 
 describe('App', () => {
@@ -4315,6 +4316,46 @@ describe('writing', () => {
         expect(calls).toEqual(['list']);
         const hubPage = make({ token: 't' });
         await hubPage.app.loadFolderVaults();
+        expect(hubPage.app.folderVaultList).toBeNull();
+      });
+
+      it('reads the access again when the menu Project opens: a tab open for long says what the browser says now', async () => {
+        // The browser dropped the permission of one folder and another was moved away since the page loaded.
+        let access: ['granted' | 'prompt', 'granted' | 'gone'] = ['granted', 'granted'];
+        let reads = 0;
+        const folderVaults = {
+          list: async () => {
+            reads += 1;
+            return [
+              { id: 'a', name: 'tasks-vault', active: true, access: 'granted' as const },
+              { id: 'b', name: 'tricentis-vault', active: false, access: access[0] },
+              { id: 'c', name: 'old-vault', active: false, access: access[1] },
+            ];
+          },
+          select: async () => 'switched' as const,
+        };
+        const m = make({ token: 't', mode: 'web', folderVaults });
+        m.app.phase = 'ready';
+        await m.app.loadFolderVaults();
+        const hints = () =>
+          vaultMenuItems(m.app)
+            .filter((i) => i.kind === 'radio')
+            .map((i) => [i.label, i.disabled ?? false, i.hint]);
+        const allow = translate(m.app.lang, 'hint.item.menu.vault_switch_allow');
+        const plain = translate(m.app.lang, 'hint.item.menu.vault_switch');
+        expect(hints()).toEqual([['tasks-vault', false, plain], ['tricentis-vault', false, plain], ['old-vault', false, plain]]);
+        access = ['prompt', 'gone'];
+        vaultMenuOpened(m.app);
+        await vi.waitFor(() => expect(reads).toBe(2));
+        await Promise.resolve();
+        expect(hints()).toEqual([
+          ['tasks-vault', false, plain],
+          ['tricentis-vault', false, allow],
+          [translate(m.app.lang, 'menu.vault_gone', { name: 'old-vault' }), true, allow],
+        ]);
+        // Beside a hub the menu has no folders: opening it asks nothing.
+        const hubPage = make({ token: 't' });
+        vaultMenuOpened(hubPage.app);
         expect(hubPage.app.folderVaultList).toBeNull();
       });
 

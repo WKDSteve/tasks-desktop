@@ -37,7 +37,7 @@
   import { routeHref } from 'appkit-ui/route';
   import { installTaskApart } from './lib/taskApart';
   import { createContextRegistry, taskTarget, viewTarget } from './lib/context';
-  import { vaultMenuItems } from './lib/vaultMenu';
+  import { vaultMenuItems, vaultMenuOpened } from './lib/vaultMenu';
   import { rowActionsMenuItems } from './lib/rowActionsMenu';
   import ConflictCenter from './views/ConflictCenter.svelte';
   import SetupCard from './views/SetupCard.svelte';
@@ -383,6 +383,7 @@
         id: 'project',
         label: t('menu.project'),
         hint: t('hint.ui.menu.project'),
+        onopen: () => vaultMenuOpened(app),
         items: [
           ...vaultMenuItems(app),
           {

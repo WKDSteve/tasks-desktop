@@ -11,8 +11,18 @@ import { translate, type Key } from './i18n';
 /** What the entries need of the page. */
 export type VaultMenuApp = Pick<
   App,
-  'lang' | 'phase' | 'snapshot' | 'tasks' | 'vaultList' | 'vaultBusy' | 'machineActions' | 'selectVault' | 'revealVault' | 'openVaults' | 'canChooseFolder' | 'chooseFolder' | 'folderVaultList' | 'folderSwitching' | 'selectFolderVault'
+  'lang' | 'phase' | 'snapshot' | 'tasks' | 'vaultList' | 'vaultBusy' | 'machineActions' | 'selectVault' | 'revealVault' | 'openVaults' | 'canChooseFolder' | 'chooseFolder' | 'folderVaultList' | 'folderSwitching' | 'selectFolderVault' | 'loadFolderVaults'
 >;
+
+/**
+ * The menu "Project" opens (`Menu.onopen`): the folders of the web variant are read again. Their access is the
+ * browser's and changes without the page (it drops a permission after a while, a folder is moved away), so a tab that
+ * was open for long would still say "ready" for a folder that asks again or is gone. Beside a hub there are no such
+ * folders and nothing is read.
+ */
+export function vaultMenuOpened(app: Pick<App, 'loadFolderVaults'>): void {
+  void app.loadFolderVaults();
+}
 
 export function vaultMenuItems(app: VaultMenuApp): MenuItem[] {
   const t = (key: Key, params: Record<string, string | number> = {}) => translate(app.lang, key, params);
