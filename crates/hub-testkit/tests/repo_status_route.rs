@@ -237,7 +237,8 @@ async fn the_state_of_a_tile_is_asked_in_its_folder_and_names_no_folder() {
     assert_eq!(status, 200);
     assert_eq!(again, doc);
     assert_eq!(r.tools.asked.lock().unwrap().len(), 3);
-    // A fresh look asks git again, and gh not before its answer is some seconds old.
+    // A fresh look asks git again (not sooner than a second after its last answer: it waits for the rest), and gh
+    // not before its answer is some seconds old.
     let (status, _, _) = get(&r, &format!("/api/tasks/repos/status?id={id}&fresh=1")).await;
     assert_eq!(status, 200);
     let asked = r.tools.asked.lock().unwrap().clone();

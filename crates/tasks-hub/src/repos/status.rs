@@ -6,7 +6,9 @@
 //! [`Tools`] (the real one starts them as children of the hub, `appkit_core::child`: no shell, a time limit, a limit
 //! for the output; the tests hand in a `git` and a `gh` that only answer). `gh` uses its own login; the hub reads no
 //! token. The questions are throttled per repo: `git` at most every few seconds, `gh` once a minute, also after a
-//! failure, so nothing is polled in seconds whatever the page asks.
+//! failure, so nothing is polled in seconds whatever the page asks. One look at a repo at a time: a second question
+//! for the same repo (another tab, a reload while `gh` hangs) waits for the first and takes its answer. The jobs of a
+//! failed run are asked once: a finished run does not change.
 //!
 //! **Waiting for approval** is a state of its own, not red: the runner guard of testing.nvim (`docs/RUNNER-GUARD.md`)
 //! refuses the job of a commit of a public repository that was not approved, and GitHub reports that as a plain
@@ -36,6 +38,36 @@ pub const MAX_OUTPUT: usize = 1024 * 1024;
 pub const MAX_FAILED_LOOKUPS: usize = 5;
 /// The most runs of the list that are read.
 const LIST_LIMIT: &str = "10";
+
+/// The smallest time between two `git status` runs of one repo that a `fresh` look asks for (a button of the page, or
+/// anything else that asks with `fresh`, starts no process more often than this).
+pub const FRESH_EVERY: Duration = Duration::from_secs(1);
+/// The most programs the hub runs at the same time for all repos together, whatever is asked.
+pub const MAX_AT_ONCE: usize = 4;
+/// What a child must not inherit: it would point `git` or `gh` at another repository than the folder of the tile.
+const NOT_INHERITED: [&str; 8] = [
+    "GIT_DIR",
+    "GIT_WORK_TREE",
+    "GIT_INDEX_FILE",
+    "GIT_COMMON_DIR",
+    "GIT_NAMESPACE",
+    "GH_REPO",
+    "GH_HOST",
+    "GIT_CONFIG_PARAMETERS",
+];
+/// The most failed runs whose jobs are remembered (a finished run never changes; beyond that the memory starts anew).
+const MAX_KEPT_JOBS: usize = 512;
+/// What `git status` is asked with. `core.fsmonitor` of the checkout's own config is switched off: it names a program
+/// git would start, and the folder of a tile may be a clone of somebody else's repository.
+const GIT_STATUS: [&str; 6] = [
+    "-c",
+    "core.fsmonitor=false",
+    "status",
+    "--porcelain=v1",
+    "-b",
+    // Untracked files count as changed, whatever `status.showUntrackedFiles` of the person says.
+    "--untracked-files=normal",
+];
 
 /// The step a job fails in when the runner refuses it (`Set up job` on a GitHub-hosted runner).
 const SETUP_STEPS: [&str; 2] = ["Set up runner", "Set up job"];
@@ -294,10 +326,13 @@ impl SystemTools {
             } else {
                 name.to_owned()
             };
+            // Only a place a child may be started from (whole, local, without `..`): an entry the start would refuse
+            // must not hide a usable one further on.
             std::env::split_paths(path?)
-                .filter(|dir| dir.is_absolute())
                 .map(|dir| dir.join(&file))
-                .find(|candidate| candidate.is_file())
+                .find(|candidate| {
+                    appkit_core::child::local_absolute(candidate) && candidate.is_file()
+                })
         };
         Self {
             git: find("git"),
@@ -339,7 +374,7 @@ impl Tools for SystemTools {
                         ("GH_NO_UPDATE_NOTIFIER".into(), "1".into()),
                         ("GIT_OPTIONAL_LOCKS".into(), "0".into()),
                     ],
-                    remove: Vec::new(),
+                    remove: NOT_INHERITED.iter().map(Into::into).collect(),
                 });
             let said = child::run(ChildRun {
                 start,
@@ -383,7 +418,14 @@ struct Row {
 /// Why `gh` did not answer, from what it wrote: a word of a fixed set (its own text may name a folder).
 fn why_not(stderr: &str) -> &'static str {
     let text = stderr.to_ascii_lowercase();
-    if text.contains("auth login") || text.contains("authentication") || text.contains("401") {
+    // First what is no repository of GitHub: gh ends that message with a hint at `gh auth login` too.
+    if text.contains("no git remotes")
+        || text.contains("none of the git remotes")
+        || text.contains("not a git repository")
+    {
+        "no_remote"
+    } else if text.contains("auth login") || text.contains("authentication") || text.contains("401")
+    {
         "login"
     } else if text.contains("error connecting")
         || text.contains("dial tcp")
@@ -392,11 +434,6 @@ fn why_not(stderr: &str) -> &'static str {
         || text.contains("timeout")
     {
         "offline"
-    } else if text.contains("no git remotes")
-        || text.contains("none of the git remotes")
-        || text.contains("not a git repository")
-    {
-        "no_remote"
     } else {
         "failed"
     }
@@ -430,6 +467,12 @@ fn jobs_of(doc: &Value) -> Vec<Job> {
 pub struct Status {
     tools: Arc<dyn Tools>,
     rows: tokio::sync::Mutex<HashMap<PathBuf, Row>>,
+    /// One look at a repo at a time: who looks holds the lock of its folder.
+    looking: std::sync::Mutex<HashMap<PathBuf, Arc<tokio::sync::Mutex<()>>>>,
+    /// The jobs of failed runs that were read, by the id of the run (ids are GitHub's, one for each run anywhere).
+    jobs: std::sync::Mutex<HashMap<u64, Vec<Job>>>,
+    /// At most [`MAX_AT_ONCE`] programs at a time, for all repos together.
+    running: tokio::sync::Semaphore,
     local_every: Duration,
     ci_every: Duration,
 }
@@ -440,6 +483,9 @@ impl Status {
         Self {
             tools,
             rows: tokio::sync::Mutex::new(HashMap::new()),
+            looking: std::sync::Mutex::new(HashMap::new()),
+            jobs: std::sync::Mutex::new(HashMap::new()),
+            running: tokio::sync::Semaphore::new(MAX_AT_ONCE),
             local_every: LOCAL_EVERY,
             ci_every: CI_EVERY,
         }
@@ -453,16 +499,19 @@ impl Status {
         self
     }
 
+    /// Ask a program, when one of the few places is free: a page with many tiles (or anything that asks for many
+    /// repos at once) queues here instead of starting a process for each.
+    async fn ask(&self, tool: Tool, args: &[&str], folder: &Path) -> Result<Said, Silent> {
+        let _place = self.running.acquire().await.map_err(|_| Silent::Failed)?;
+        self.tools.ask(tool, args, folder).await
+    }
+
     async fn local(&self, folder: &Path) -> Result<Local, &'static str> {
         // A tile whose folder is gone (moved, a drive that is not there): said as that, and nothing is started.
         if !folder.is_dir() {
             return Err("no_folder");
         }
-        match self
-            .tools
-            .ask(Tool::Git, &["status", "--porcelain=v1", "-b"], folder)
-            .await
-        {
+        match self.ask(Tool::Git, &GIT_STATUS, folder).await {
             Ok(said) if said.code == Some(0) => Ok(local_state(&said.stdout)),
             Ok(_) => Err("not_a_repo"),
             Err(Silent::Missing) => Err("no_git"),
@@ -472,7 +521,6 @@ impl Status {
 
     async fn ci(&self, folder: &Path) -> CiRow {
         let list = self
-            .tools
             .ask(
                 Tool::Gh,
                 &[
@@ -528,16 +576,39 @@ impl Status {
                 continue;
             };
             looked += 1;
-            let id = id.to_string();
+            // A run that failed is finished, and the jobs of a finished run do not change: read once, then kept.
+            let kept = self
+                .jobs
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .get(&id)
+                .cloned();
+            if let Some(jobs) = kept {
+                run.jobs = Some(jobs);
+                continue;
+            }
+            let number = id.to_string();
             let jobs = self
-                .tools
-                .ask(Tool::Gh, &["run", "view", &id, "--json", "jobs"], folder)
+                .ask(
+                    Tool::Gh,
+                    &["run", "view", &number, "--json", "jobs"],
+                    folder,
+                )
                 .await;
             if let Ok(said) = jobs
                 && said.code == Some(0)
                 && let Ok(doc) = serde_json::from_str::<Value>(&said.stdout)
             {
-                run.jobs = Some(jobs_of(&doc));
+                let jobs = jobs_of(&doc);
+                let mut kept = self
+                    .jobs
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner);
+                if kept.len() >= MAX_KEPT_JOBS {
+                    kept.clear();
+                }
+                kept.insert(id, jobs.clone());
+                run.jobs = Some(jobs);
             }
         }
         let state = ci_state(&runs);
@@ -560,9 +631,21 @@ impl Status {
     }
 
     /// The state of the repo in `folder`, asked now where the last answer is older than its interval. `fresh` asks
-    /// `git` again in any case and `gh` when its last answer is older than the interval of `git` (a button of the
-    /// page cannot poll `gh` in seconds either). The answer names no folder.
+    /// `git` again in any case, but not sooner than [`FRESH_EVERY`] after its last answer (it waits for the rest of
+    /// that time), and `gh` when its last answer is older than the interval of `git` (a button of the page cannot
+    /// poll in seconds either). An answer has the age of the moment it
+    /// came, so a program that ran into its time limit is not asked again at once. The answer names no folder.
     pub async fn look(&self, folder: &Path, fresh: bool) -> Value {
+        // One look at a repo at a time: who comes second waits here and then finds the answers of the first, still
+        // young, so it starts nothing.
+        let one = Arc::clone(
+            self.looking
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .entry(folder.to_path_buf())
+                .or_default(),
+        );
+        let _looking = one.lock().await;
         let now = Instant::now();
         let held = self
             .rows
@@ -574,9 +657,26 @@ impl Status {
         let due = |at: Option<Instant>, every: Duration| {
             at.is_none_or(|at| now.saturating_duration_since(at) >= every)
         };
-        let local = match &held.local {
-            Some((at, local)) if !fresh && !due(Some(*at), self.local_every) => local.clone(),
-            _ => self.local(folder).await,
+        // An answer that is used again keeps the time it was asked at: questions that come faster than the interval
+        // must not keep an old answer young for ever.
+        // A fresh look means "as it is now": it is answered from a new `git status`, never from the held one. It still
+        // starts no process more often than `FRESH_EVERY` for a repo: asked sooner, it waits for the rest of that time
+        // first (the lock of the folder is held, so whoever asks meanwhile waits too and then takes this answer).
+        if fresh && let Some((at, _)) = &held.local {
+            let age = now.saturating_duration_since(*at);
+            let gap = FRESH_EVERY.min(self.local_every);
+            if age < gap {
+                tokio::time::sleep(gap - age).await;
+            }
+        }
+        let (local_at, local) = match &held.local {
+            Some((at, local)) if !fresh && !due(Some(*at), self.local_every) => {
+                (*at, local.clone())
+            }
+            _ => {
+                let local = self.local(folder).await;
+                (Instant::now(), local)
+            }
         };
         let ci_every = if fresh {
             self.local_every.min(self.ci_every)
@@ -587,12 +687,15 @@ impl Status {
             Some((at, ci)) if !due(Some(*at), ci_every) => (*at, ci.clone()),
             // A folder that is no checkout has no CI to ask for.
             _ if local.is_err() => (now, CiRow::Unavailable("no_remote")),
-            _ => (now, self.ci(folder).await),
+            _ => {
+                let ci = self.ci(folder).await;
+                (Instant::now(), ci)
+            }
         };
         self.rows.lock().await.insert(
             folder.to_path_buf(),
             Row {
-                local: Some((now, local.clone())),
+                local: Some((local_at, local.clone())),
                 ci: Some(ci.clone()),
             },
         );
@@ -831,8 +934,15 @@ mod tests {
                 self.asked.lock().unwrap().push(format!(
                     "{} {}",
                     if tool == Tool::Git { "git" } else { "gh" },
-                    args.iter().take(3).copied().collect::<Vec<_>>().join(" ")
+                    args.iter()
+                        .filter(|a| **a != "-c" && !a.starts_with("core."))
+                        .take(3)
+                        .copied()
+                        .collect::<Vec<_>>()
+                        .join(" ")
                 ));
+                // A real program takes its time: whoever else waits gets a turn meanwhile.
+                tokio::task::yield_now().await;
                 match (tool, args.get(1).copied()) {
                     (Tool::Git, _) => self.git.lock().unwrap().clone().unwrap_or(ok("## main\n")),
                     (Tool::Gh, Some("list")) => {
@@ -950,6 +1060,11 @@ mod tests {
             ("error connecting to api.github.com", "offline"),
             ("dial tcp: lookup api.github.com: no such host", "offline"),
             ("no git remotes found", "no_remote"),
+            // A remote that is not GitHub's: gh says so and adds a hint at its login, which is not what is wrong.
+            (
+                "none of the git remotes configured for this repository point to a known GitHub host. To tell gh about a new GitHub host, please use `gh auth login`",
+                "no_remote",
+            ),
             ("something else in E:/secret/place", "failed"),
         ] {
             *fake.list.lock().unwrap() = Some(refused(stderr));
@@ -998,9 +1113,16 @@ mod tests {
         let doc = status.look(Path::new(FOLDER.as_str()), false).await;
         assert_eq!(doc["local"]["state"], "clean");
         assert_eq!(fake.asked(), Vec::<String>::new());
-        // A fresh look asks git, and gh only when its answer is older than the interval of git.
+        // A fresh look asks git anew, but not sooner than a second after its last answer: it waits for the rest. gh
+        // is asked only when its answer is older than the interval of git.
+        let before = Instant::now();
         status.look(Path::new(FOLDER.as_str()), true).await;
         assert_eq!(fake.asked(), ["git status --porcelain=v1 -b"]);
+        assert!(
+            before.elapsed() >= FRESH_EVERY - Duration::from_millis(100),
+            "the fresh look waited: {:?}",
+            before.elapsed()
+        );
         // Another repo has its own times.
         let other = std::env::current_dir().unwrap();
         status.look(&other, false).await;
@@ -1022,6 +1144,166 @@ mod tests {
                 "gh run list --event",
                 "git status --porcelain=v1 -b"
             ]
+        );
+    }
+
+    #[test]
+    fn git_is_asked_without_the_fsmonitor_of_the_checkout() {
+        // `core.fsmonitor` of a checkout's config names a program `git status` would start.
+        assert_eq!(GIT_STATUS[..2], ["-c", "core.fsmonitor=false"]);
+        assert_eq!(GIT_STATUS[2], "status");
+        // Untracked files count, whatever the config of the person says.
+        assert!(GIT_STATUS.contains(&"--untracked-files=normal"));
+        // And nothing of the hub's own environment points the programs at another repository.
+        for name in ["GIT_DIR", "GIT_WORK_TREE", "GH_REPO", "GH_HOST"] {
+            assert!(NOT_INHERITED.contains(&name), "{name}");
+        }
+    }
+
+    #[tokio::test]
+    async fn the_jobs_of_a_failed_run_are_asked_once() {
+        let fake = Arc::new(Fake::default());
+        *fake.list.lock().unwrap() = Some(ok(r#"[
+            {"databaseId":5,"status":"completed","conclusion":"failure","headSha":"abc1234","url":"https://github.com/o/r/actions/runs/5"}
+        ]"#));
+        fake.jobs.lock().unwrap().insert(
+            "5".to_owned(),
+            r#"{"jobs":[{"conclusion":"failure","steps":[{"name":"Set up runner","conclusion":"failure"}]}]}"#.to_owned(),
+        );
+        // No interval: every look asks git and the list of gh again.
+        let status = status(&fake).with_intervals(Duration::ZERO, Duration::ZERO);
+        let first = status.look(Path::new(FOLDER.as_str()), false).await;
+        assert_eq!(first["ci"]["state"], "approval");
+        assert_eq!(
+            fake.asked(),
+            [
+                "git status --porcelain=v1 -b",
+                "gh run list --event",
+                "gh run view 5"
+            ]
+        );
+        // The run is finished: its jobs are not asked again, and the answer is the same.
+        let again = status.look(Path::new(FOLDER.as_str()), false).await;
+        assert_eq!(again, first);
+        assert_eq!(
+            fake.asked(),
+            ["git status --porcelain=v1 -b", "gh run list --event"]
+        );
+        // Jobs that could not be read are not remembered as "none": the next look asks again.
+        let other = Arc::new(Fake::default());
+        *other.list.lock().unwrap() = fake.list.lock().unwrap().clone();
+        let status = Status::new(Arc::clone(&other) as Arc<dyn Tools>)
+            .with_intervals(Duration::ZERO, Duration::ZERO);
+        status.look(Path::new(FOLDER.as_str()), false).await;
+        status.look(Path::new(FOLDER.as_str()), false).await;
+        let views = other
+            .asked()
+            .iter()
+            .filter(|a| a.starts_with("gh run view"))
+            .count();
+        assert_eq!(views, 2);
+    }
+
+    #[tokio::test]
+    async fn two_looks_at_one_repo_at_the_same_time_start_everything_once() {
+        let fake = Arc::new(Fake::default());
+        let status = status(&fake);
+        let folder = Path::new(FOLDER.as_str());
+        let (a, b) = tokio::join!(status.look(folder, false), status.look(folder, false));
+        assert_eq!(a, b);
+        assert_eq!(
+            fake.asked(),
+            ["git status --porcelain=v1 -b", "gh run list --event"]
+        );
+    }
+
+    /// Tools that count how many programs run at the same moment.
+    #[derive(Default)]
+    struct Counting {
+        now: std::sync::atomic::AtomicUsize,
+        most: std::sync::atomic::AtomicUsize,
+    }
+
+    impl Tools for Counting {
+        fn ask<'a>(
+            &'a self,
+            tool: Tool,
+            _args: &'a [&'a str],
+            _cwd: &'a Path,
+        ) -> BoxFuture<'a, Result<Said, Silent>> {
+            use std::sync::atomic::Ordering::SeqCst;
+            Box::pin(async move {
+                let running = self.now.fetch_add(1, SeqCst) + 1;
+                self.most.fetch_max(running, SeqCst);
+                tokio::time::sleep(Duration::from_millis(10)).await;
+                self.now.fetch_sub(1, SeqCst);
+                ok(if tool == Tool::Git { "## main\n" } else { "[]" })
+            })
+        }
+    }
+
+    #[tokio::test]
+    async fn many_repos_asked_at_once_run_a_few_programs_at_a_time() {
+        let tools = Arc::new(Counting::default());
+        let status = Arc::new(Status::new(Arc::clone(&tools) as Arc<dyn Tools>));
+        // Many repos at the same moment: the folders of the temp folder (a look only needs a folder that is there).
+        let base = std::env::temp_dir();
+        let mut looks = tokio::task::JoinSet::new();
+        for entry in std::fs::read_dir(&base).unwrap().flatten().take(40) {
+            if entry.path().is_dir() {
+                let status = Arc::clone(&status);
+                looks.spawn(async move { status.look(&entry.path(), false).await });
+            }
+        }
+        let status_too = Arc::clone(&status);
+        looks.spawn(async move { status_too.look(&base, false).await });
+        while looks.join_next().await.is_some() {}
+        let most = tools.most.load(std::sync::atomic::Ordering::SeqCst);
+        assert!((1..=MAX_AT_ONCE).contains(&most), "{most} programs at once");
+    }
+
+    #[test]
+    fn a_program_is_taken_only_from_a_place_a_child_may_start_from() {
+        // A relative entry, an empty one and one with `..` hold no program for the hub, also when a file is there.
+        let here = std::env::current_exe().unwrap();
+        let dir = here.parent().unwrap();
+        let name = if cfg!(windows) { "git.exe" } else { "git" };
+        let scratch =
+            std::env::temp_dir().join(format!("tasks-hub-status-path-{}", std::process::id()));
+        std::fs::create_dir_all(scratch.join("bin")).unwrap();
+        std::fs::write(scratch.join("bin").join(name), b"not a program").unwrap();
+        let dotted = scratch.join("bin").join("..").join("bin");
+        let good = scratch.join("bin");
+        let path =
+            std::env::join_paths([Path::new("relative"), Path::new(""), dotted.as_path(), dir])
+                .unwrap();
+        assert!(SystemTools::on_path(Some(&path)).git.is_none(), "{path:?}");
+        let path = std::env::join_paths([dotted.as_path(), good.as_path()]).unwrap();
+        assert_eq!(
+            SystemTools::on_path(Some(&path)).git,
+            Some(good.join(name)),
+            "the entry with `..` is passed over, the usable one after it is taken"
+        );
+        std::fs::remove_dir_all(&scratch).unwrap();
+    }
+
+    #[tokio::test]
+    async fn an_answer_used_again_keeps_its_age() {
+        let fake = Arc::new(Fake::default());
+        let status =
+            status(&fake).with_intervals(Duration::from_millis(120), Duration::from_secs(3600));
+        let folder = Path::new(FOLDER.as_str());
+        status.look(folder, false).await;
+        fake.asked();
+        // Questions that come faster than the interval: the answer is used again, and still grows old.
+        for _ in 0..4 {
+            tokio::time::sleep(Duration::from_millis(50)).await;
+            status.look(folder, false).await;
+        }
+        let asked = fake.asked();
+        assert!(
+            asked.iter().any(|a| a.starts_with("git status")),
+            "git was asked again after its interval, though the questions never paused: {asked:?}"
         );
     }
 

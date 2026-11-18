@@ -310,6 +310,8 @@ async fn a_phone_reaches_the_routes_of_the_phone_page_and_nothing_else() {
         ("GET", "/api/tasks/history"),
         ("GET", "/api/tasks/repos"),
         ("GET", "/api/tasks/repos/suggest"),
+        ("GET", "/api/tasks/repos/status?id=aaaa0001"),
+        ("POST", "/api/tasks/reminders/mail"),
         ("POST", "/api/tasks/rescan"),
         ("POST", "/api/tasks/intent"),
         ("POST", "/api/tasks/estimate"),

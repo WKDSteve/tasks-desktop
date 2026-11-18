@@ -725,15 +725,25 @@ names a tile (`?id=`, optionally `fresh=1`), never a folder. The hub starts two 
 both as children of the hub (`appkit_core::child`: an absolute program found once on the `PATH` of this start, the
 arguments as a list, no shell, 15 s, at most 1 MiB of output, ended with everything they started):
 
-- `git status --porcelain=v1 -b`: clean, changed files, commits ahead and behind;
+- `git -c core.fsmonitor=false status --porcelain=v1 -b --untracked-files=normal`: clean, changed files, commits ahead and behind. The
+  `core.fsmonitor` of the checkout's own config is switched off: it names a program `git status` would start, and the
+  folder of a tile may be a clone of somebody else's repository;
 - `gh run list --event push --limit 10 --json ...`, and for at most five failed runs of the newest commit
   `gh run view <id> --json jobs`: a run refused by the runner guard (every failed job failed only in its setup step) is
   *waiting for approval*, not red.
 
-`gh` uses its own login; the hub reads no token and passes none on. Both programs run with prompts switched off
+`gh` uses its own login; the hub reads no token and passes none on. The children inherit the environment of the hub
+without what would point them at another repository (`GIT_DIR`, `GIT_WORK_TREE`, `GIT_INDEX_FILE`, `GH_REPO`,
+`GH_HOST` and the like). **A tile is a checkout the person trusts:** `git status` still runs what a checkout's own
+config asks of it besides the file monitor (a `filter` of its `.gitattributes`, the config of its submodules), so a
+folder unpacked from an archive of unknown origin should not be made a tile. Both programs run with prompts switched off
 (`GIT_TERMINAL_PROMPT=0`, `GH_PROMPT_DISABLED=1`) and `git` without optional locks. The questions are throttled per repo
 in the hub, whatever the page asks: `git` at most every 5 s, `gh` at most once a minute (a `fresh` look asks `git`
-again and `gh` only when its answer is older than 5 s), also after a failure. `TASKS_DESKTOP_NO_GH` (any value) makes
+again, not sooner than 1 s after its last answer (it waits for the rest of that second), and `gh` only when its answer
+is older than 5 s), also after a failure; an
+answer has the age of the moment it came. At most four programs run at a time for all repos together. One look at a repo at a time: a second
+request for the same tile waits for the first and takes its answers. The jobs of a failed run are read once (a
+finished run does not change). `TASKS_DESKTOP_NO_GH` (any value) makes
 the hub never ask GitHub.
 
 The answer (`hub.repo_status`) holds words of a fixed set, numbers, the name of the branch (only plain characters), the

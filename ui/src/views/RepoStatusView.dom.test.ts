@@ -113,6 +113,37 @@ describe('RepoStatusView', () => {
     expect(root.querySelectorAll('[data-copy]')).toHaveLength(1);
   });
 
+  it('does not move a row away while a link or a button of the table has the focus', async () => {
+    const m = make({ token: 't' });
+    made = m;
+    (m.hub as unknown as { repos: () => Promise<HubRepos> }).repos = async () => TILES;
+    // At first everything is green: the rows are by name.
+    const green = { local: clean, ci: { state: 'green', url: 'https://github.com/o/x/actions/runs/1' } } as RepoStatus;
+    m.hub.statuses = { aaaa0001: green, bbbb0002: green, cccc0003: green, dddd0004: green };
+    await m.app.start(null);
+    const root = document.createElement('div');
+    document.body.append(root);
+    mounted = mount(RepoStatusView, { target: root, props: { app: m.app } });
+    flushSync();
+    await settle();
+    const names = () => rowsOf(root).map((r) => r.dataset.repo);
+    expect(names()).toEqual(['aaaa0001', 'bbbb0002', 'dddd0004', 'cccc0003']);
+    // The last repo turns red while the link of the first row has the focus: nothing jumps.
+    m.hub.statuses = { ...m.hub.statuses, cccc0003: { local: clean, ci: { state: 'red' } } };
+    const link = row(root, 'aaaa0001').querySelector('a')!;
+    link.focus();
+    root.querySelector<HTMLButtonElement>('[data-ask]')!.click();
+    await settle();
+    expect(row(root, 'cccc0003').dataset.ci).toBe('red');
+    expect(names()).toEqual(['aaaa0001', 'bbbb0002', 'dddd0004', 'cccc0003']);
+    expect(document.activeElement).toBe(link);
+    // With the focus elsewhere the next round puts the red one first.
+    link.blur();
+    root.querySelector<HTMLButtonElement>('[data-ask]')!.click();
+    await settle();
+    expect(names()[0]).toBe('cccc0003');
+  });
+
   it('opens the run on github.com in a new tab, without handing the page over', async () => {
     const { root } = await show();
     const link = row(root, 'bbbb0002').querySelector('a')!;
@@ -161,6 +192,41 @@ describe('RepoStatusView', () => {
     vi.advanceTimersByTime(60_000);
     await settle();
     expect(m.hub.statusAsked).toEqual([]);
+  });
+
+  it('stops a round that is under way when the view goes: the repos not asked yet are not asked', async () => {
+    const m = make({ token: 't' });
+    made = m;
+    (m.hub as unknown as { repos: () => Promise<HubRepos> }).repos = async () => TILES;
+    m.hub.statuses = { ...STATES };
+    // The hub answers slowly: three questions are under way (the width of a round), the fourth waits its turn.
+    let release: () => void = () => undefined;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    const answer = m.hub.repoStatus.bind(m.hub);
+    m.hub.repoStatus = async (id, fresh) => {
+      const status = answer(id, fresh);
+      await held;
+      return status;
+    };
+    await m.app.start(null);
+    const root = document.createElement('div');
+    document.body.append(root);
+    mounted = mount(RepoStatusView, { target: root, props: { app: m.app } });
+    flushSync();
+    await settle();
+    expect(m.hub.statusAsked).toHaveLength(3);
+    // A round is under way: the button starts no second one beside it, and a round of the view's own is not said.
+    expect(root.querySelector<HTMLButtonElement>('[data-ask]')!.disabled).toBe(true);
+    expect(root.querySelector('[data-asking]')?.textContent).toBe('');
+    root.querySelector<HTMLButtonElement>('[data-ask]')!.click();
+    await settle();
+    expect(m.hub.statusAsked).toHaveLength(3);
+    void unmount(mounted);
+    mounted = undefined;
+    release();
+    await settle();
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    expect(m.hub.statusAsked, 'the fourth repo is not asked after the view is gone').toHaveLength(3);
   });
 
   it('asks nothing in the web variant and says that it needs the desktop app', async () => {

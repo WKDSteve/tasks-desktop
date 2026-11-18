@@ -34,6 +34,10 @@
   // What the hub said of each repo: its state, or that it did not answer. A repo not in here was not asked yet.
   let states = $state<Record<string, RepoStatus | 'failed'>>({});
   let asking = $state(false);
+  // Only a round the person asked for is said ("Asking…"): the rounds the view starts by itself every quarter of a
+  // minute would be read out by a screen reader again and again.
+  let saying = $state(false);
+  let table = $state<HTMLElement | null>(null);
   // The order of the rows: by name until a round is through, then what needs a look first. It changes only at the
   // end of a round, so that a row does not jump away under the pointer while the answers come in.
   let order = $state<string[]>([]);
@@ -44,24 +48,39 @@
     return [...placed, ...rest].map((id) => ({ ...known.get(id)!, state: states[id] }));
   });
 
+  // The view is in the page: a round that is under way when it goes asks the hub for nothing more.
+  let alive = true;
+  $effect(() => {
+    alive = true;
+    return () => {
+      alive = false;
+    };
+  });
   async function round(fresh: boolean): Promise<void> {
     if (asking || repos.length === 0) return;
     asking = true;
+    saying = fresh;
     const asked = repos.map((r) => r.id);
     await inTurns(asked, WIDTH, async (id) => {
+      if (!alive) return;
       try {
         states[id] = await app.repoStatus(id, fresh);
       } catch {
         states[id] = 'failed';
       }
     });
-    order = byUrgency(
-      repos.map((r) => {
-        const state = states[r.id];
-        return { name: r.name, id: r.id, status: state === undefined || state === 'failed' ? null : state };
-      }),
-    ).map((r) => r.id);
+    // A row that moves loses the focus: while a link or a button of the table has it, the order stays as it is (the
+    // next round sorts).
+    if (!table?.contains(document.activeElement)) {
+      order = byUrgency(
+        repos.map((r) => {
+          const state = states[r.id];
+          return { name: r.name, id: r.id, status: state === undefined || state === 'failed' ? null : state };
+        }),
+      ).map((r) => r.id);
+    }
     asking = false;
+    saying = false;
   }
   $effect(() => {
     if (ids === '' || !app.machineActions) return;
@@ -100,7 +119,7 @@
     {#if app.machineActions && repos.length > 0}
       <div class="tools">
         <button type="button" data-ask disabled={asking} onclick={() => void round(true)}>{t('repostatus.ask')}</button>
-        <span role="status" data-asking>{asking ? t('repostatus.asking') : ''}</span>
+        <span role="status" data-asking>{saying ? t('repostatus.asking') : ''}</span>
       </div>
     {/if}
   </header>
@@ -115,7 +134,7 @@
       <button type="button" class="link" onclick={() => app.setView('repos')}>{t('repostatus.to_tiles')}</button>
     </p>
   {:else}
-    <table>
+    <table bind:this={table}>
       <thead>
         <tr>
           <th scope="col">{t('repostatus.col.repo')}</th>
