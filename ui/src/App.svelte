@@ -535,6 +535,19 @@
             onselect: () => app.setView('repos'),
             ...apart('repos'),
           },
+          // The state of those repos is asked by the hub (git, gh): the web variant has none and does not offer it.
+          ...(app.machineActions
+            ? [
+                {
+                  kind: 'radio' as const,
+                  label: t('nav.repostatus'),
+                  hint: t('hint.item.nav.repostatus'),
+                  checked: app.view === 'repostatus',
+                  onselect: () => app.setView('repostatus'),
+                  ...apart('repostatus'),
+                },
+              ]
+            : []),
           // The export belongs to the view that is shown: it takes what that view draws.
           { kind: 'section', label: t('menu.sec.export') },
           ...exportItems(ready),
@@ -898,7 +911,9 @@
                         ? t('nav.views')
                         : app.view === 'repos'
                           ? t('nav.repos')
-                          : t('nav.list')}
+                          : app.view === 'repostatus'
+                            ? t('nav.repostatus')
+                            : t('nav.list')}
         </h1>
         {#if alone}
           <!-- A window of one task (detached from a float): its detail, alone, as wide as the window allows. -->
@@ -930,6 +945,8 @@
           <ViewsView {app} />
         {:else if app.view === 'repos'}
           <Lazy {app} load={() => import('./views/ReposView.svelte')} />
+        {:else if app.view === 'repostatus'}
+          <Lazy {app} load={() => import('./views/RepoStatusView.svelte')} />
         {:else}
           <ListView {app} bind:searchBox />
         {/if}

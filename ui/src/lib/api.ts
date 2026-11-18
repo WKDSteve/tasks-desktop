@@ -22,6 +22,7 @@ import type {
 import type { ViewForm } from './views';
 import { parseRepos, parseSuggestions, type HubRepos, type RepoGroup } from './repos';
 import { parseRemindersMail, type RemindersMail } from './reminders';
+import { parseRepoStatus, type RepoStatus } from './repoStatus';
 import type { About } from './about';
 import { ApiError, failure, HubClient, textOf, type Hello, type SnapshotResult as KitSnapshotResult } from 'appkit-ui/client';
 
@@ -328,6 +329,14 @@ export class Hub extends HubClient<Snapshot> {
   /** The folders below `REPOS_DIR` that are no tile yet, by name: what the form of a new tile offers. */
   async repoSuggest(): Promise<string[]> {
     return parseSuggestions(await this.json<unknown>('/api/tasks/repos/suggest'));
+  }
+
+  /**
+   * The state of the repo of a tile: its checkout and the CI of its newest pushed commit, as the hub asked `git` and
+   * `gh` (throttled there). `fresh` asks `git` again now.
+   */
+  async repoStatus(id: string, fresh: boolean): Promise<RepoStatus> {
+    return parseRepoStatus(await this.json<unknown>(`/api/tasks/repos/status?id=${encodeURIComponent(id)}${fresh ? '&fresh=1' : ''}`));
   }
 
   /** A folder as a tile of a group; the answer is the new document. */

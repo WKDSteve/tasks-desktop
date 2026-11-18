@@ -8,6 +8,7 @@ import type { DonePreview, Groupings, Result, Snapshot, TaskDocument, TaskEntry,
 import { task } from './fixtures';
 import type { PrintSheet } from './export';
 import type { RemindersMail } from './reminders';
+import type { RepoStatus } from './repoStatus';
 
 export function snapshot(tasks: TaskEntry[], rev = 'rev:1'): Snapshot {
   return {
@@ -419,6 +420,15 @@ export class FakeHub {
   async selectVault(name: string): Promise<void> {
     this.vaultCalls.push(`select ${name}`);
     if (this.vaultError) throw this.vaultError;
+  }
+  /** The state of the repos: what was asked (`<id>` or `<id> fresh`), and what the hub answers for an id (none: it fails). */
+  statusAsked: string[] = [];
+  statuses: Record<string, RepoStatus> = {};
+  async repoStatus(id: string, fresh: boolean): Promise<RepoStatus> {
+    this.statusAsked.push(fresh ? `${id} fresh` : id);
+    const status = this.statuses[id];
+    if (!status) throw new ApiError(502, 'failed', 'no answer');
+    return status;
   }
   /** The reminders by e-mail: what was asked, and what the hub answers (an error to throw, or the mail). */
   mailAsked: { to: string; ids: string[]; lang: string; send: boolean }[] = [];

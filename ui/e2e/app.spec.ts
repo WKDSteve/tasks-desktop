@@ -9946,6 +9946,51 @@ test('repo tiles: groups and tiles are made, an image or a letter, moved with th
   }
 });
 
+test('repo status: a tile has a row with its checkout, read again by the button; a hub that does not ask GitHub says so', async ({ page }) => {
+  const info = test.info();
+  const tag = `r${String(info.repeatEachIndex).padStart(3, '0')}t${info.retry}`;
+  const root = join(state().config, '..', `status-${tag}`);
+  const name = `status-repo-${tag}`;
+  const repo = join(root, name);
+  mkdirSync(repo, { recursive: true });
+  // A checkout of its own: inside the folder of the run, git would answer for the checkout around it.
+  execFileSync('git', ['init', '-q', repo]);
+  try {
+    await watchViolations(page);
+    await pair(page);
+    await chooseView(page, 'View', 'Repos');
+    const tab = page.getByRole('region', { name: 'Repos', exact: true });
+    await tab.getByLabel('New group', { exact: true }).fill(`Status ${tag}`);
+    await tab.getByRole('button', { name: 'Make the group' }).click();
+    await expect(tab.getByRole('heading', { name: `Status ${tag}` })).toBeVisible();
+    await tab.getByLabel('Folder of the repo').fill(repo);
+    await tab.getByLabel('Into the group').selectOption({ label: `Status ${tag}` });
+    await tab.getByRole('button', { name: 'Add the repo' }).click();
+    await expect(tab.locator('button.face', { hasText: name })).toBeVisible();
+
+    await chooseView(page, 'View', 'Repo status');
+    const row = page.locator('tr[data-repo]', { hasText: name });
+    // The hub starts git for it: the first answer may take a moment on a busy machine.
+    await expect(row).toHaveAttribute('data-local', 'clean', { timeout: WRITE_BUDGET });
+    await expect(row).toContainText('clean');
+    // The hub of the tests never asks GitHub (TASKS_DESKTOP_NO_GH): said in words, not as an error and not as green.
+    await expect(row).toHaveAttribute('data-ci', 'unavailable');
+    await expect(row).toContainText('gh is not installed');
+    await expect(row.getByRole('link')).toHaveCount(0);
+    expect(await violations(page)).toEqual([]);
+
+    // A file appears in the checkout: the button asks git again now (the hub holds an answer for some seconds).
+    writeFileSync(join(repo, 'new.txt'), 'x\n');
+    await page.getByRole('button', { name: 'Ask again now' }).click();
+    await expect(row).toHaveAttribute('data-local', 'dirty', { timeout: WRITE_BUDGET });
+    await expect(row).toContainText('1 changed');
+    expect(await violations(page)).toEqual([]);
+    expect(consoleProblems.get(page)).toEqual([]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 /** Switch a check of the menu Options (the menu closes on the choice). */
 async function toggleOption(page: Page, name: string): Promise<void> {
   await page.getByRole('menuitem', { name: 'Options', exact: true }).click();

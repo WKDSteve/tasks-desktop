@@ -808,6 +808,18 @@ pub async fn serve(opts: ServeOptions) -> Result<(), String> {
     let upload_dir = dir.join("uploads");
     // The repo tiles of this device, beside config.json: read once, then held and written by the hub alone.
     let repos = Arc::new(crate::repos::Store::open(&dir));
+    // The state of those repos (their checkout, the CI of their newest push): `git` and `gh` as found on the `PATH`
+    // of this start; one that is missing is said by the view, it stops nothing.
+    let repo_tools = crate::repos::status::SystemTools::on_path(
+        env.get("PATH").map(std::ffi::OsString::as_os_str),
+    );
+    // `TASKS_DESKTOP_NO_GH` (any value): GitHub is never asked, the view shows the checkouts only.
+    let repo_tools = if env.get("TASKS_DESKTOP_NO_GH").is_some() {
+        repo_tools.without_gh()
+    } else {
+        repo_tools
+    };
+    let repo_status = Arc::new(crate::repos::status::Status::new(Arc::new(repo_tools)));
     // A phone through Tailscale Serve (`tailscale serve` forwards https://<name> to this loopback port): only when the
     // person named the machine; a name that is not one stops the start here, said plainly.
     let tailnet = tailnet_name(&env)?;
@@ -845,6 +857,7 @@ pub async fn serve(opts: ServeOptions) -> Result<(), String> {
         sheet_run: Some(Arc::clone(&sheet_run)),
         testing: Some(Arc::clone(&testing)),
         repos: Some(Arc::clone(&repos)),
+        repo_status: Some(Arc::clone(&repo_status)),
         // No mail account yet (the SMTP account of the settings is a task of its own): the route of the reminders
         // by e-mail shows the mail and says that it cannot be sent.
         mail: None,

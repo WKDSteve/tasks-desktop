@@ -691,6 +691,32 @@ session: the page reads the image with it and shows it from a `blob:` address it
 the page allows `img-src 'self' blob:` (a `data:` image stays refused). A repository folder has no data class: nothing
 of it but this image and the folder's last name leaves the hub, and only to the paired page of this device.
 
+## The state of a repository (`GET /api/tasks/repos/status`)
+
+The view *Repo status* shows, for each repo of the tiles, its checkout and the CI of its newest pushed commit. The page
+names a tile (`?id=`, optionally `fresh=1`), never a folder. The hub starts two programs in the folder of that tile,
+both as children of the hub (`appkit_core::child`: an absolute program found once on the `PATH` of this start, the
+arguments as a list, no shell, 15 s, at most 1 MiB of output, ended with everything they started):
+
+- `git status --porcelain=v1 -b`: clean, changed files, commits ahead and behind;
+- `gh run list --event push --limit 10 --json ...`, and for at most five failed runs of the newest commit
+  `gh run view <id> --json jobs`: a run refused by the runner guard (every failed job failed only in its setup step) is
+  *waiting for approval*, not red.
+
+`gh` uses its own login; the hub reads no token and passes none on. Both programs run with prompts switched off
+(`GIT_TERMINAL_PROMPT=0`, `GH_PROMPT_DISABLED=1`) and `git` without optional locks. The questions are throttled per repo
+in the hub, whatever the page asks: `git` at most every 5 s, `gh` at most once a minute (a `fresh` look asks `git`
+again and `gh` only when its answer is older than 5 s), also after a failure. `TASKS_DESKTOP_NO_GH` (any value) makes
+the hub never ask GitHub.
+
+The answer (`hub.repo_status`) holds words of a fixed set, numbers, the name of the branch (only plain characters), the
+address of the run and, for a commit that waits for approval, `testing ci trust <owner/repo> <sha>`. The address is
+passed on only when it is exactly `https://github.com/<owner>/<repo>/actions/runs/<digits>`; the command only for
+plain names and a hex sha (it is copied to be pasted into a shell). What `git` or `gh` wrote is never passed on (it may
+name a folder): why there is no answer is one of `no_git`, `not_a_repo`, `no_folder`, `no_gh`, `login`, `offline`,
+`no_remote`, `failed`. The page checks the address and the command again before it shows them. The route needs a
+session and is not released for a paired phone.
+
 ## Reminders by e-mail (`POST /api/tasks/reminders/mail`)
 
 The view *Reminders* sends a choice of reminders to one e-mail address. The page names task ids and the address

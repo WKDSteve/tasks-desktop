@@ -145,6 +145,9 @@ pub struct Extras {
     pub snapshot_root: Option<std::path::PathBuf>,
     /// The repo tiles of this device (`repos.json` in the config folder); none: the routes say this hub keeps none.
     pub repos: Option<Arc<crate::repos::Store>>,
+    /// The state of the repos of the tiles (their checkout, the CI of their newest push: `crate::repos::status`);
+    /// none: the route says this hub looks at none.
+    pub repo_status: Option<Arc<crate::repos::status::Status>>,
     /// Where a mail with reminders leaves the hub (`crate::mail`); none: the route says this hub has no mail account.
     pub mail: Option<Arc<dyn crate::mail::Transport>>,
     /// The name of this machine in the tailnet (`pc.example.ts.net`), for a phone that comes through Tailscale Serve;
@@ -181,6 +184,7 @@ pub async fn start_with(cfg: ServerConfig, extras: Extras) -> std::io::Result<Ru
         upload_engine,
         snapshot_root,
         repos,
+        repo_status,
         mail,
         tailnet,
         push,
@@ -215,6 +219,7 @@ pub async fn start_with(cfg: ServerConfig, extras: Extras) -> std::io::Result<Ru
         upload_dir: upload_dir.map(Arc::new),
         upload_engine,
         repos,
+        repo_status,
         mail,
         push,
         attach_dirs: Arc::new(
@@ -448,6 +453,7 @@ fn app_routes(core: &Arc<Shared>) -> Router<Arc<Shared>> {
         .route(&r("repos"), get(self::repos::repos))
         .route(&r("repos/image"), get(self::repos::repo_image))
         .route(&r("repos/suggest"), get(self::repos::repo_suggest))
+        .route(&r("repos/status"), get(self::repos::repo_status))
         .route(
             &r("repos/add"),
             post(self::repos::repo_add).layer(DefaultBodyLimit::max(4 * 1024)),
@@ -593,6 +599,7 @@ mod tests {
                 upload_engine: None,
                 repos: None,
                 mail: None,
+                repo_status: None,
             },
         ))
     }

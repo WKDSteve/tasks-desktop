@@ -140,6 +140,7 @@ import {
 import { localToday } from './remind';
 import type { RemindersMail } from './reminders';
 import { DEFAULT_ROW_ACTIONS, parseRowActions, serializeRowActions, type RowActionPrefs } from './rowActions';
+import type { RepoStatus } from './repoStatus';
 import { COLUMN_KEYS, defaultColumns, parseColumns, serializeColumns, type ListColumns } from './columns';
 import { emptyFolds, foldOf, parseFolds, serializeFolds, type FoldMemory, type Folds, type FoldView } from './fold';
 import { parseSizes, serializeSizes, withSize, type Size, type Sizes } from './sizes';
@@ -150,7 +151,7 @@ const NOTE_MAX = 1000;
 
 export type Phase = 'starting' | 'needs_pairing' | 'offline' | 'unavailable' | 'ready';
 export type Connection = 'live' | 'reconnecting' | 'offline';
-export type View = 'today' | 'list' | 'board' | 'plan' | 'inbox' | 'abnahme' | 'cross' | 'calendar' | 'timeline' | 'reminders' | 'stats' | 'done' | 'views' | 'repos';
+export type View = 'today' | 'list' | 'board' | 'plan' | 'inbox' | 'abnahme' | 'cross' | 'calendar' | 'timeline' | 'reminders' | 'stats' | 'done' | 'views' | 'repos' | 'repostatus';
 export type Theme = 'auto' | 'light' | 'dark';
 /** The blocks of the Today view that a person may hide. */
 export { ORDERED_TILES, TILES, type OrderedTile, type Tile } from './tiles-list';
@@ -551,6 +552,16 @@ export class App {
    */
   remindersMail(to: string, ids: string[], send: boolean): Promise<RemindersMail> {
     return this.env.hub.remindersMail({ to, ids, lang: this.lang === 'de' ? 'de' : 'en', send });
+  }
+
+  /** The state of the repo of a tile (its checkout, the CI of its newest push), as the hub asks `git` and `gh`. */
+  repoStatus(id: string, fresh: boolean): Promise<RepoStatus> {
+    return this.env.hub.repoStatus(id, fresh);
+  }
+
+  /** A text onto the clipboard (a command to paste into a terminal); false when the browser did not let it. */
+  copyText(text: string): Promise<boolean> {
+    return this.env.out.copy(text);
   }
 
   /** The image of a tile, read with the session. */

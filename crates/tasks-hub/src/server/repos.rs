@@ -200,6 +200,47 @@ pub(super) async fn repo_suggest(
     json_response(StatusCode::OK, body.to_string(), None)
 }
 
+/// `GET /api/tasks/repos/status?id=[&fresh=1]`: the state of the repo of a tile (`hub.repo_status`): its checkout
+/// (`local`: clean, dirty, unpushed, behind, diverged, with the numbers and the branch) and the CI of its newest pushed
+/// commit (`ci`: green, red, running, queued, approval, cancelled, skipped, none, with the address of the run and, for
+/// a commit that waits for approval, the command that approves it). `unavailable` with a `reason` of a fixed set when
+/// `git` or `gh` is missing, not logged in or offline. The hub throttles the questions per repo (`repos::status`);
+/// `fresh` asks `git` again now. No folder is named.
+pub(super) async fn repo_status(
+    State(st): State<Arc<Shared>>,
+    RawQuery(query): RawQuery,
+) -> Response {
+    let rt = st.rt();
+    let (Some(store), Some(status)) = (rt.repos.clone(), rt.repo_status.clone()) else {
+        return unavailable();
+    };
+    let (id, fresh) = match parse_query(query.as_deref(), &["id", "fresh"]) {
+        Ok(q) => (
+            q.get("id").cloned().unwrap_or_default(),
+            q.get("fresh").cloned(),
+        ),
+        Err(why) => return error_body(StatusCode::BAD_REQUEST, "bad_request", why),
+    };
+    if !repos::valid_id(&id) {
+        return error_body(
+            StatusCode::BAD_REQUEST,
+            "bad_id",
+            "id is 8 lowercase letters or digits",
+        );
+    }
+    let fresh = match fresh.as_deref() {
+        None => false,
+        Some("1") => true,
+        Some(_) => return error_body(StatusCode::BAD_REQUEST, "bad_request", "fresh is 1"),
+    };
+    let Some(folder) = store.folder(&id) else {
+        return error_body(StatusCode::NOT_FOUND, "not_found", "there is no such tile");
+    };
+    let mut doc = status.look(&folder, fresh).await;
+    doc["id"] = json!(id);
+    json_response(StatusCode::OK, doc.to_string(), None)
+}
+
 /// `POST /api/tasks/repos/add` `{ "path", "name"?, "group" }`: a folder as a tile of a group. The path is checked as a
 /// vault folder is (whole, local, there) and never sent back, not in an error either. A `path` that is one plain name
 /// (`suggestion_name`, what `repo_suggest` lists) is the folder of that name below `REPOS_DIR`.

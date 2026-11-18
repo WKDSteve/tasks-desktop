@@ -329,6 +329,8 @@ export function env(config: string): NodeJS.ProcessEnv {
     // The folder dialog is not shown in a test: the folder it "returns" is this one (see `pickedFolder`).
     TASKS_DESKTOP_PICK_RESULT: pickedFolder(config),
     TASKS_DESKTOP_PORT: String(port()),
+    // The repo status never asks GitHub in a test (the checkouts are still read with git).
+    TASKS_DESKTOP_NO_GH: '1',
     // Where the text snapshots of the test sheets are read from (see `prepareVault`).
     REPOS_DIR: join(config, '..', 'repos'),
     // The family of this run, not of this machine: an ai-desktop installed or running here is not found (folders that

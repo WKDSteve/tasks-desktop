@@ -50,6 +50,7 @@ export function paletteActions(app: App): PaletteAction[] {
   add('go.stats', t('palette.go', { view: t('nav.stats') }), () => app.setView('stats'));
   if (app.can('finished')) add('go.done', t('palette.go', { view: t('nav.done') }), () => app.setView('done'));
   add('go.repos', t('palette.go', { view: t('nav.repos') }), () => app.setView('repos'));
+  if (app.machineActions) add('go.repostatus', t('palette.go', { view: t('nav.repostatus') }), () => app.setView('repostatus'));
   if (app.can('views')) {
     add('go.views', t('palette.go', { view: t('nav.views') }), () => app.setView('views'));
     // Every saved view of the vault, by its name.

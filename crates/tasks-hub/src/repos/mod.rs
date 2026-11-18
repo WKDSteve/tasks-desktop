@@ -21,6 +21,7 @@ use serde_json::{json, Value};
 use crate::classes::AreaPolicy;
 
 pub mod image;
+pub mod status;
 
 /// The name of the file in the config folder.
 pub const FILE: &str = "repos.json";

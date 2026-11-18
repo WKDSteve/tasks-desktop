@@ -32,6 +32,7 @@ pub(super) struct VaultRuntime {
     /// The folder of the plugin checkouts the snapshots of the test sheets are read from.
     pub(super) snapshot_root: Option<Arc<PathBuf>>,
     pub(super) repos: Option<Arc<crate::repos::Store>>,
+    pub(super) repo_status: Option<Arc<crate::repos::status::Status>>,
     /// Where a mail with reminders leaves the hub; none: this hub has no mail account.
     pub(super) mail: Option<Arc<dyn crate::mail::Transport>>,
     pub(super) engine: Option<Arc<dyn Engine>>,
@@ -94,6 +95,7 @@ pub(super) struct AppParts {
     pub(super) upload_engine: Option<UploadEngine>,
     pub(super) snapshot_root: Option<Arc<PathBuf>>,
     pub(super) repos: Option<Arc<crate::repos::Store>>,
+    pub(super) repo_status: Option<Arc<crate::repos::status::Status>>,
     pub(super) mail: Option<Arc<dyn crate::mail::Transport>>,
     /// Web Push to the paired phones; none: this hub sends none.
     pub(super) push: Option<HubPush>,
@@ -190,6 +192,7 @@ pub(super) fn build_runtime(
         upload_engine: app.upload_engine.clone(),
         snapshot_root: app.snapshot_root.clone(),
         repos: app.repos.clone(),
+        repo_status: app.repo_status.clone(),
         mail: app.mail.clone(),
         engine,
         store,
