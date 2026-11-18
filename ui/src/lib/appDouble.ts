@@ -162,7 +162,9 @@ export class FakeHub {
   }
   /** The instance `hello` names: another one is a hub that was started anew. */
   instance = 'i';
+  helloCalls = 0;
   async hello() {
+    this.helloCalls += 1;
     if (this.hubDown) throw new Error('down');
     return { instance: this.instance, version: '0', engine: { ready: this.engineReady, problem: 'x', capabilities: this.capabilities } };
   }
@@ -572,7 +574,9 @@ export function make(
     mode?: 'web';
     readOnly?: boolean;
     openWindow?: (route: string) => boolean;
-    askSession?: (onLate: (token: string) => void) => Promise<string | null>;
+    askSession?: (onLate?: (token: string) => void) => Promise<string | null>;
+    visible?: () => boolean;
+    hasFocus?: () => boolean;
     chooseFolder?: () => void;
     folderVaults?: Env['folderVaults'];
     fetchFn?: typeof fetch;
@@ -621,6 +625,8 @@ export function make(
     ...(overrides.readOnly ? { readOnly: true } : {}),
     ...(overrides.openWindow ? { openWindow: overrides.openWindow } : {}),
     ...(overrides.askSession ? { askSession: overrides.askSession } : {}),
+    ...(overrides.visible ? { visible: overrides.visible } : {}),
+    ...(overrides.hasFocus ? { hasFocus: overrides.hasFocus } : {}),
     ...(overrides.chooseFolder ? { chooseFolder: overrides.chooseFolder } : {}),
     ...(overrides.folderVaults ? { folderVaults: overrides.folderVaults } : {}),
     out: {

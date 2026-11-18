@@ -254,7 +254,13 @@ export interface Env {
    * Ask the open tabs of the page for their session (appkit-ui/handoff): a tab the browser opened from a link has none
    * of its own. The token, or null when no tab answered. Left out where there is no hub (the web variant).
    */
-  askSession?(onLate: (token: string) => void): Promise<string | null>;
+  askSession?(onLate?: (token: string) => void): Promise<string | null>;
+  /**
+   * Whether the tab is shown (`document.visibilityState`): a hidden tab asks no hub that does not answer. Left out: shown.
+   */
+  visible?(): boolean;
+  /** Whether the window has the focus now (`document.hasFocus`): no focus event is to come. Left out: it has not. */
+  hasFocus?(): boolean;
   /** The ways out of the page for an export: a file the browser saves, the clipboard, the printer. Replaced in tests. */
   out: {
     save(name: string, text: string, type: string): boolean;
@@ -270,8 +276,12 @@ export const TOKEN_KEY = 'tasks-desktop.session';
 /** A pairing code the hub turned away for too many attempts (429) is still good: it is traded again a few times. */
 export const EXCHANGE_RETRIES = 3;
 const EXCHANGE_RETRY_MS = 3000;
-/** How long the page waits between two questions to a hub that does not answer (`App.watchHub`). */
+/**
+ * How long the page waits between two questions to a hub that does not answer (`App.watchHub`), at first; each further
+ * miss doubles it, up to `HUB_PROBE_MAX_MS`. The focus of the window asks at once.
+ */
 export const HUB_PROBE_MS = 3000;
+export const HUB_PROBE_MAX_MS = 30_000;
 /** How long a pairing code offered to a page that still believed in its old hub is kept (a code lives a minute). */
 const LATE_CODE_MS = 60_000;
 /** Where the hub of the page is (`App.hubState`). */
@@ -4607,14 +4617,22 @@ export class App {
     if (this.#watchingHub || this.stopped || this.env.mode === 'web' || this.#hubInstance === null) return;
     if (this.hubState === 'replaced') return;
     this.#watchingHub = true;
+    let wait = HUB_PROBE_MS;
     try {
       for (;;) {
+        // A hidden tab asks nothing: its focus (`focused`) wakes the watcher again.
+        if (this.env.visible && !this.env.visible()) {
+          await this.watchSleep(HUB_PROBE_MAX_MS);
+          if (this.stopped) return;
+          continue;
+        }
         const instance = await this.hubNow();
         // (Read anew: another answer may have found a new hub while this one was awaited.)
         if (this.stopped || (this.hubState as HubState) === 'replaced') return;
         if (instance === null) {
           this.hubState = 'gone';
-          await this.env.sleep(HUB_PROBE_MS);
+          await this.watchSleep(wait);
+          wait = Math.min(wait * 2, HUB_PROBE_MAX_MS);
           if (this.stopped) return;
           continue;
         }
@@ -4634,6 +4652,21 @@ export class App {
     } finally {
       this.#watchingHub = false;
     }
+  }
+
+  /** Ends the wait of `watchHub` before its next question (`focused`). */
+  #wakeWatch: (() => void) | null = null;
+
+  /** The wait of `watchHub` between two questions, ended early by the focus of the window. */
+  private watchSleep(ms: number): Promise<void> {
+    return new Promise<void>((resolve) => {
+      const wake = (): void => {
+        if (this.#wakeWatch === wake) this.#wakeWatch = null;
+        resolve();
+      };
+      this.#wakeWatch = wake;
+      void this.env.sleep(ms).then(wake);
+    });
   }
 
   /**
@@ -4669,6 +4702,8 @@ export class App {
     const late = this.#lateCode;
     this.#lateCode = null;
     if (late !== null && this.env.now() - late.at <= LATE_CODE_MS) void this.pairAgain({ code: late.code });
+    // The window has the focus already: no focus event comes to ask the other tabs for a session of the new hub.
+    else if (this.env.hasFocus?.()) void this.askForNewSession();
   }
   /** A pairing code offered while the page still believed in its old hub, and when. */
   #lateCode: { code: string; at: number } | null = null;
@@ -4726,12 +4761,28 @@ export class App {
   }
   #pairingAgain = false;
 
-  /** The tab got the focus while it waits for a new hub: an open tab of the page may hold a session of it by now. */
+  /**
+   * The tab got the focus while it waits for a new hub (or found it while it had the focus): an open tab of the page
+   * may hold a session of it by now. A late answer is listened for by one question at a time: the listener of a
+   * question stays until an answer comes, so each focus would leave one more.
+   */
   private async askForNewSession(): Promise<void> {
     if (this.hubState !== 'replaced' || !this.env.askSession) return;
-    const token = await this.env.askSession((late) => void this.pairAgain({ token: late }));
+    let token: string | null;
+    if (this.#lateListening) {
+      token = await this.env.askSession();
+    } else {
+      this.#lateListening = true;
+      token = await this.env.askSession((late) => {
+        this.#lateListening = false;
+        void this.pairAgain({ token: late });
+      });
+      // Answered in time: the question listens no more.
+      if (token) this.#lateListening = false;
+    }
     if (token) await this.pairAgain({ token });
   }
+  #lateListening = false;
 
   /**
    * The hub refused the session (a 401). When another hub answers than the one of this page, that is `newHub` and the
@@ -5382,6 +5433,8 @@ export class App {
     // A window the hub refused a stream (too many windows) tries again now, not at the end of its backoff: the window
     // that was closed to make room is often what gave this one the focus.
     if (this.streamsFull) this.#wakeStream?.();
+    // A page that lost its hub asks at once, not at the end of its wait.
+    this.#wakeWatch?.();
     // A page that outlived its hub: the tab the new start opened may hand over its session now.
     if (this.hubState === 'replaced') void this.askForNewSession();
     // Not before the hub has confirmed the session: a page on the cached list holds the token already.

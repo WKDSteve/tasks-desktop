@@ -47,6 +47,8 @@ const env: Env = {
   fetchFn,
   sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
   reload: () => window.location.reload(),
+  visible: () => document.visibilityState !== 'hidden',
+  hasFocus: () => document.hasFocus(),
   // The same page in a new window. Not `noopener`: the browser then gives the new window a copy of this tab's
   // session storage, and with it the session (it is paired without a new code).
   openWindow: (route) => window.open(`${window.location.pathname}${window.location.search}${route}`, '_blank') !== null,
@@ -58,7 +60,7 @@ const env: Env = {
             random: () => crypto.getRandomValues(new Uint8Array(16)),
             setTimeout: (run, ms) => window.setTimeout(run, ms),
             clearTimeout: (handle) => window.clearTimeout(handle as number),
-            onLate,
+            ...(onLate ? { onLate } : {}),
           }),
       }
     : {}),

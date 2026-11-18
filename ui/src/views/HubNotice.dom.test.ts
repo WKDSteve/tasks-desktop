@@ -5,6 +5,7 @@
 import { flushSync, mount, tick, unmount } from 'svelte';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from '../lib/api';
+import { HUB_PROBE_MAX_MS, HUB_PROBE_MS } from '../lib/app.svelte';
 import { make } from '../lib/appDouble';
 import { translate, type Key } from '../lib/i18n';
 import HubNotice from './HubNotice.svelte';
@@ -158,6 +159,68 @@ describe('a page whose hub is gone', () => {
     expect(m.hub.token).toBe('session-of-the-new-tab');
     expect(m.app.drafts).toEqual({ 'pub/a': { prio: 1 } });
     expect(m.hub.exchanged).toEqual([]);
+  });
+
+  it('asks a hub that does not answer less and less often, not at all from a hidden tab, and at once on the focus', async () => {
+    const asked: number[] = [];
+    let shown = true;
+    const m = await page({
+      // The stream waits for its answer: only the watcher of the hub asks and waits here.
+      fetchFn: (() => new Promise<Response>(() => undefined)) as typeof fetch,
+      sleep: (ms) => {
+        asked.push(ms);
+        return new Promise<void>((resolve) => waits.push(resolve));
+      },
+      visible: () => shown,
+    });
+    end(m);
+    await m.app.refresh();
+    await settle();
+    expect(m.app.hubState).toBe('gone');
+    for (let i = 0; i < 6; i += 1) {
+      endWaits();
+      await settle();
+    }
+    // The wait doubled from 3 s and stays at 30 s.
+    expect(asked).toEqual([HUB_PROBE_MS, 6000, 12_000, 24_000, HUB_PROBE_MAX_MS, HUB_PROBE_MAX_MS, HUB_PROBE_MAX_MS]);
+
+    // Hidden: the waits end, but the hub is not asked.
+    shown = false;
+    endWaits();
+    await settle();
+    const hidden = m.hub.helloCalls;
+    for (let i = 0; i < 3; i += 1) {
+      endWaits();
+      await settle();
+    }
+    expect(m.hub.helloCalls).toBe(hidden);
+
+    // Shown and focused again: the hub that is back is asked at once, not at the end of the wait.
+    shown = true;
+    m.hub.hubDown = false;
+    await m.app.focused();
+    await vi.waitFor(() => expect(m.app.hubState).toBe('here'));
+  });
+
+  it('a page that has the focus when it finds the new hub asks the other tabs at once, with one late listener', async () => {
+    const lateAsked: boolean[] = [];
+    const m = await page({
+      hasFocus: () => true,
+      askSession: async (onLate) => {
+        lateAsked.push(onLate !== undefined);
+        return null;
+      },
+    });
+    m.hub.instance = 'another';
+    m.hub.onUnauthorized();
+    await vi.waitFor(() => expect(m.app.hubState).toBe('replaced'));
+    // No focus event came: the question was asked anyway.
+    await vi.waitFor(() => expect(lateAsked).toEqual([true]));
+    // Every further focus asks again, but no question listens for a late answer beside the first.
+    await m.app.focused();
+    await m.app.focused();
+    await settle();
+    expect(lateAsked).toEqual([true, false, false]);
   });
 
   it('a session of another tab that the new hub refuses is not taken: the page stays as it was and says so', async () => {

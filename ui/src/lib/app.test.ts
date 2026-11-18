@@ -566,7 +566,7 @@ describe('App', () => {
     let late: (token: string) => void = () => {};
     const { app, session } = make({
       askSession: async (onLate) => {
-        late = onLate;
+        if (onLate) late = onLate;
         return null;
       },
     });
@@ -580,8 +580,8 @@ describe('App', () => {
 
   it('a late answer changes nothing in a tab that left the pairing page, or was stopped', async () => {
     let late: (token: string) => void = () => {};
-    const askSession = async (onLate: (token: string) => void): Promise<null> => {
-      late = onLate;
+    const askSession = async (onLate?: (token: string) => void): Promise<null> => {
+      if (onLate) late = onLate;
       return null;
     };
     const paired = make({ askSession });
@@ -621,7 +621,7 @@ describe('App', () => {
       const { app, hub, session } = make({
         askSession: async (onLate) => {
           asked += 1;
-          late = onLate;
+          if (onLate) late = onLate;
           return null;
         },
       });
@@ -642,7 +642,7 @@ describe('App', () => {
       let late: (token: string) => void = () => {};
       const { app, hub, session } = make({
         askSession: async (onLate) => {
-          late = onLate;
+          if (onLate) late = onLate;
           return null;
         },
       });
