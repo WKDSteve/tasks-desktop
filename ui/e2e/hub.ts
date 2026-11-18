@@ -22,7 +22,7 @@ export const origin = (): string => `http://127.0.0.1:${port()}`;
  */
 export const RUN_ROOT_NAME = 'tasks-desktop-e2e';
 
-const exe = join(repo, 'target', 'debug', process.platform === 'win32' ? 'tasks-hub.exe' : 'tasks-hub');
+export const exe = join(repo, 'target', 'debug', process.platform === 'win32' ? 'tasks-hub.exe' : 'tasks-hub');
 
 /** Titles and bodies an attacker could write into a vault. */
 export const HOSTILE: { slug: string; title: string; body: string; front?: string[] }[] = [

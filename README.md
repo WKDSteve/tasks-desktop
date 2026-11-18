@@ -402,6 +402,21 @@ says so. `install --autostart` that fails in a later step takes its login entry 
 hub before it removes the entry and the links. `TASKS_DESKTOP_ALONE_SECS` (1 to 86400) sets another time than the
 ten minutes.
 
+**What an open page does then.** "A page" is a connection, not a tab: a browser that puts a background tab to sleep
+(the memory saver of Chrome, sleeping tabs of Edge) closes it, so a hub can end while its tab is still there. The page
+notices (its event stream broke and `hello` does not answer) and says so in a quiet line above the view, with the way
+to start the hub again ("Tasks" in the Start menu, or `tasks-hub start --open`); a page in a browser cannot start a
+program itself. The list, the open task and what you typed stay where they are, and what is not saved is named as not
+saved. When a hub answers again:
+
+- the same one (it was only out of reach): the page reads again and goes on by itself;
+- a new one (started anew, so it knows nothing of the old session): the page says that it needs the new link and
+  keeps everything on the screen meanwhile. Come back to the old tab once the start has opened its own page: the old
+  tab takes that session over when it gets the focus. Or paste the link of `tasks-hub open` into the address bar of
+  the old tab. Either way the page goes on where it stood, with what you typed.
+
+A session that the hub of the page itself refuses (it was ended there) still empties the page and asks to pair.
+
 ## Look at the current state
 
 `tools/dev-hub.ps1` builds this checkout (UI, then the hub with the interface embedded) and runs the hub from

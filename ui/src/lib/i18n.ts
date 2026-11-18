@@ -1168,6 +1168,13 @@ const en = {
   'state.offline.title': 'The hub is not reachable',
   'state.offline.body': 'Start it with the command below. This page tries again by itself.',
   'state.stale': 'Showing the last known list ({age} old). Waiting for the hub.',
+  'hub.gone':
+    'The hub is not running any more. A hub in the background ends itself ten minutes after its last page, and a tab the browser put to sleep is no page. Start it again: "Tasks" in the Start menu, or in a terminal',
+  'hub.gone.then': 'This page connects again by itself as soon as the hub answers.',
+  'hub.replaced':
+    'The hub was started anew, and this page is still paired with the one before. Come back to this tab once the start has opened its page (this tab then takes the session over), or paste the link this prints into the address bar of this tab:',
+  'hub.replaced.refused': 'The new hub did not take this page. Get a fresh link (tasks-hub open) and try again.',
+  'hub.unsaved': 'What you typed is still here, but it is not saved yet.',
   'today.next': 'Next task',
   'today.why.freed': 'Freed: what it waited for is done',
   'today.why.area': 'Same area as your last work',
@@ -3303,6 +3310,13 @@ const de: Record<Key, string> = {
   'state.offline.title': 'Der Hub ist nicht erreichbar',
   'state.offline.body': 'Starte ihn mit dem Befehl unten. Diese Seite versucht es selbst erneut.',
   'state.stale': 'Zeigt die zuletzt bekannte Liste ({age} alt). Wartet auf den Hub.',
+  'hub.gone':
+    'Der Hub läuft nicht mehr. Ein Hub im Hintergrund beendet sich zehn Minuten nach seiner letzten Seite, und ein Tab, den der Browser schlafen gelegt hat, zählt nicht als Seite. Starte ihn neu: „Tasks“ im Startmenü oder im Terminal',
+  'hub.gone.then': 'Diese Seite verbindet sich von selbst wieder, sobald der Hub antwortet.',
+  'hub.replaced':
+    'Der Hub wurde neu gestartet, und diese Seite ist noch mit dem alten gekoppelt. Komm in diesen Tab zurück, sobald der Start seine Seite geöffnet hat (dieser Tab übernimmt dann die Sitzung), oder füge den Link, den das hier ausgibt, in die Adresszeile dieses Tabs ein:',
+  'hub.replaced.refused': 'Der neue Hub hat diese Seite nicht angenommen. Hol dir einen frischen Link (tasks-hub open) und versuch es erneut.',
+  'hub.unsaved': 'Was du getippt hast, steht noch da, ist aber noch nicht gespeichert.',
   'today.next': 'Nächster Task',
   'today.why.freed': 'Frei geworden: worauf er wartete, ist erledigt',
   'today.why.area': 'Gleicher Bereich wie deine letzte Arbeit',

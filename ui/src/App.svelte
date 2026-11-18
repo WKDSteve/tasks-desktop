@@ -41,6 +41,7 @@
   import { rowActionsMenuItems } from './lib/rowActionsMenu';
   import ConflictCenter from './views/ConflictCenter.svelte';
   import SetupCard from './views/SetupCard.svelte';
+  import HubNotice from './views/HubNotice.svelte';
   import Toast from './views/Toast.svelte';
   import Lazy from './views/Lazy.svelte';
 
@@ -860,6 +861,7 @@
         {#if app.readOnly}
           <p class="banner" role="status">{t('web.readonly.banner')}</p>
         {/if}
+        <HubNotice {app} />
         {#if app.cachedAt !== null}
           <p class="banner">{t('state.stale', { age })}</p>
         {/if}

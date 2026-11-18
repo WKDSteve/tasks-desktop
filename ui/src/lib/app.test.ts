@@ -186,6 +186,8 @@ describe('App', () => {
     app.pairRefused = true;
     app.pairLimited = true;
     hub.onUnauthorized();
+    // The page asks the hub who it is before it lets go (a new hub is not a lost session): one answer later.
+    await new Promise((resolve) => setTimeout(resolve, 0));
     expect(app.phase).toBe('needs_pairing');
     expect(app.pairRefused).toBe(false);
     expect(app.pairLimited).toBe(false);
@@ -739,6 +741,8 @@ describe('App', () => {
     await app.start(null);
     expect(app.tasks.length).toBe(1);
     hub.onUnauthorized();
+    // The page asks the hub who it is before it lets go (a new hub is not a lost session): one answer later.
+    await new Promise((resolve) => setTimeout(resolve, 0));
     expect(app.phase).toBe('needs_pairing');
     expect(app.tasks).toEqual([]);
     expect(session.has('tasks-desktop.session')).toBe(false);
@@ -4870,6 +4874,8 @@ describe('what the reviews of the matrix, the inbox and the check found', () => 
     await app.openChecks();
     expect(app.graph).not.toBeNull();
     hub.onUnauthorized();
+    // The page asks the hub who it is before it lets go (a new hub is not a lost session): one answer later.
+    await new Promise((resolve) => setTimeout(resolve, 0));
     expect(app.graph).toBeNull();
     expect(app.matrix).toBeNull();
     expect(app.checking).toBe(false);
@@ -5726,6 +5732,8 @@ describe('the saved views', () => {
     await m.app.start(null);
     await vi.waitFor(() => expect(m.app.viewsState.list.map((v) => v.id)).toEqual(['pub/mine']));
     m.hub.onUnauthorized();
+    // The page asks the hub who it is before it lets go (a new hub is not a lost session): one answer later.
+    await new Promise((resolve) => setTimeout(resolve, 0));
     expect(m.app.viewsState.doc).toBeNull();
     expect(m.app.viewsState.groupings).toBeNull();
   });
@@ -6556,6 +6564,8 @@ describe('App, attaching a screenshot', () => {
     await m.app.attachScreenshot('pub/a');
     expect(m.app.attached).not.toBeNull();
     m.hub.onUnauthorized();
+    // The page asks the hub who it is before it lets go (a new hub is not a lost session): one answer later.
+    await new Promise((resolve) => setTimeout(resolve, 0));
     expect(m.app.attached).toBeNull();
   });
 

@@ -250,6 +250,10 @@ export const TOKEN_KEY = 'tasks-desktop.session';
 /** A pairing code the hub turned away for too many attempts (429) is still good: it is traded again a few times. */
 export const EXCHANGE_RETRIES = 3;
 const EXCHANGE_RETRY_MS = 3000;
+/** How long the page waits between two questions to a hub that does not answer (`App.watchHub`). */
+export const HUB_PROBE_MS = 3000;
+/** Where the hub of the page is (`App.hubState`). */
+export type HubState = 'here' | 'gone' | 'replaced';
 /** The saved view that was open last (its id). */
 const OPEN_VIEW_KEY = 'tasks-desktop.view-open';
 /** The key the palette remembers a choice of a saved view under (`view.<id>` of `paletteActions`, as an action). */
@@ -4154,6 +4158,8 @@ export class App {
     for (;;) {
       try {
         const hello = await this.env.hub.hello();
+        this.#hubInstance = hello.instance;
+        this.hubState = 'here';
         this.appVersion = hello.build ? `${hello.version} (${hello.build})` : hello.version;
         if (!hello.engine.ready) {
           this.problem = hello.engine.problem ?? 'unknown';
@@ -4273,6 +4279,11 @@ export class App {
    */
   offerCode(code: string): void {
     if (this.sessionHeld) return;
+    // A page that outlived its hub pairs with the new one where it stands: a start anew would throw away what is typed.
+    if (this.hubState === 'replaced') {
+      void this.pairAgain({ code });
+      return;
+    }
     this.pendingCode = code;
     if (this.phase === 'needs_pairing') void this.start(code);
   }
@@ -4303,7 +4314,153 @@ export class App {
   /** The session of this tab was confirmed (a token held for the cached list only is not that). */
   private sessionHeld = false;
 
+  /**
+   * Where the hub of this page is. `gone`: it does not answer (a hub in the background ends itself ten minutes after
+   * its last page, and a tab the browser put to sleep is no page). `replaced`: a hub answers, but not the one the page
+   * was paired with; its session ended with the old hub. In both the page keeps what it shows and what was typed into
+   * it, and says how to go on (App.svelte); nothing is written until a hub takes it again.
+   */
+  hubState = $state<HubState>('here');
+  /** The instance of the hub the page was started with (`hello`); null before the first answer and in the web variant. */
+  #hubInstance: string | null = null;
+  #watchingHub = false;
+  #judgingLoss = false;
+
+  /** The instance of the hub that answers now, or null when none does. `hello` needs no session. */
+  private async hubNow(): Promise<string | null> {
+    try {
+      return (await this.env.hub.hello()).instance;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * A request or the stream failed without an answer: ask the hub who it is until one answers. The same hub: the page
+   * reads again and its stream connects at once. Another one: `newHub`. One watcher at a time; none in the web variant
+   * (no hub) or before the page knew its hub.
+   */
+  private async watchHub(): Promise<void> {
+    if (this.#watchingHub || this.stopped || this.env.mode === 'web' || this.#hubInstance === null) return;
+    if (this.hubState === 'replaced') return;
+    this.#watchingHub = true;
+    try {
+      for (;;) {
+        const instance = await this.hubNow();
+        // (Read anew: another answer may have found a new hub while this one was awaited.)
+        if (this.stopped || (this.hubState as HubState) === 'replaced') return;
+        if (instance === null) {
+          this.hubState = 'gone';
+          await this.env.sleep(HUB_PROBE_MS);
+          if (this.stopped) return;
+          continue;
+        }
+        if (instance !== this.#hubInstance) {
+          this.newHub();
+          return;
+        }
+        const was = this.hubState;
+        this.hubState = 'here';
+        if (was === 'gone') {
+          // Not at the end of the stream's backoff (up to half a minute): now.
+          this.#wakeStream?.();
+          void this.refresh();
+        }
+        return;
+      }
+    } finally {
+      this.#watchingHub = false;
+    }
+  }
+
+  /**
+   * Before the stream tries again: is the hub still the one of this page? A new one would refuse the stream (401), and
+   * that refusal would empty the page (`dropSession`); asked first, the page keeps what it shows.
+   */
+  private async beforeStreamRetry(): Promise<void> {
+    if (this.stopped || this.env.mode === 'web' || this.#hubInstance === null || this.hubState === 'replaced') return;
+    const instance = await this.hubNow();
+    if (this.stopped) return;
+    if (instance === null) void this.watchHub();
+    else if (instance !== this.#hubInstance) this.newHub();
+    else if (this.hubState === 'gone') this.hubState = 'here';
+  }
+
+  /**
+   * Another hub answers than the one the page was paired with (the old one ended, a new one was started). The session
+   * is gone with the old hub, so nothing more is asked with it; the list, the open task and what was typed stay on the
+   * page until the new hub takes it (`pairAgain`).
+   */
+  private newHub(): void {
+    if (this.hubState === 'replaced') return;
+    this.hubState = 'replaced';
+    this.sessionHeld = false;
+    this.pairRefused = false;
+    this.pairLimited = false;
+    safe(() => this.env.session.removeItem(TOKEN_KEY));
+    this.env.hub.setToken(null);
+    this.stream.cut();
+    this.connection = 'offline';
+  }
+
+  /**
+   * The page takes the new hub: with a pairing code (a link pasted into this tab) or with the session of the tab the
+   * new start opened. Nothing of the page is thrown away; the list is read again and the stream follows. A code or a
+   * session the hub refuses leaves the page as it was, and says so.
+   */
+  private async pairAgain(by: { code: string } | { token: string }): Promise<void> {
+    if (this.hubState !== 'replaced' || this.#pairingAgain) return;
+    this.#pairingAgain = true;
+    try {
+      const instance = await this.hubNow();
+      if (instance === null) return;
+      const token = 'code' in by ? await this.env.hub.exchange(by.code) : by.token;
+      safe(() => this.env.session.setItem(TOKEN_KEY, token));
+      this.env.hub.setToken(token);
+      this.env.hub.onUnauthorized = () => this.lostSession();
+      this.#hubInstance = instance;
+      this.sessionHeld = true;
+      this.hubState = 'here';
+      await this.refresh();
+      if (!this.env.hub.hasToken || this.stopped) return;
+      void this.followStream();
+    } catch {
+      this.say('error', 'hub.replaced.refused');
+    } finally {
+      this.#pairingAgain = false;
+    }
+  }
+  #pairingAgain = false;
+
+  /** The tab got the focus while it waits for a new hub: an open tab of the page may hold a session of it by now. */
+  private async askForNewSession(): Promise<void> {
+    if (this.hubState !== 'replaced' || !this.env.askSession) return;
+    const token = await this.env.askSession((late) => void this.pairAgain({ token: late }));
+    if (token) await this.pairAgain({ token });
+  }
+
+  /**
+   * The hub refused the session (a 401). When another hub answers than the one of this page, that is `newHub` and the
+   * page stays as it is; any other refusal (the session was ended, the hub forgot it) empties the page as before.
+   * The hub is asked only while the stream is down: a live stream is of the page's own hub.
+   */
   private lostSession(): void {
+    if (this.hubState === 'replaced') return;
+    const ask = !this.stopped && this.#hubInstance !== null && this.env.mode !== 'web' && !this.stream.open && this.sessionHeld;
+    if (!ask) {
+      this.dropSession();
+      return;
+    }
+    if (this.#judgingLoss) return;
+    this.#judgingLoss = true;
+    void this.hubNow().then((instance) => {
+      this.#judgingLoss = false;
+      if (!this.stopped && instance !== null && instance !== this.#hubInstance) this.newHub();
+      else this.dropSession();
+    });
+  }
+
+  private dropSession(): void {
     this.sessionHeld = false;
     // The loss is not about a code that was refused at the start.
     this.pairRefused = false;
@@ -4409,6 +4566,7 @@ export class App {
       }
       if (this.tasks.length === 0) this.phase = 'offline';
       this.connection = 'offline';
+      void this.watchHub();
     }
   }
 
@@ -4925,6 +5083,8 @@ export class App {
     // A window the hub refused a stream (too many windows) tries again now, not at the end of its backoff: the window
     // that was closed to make room is often what gave this one the focus.
     if (this.streamsFull) this.#wakeStream?.();
+    // A page that outlived its hub: the tab the new start opened may hand over its session now.
+    if (this.hubState === 'replaced') void this.askForNewSession();
     // Not before the hub has confirmed the session: a page on the cached list holds the token already.
     if (this.phase !== 'ready' || !this.sessionHeld) return;
     // hub-desktop can switch the start at login too (the tile, in another window): the Options menu shows what is true now.
@@ -4984,7 +5144,12 @@ export class App {
       url: () => this.env.hub.url('/api/tasks/events'),
       bearer: () => this.env.hub.bearer,
       hasToken: () => this.env.hub.hasToken,
-      sleep: (ms) => this.streamSleep(ms),
+      sleep: async (ms) => {
+        // The stream broke: said at once when no hub answers, and asked again right before the next try.
+        void this.watchHub();
+        await this.streamSleep(ms);
+        await this.beforeStreamRetry();
+      },
       // What happened while the stream was down.
       onOpen: () => void this.refresh(),
       onMessage: (m) => this.onMessage(m),

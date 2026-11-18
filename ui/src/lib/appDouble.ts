@@ -145,9 +145,11 @@ export class FakeHub {
   url(p: string) {
     return p;
   }
+  /** The instance `hello` names: another one is a hub that was started anew. */
+  instance = 'i';
   async hello() {
     if (this.hubDown) throw new Error('down');
-    return { instance: 'i', version: '0', engine: { ready: this.engineReady, problem: 'x', capabilities: this.capabilities } };
+    return { instance: this.instance, version: '0', engine: { ready: this.engineReady, problem: 'x', capabilities: this.capabilities } };
   }
   /** Each answer of `about` waits for the next of these gates first (none: it answers at once). */
   aboutGates: Promise<void>[] = [];
