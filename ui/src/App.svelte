@@ -38,7 +38,6 @@
   import { installTaskApart } from './lib/taskApart';
   import { createContextRegistry, taskTarget, viewTarget } from './lib/context';
   import { vaultMenuItems, vaultMenuOpened } from './lib/vaultMenu';
-  import { rowActionsMenuItems } from './lib/rowActionsMenu';
   import ConflictCenter from './views/ConflictCenter.svelte';
   import SetupCard from './views/SetupCard.svelte';
   import HubNotice from './views/HubNotice.svelte';
@@ -647,13 +646,6 @@
           },
           {
             kind: 'check',
-            label: t('menu.hide_learning'),
-            hint: t('hint.item.menu.hide_learning'),
-            checked: app.learningHidden,
-            onselect: () => app.setLearningHidden(!app.learningHidden),
-          },
-          {
-            kind: 'check',
             label: t('menu.bar_areas'),
             hint: t('hint.item.menu.bar_areas'),
             checked: app.barAreas,
@@ -711,7 +703,6 @@
                     onselect: () => {},
                   },
                 ]),
-          ...rowActionsMenuItems(app),
           { kind: 'section', label: t('menu.sec.export') },
           { kind: 'info', label: t('menu.export_where') },
           ...(fromDisk

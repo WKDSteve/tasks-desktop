@@ -452,8 +452,8 @@
     onlive={(columns) => (app.listColumns = columns)}
     oncommit={(columns) => app.setListColumns(columns)}
   >
-    <!-- The place the bar of a row takes, kept in the head too (never drawn, never reached). -->
-    {#snippet tail()}{#if shown[0]}<span class="actions-space" aria-hidden="true" inert><RowActions {app} task={shown[0]} /></span>{/if}{/snippet}
+    <!-- The place the bar takes in a row where every row shows it, kept in the head too (never drawn, never reached). -->
+    {#snippet tail()}{#if app.rowActions.always && shown[0]}<span class="actions-space" aria-hidden="true" inert><RowActions {app} task={shown[0]} /></span>{/if}{/snippet}
   </ListColumnsHead>
   <div class="rows" class:zebra={app.zebra} data-areas={layout}>
     {#snippet row(task: TaskEntry, band: boolean)}

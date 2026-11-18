@@ -45,7 +45,7 @@
 </script>
 
 {#if offered.length > 0}
-  <span class="row-actions" class:shown={barShown(app.rowActions, selected)} role="group" aria-label={t('rowact.group', { id: task.id })}>
+  <span class="row-actions" class:shown={barShown(app.rowActions, selected)} class:always={app.rowActions.always} role="group" aria-label={t('rowact.group', { id: task.id })}>
     {#each offered as action (action)}
       {#if action === 'move'}
         <button
@@ -114,15 +114,37 @@
 {/if}
 
 <style>
-  /* Hidden, not gone: the bar keeps its width in every row, so nothing jumps when the pointer goes over the list, and
-     a hidden button is out of the order of the keyboard until its row has the focus. */
+  /* The bar lies over the end of its row (the marks of the row that is meant), on the ground of that row: it takes no
+     width from the row, so nothing moves when the pointer goes over the list and a narrow window cuts no title for it.
+     Hidden, not gone: a hidden button is out of the order of the keyboard until its row has the focus. */
+  :global(.row-host) {
+    position: relative;
+  }
   .row-actions {
     visibility: hidden;
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    right: 0;
     display: inline-flex;
-    flex: none;
     align-items: center;
     gap: 0.25rem;
-    margin: 0 0.4rem;
+    padding: 0 0.4rem;
+    background: var(--surface-2);
+  }
+  /* A row of the list that is narrow (a small window, the columns dragged wide) has no end to spare: its title is cut
+     already and the bar would lie on it. There the bar is not drawn; the context menu of the row has the same. The
+     rows that are a container say so themselves (`row-line`, TaskRow). */
+  @container row-line (max-width: 52rem) {
+    .row-actions:not(.always) {
+      display: none;
+    }
+  }
+  /* Always shown: beside the marks, in the row (which gives the room), not over them. */
+  .row-actions.always {
+    position: static;
+    flex: none;
+    background: none;
   }
   .row-actions.shown,
   :global(.row-host:hover) > .row-actions,

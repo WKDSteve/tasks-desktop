@@ -7802,7 +7802,7 @@ test('the actions of a row: only on the row under the pointer or with the focus,
   const drawn = () =>
     page.locator('.rows [data-row-action]').evaluateAll((els) =>
       els
-        .filter((el) => getComputedStyle(el).visibility === 'visible')
+        .filter((el) => getComputedStyle(el).visibility === 'visible' && el.getClientRects().length > 0)
         .map((el) => `${el.closest('.row-host')?.querySelector('.id')?.textContent ?? '?'}:${el.getAttribute('data-row-action') ?? ''}`),
     );
   const idOf = async (n: number) => (await hosts.nth(n).locator('.id').innerText()).trim();
@@ -7843,11 +7843,21 @@ test('the actions of a row: only on the row under the pointer or with the focus,
   await page.keyboard.press('Escape');
   await expect(asking).toHaveCount(0);
 
-  // More actions are a choice in Options, each for itself.
-  await page.getByRole('menuitem', { name: 'Options', exact: true }).click();
-  await page.getByRole('menuitemcheckbox', { name: 'Row action: set the status' }).click();
-  await page.getByRole('menuitem', { name: 'Options', exact: true }).click();
-  await page.getByRole('menuitemcheckbox', { name: 'Row action: copy the id' }).click();
+  // More actions are a choice in Options > Defaults, each for itself.
+  const defaults = page.getByRole('dialog', { name: 'Defaults' });
+  const openDefaults = async () => {
+    await page.getByRole('menuitem', { name: 'Options', exact: true }).click();
+    await page.getByRole('menuitem', { name: 'Defaults ...' }).click();
+    await expect(defaults).toBeVisible();
+  };
+  const actionsOf = defaults.getByRole('group', { name: 'Actions at the end of a row' });
+  await openDefaults();
+  await expect(actionsOf.getByRole('checkbox', { name: 'Move to another area' })).toBeChecked();
+  await actionsOf.getByRole('checkbox', { name: 'Set the status' }).check();
+  await actionsOf.getByRole('checkbox', { name: 'Copy the id' }).check();
+  await expectAccessible(page, 'the choice of the actions of a row');
+  await defaults.getByRole('button', { name: 'Close' }).click();
+  await expect(defaults).toHaveCount(0);
   await page.getByRole('searchbox', { name: /search/i }).first().fill('Rowact a001');
   const mine = page.locator('.rows .row-host', { hasText: 'Rowact a001' });
   await expect(hosts).toHaveCount(1);
@@ -7865,13 +7875,24 @@ test('the actions of a row: only on the row under the pointer or with the focus,
   await expect(status).toHaveValue('doing');
   expect(readFileSync(file, 'utf8')).toContain('status: doing');
 
+  // A narrow list has no end to spare (its titles are cut already): the bar is not drawn there, and comes back.
+  await page.setViewportSize({ width: 800, height: 720 });
+  await mine.hover();
+  expect(await drawn()).toEqual([]);
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await mine.hover();
+  expect((await drawn()).length).toBe(3);
+
   // Always: every row draws its bar, without the pointer; the choice holds over a reload.
   await page.getByRole('searchbox', { name: /search/i }).first().fill('');
   await expect(hosts.nth(2)).toBeVisible();
-  await page.getByRole('menuitem', { name: 'Options', exact: true }).click();
-  await page.getByRole('menuitemcheckbox', { name: 'Always show the row actions' }).click();
+  await openDefaults();
+  await actionsOf.getByRole('checkbox', { name: 'Show them in every row, all the time' }).check();
+  await defaults.getByRole('button', { name: 'Close' }).click();
   await page.mouse.move(0, 0);
   expect((await drawn()).length).toBe((await hosts.count()) * 3);
+  // Now the bar stands in the row, and the head keeps its place: the columns of both end at the same edge.
+  expect(await edge(page.locator('.table .head .cols'))).toBe(await edge(hosts.nth(1).locator('button.row')));
   await page.reload();
   await expect(page.getByRole('menubar')).toBeVisible();
   await showList(page);
@@ -8000,19 +8021,25 @@ test('a learning task carries its mark in the list and on the board, the filter 
   expect(rows).toBeGreaterThan(0);
   expect(await page.locator('.rows .row-host [data-learning]').count()).toBe(rows);
 
-  // Hidden in the views and the overview is a switch of Options, off as the page comes and kept in the browser.
-  const options = page.getByRole('menuitem', { name: 'Options', exact: true });
-  const hide = page.getByRole('menuitemcheckbox', { name: 'Hide learning tasks in the views and the overview' });
-  await options.click();
-  await expect(hide).toHaveAttribute('aria-checked', 'false');
-  await hide.click();
+  // Hidden in the views and the overview is a switch of Options > Defaults, off as the page comes and kept in the browser.
+  const defaults = page.getByRole('dialog', { name: 'Defaults' });
+  const hide = defaults.getByRole('checkbox', { name: 'Hide learning tasks in the views and the overview' });
+  const openDefaults = async () => {
+    await page.getByRole('menuitem', { name: 'Options', exact: true }).click();
+    await page.getByRole('menuitem', { name: 'Defaults ...' }).click();
+    await expect(defaults).toBeVisible();
+  };
+  await openDefaults();
+  await expect(hide).not.toBeChecked();
+  await hide.check();
+  await defaults.getByRole('button', { name: 'Close' }).click();
   // The list keeps them: its own filter says what it shows.
   await expect(page.locator('button.row', { hasText: 'Learnq l001' })).toBeVisible();
   await page.reload();
   await expect(page.getByRole('menubar')).toBeVisible();
-  await options.click();
-  await expect(hide).toHaveAttribute('aria-checked', 'true');
-  await page.keyboard.press('Escape');
+  await openDefaults();
+  await expect(hide).toBeChecked();
+  await defaults.getByRole('button', { name: 'Close' }).click();
   removeFile(file);
 });
 

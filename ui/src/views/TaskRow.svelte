@@ -147,6 +147,8 @@
     display: flex;
     align-items: center;
     border-bottom: 1px solid var(--border);
+    /* The bar of actions asks how wide the row is (RowActions.svelte). */
+    container: row-line / inline-size;
   }
   /* The band of the area: on the line, so the mark of the selected row (inside the button) stays beside it. */
   .line.banded {

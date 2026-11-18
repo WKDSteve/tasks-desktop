@@ -9,6 +9,7 @@
   import { floating } from '../lib/floating';
   import { translate, type Key } from '../lib/i18n';
   import { SORT_GROUPS } from '../lib/sort';
+  import { ROW_ACTIONS, toggleRowAction } from '../lib/rowActions';
 
   let { app, open, onclose }: { app: App; open: boolean; onclose: () => void } = $props();
   const t = (key: Key, params: Record<string, string | number> = {}) => translate(app.lang, key, params);
@@ -114,6 +115,10 @@
         <input type="checkbox" checked={app.zebra} onchange={(e) => app.setZebra(e.currentTarget.checked)} />
         {t('menu.zebra')}
       </label>
+      <label class="check" data-hint={t('hint.item.menu.hide_learning')}>
+        <input type="checkbox" data-pref="hide-learning" checked={app.learningHidden} onchange={(e) => app.setLearningHidden(e.currentTarget.checked)} />
+        {t('menu.hide_learning')}
+      </label>
       <label class="check" data-hint={t('hint.item.menu.bar_areas')}>
         <input type="checkbox" checked={app.barAreas} onchange={(e) => app.setBarAreas(e.currentTarget.checked)} />
         {t('menu.bar_areas')}
@@ -135,6 +140,31 @@
         placeholder={t('defaults.claim_name.none')}
         onchange={(e) => app.setClaimName(e.currentTarget.value)}
       />
+    </fieldset>
+
+    <!-- The actions at the end of a row of a list: each for itself, none forced (lib/rowActions.ts). -->
+    <fieldset data-testid="defaults-row-actions">
+      <legend>{t('menu.sec.row_actions')}</legend>
+      {#each ROW_ACTIONS as action (action)}
+        <label class="check" data-hint={t('hint.item.menu.rowact')}>
+          <input
+            type="checkbox"
+            data-row-action-pref={action}
+            checked={app.rowActions.shown.includes(action)}
+            onchange={() => app.setRowActions(toggleRowAction(app.rowActions, action))}
+          />
+          {t(`menu.rowact.${action}`)}
+        </label>
+      {/each}
+      <label class="check" data-hint={t('hint.item.menu.rowact.always')}>
+        <input
+          type="checkbox"
+          data-row-action-pref="always"
+          checked={app.rowActions.always}
+          onchange={(e) => app.setRowActions({ ...app.rowActions, always: e.currentTarget.checked })}
+        />
+        {t('menu.rowact.always')}
+      </label>
     </fieldset>
 
     <fieldset data-testid="defaults-layout">

@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import { make } from './appDouble';
-import { translate } from './i18n';
 import {
   DEFAULT_ROW_ACTIONS,
   ROW_ACTIONS,
@@ -11,7 +10,6 @@ import {
   toggleRowAction,
   type RowActionPrefs,
 } from './rowActions';
-import { rowActionsMenuItems } from './rowActionsMenu';
 
 const all: RowActionPrefs = { shown: ROW_ACTIONS, always: false };
 const caps = { move: true, write: true, machine: true };
@@ -67,23 +65,6 @@ describe('the actions at the end of a row: the page', () => {
     again.app.resetToFactory();
     expect(again.app.rowActions).toEqual(DEFAULT_ROW_ACTIONS);
     expect(make({ token: 't', prefs: again.prefs }).app.rowActions).toEqual(DEFAULT_ROW_ACTIONS);
-    m.app.stop();
-  });
-
-  it('has a switch for every action in the menu Options, and one to show them always', () => {
-    const m = make({ token: 't' });
-    const checks = () => rowActionsMenuItems(m.app).filter((item) => item.kind === 'check');
-    expect(checks().map((item) => [item.label, item.checked])).toEqual([
-      ...ROW_ACTIONS.map((action) => [translate(m.app.lang, `menu.rowact.${action}`), action === 'move']),
-      [translate(m.app.lang, 'menu.rowact.always'), false],
-    ]);
-    checks()[3]?.onselect();
-    checks()[6]?.onselect();
-    expect(m.app.rowActions).toEqual({ shown: ['move', 'finish'], always: true });
-    // Switched off again: nothing is forced, the bar can be emptied.
-    checks()[0]?.onselect();
-    checks()[3]?.onselect();
-    expect(m.app.rowActions).toEqual({ shown: [], always: true });
     m.app.stop();
   });
 });
