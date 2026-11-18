@@ -9043,6 +9043,9 @@ test('"Suggest fields" fills the new-task form from a text; asks before the text
             status: 200,
             body: {
               id: '0123456789abcdef',
+              // As ai-desktop names a job: the hub acts only on a draft it sent.
+              source: 'tasks-desktop',
+              kind: 'draft-task',
               status: 'done',
               output: 'the whole answer',
               draft: {
@@ -9057,7 +9060,7 @@ test('"Suggest fields" fills the new-task form from a text; asks before the text
               },
             },
           }
-        : { status: 200, body: { id: '0123456789abcdef', status: 'needs_confirmation' } };
+        : { status: 200, body: { id: '0123456789abcdef', source: 'tasks-desktop', kind: 'draft-task', status: 'needs_confirmation' } };
     }
     return { status: 404, body: { error: { message: 'no such route' } } };
   });
