@@ -143,6 +143,7 @@ fn suggestions(root: &std::path::Path, taken: &[PathBuf]) -> (Vec<String>, bool)
     let mut names: Vec<String> = entries
         .filter_map(Result::ok)
         .filter(|e| e.file_type().is_ok_and(|t| t.is_dir()))
+        .filter(|e| !hidden_on_disk(e))
         .filter_map(|e| e.file_name().into_string().ok())
         .filter(|name| suggestion_name(name))
         .filter(|name| {
@@ -154,6 +155,25 @@ fn suggestions(root: &std::path::Path, taken: &[PathBuf]) -> (Vec<String>, bool)
     let more = names.len() > SUGGEST_MAX;
     names.truncate(SUGGEST_MAX);
     (names, more)
+}
+
+/// Whether the folder of `entry` is hidden by the file system: on Windows the attributes hidden or system (what
+/// Explorer leaves out, `$RECYCLE.BIN` and `System Volume Information` of a drive root), elsewhere nothing beyond the
+/// leading dot `suggestion_name` refuses. The attributes come with the listing, no further look at the disk.
+fn hidden_on_disk(entry: &std::fs::DirEntry) -> bool {
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::MetadataExt;
+        const HIDDEN_OR_SYSTEM: u32 = 0x2 | 0x4;
+        entry
+            .metadata()
+            .map_or(true, |m| m.file_attributes() & HIDDEN_OR_SYSTEM != 0)
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = entry;
+        false
+    }
 }
 
 /// Whether two paths name one folder as the person writes them: the separators and, on Windows, the case of the
@@ -417,5 +437,31 @@ pub(super) async fn repo_open(State(st): State<Arc<Shared>>, body: Bytes) -> Res
             "open_failed",
             "the start stopped unexpectedly",
         ),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// `REPOS_DIR` on a drive root: the folders Windows keeps there (hidden, system) are no suggestion; the plain ones
+    /// are.
+    #[cfg(windows)]
+    #[test]
+    fn a_drive_root_suggests_no_folder_windows_hides() {
+        let drive = std::env::var("SystemDrive").unwrap_or_else(|_| "C:".to_owned());
+        let root = PathBuf::from(format!("{drive}\\"));
+        let (names, _) = suggestions(&root, &[]);
+        for hidden in ["$Recycle.Bin", "System Volume Information"] {
+            if root.join(hidden).exists() {
+                assert!(
+                    !names.iter().any(|n| n.eq_ignore_ascii_case(hidden)),
+                    "{hidden} in {names:?}"
+                );
+            }
+        }
+        if root.join("Windows").is_dir() {
+            assert!(names.iter().any(|n| n == "Windows"), "{names:?}");
+        }
     }
 }
