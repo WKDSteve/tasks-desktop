@@ -387,6 +387,11 @@ fn app_routes(core: &Arc<Shared>) -> Router<Arc<Shared>> {
             &r("draft_job"),
             post(draft_job).layer(DefaultBodyLimit::max(small)),
         )
+        // A review or a prepared decision: where it stands, its answer taken apart by the engine.
+        .route(
+            &r("agent_result"),
+            post(agent_result).layer(DefaultBodyLimit::max(small)),
+        )
         .route(
             &r("draft_confirm"),
             post(draft_confirm).layer(DefaultBodyLimit::max(small)),

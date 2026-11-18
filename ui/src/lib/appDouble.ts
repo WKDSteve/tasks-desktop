@@ -79,6 +79,19 @@ export class FakeHub {
     if (this.agentRefusal) throw this.agentRefusal;
     return this.agentAnswer;
   };
+  /** A review or a prepared decision: what `agent_result` answers, one each (the last one again), and what was asked. */
+  resultQueue: unknown[] = [];
+  resultCalls: { job: string; id: string; kind: string }[] = [];
+  agentResult = async (job: string, id: string, kind: string) => {
+    this.resultCalls.push({ job, id, kind });
+    const next = this.resultQueue.length > 1 ? this.resultQueue.shift() : this.resultQueue[0];
+    if (next instanceof ApiError) throw next;
+    return next ?? { status: 'running' };
+  };
+  confirmed: string[] = [];
+  confirmDraft = async (job: string) => {
+    this.confirmed.push(job);
+  };
   token: string | null = null;
   onUnauthorized: () => void = () => {};
   doc: Snapshot = snapshot([task('pub/a', { etag: 'e1' })]);

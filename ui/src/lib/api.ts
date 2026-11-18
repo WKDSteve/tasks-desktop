@@ -41,6 +41,8 @@ export type Op =
   | { op: 'append_note'; id: string; text: string; if_match?: string }
   | { op: 'add_steps'; id: string; steps: string[]; if_match?: string }
   | { op: 'set_body'; id: string; body: string; if_match?: string }
+  /** One `## ` section of a task, open or finished: replaced, or added at the end (a review, a prepared decision). */
+  | { op: 'set_section'; id: string; heading: string; text: string; if_match?: string }
   | { op: 'move_area'; id: string; to_area: string; if_match?: string }
   /** A saved view: `area` alone makes a new one, `id` replaces that one (on the version read). */
   | { op: 'view_save'; id?: string; area?: string; view: ViewForm; if_match?: string }
@@ -134,6 +136,7 @@ export interface AgentTab {
 export type { DraftChoices, DraftJob, DraftState } from './suggestFields';
 import type { SplitJob, SplitState } from './split';
 import type { DraftChoices, DraftJob, DraftState } from './suggestFields';
+import type { AnswerKind, AnswerState } from './agentAnswer';
 
 /** What a job asks of the agent (`kind` of ai-desktop's `POST /jobs`). */
 export type AgentKind = 'handoff' | 'review-done' | 'prepare-decision';
@@ -425,6 +428,14 @@ export class Hub extends HubClient<Snapshot> {
    */
   sendDraft(text: string, choices: DraftChoices): Promise<DraftJob> {
     return this.postJson<DraftJob>('/api/tasks/draft', { text, choices });
+  }
+
+  /**
+   * Where a review or a prepared decision stands: its status and, once done, the answer taken apart by the engine
+   * (`sections` to adopt, a review's `follow_up`, a decision's `questions_added`).
+   */
+  agentResult(job: string, id: string, kind: AnswerKind): Promise<AnswerState> {
+    return this.postJson<AnswerState>('/api/tasks/agent_result', { job, id, kind });
   }
 
   /** Where a draft stands: its status and, once done, `draft` or `draft_error`. */

@@ -15,7 +15,10 @@
 //! * `.fake-bodies-page`: how many bodies one page holds;
 //! * `.fake-snapshot-ms`: a `snapshot` takes that long (an engine started slowly on a busy machine);
 //! * `.fake-task-ms`, `.fake-task-calls`: a `task` read takes that long, and every one is counted;
-//! * `.fake-task-file`: the file every task is in;
+//! * `.fake-task-file`: the file every task is in; `.fake-task-done-file`: the file a finished one (`task` with
+//!   `finished`) is in, which then says `status: done` and `finished: true` (without it: `not_found`);
+//! * `agent_answer`: one section `## Prüfung` whose text is the `output` it was given, and a follow-up when the output
+//!   says `follow-up`; an output `broken` is refused (`invalid_argument`);
 //! * `.fake-calls-areas`, `.fake-calls-next`: every `areas` and `next` question is counted (only in a
 //!   vault with `.fake-n`);
 //! * `.fake-check-ms`, `.fake-check-done`, `.fake-check-fail`: a `check` takes that long, leaves a
@@ -314,6 +317,18 @@ fn tasks_fill(call: &Call<'_>, doc: &mut Value) {
                 doc["code"] = json!("not_found");
                 doc["message"] = json!("no such task");
                 doc["retryable"] = json!(false);
+            } else if params.get("finished").and_then(Value::as_bool) == Some(true) {
+                // A finished task only where the vault names its file, as the engine finds one in the Backlog.
+                if let Ok(file) = std::fs::read_to_string(vault.join(".fake-task-done-file")) {
+                    doc["task"] = json!({ "id": id, "status": "done", "file": file.trim() });
+                    doc["finished"] = json!(true);
+                    doc["body"] = json!("");
+                } else {
+                    doc["kind"] = json!(call.dialect.error_kind);
+                    doc["code"] = json!("not_found");
+                    doc["message"] = json!("no such finished task");
+                    doc["retryable"] = json!(false);
+                }
             } else {
                 doc["task"] = json!({ "id": id });
                 if let Ok(file) = std::fs::read_to_string(vault.join(".fake-task-file")) {
@@ -324,6 +339,21 @@ fn tasks_fill(call: &Call<'_>, doc: &mut Value) {
                 // snapshot's, as the engine's is.
                 if let Some(n) = state(vault) {
                     doc["rev"] = json!(format!("rev:t{n:05x}"));
+                }
+            }
+        }
+        "agent_answer" => {
+            let output = params.get("output").and_then(Value::as_str).unwrap_or("");
+            if output == "broken" {
+                doc["kind"] = json!(call.dialect.error_kind);
+                doc["code"] = json!("invalid_argument");
+                doc["message"] = json!("the answer has no review block");
+                doc["retryable"] = json!(false);
+            } else {
+                doc["answer_kind"] = params.get("kind").cloned().unwrap_or(Value::Null);
+                doc["sections"] = json!([{ "heading": "## Prüfung", "text": output }]);
+                if output.contains("follow-up") {
+                    doc["follow_up"] = json!({ "title": "Document it" });
                 }
             }
         }

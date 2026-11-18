@@ -15,6 +15,7 @@ export type TasksExport =
   | PlanCompare
   | Check
   | TaskDocument
+  | AgentAnswer
   | Next
   | Areas
   | Finished
@@ -560,6 +561,10 @@ export type TaskDocument = Head & {
    */
   body: string;
   body_truncated: boolean;
+  /**
+   * Capability task_finished: the call named finished, and this is the finished task of the id, read from its area's Backlog/ (no readiness, no rounds).
+   */
+  finished?: true;
   steps: {
     n: number;
     text: string;
@@ -600,6 +605,48 @@ export type TaskDocument = Head & {
    * Present (true) when the routine has more finished rounds than `rounds` holds.
    */
   rounds_truncated?: true;
+};
+/**
+ * tasks.agent_answer (capability agent_answer): the answer of an agent's job (kind review-done or prepare-decision) taken apart for one task by the rules of :Tasks agent, as the sections a caller writes with set_section after a yes. Nothing is written. The texts are untrusted.
+ */
+export type AgentAnswer = Head & {
+  kind: "tasks.agent_answer";
+  digest: Digest;
+  answer_kind: "review-done" | "prepare-decision";
+  /**
+   * In the order to write them: the heading (one line, '## ' and a word) and the text below it, trimmed.
+   *
+   * @minItems 1
+   * @maxItems 2
+   */
+  sections:
+    | [
+        {
+          heading: string;
+          text: string;
+        }
+      ]
+    | [
+        {
+          heading: string;
+          text: string;
+        },
+        {
+          heading: string;
+          text: string;
+        }
+      ];
+  /**
+   * review-done: the follow-up task the review proposes (create it only after a yes of its own).
+   */
+  follow_up?: {
+    title: string;
+    summary?: string;
+  };
+  /**
+   * prepare-decision: whether the open questions are among the sections (only when the task has none of its own).
+   */
+  questions_added?: boolean;
 };
 /**
  * tasks.next: what to start, with the reason; or why there is nothing.
@@ -1378,6 +1425,7 @@ export interface ResultEntry {
     | "append_note"
     | "reopen"
     | "set_body"
+    | "set_section"
     | "view_save"
     | "view_delete"
     | "attach"
@@ -1474,6 +1522,7 @@ export interface Inverse {
     | "tick_step"
     | "answer"
     | "set_body"
+    | "set_section"
     | "move_area"
     | "view_save"
     | "view_delete"
@@ -1504,6 +1553,14 @@ export interface Inverse {
    * `set_body`: the text below the frontmatter that the task had.
    */
   body?: string;
+  /**
+   * `set_section`: the heading of the section that was replaced.
+   */
+  heading?: string;
+  /**
+   * `set_section`: the text the section had below its heading.
+   */
+  text?: string;
   /**
    * `move_area`: the area the task came from (`id` is the id it has now).
    */

@@ -48,6 +48,21 @@ import type {
 } from './contract';
 import { expandAreas, isAreaGroup, NO_AREA, type AreaGroupInfo } from './areaGroups';
 import type { Op } from './api';
+import { adoptOps, followUpOp, runAnswer, type Answer, type AnswerKind } from './agentAnswer';
+
+/** What the dialog "Answer of the agent" shows. */
+export interface AnswerView {
+  id: string;
+  area: string;
+  title: string;
+  kind: AnswerKind;
+  phase: 'waiting' | 'confirm' | 'shown' | 'failed' | 'adopted';
+  job?: string;
+  answer?: Answer;
+  why?: string;
+  /** The id of the follow-up task once it is made. */
+  followUpMade?: string;
+}
 import { indexOfLinks, touchedAreas } from './cross';
 import { planProjects, projectOfTask, projectsOf, type ClosePreview, type Project } from './projects';
 import { parseCompareSort, serializeCompareSort, type CompareSort } from './planCompare';
@@ -693,6 +708,15 @@ export class App {
   agentDashboard = $state(false);
   /** A hand-over is under way: the dialog sends nothing twice. */
   agentSending = $state(false);
+  /**
+   * A review of a finished task or a prepared decision, on its way or back (one at a time): what the dialog
+   * "Answer of the agent" shows. Nothing is written until the person adopts it.
+   */
+  answer = $state.raw<AnswerView | null>(null);
+  /** Counts the runs: a closed or replaced one stops watching its job. */
+  #answerRun = 0;
+  /** The yes or no to a job that waits for one (a private area on a model that is not local). */
+  #answerConfirm: ((yes: boolean) => void) | null = null;
   /** The plan wizard is open. */
   planning = $state(false);
   /** The task that is being finished, with what the engine says that does. */
@@ -1746,6 +1770,17 @@ export class App {
       if (inv.op === 'move_area') {
         if (typeof inv.to_area !== 'string') return undefined;
         inverses.push({ op: 'move_area', id: inv.id, to_area: inv.to_area, ...(inv.if_match ? { if_match: inv.if_match } : {}) });
+        continue;
+      }
+      if (inv.op === 'set_section') {
+        if (typeof inv.heading !== 'string' || typeof inv.text !== 'string') return undefined;
+        inverses.push({
+          op: 'set_section',
+          id: inv.id,
+          heading: inv.heading,
+          text: inv.text,
+          ...(inv.if_match ? { if_match: inv.if_match } : {}),
+        });
         continue;
       }
       if (inv.op === 'set_body') {
@@ -3439,6 +3474,78 @@ export class App {
 
   closeAgent(): void {
     if (!this.agentSending) this.agentFor = null;
+  }
+
+  /**
+   * Check a finished task against its acceptance (`review-done`) or prepare a task that waits for a decision
+   * (`prepare-decision`): the job runs at once in ai-desktop, the dialog shows where it stands and then the answer the
+   * engine took apart. Only where the AI functions are offered.
+   */
+  async startAnswer(id: string, kind: AnswerKind, title: string): Promise<void> {
+    if (!this.aiFeatures) return;
+    this.#answerConfirm?.(false);
+    const run = ++this.#answerRun;
+    const area = id.split('/')[0] ?? '';
+    this.answer = { id, area, title, kind, phase: 'waiting' };
+    const mine = () => run === this.#answerRun;
+    const set = (patch: Partial<AnswerView>) => {
+      if (mine() && this.answer) this.answer = { ...this.answer, ...patch };
+    };
+    try {
+      const outcome = await runAnswer(this.env.hub, id, kind, {
+        started: (job) => set({ job }),
+        wanted: mine,
+        confirm: () =>
+          new Promise<boolean>((resolve) => {
+            if (!mine()) return resolve(false);
+            this.#answerConfirm = (yes) => {
+              this.#answerConfirm = null;
+              set({ phase: 'waiting' });
+              resolve(yes);
+            };
+            set({ phase: 'confirm' });
+          }),
+        sleep: (ms) => this.env.sleep(ms),
+        now: () => this.env.now(),
+      });
+      if (outcome.kind === 'answer') set({ phase: 'shown', answer: outcome.answer });
+      else if (outcome.kind === 'failed') set({ phase: 'failed', why: outcome.why, ...(outcome.job ? { job: outcome.job } : {}) });
+      else if (mine()) this.answer = null;
+    } catch (error) {
+      set({ phase: 'failed', why: error instanceof ApiError ? error.message : String(error) });
+    }
+  }
+
+  /** The yes or no to sending the task of a private area to a model that is not local. */
+  confirmAnswer(yes: boolean): void {
+    this.#answerConfirm?.(yes);
+  }
+
+  /** Write the answer into the task (one `set_section` per section); it stays shown, its follow-up still to make. */
+  async adoptAnswer(): Promise<void> {
+    const view = this.answer;
+    if (!view?.answer || view.phase !== 'shown') return;
+    const result = await this.write(adoptOps(view.id, view.answer));
+    if (result && result.results.every((r) => r.ok) && this.answer === view) {
+      this.answer = { ...view, phase: 'adopted' };
+    }
+  }
+
+  /** Make the follow-up task the review proposes, in the area of the reviewed task: only on this click. */
+  async createFollowUp(): Promise<void> {
+    const view = this.answer;
+    const followUp = view?.answer?.followUp;
+    if (!view || !followUp || view.followUpMade) return;
+    const result = await this.write([followUpOp(view.area, followUp)], { undoable: false });
+    const made = result?.results.find((r) => r.ok && r.outcome === 'created')?.id;
+    if (made && this.answer?.id === view.id) this.answer = { ...this.answer, followUpMade: made };
+  }
+
+  /** Close the dialog: a job still watched is left to ai-desktop (it stays in its dashboard). */
+  closeAnswer(): void {
+    this.#answerRun += 1;
+    this.#answerConfirm?.(false);
+    this.answer = null;
   }
 
   /**

@@ -8555,6 +8555,81 @@ test('"Split into tasks": the plan and its tasks go to ai-desktop, only the tick
   }
 });
 
+test('a finished task is checked against its acceptance: the review comes back as a proposal, adopt writes it into the Backlog file', async ({
+  page,
+}) => {
+  const file = join(state().vault, 'lib.nvim', 'Backlog', 'TASKS', '2025-12-30_shipped-bug.md');
+  const original = readFileSync(file, 'utf8');
+  let asked = 0;
+  const ai = await aiDesktopDouble((_, path) => {
+    if (path === '/jobs') return { status: 201, body: { job_id: '0123456789abcdef', status: 'running', private: false } };
+    if (path === '/jobs/0123456789abcdef') {
+      asked += 1;
+      return asked < 2
+        ? { status: 200, body: { id: '0123456789abcdef', status: 'running' } }
+        : {
+            status: 200,
+            body: {
+              id: '0123456789abcdef',
+              status: 'done',
+              output: [
+                'I read the diff.',
+                '<!-- review:begin -->',
+                '## Prüfung',
+                '',
+                '- [x] fixed — erfüllt: lib.nvim@def5678',
+                '- [ ] tested — offen: no test',
+                '',
+                '### Folgetask (Vorschlag)',
+                '',
+                '- title: Test the fix',
+                '- summary: A spec that fails without the fix.',
+                '<!-- review:end -->',
+              ].join('\n'),
+            },
+          };
+    }
+    return { status: 404, body: { error: { message: 'no such route' } } };
+  });
+  try {
+    await watchViolations(page);
+    await pair(page);
+    await showList(page);
+    await page.getByText('More filters', { exact: false }).first().click();
+    await page.getByLabel('Show finished tasks under the list').check();
+    const finished = page.getByRole('region', { name: 'Finished' });
+    await finished.getByLabel('Period').selectOption('all');
+    await finished.getByRole('button', { name: /Shipped bug/ }).click();
+    const shipped = page.getByRole('dialog', { name: 'Finished task' });
+    await shipped.getByRole('button', { name: 'Check against the acceptance ...' }).click();
+    const answer = page.getByRole('dialog', { name: 'Review against the acceptance' });
+    await expect(answer.getByTestId('answer-body')).toContainText('tested — offen: no test', { timeout: 15_000 });
+    await expect(answer).toContainText('Proposed follow-up task: Test the fix');
+    expect(await violations(page)).toEqual([]);
+    // The finished file went, as it is in the Backlog, to run at once; nothing is written yet.
+    const job = ai.seen.find((r) => r.path === '/jobs')!;
+    expect(job.body).toMatchObject({ kind: 'review-done', mode: 'run', task_id: 'lib.nvim/shipped-bug' });
+    expect(String(job.body['markdown'])).toContain('done_in: lib.nvim@def5678');
+    expect(readFileSync(file, 'utf8')).toBe(original);
+
+    await answer.getByRole('button', { name: 'Adopt', exact: true }).click();
+    await expect(answer).toContainText('Adopted into the task');
+    const written = readFileSync(file, 'utf8');
+    expect(written).toContain('\n## Prüfung\n\n- [x] fixed — erfüllt: lib.nvim@def5678\n');
+    expect(written).toContain('Fixed.');
+    expect(written).toContain('status: done');
+    // The follow-up only on its own click, as an open task of the area.
+    await answer.getByRole('button', { name: 'Create the follow-up task' }).click();
+    await expect(answer).toContainText('Created lib.nvim/test-the-fix.');
+    await answer.getByRole('button', { name: 'Close', exact: true }).click();
+    await expect(answer).toBeHidden();
+  } finally {
+    await ai.close();
+    writeFileSync(file, original);
+    rmSync(join(state().vault, 'lib.nvim', 'ROADMAP', 'tasks', 'test-the-fix.md'), { force: true });
+  }
+});
+
 test('the switch "Show AI functions" off: no AI place in the task, kept over a reload', async ({ page }) => {
   await page.route('**/api/tasks/ai_desktop', (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: '{"installed":true,"running":true}' }),

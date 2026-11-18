@@ -487,7 +487,7 @@ pub(super) async fn search_route(
 /// the path below the task and its link, never the image. `project_new`, `plan_set` and `project_set` make a project file
 /// and change the frontmatter of an open plan or project file (the project level); the engine judges the relation.
 /// `plan_close` and `project_close` finish a plan or a project by hand; the engine refuses while something holds it open.
-pub(super) const OPS_ALLOWED: [&str; 20] = [
+pub(super) const OPS_ALLOWED: [&str; 21] = [
     "set",
     "new",
     "reorder",
@@ -505,6 +505,7 @@ pub(super) const OPS_ALLOWED: [&str; 20] = [
     "append_note",
     "reopen",
     "set_body",
+    "set_section",
     "view_save",
     "view_delete",
     "attach",
@@ -1456,7 +1457,13 @@ pub(super) async fn agent_send(State(st): State<Arc<Shared>>, body: Bytes) -> Re
     let Some(vault) = rt.vault.clone() else {
         return engine_unavailable(&st);
     };
-    let reply = match ask(&st, Calls::Task, Some(&json!({ "id": id }))).await {
+    // A review is of a finished task: the engine reads it from the Backlog of its area (capability `task_finished`).
+    let question = if kind == "review-done" {
+        json!({ "id": id, "finished": true })
+    } else {
+        json!({ "id": id })
+    };
+    let reply = match ask(&st, Calls::Task, Some(&question)).await {
         Ok(r) => r,
         Err(response) => return response,
     };
@@ -1540,6 +1547,98 @@ pub(super) async fn agent_send(State(st): State<Arc<Shared>>, body: Bytes) -> Re
             error_body(status, refusal.code(), &refusal.message())
         }
     }
+}
+
+/// The kinds whose answer comes back to the page as sections to adopt (`agent_result`).
+const ANSWER_KINDS: [&str; 2] = ["review-done", "prepare-decision"];
+/// The most of a job's answer the engine is given: its end, where the block stands. The block itself is at most 32 KiB;
+/// the engine takes a request of 256 KiB, and escaped for it (line breaks, quotes, `\uXXXX` for what is not ASCII) a
+/// text can grow threefold, so 64 KiB stay below that.
+const ANSWER_TAIL: usize = 64 * 1024;
+
+/// The last `max` bytes of `text`, cut at a character.
+fn tail_of(text: &str, max: usize) -> &str {
+    if text.len() <= max {
+        return text;
+    }
+    let mut start = text.len() - max;
+    while !text.is_char_boundary(start) {
+        start += 1;
+    }
+    &text[start..]
+}
+
+/// `POST /api/tasks/agent_result` `{ "job", "id", "kind" }`: where a review (`review-done`) or a prepared decision
+/// (`prepare-decision`) of the task `id` stands. While the job runs or waits for a yes, its `status` (and `note`,
+/// `private`); a failed or cancelled one its `error`. Once it is done, the engine takes the answer of ai-desktop apart
+/// (`agent_answer`, by the rules of `:Tasks agent`): `sections` to write with `set_section` after a yes, a review's
+/// `follow_up`, a decision's `questions_added`. Only that reaches the page, never the whole answer of the model; an
+/// answer that breaks a rule is the engine's refusal with its reason.
+pub(super) async fn agent_result(State(st): State<Arc<Shared>>, body: Bytes) -> Response {
+    let map = match vault_request(&body, &["job", "id", "kind"]) {
+        Ok(m) => m,
+        Err(r) => return r,
+    };
+    let job = match job_of(&map) {
+        Ok(j) => j,
+        Err(r) => return r,
+    };
+    let id = match vault_text(&map, "id", 200) {
+        Ok(id) if valid_task_id(&id) => id,
+        Ok(_) => {
+            return error_body(
+                StatusCode::BAD_REQUEST,
+                "bad_id",
+                "id must be <area>/<slug>",
+            )
+        }
+        Err(r) => return r,
+    };
+    let kind = match vault_text(&map, "kind", 32) {
+        Ok(k) if ANSWER_KINDS.contains(&k.as_str()) => k,
+        Ok(_) => {
+            return error_body(
+                StatusCode::BAD_REQUEST,
+                "bad_kind",
+                "kind is review-done or prepare-decision",
+            )
+        }
+        Err(r) => return r,
+    };
+    let Some(intake) = st.rt().agent.clone() else {
+        return error_body(
+            StatusCode::NOT_FOUND,
+            "agent_unavailable",
+            "this hub hands no task to an agent",
+        );
+    };
+    let doc = match intake.job(&job).await {
+        Ok(doc) => doc,
+        Err(refusal) => return agent_refusal(&refusal),
+    };
+    let mut out = serde_json::Map::new();
+    if doc["status"].as_str() != Some("done") {
+        for key in ["status", "error", "note", "private"] {
+            if let Some(v) = doc.get(key).filter(|v| !v.is_null()) {
+                out.insert(key.to_owned(), v.clone());
+            }
+        }
+        return axum::Json(serde_json::Value::Object(out)).into_response();
+    }
+    let output = tail_of(doc["output"].as_str().unwrap_or_default(), ANSWER_TAIL);
+    let question = json!({ "kind": kind, "output": output, "id": id });
+    let reply = match ask(&st, Calls::AgentAnswer, Some(&question)).await {
+        Ok(r) => r,
+        Err(response) => return response,
+    };
+    let answer = serde_json::from_str::<serde_json::Value>(&reply.text).unwrap_or_default();
+    out.insert("status".to_owned(), json!("done"));
+    for key in ["sections", "follow_up", "questions_added"] {
+        if let Some(v) = answer.get(key).filter(|v| !v.is_null()) {
+            out.insert(key.to_owned(), v.clone());
+        }
+    }
+    axum::Json(serde_json::Value::Object(out)).into_response()
 }
 
 /// The longest free text a draft takes (a note, a piece of a mail; ai-desktop would take more).
@@ -1667,6 +1766,13 @@ pub(super) async fn draft_send(State(st): State<Arc<Shared>>, body: Bytes) -> Re
 #[allow(clippy::result_large_err)]
 fn draft_job_id(body: &Bytes) -> Result<String, Response> {
     let map = vault_request(body, &["job"])?;
+    job_of(&map)
+}
+
+/// The field `job` of a request: the 16 hex digits of a job of ai-desktop.
+// The error is the answer to send, as with `ask`: a response is large, and rare.
+#[allow(clippy::result_large_err)]
+fn job_of(map: &serde_json::Map<String, serde_json::Value>) -> Result<String, Response> {
     match map.get("job").and_then(serde_json::Value::as_str) {
         Some(id)
             if id.len() == 16 && id.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f')) =>

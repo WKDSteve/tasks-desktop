@@ -1,7 +1,7 @@
 <script lang="ts">
   import { closeOnBackdrop } from 'appkit-ui/backdrop';
   // A finished task looked at from the list under the open ones: the facts the Backlog list holds about it, read only.
-  // The engine reads open tasks only, so the text of a finished task is not here.
+  // The text of a finished task is not here; its review by an agent is (only while the AI functions are offered).
   import type { App } from '../lib/app.svelte';
   import { labelOf, translate, type Key } from '../lib/i18n';
   import { markHidden } from '../lib/text';
@@ -34,6 +34,21 @@
       <h2>{markHidden(item.title)}</h2>
       <button type="button" data-close onclick={() => dialog?.close()}>{t('peek.close')}</button>
     </div>
+    {#if app.aiFeatures}
+      <!-- Only where the AI functions are offered: the review of this finished task by an agent (WEB-29). -->
+      <p class="ai-actions" data-testid="ai-actions">
+        <button
+          type="button"
+          data-hint={t('hint.ui.finished.review')}
+          onclick={() => {
+            const peek = item;
+            if (!peek) return;
+            dialog?.close();
+            void app.startAnswer(peek.id, 'review-done', peek.title);
+          }}>{t('answer.review')}</button
+        >
+      </p>
+    {/if}
     <p class="note">{t('done.read.note')}</p>
     <dl>
       <dt>{t('done.read.id')}</dt>

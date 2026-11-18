@@ -851,6 +851,71 @@ describe('App', () => {
     again.app.stop();
   });
 
+  it('reviews a finished task: the answer is a proposal, adopt writes its section, the follow-up only on its click', async () => {
+    const { app, hub } = make({ token: 't' });
+    await app.start(null);
+    await app.loadEnums();
+    // Without the AI functions nothing is sent.
+    await app.startAnswer('pub/old', 'review-done', 'Old');
+    expect(app.answer).toBeNull();
+    expect(hub.agentCalls).toEqual([]);
+    hub.aiDesktopFound = { installed: true, running: true };
+    await app.focused();
+    await vi.waitFor(() => expect(app.aiFeatures).toBe(true));
+
+    hub.agentAnswer = { job_id: '0123456789abcdef', status: 'running', private: false, port: 47123 };
+    hub.resultQueue = [
+      { status: 'running' },
+      {
+        status: 'done',
+        sections: [{ heading: '## Prüfung', text: '- [ ] documented — offen' }],
+        follow_up: { title: 'Document it', summary: 'The README names it.' },
+      },
+    ];
+    await app.startAnswer('pub/old', 'review-done', 'Old');
+    expect(hub.agentCalls).toEqual([{ id: 'pub/old', mode: 'run', kind: 'review-done' }]);
+    expect(hub.resultCalls.at(-1)).toEqual({ job: '0123456789abcdef', id: 'pub/old', kind: 'review-done' });
+    expect(app.answer).toMatchObject({ phase: 'shown', area: 'pub', job: '0123456789abcdef' });
+    expect(hub.sent).toEqual([]);
+
+    // Adopt: one set_section, nothing else.
+    await app.adoptAnswer();
+    expect(hub.sent.at(-1)?.ops).toEqual([
+      { op: 'set_section', id: 'pub/old', heading: '## Prüfung', text: '- [ ] documented — offen' },
+    ]);
+    expect(app.answer?.phase).toBe('adopted');
+    // The follow-up only now, on its own click, in the area of the task.
+    await app.createFollowUp();
+    expect(hub.sent.at(-1)?.ops).toEqual([
+      { op: 'new', area: 'pub', title: 'Document it', fields: { kind: 'task', summary: 'The README names it.' } },
+    ]);
+    expect(app.answer?.followUpMade).toBe('pub/created');
+    const writes = hub.sent.length;
+    await app.createFollowUp();
+    expect(hub.sent.length).toBe(writes);
+    app.closeAnswer();
+    expect(app.answer).toBeNull();
+
+    // A private area on a model that is not local: asked in the dialog; no sends nothing on.
+    hub.agentAnswer = { job_id: 'fedcba9876543210', status: 'needs_confirmation', private: true, port: 47123 };
+    const asked = app.startAnswer('sec/x', 'prepare-decision', 'X');
+    await vi.waitFor(() => expect(app.answer?.phase).toBe('confirm'));
+    app.confirmAnswer(false);
+    await asked;
+    expect(app.answer).toBeNull();
+    expect(hub.confirmed).toEqual([]);
+
+    // A refusal of the engine (a broken answer) is told, nothing written.
+    hub.agentAnswer = { job_id: '0123456789abcdef', status: 'running', private: false, port: 47123 };
+    hub.resultQueue = [new ApiError(400, 'invalid_argument', 'the answer has no review block')];
+    const before = hub.sent.length;
+    await app.startAnswer('pub/old', 'review-done', 'Old');
+    expect(app.answer).toMatchObject({ phase: 'failed', why: 'the answer has no review block' });
+    await app.adoptAnswer();
+    expect(hub.sent.length).toBe(before);
+    app.stop();
+  });
+
   it('counts a running ai-desktop without an installer as found', async () => {
     const { app, hub } = make({ token: 't' });
     hub.aiDesktopFound = { installed: false, running: true };

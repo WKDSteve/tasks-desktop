@@ -870,6 +870,17 @@ named in a quiet mark: the agent stopped without giving the task back). Nothing 
 page reads the claims and the status the engine writes, as with every change of the vault. With *Show AI functions*
 off the mark stays (it says who holds the task), the link and the messages do not.
 
+**Check against the acceptance.** A finished task (the dialog of a finished one in the list under the open ones) has
+*Check against the acceptance ...* while the AI functions are shown. The hub reads the finished file from the Backlog
+through the engine (with its `commits` and `done_in`) and sends it to ai-desktop as a job of the kind `review-done` that
+runs at once; the agent only reads (`docs/JOBS.md` of ai-desktop, "Reviews"). The dialog *Review against the
+acceptance* says where the job stands (you may close it: the job stays in ai-desktop) and then shows the review as a
+proposal: nothing is written until *Adopt*, which writes it into the finished file as its section `## Prüfung` (an
+earlier one is replaced; the rest of the file stays) through the engine's operation `set_section`, with an undo in the
+message. A follow-up task the review proposes is created only with *Create the follow-up task*, as an open task of the
+same area. The engine checks the answer (`agent_answer`, the rules of `:Tasks agent` in tasks.nvim): a block of
+another kind, a second section of the task's level or a control character is refused with its reason.
+
 <!-- connections:begin (written by the app-icons tool of the workshop; change integrations.json there, not this block) -->
 ## Connections
 

@@ -66,7 +66,7 @@ pub fn cli_config_from_setup(setup: &Setup, env: Env) -> CliEngineConfig {
 
 /// The calls of the contract `tasks-export/1` and `tasks-ops/1`: the table of this app. The seam
 /// reads the flags of each entry; it knows no call by name.
-static SPECS: [MethodSpec; 20] = [
+static SPECS: [MethodSpec; 21] = [
     MethodSpec::bare("hello", "tasks.hello"),
     MethodSpec::bare("snapshot", "tasks.snapshot"),
     MethodSpec::read("list", "tasks.list"),
@@ -87,6 +87,7 @@ static SPECS: [MethodSpec; 20] = [
     MethodSpec::bare("views", "tasks.views"),
     MethodSpec::read("waits", "tasks.waits"),
     MethodSpec::bare("plan_compare", "tasks.plan_compare"),
+    MethodSpec::read("agent_answer", "tasks.agent_answer"),
 ];
 
 /// The calls of the tasks engine, by name.
@@ -114,9 +115,10 @@ impl Calls {
     pub const Views: Method = Method::new(&SPECS[17]);
     pub const Waits: Method = Method::new(&SPECS[18]);
     pub const PlanCompare: Method = Method::new(&SPECS[19]);
+    pub const AgentAnswer: Method = Method::new(&SPECS[20]);
 
     /// Every call of the table.
-    pub const ALL: [Method; 20] = [
+    pub const ALL: [Method; 21] = [
         Self::Hello,
         Self::Snapshot,
         Self::List,
@@ -137,6 +139,7 @@ impl Calls {
         Self::Views,
         Self::Waits,
         Self::PlanCompare,
+        Self::AgentAnswer,
     ];
 
     /// Parse the name of a route or a request. Nothing else is accepted.
@@ -189,6 +192,6 @@ mod table_tests {
             assert_eq!(Calls::parse(m.as_str()), Some(m));
             assert!(m.reply_kind().starts_with("tasks."), "{}", m.as_str());
         }
-        assert_eq!(Calls::ALL.len(), 20);
+        assert_eq!(Calls::ALL.len(), 21);
     }
 }

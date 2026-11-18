@@ -466,6 +466,19 @@ The page uses the port only when the person ticked "open the dashboard afterward
 does not reach the route (it is not one of the device routes); it counts against the limit of mutations like every
 `POST` of a session.
 
+## The answer of a review or a prepared decision (`POST /api/tasks/agent_result`)
+
+A review (`review-done`) is of a finished task: `POST /api/tasks/agent` asks the engine for it with `finished`, and the
+engine names its file in the Backlog of its area (the hub checks that it lies in the vault, as above). The job runs at
+once. `POST /api/tasks/agent_result { "job", "id", "kind" }` (`kind` `review-done` or `prepare-decision`, nothing
+else) reads where it stands (`GET /jobs/<id>` of ai-desktop, no secret): while it runs only `status`, `error`, `note`
+and `private` pass; once it is done, the hub gives the end of ai-desktop's answer (at most 64 KiB, cut at a character:
+the block is the last thing in it) to the engine (`agent_answer`), which takes it apart by its rules and refuses an
+answer that breaks one. Only the engine's `sections`, `follow_up` and `questions_added` reach the page, never the
+model's whole answer. A needed yes for a private area goes through `draft_confirm` below. Nothing is written by these
+routes: the page writes the sections with `ops` (`set_section`) only after the person's *Adopt*, and the follow-up task
+with `new` only after its own click. A paired phone does not reach the route.
+
 ## Suggesting the fields of a new task (`POST /api/tasks/draft`, `draft_job`, `draft_confirm`)
 
 "Suggest fields" of the new-task form sends `{ "text", "choices" }` and nothing else: the free text (up to 64 KiB;

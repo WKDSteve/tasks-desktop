@@ -845,19 +845,33 @@ async fn a_task_is_handed_to_the_agent_with_its_file_and_only_with_a_session() {
     ] {
         assert_eq!(post(&r, route, bad, true).await.0, 400, "{bad}");
     }
+    // A review is of a finished task: the engine reads it from the Backlog (`task` with `finished`); an id with no
+    // finished file is not found, and nothing is sent.
     let review = r#"{"id":"alpha.nvim/t1","mode":"run","kind":"review-done"}"#;
     let (status, doc) = post(&r, route, review, true).await;
     assert_eq!(
         (status, doc["error"]["code"].as_str()),
-        (409, Some("kind_unfit")),
+        (404, Some("not_found")),
         "{doc}"
     );
     assert_eq!(fake.jobs.lock().unwrap().len(), 1, "nothing more was sent");
 
-    // A finished task may be reviewed: the engine says its status.
+    // The finished file goes, with its commits.
+    let done_dir = r.vault.join("alpha.nvim/Backlog/FEATURES");
+    std::fs::create_dir_all(&done_dir).unwrap();
+    std::fs::write(
+        done_dir.join("2026-11-01_t1.md"),
+        "---\ntitle: Done one\nstatus: done\ncommits: [alpha.nvim@abc1234]\n---\n\n## Akzeptanz\n\n- [x] it works\n",
+    )
+    .unwrap();
+    std::fs::write(
+        r.vault.join(".fake-task-done-file"),
+        "alpha.nvim/Backlog/FEATURES/2026-11-01_t1.md",
+    )
+    .unwrap();
     std::fs::write(
         r.vault.join(".fake-merge-task.json"),
-        r#"{"task":{"id":"alpha.nvim/t1","area":"alpha.nvim","title":"Done one","status":"done","file":"alpha.nvim/ROADMAP/tasks/t1.md"}}"#,
+        r#"{"task":{"id":"alpha.nvim/t1","area":"alpha.nvim","title":"Done one","status":"done","file":"alpha.nvim/Backlog/FEATURES/2026-11-01_t1.md"}}"#,
     )
     .unwrap();
     let (status, doc) = post(&r, route, review, true).await;
@@ -868,8 +882,27 @@ async fn a_task_is_handed_to_the_agent_with_its_file_and_only_with_a_session() {
             (jobs[1].kind.as_str(), jobs[1].title.as_str()),
             ("review-done", "Done one")
         );
+        assert!(
+            jobs[1].markdown.contains("commits: [alpha.nvim@abc1234]"),
+            "the finished file: {}",
+            jobs[1].markdown
+        );
     }
+    // Another kind is asked of the open task (no `finished`): its status decides.
+    let (status, doc) = post(
+        &r,
+        "/api/tasks/agent",
+        r#"{"id":"alpha.nvim/t1","mode":"run","kind":"prepare-decision"}"#,
+        true,
+    )
+    .await;
+    assert_eq!(
+        (status, doc["error"]["code"].as_str()),
+        (409, Some("kind_unfit")),
+        "the open task (status done by the merge) is no decision: {doc}"
+    );
     std::fs::remove_file(r.vault.join(".fake-merge-task.json")).unwrap();
+    std::fs::remove_file(r.vault.join(".fake-task-done-file")).unwrap();
 
     // A task file over 256 KiB is not sent.
     std::fs::write(
@@ -884,6 +917,95 @@ async fn a_task_is_handed_to_the_agent_with_its_file_and_only_with_a_session() {
         "{doc}"
     );
     assert_eq!(fake.jobs.lock().unwrap().len(), 2);
+}
+
+#[tokio::test]
+async fn the_answer_of_a_review_comes_back_taken_apart_by_the_engine_and_never_whole() {
+    let route = "/api/tasks/agent_result";
+    let fake = intake(Err(Refusal::NotRunning));
+    let r = rig_full(
+        "agent-result",
+        false,
+        None,
+        None,
+        None,
+        None,
+        None,
+        Some(Arc::clone(&fake) as Arc<dyn JobIntake>),
+    )
+    .await;
+    let body = r#"{"job":"0123456789abcdef","id":"alpha.nvim/t1","kind":"review-done"}"#;
+
+    // While it runs: its status, nothing of the text.
+    *fake.doc.lock().unwrap() = serde_json::json!({
+        "id": "0123456789abcdef", "status": "running", "markdown": "the task", "output": "half"
+    });
+    let (status, doc) = post(&r, route, body, true).await;
+    assert_eq!(
+        (status, doc["status"].as_str()),
+        (200, Some("running")),
+        "{doc}"
+    );
+    assert!(
+        doc.get("output").is_none() && doc.get("markdown").is_none(),
+        "{doc}"
+    );
+
+    // Done: the engine's sections and follow-up, not the model's whole answer.
+    *fake.doc.lock().unwrap() = serde_json::json!({
+        "id": "0123456789abcdef", "status": "done", "markdown": "the task",
+        "output": "a review with a follow-up"
+    });
+    let (status, doc) = post(&r, route, body, true).await;
+    assert_eq!(status, 200, "{doc}");
+    assert_eq!(doc["status"], "done");
+    assert_eq!(doc["sections"][0]["heading"], "## Prüfung", "{doc}");
+    assert_eq!(doc["follow_up"]["title"], "Document it", "{doc}");
+    assert!(
+        doc.get("output").is_none() && doc.get("markdown").is_none(),
+        "{doc}"
+    );
+
+    // A long answer: only its end goes to the engine (the block is the last thing in it), cut at a character.
+    let long = format!("{}ü{}", "x".repeat(300 * 1024), "the end");
+    *fake.doc.lock().unwrap() =
+        serde_json::json!({ "id": "0123456789abcdef", "status": "done", "output": long });
+    let (status, doc) = post(&r, route, body, true).await;
+    assert_eq!(status, 200, "{doc}");
+    let text = doc["sections"][0]["text"].as_str().unwrap();
+    assert!(
+        text.len() <= 64 * 1024 && text.ends_with("the end"),
+        "{}",
+        text.len()
+    );
+
+    // An answer the engine refuses: its reason, nothing to adopt.
+    *fake.doc.lock().unwrap() =
+        serde_json::json!({ "id": "0123456789abcdef", "status": "done", "output": "broken" });
+    let (status, doc) = post(&r, route, body, true).await;
+    assert_eq!(status, 400, "{doc}");
+    assert!(doc.to_string().contains("no review block"), "{doc}");
+
+    // A failed job: its status and error.
+    *fake.doc.lock().unwrap() =
+        serde_json::json!({ "id": "0123456789abcdef", "status": "failed", "error": "boom" });
+    let (_, doc) = post(&r, route, body, true).await;
+    assert_eq!(
+        (doc["status"].as_str(), doc["error"].as_str()),
+        (Some("failed"), Some("boom")),
+        "{doc}"
+    );
+
+    // Refused before anything is asked: no session, a bad job, a kind that brings no answer back, a bad id.
+    assert_eq!(post(&r, route, body, false).await.0, 401);
+    for bad in [
+        r#"{"job":"../x","id":"alpha.nvim/t1","kind":"review-done"}"#,
+        r#"{"job":"0123456789abcdef","id":"alpha.nvim/t1","kind":"handoff"}"#,
+        r#"{"job":"0123456789abcdef","id":"../t1","kind":"review-done"}"#,
+        r#"{"job":"0123456789abcdef","id":"alpha.nvim/t1"}"#,
+    ] {
+        assert_eq!(post(&r, route, bad, true).await.0, 400, "{bad}");
+    }
 }
 
 #[tokio::test]
