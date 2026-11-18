@@ -7295,6 +7295,8 @@ test('the button of a row opens the same choice of an area', async ({ page }) =>
   await chooseView(page, 'View', 'Today');
   await page.locator('button.tile[data-count="doing"]').click();
   const panel = page.getByRole('region', { name: 'doing' });
+  // The actions of a row are drawn in the row under the pointer (or with the focus).
+  await panel.locator('li.row-host', { hasText: 'Dropped by button e2e' }).hover();
   await panel.getByRole('button', { name: `Move lib.nvim/${slug} to another area` }).click();
   const dialog = page.getByRole('dialog', { name: 'Move to another area' });
   await expect(dialog).toBeVisible();
@@ -7776,6 +7778,94 @@ To be flicked by a finger.
 
     removeFile(file);
   });
+});
+
+test('the actions of a row: only on the row under the pointer or with the focus, more of them from Options, and always when that is switched on', async ({ page }) => {
+  const slug = 'row-actions-e2e';
+  const file = join(state().vault, 'lib.nvim', 'ROADMAP', 'tasks', `${slug}.md`);
+  writeFileSync(file, `---\ntitle: Rowact a001\nstatus: open\nkind: task\n---\n\nA row with actions.\n`);
+  await pair(page);
+  await showList(page);
+  const hosts = page.locator('.rows .row-host');
+  await expect(hosts.nth(2)).toBeVisible();
+  /** The controls of the bars that are drawn, as the row that holds each: `visibility` is what hides a bar. */
+  const drawn = () =>
+    page.locator('.rows [data-row-action]').evaluateAll((els) =>
+      els
+        .filter((el) => getComputedStyle(el).visibility === 'visible')
+        .map((el) => `${el.closest('.row-host')?.querySelector('.id')?.textContent ?? '?'}:${el.getAttribute('data-row-action') ?? ''}`),
+    );
+  const idOf = async (n: number) => (await hosts.nth(n).locator('.id').innerText()).trim();
+
+  // Nothing is selected and the pointer is elsewhere: every row keeps the place of its bar, none is drawn.
+  await page.mouse.move(0, 0);
+  await expect(page.locator('.rows [aria-current="true"]')).toHaveCount(0);
+  expect(await page.locator('.rows .row-actions').count()).toBe(await hosts.count());
+  expect(await drawn()).toEqual([]);
+
+  // The pointer on a row draws its bar, one button as the page comes, and nothing moves.
+  const before = await hosts.nth(1).boundingBox();
+  const title = await hosts.nth(1).locator('.title').boundingBox();
+  await hosts.nth(1).hover();
+  expect(await drawn()).toEqual([`${await idOf(1)}:move`]);
+  expect(await hosts.nth(1).boundingBox()).toEqual(before);
+  expect(await hosts.nth(1).locator('.title').boundingBox()).toEqual(title);
+  await hosts.nth(2).hover();
+  expect(await drawn()).toEqual([`${await idOf(2)}:move`]);
+
+  // The keys: the row with the focus draws its bar, Tab reaches the button, Enter asks for the area.
+  await page.mouse.move(0, 0);
+  await hosts.nth(0).locator('button.row').focus();
+  expect(await drawn()).toEqual([`${await idOf(0)}:move`]);
+  await page.keyboard.press('Tab');
+  const move = hosts.nth(0).getByRole('button', { name: `Move ${await idOf(0)} to another area` });
+  await expect(move).toBeFocused();
+  await expectAccessible(page, 'the actions of a row with the focus');
+  await page.keyboard.press('Enter');
+  const asking = page.getByRole('dialog', { name: 'Move to another area' });
+  await expect(asking).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(asking).toHaveCount(0);
+
+  // More actions are a choice in Options, each for itself.
+  await page.getByRole('menuitem', { name: 'Options', exact: true }).click();
+  await page.getByRole('menuitemcheckbox', { name: 'Row action: set the status' }).click();
+  await page.getByRole('menuitem', { name: 'Options', exact: true }).click();
+  await page.getByRole('menuitemcheckbox', { name: 'Row action: copy the id' }).click();
+  await page.getByRole('searchbox', { name: /search/i }).first().fill('Rowact a001');
+  const mine = page.locator('.rows .row-host', { hasText: 'Rowact a001' });
+  await expect(hosts).toHaveCount(1);
+  await page.mouse.move(0, 0);
+  expect(await drawn()).toEqual([]);
+  await mine.hover();
+  expect(await drawn()).toEqual([`lib.nvim/${slug}:move`, `lib.nvim/${slug}:status`, `lib.nvim/${slug}:copy`]);
+  // The status is written by its choice in the row.
+  const status = mine.getByLabel(`Status of lib.nvim/${slug}`);
+  const answered = nextAnswer(page);
+  await status.selectOption('doing');
+  await answered;
+  // Held back while the write is on its way, and free again when the list is read.
+  await expect(status).toBeEnabled({ timeout: WRITE_BUDGET });
+  await expect(status).toHaveValue('doing');
+  expect(readFileSync(file, 'utf8')).toContain('status: doing');
+
+  // Always: every row draws its bar, without the pointer; the choice holds over a reload.
+  await page.getByRole('searchbox', { name: /search/i }).first().fill('');
+  await expect(hosts.nth(2)).toBeVisible();
+  await page.getByRole('menuitem', { name: 'Options', exact: true }).click();
+  await page.getByRole('menuitemcheckbox', { name: 'Always show the row actions' }).click();
+  await page.mouse.move(0, 0);
+  expect((await drawn()).length).toBe((await hosts.count()) * 3);
+  await page.reload();
+  await expect(page.getByRole('menubar')).toBeVisible();
+  await showList(page);
+  // The page comes back with the filter it was left with: the words of the search may still be the row's.
+  await page.getByRole('searchbox', { name: /search/i }).first().fill('');
+  await expect(hosts.nth(2)).toBeVisible();
+  await page.mouse.move(0, 0);
+  expect((await drawn()).length).toBe((await hosts.count()) * 3);
+  await expectAccessible(page, 'a list whose rows always show their actions');
+  removeFile(file);
 });
 
 test('with the option to save with a button, the fields of a task are held until Save or Ctrl+S, and Discard brings the file back', async ({ page }) => {

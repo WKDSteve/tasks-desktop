@@ -451,7 +451,10 @@ test('the handle of a dialog comes first in the order of the focus without takin
     await page.getByRole('menuitem', { name: 'View', exact: true }).click();
     await page.getByRole('menuitemradio', { name: 'Today', exact: true }).click();
     await page.locator('button.tile[data-count="doing"]').click();
-    await page.getByRole('region', { name: 'doing' }).getByRole('button', { name: `Move lib.nvim/${slug} to another area` }).click();
+    // The actions of a row are drawn in the row under the pointer (or with the focus).
+    const move = page.getByRole('region', { name: 'doing' }).getByRole('button', { name: `Move lib.nvim/${slug} to another area` });
+    await page.getByRole('region', { name: 'doing' }).locator('li.row-host', { has: page.locator(`[aria-label="Move lib.nvim/${slug} to another area"]`) }).hover();
+    await move.click();
     const choose = page.getByRole('dialog', { name: 'Move to another area' });
     await expect(choose.getByLabel('Area')).toBeFocused();
     await choose.getByLabel('Area').selectOption('cascade.nvim');

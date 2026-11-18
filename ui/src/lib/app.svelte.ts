@@ -139,6 +139,7 @@ import {
 } from './lists';
 import { localToday } from './remind';
 import type { RemindersMail } from './reminders';
+import { DEFAULT_ROW_ACTIONS, parseRowActions, serializeRowActions, type RowActionPrefs } from './rowActions';
 import { COLUMN_KEYS, defaultColumns, parseColumns, serializeColumns, type ListColumns } from './columns';
 import { emptyFolds, foldOf, parseFolds, serializeFolds, type FoldMemory, type Folds, type FoldView } from './fold';
 import { parseSizes, serializeSizes, withSize, type Size, type Sizes } from './sizes';
@@ -405,6 +406,8 @@ export class App {
   groupAreas = $state(false);
   /** Every second row of a list on a quieter ground. */
   zebra = $state(false);
+  /** The actions at the end of a row of a list, and whether every row shows them all the time (`lib/rowActions.ts`). */
+  rowActions = $state.raw<RowActionPrefs>(DEFAULT_ROW_ACTIONS);
   /** The choice of the areas also stands in the bar at the top, for every view (a trial). */
   barAreas = $state(false);
   /** The field the statistics cut the areas up by, and the order of the areas there (`lib/stats.ts`). */
@@ -830,6 +833,7 @@ export class App {
     this.areaCountsShown = safe(() => env.prefs.getItem('tasks-desktop.area-counts')) !== 'off';
     this.areaSplit = safe(() => env.prefs.getItem('tasks-desktop.area-split')) !== 'off';
     this.zebra = safe(() => env.prefs.getItem('tasks-desktop.zebra')) === 'on';
+    this.rowActions = parseRowActions(safe(() => env.prefs.getItem('tasks-desktop.row-actions')) ?? null);
     this.groupAreas = safe(() => env.prefs.getItem('tasks-desktop.group-areas')) === 'on';
     this.barAreas = safe(() => env.prefs.getItem('tasks-desktop.bar-areas')) === 'on';
     this.aiWanted = safe(() => env.prefs.getItem('tasks-desktop.ai')) !== 'off';
@@ -902,6 +906,7 @@ export class App {
     this.setAreaCounts(true);
     this.setAreaSplit(true);
     this.setZebra(false);
+    this.setRowActions(DEFAULT_ROW_ACTIONS);
     this.setGroupAreas(false);
     this.setBarAreas(false);
     this.setSaveMode('auto');
@@ -3424,6 +3429,11 @@ export class App {
   setZebra(on: boolean): void {
     this.zebra = on;
     safe(() => this.env.prefs.setItem('tasks-desktop.zebra', on ? 'on' : 'off'));
+  }
+
+  setRowActions(prefs: RowActionPrefs): void {
+    this.rowActions = prefs;
+    safe(() => this.env.prefs.setItem('tasks-desktop.row-actions', serializeRowActions(prefs)));
   }
 
   setBarAreas(on: boolean): void {

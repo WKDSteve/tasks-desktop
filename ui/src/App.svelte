@@ -38,6 +38,7 @@
   import { installTaskApart } from './lib/taskApart';
   import { createContextRegistry, taskTarget, viewTarget } from './lib/context';
   import { vaultMenuItems } from './lib/vaultMenu';
+  import { rowActionsMenuItems } from './lib/rowActionsMenu';
   import ConflictCenter from './views/ConflictCenter.svelte';
   import SetupCard from './views/SetupCard.svelte';
   import Toast from './views/Toast.svelte';
@@ -681,6 +682,7 @@
                     onselect: () => {},
                   },
                 ]),
+          ...rowActionsMenuItems(app),
           { kind: 'section', label: t('menu.sec.export') },
           { kind: 'info', label: t('menu.export_where') },
           ...(fromDisk

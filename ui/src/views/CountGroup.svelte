@@ -7,6 +7,7 @@
   import { translate, type Key } from '../lib/i18n';
   import { createGrip, type PointerDragEvent } from '../lib/pointerDrag';
   import { markHidden } from '../lib/text';
+  import RowActions from './RowActions.svelte';
 
   let {
     app,
@@ -63,6 +64,7 @@
   <ul class="plain">
     {#each rows as task (task.id)}
       <li
+        class="row-host"
         draggable={ondragtask && !app.locked ? 'true' : undefined}
         ondragstart={(e) => dragStart(e, task.id)}
         ondragend={dragEnd}
@@ -93,15 +95,7 @@
             onpointercancel={(e) => grip(e, task.id, 'cancel')}>⠿</span
           >
         {/if}
-        {#if ondragtask}
-          <button
-            type="button"
-            class="move"
-            aria-label={t('drop.row_button', { id: task.id })}
-            title={t('drop.choose')}
-            onclick={() => app.chooseDropMove(task.id)}>⇄</button
-          >
-        {/if}
+        <RowActions {app} {task} selected={task.id === app.selectedId} />
       </li>
     {/each}
   </ul>
@@ -133,15 +127,6 @@
     color: var(--muted);
     touch-action: none;
     user-select: none;
-  }
-  .move {
-    background: none;
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    color: var(--text);
-    cursor: pointer;
-    padding: 0 0.35rem;
-    margin-left: 0.4rem;
   }
   .plain li {
     padding: 0.1rem 0;

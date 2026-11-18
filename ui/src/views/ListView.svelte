@@ -8,6 +8,7 @@
   import TextHits from './TextHits.svelte';
   import TaskRow from './TaskRow.svelte';
   import FilterBar from './FilterBar.svelte';
+  import RowActions from './RowActions.svelte';
   import { areaColour, areaLayout, areaRuns, areaTotals } from '../lib/areaBands';
   import ExportMenu from './ExportMenu.svelte';
   import Info from 'appkit-ui/Info.svelte';
@@ -472,7 +473,9 @@
         stamp={sortStamp(task, app.sort)}
         claimant={app.claimName}
         area={band ? { label: shortArea(task.area), name: task.area, colour: areaColour(task.area) } : undefined}
-      />
+      >
+        {#snippet actions()}<RowActions {app} {task} selected={task.id === app.selectedId} />{/snippet}
+      </TaskRow>
     {/snippet}
     {#if layout === 'groups'}
       {#each runs as run (run.area)}

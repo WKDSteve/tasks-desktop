@@ -8,6 +8,7 @@
   import { isDue, isOverdue } from '../lib/remind';
   import type { StampKind } from '../lib/sort';
   import { markGesture, type Marker } from '../lib/markDom';
+  import type { Snippet } from 'svelte';
 
   let {
     task,
@@ -28,6 +29,7 @@
     claimant = '',
     area,
     marker,
+    actions,
   }: {
     task: TaskEntry;
     lang: Lang;
@@ -58,6 +60,8 @@
     area?: { label: string; name: string; colour: number };
     /** Marks the row on a click with Ctrl or Shift (`App.markClick`). */
     marker: Marker;
+    /** The actions at the end of the row (`RowActions.svelte`): beside the row, never inside its button. */
+    actions?: Snippet;
   } = $props();
 
   // A word this version does not know is shown as it is.
@@ -81,7 +85,7 @@
   }
 </script>
 
-<div class="line" class:marked class:banded={area !== undefined} style:--band={area ? `var(--area-${area.colour})` : undefined}>
+<div class="line row-host" class:marked class:banded={area !== undefined} style:--band={area ? `var(--area-${area.colour})` : undefined}>
 <input
   type="checkbox"
   class="mark"
@@ -129,6 +133,7 @@
     {/if}
   </span>
 </button>
+{@render actions?.()}
 </div>
 
 <style>
