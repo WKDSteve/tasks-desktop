@@ -523,6 +523,11 @@ export class Hub extends HubClient<Snapshot> {
     await this.postJson<unknown>('/api/tasks/split_confirm', { job });
   }
 
+  /** Put a split that waited for a yes away in ai-desktop: the person said no, or closed the dialog while it asked. */
+  async dropSplit(job: string): Promise<void> {
+    await this.postJson<unknown>('/api/tasks/split_drop', { job });
+  }
+
   /** Give a hub in the background the order to stay, or take it back; what the settings say afterwards. */
   async setKeepRunning(on: boolean): Promise<boolean | null> {
     const doc = await this.postJson<{ on: boolean | null }>('/api/tasks/keep_running', { on });

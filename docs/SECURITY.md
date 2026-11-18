@@ -527,7 +527,7 @@ ai-desktop. Nothing was sent to a model either way. `POST /api/tasks/draft_job {
 nothing else. The draft only fills the form; the page checks it once more against its own lists, and nothing is
 written before *Create*. A paired phone does not reach these routes.
 
-## Splitting a plan into tasks (`POST /api/tasks/split`, `split_job`, `split_confirm`)
+## Splitting a plan into tasks (`POST /api/tasks/split`, `split_job`, `split_confirm`, `split_drop`)
 
 "Split into tasks" sends `{ "plan" }` and nothing else (`<area>/<slug>` of an open plan, `404` for another). The hub
 builds the text itself: the plan file (`<area>/ROADMAP/plans/<slug>.md` or its folder form, checked to lie in the
@@ -535,7 +535,9 @@ vault, at most 128 KiB) and the list of the plan's tasks, open from the snapshot
 `finished` (`- <id> (<status>, phase <phase>): <title>`, cut at the limit of ai-desktop and said so). It sends them as
 a job of the kind `split-plan`, run at once, the way of `/api/tasks/agent` (the same checks before the secret goes
 out); a private or unclassified area goes with `private: true`, and the page asks before `split_confirm { "job" }`
-runs it with the secret. `split_job { "job" }` reads the job (`GET /jobs/<id>`, no secret) and passes on `status`,
+runs it with the secret; a no, or closing the dialog while it asks, sends `split_drop { "job" }`, which puts the waiting
+job away as `draft_drop` does (`DELETE /jobs/<id>` with the secret; the plan does not stay in the dashboard of
+ai-desktop; only a `split-plan` job of tasks-desktop that waits for a yes, a running one is refused with `409`). `split_job { "job" }` reads the job (`GET /jobs/<id>`, no secret) and passes on `status`,
 `error`, `note`, `private` and, once it is done, only the last block between `<!-- split:begin -->` and
 `<!-- split:end -->` of its answer (`block`, at most 64 KiB; else `block_error`): not the text sent, not the rest of the
 answer. The drafts change nothing by themselves: the page creates only the ticked ones, through `/api/tasks/ops` like

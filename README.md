@@ -884,7 +884,8 @@ the ticked* asks once, and a phase the plan does not have yet asks on its own ("
 the yes the drafts of that phase are not made). Each ticked draft is made through the engine (`new` with plan, phase,
 summary and its acceptance, then `blocked_by`), in order; `#N` in its `after`/`blocked_by` becomes the id of draft N.
 A draft the engine refuses is refused alone, with its reason in the dialog; the others are made. A private or
-unclassified area asks before it goes to a model that does not run on this machine.
+unclassified area asks before it goes to a model that does not run on this machine; a no, or closing the dialog while it
+asks, puts the waiting job away in ai-desktop (it does not stay in its dashboard).
 
 **Hand to an agent.** The button *Hand to an agent ...* in the detail of a task (also in its float, its context menu
 and the palette) opens a small choice: *Only fill in* (the default; the job stands ready in the dashboard of

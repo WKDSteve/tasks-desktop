@@ -2008,7 +2008,8 @@ pub(super) async fn draft_drop(State(st): State<Arc<Shared>>, body: Bytes) -> Re
             "this hub hands no task to an agent",
         );
     };
-    if let Err(r) = own_job(&intake, &id, &["draft-task"], true).await {
+    // Also the no of a split (`split_drop` is this route).
+    if let Err(r) = own_job(&intake, &id, &["draft-task", "split-plan"], true).await {
         return r;
     }
     match intake.discard(&id).await {

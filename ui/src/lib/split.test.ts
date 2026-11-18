@@ -115,6 +115,9 @@ function hub(status: string, states: SplitState[]): SplitHub & { calls: string[]
     confirmSplit: async (job) => {
       calls.push(`confirm ${job}`);
     },
+    dropSplit: async (job) => {
+      calls.push(`drop ${job}`);
+    },
   };
 }
 
@@ -127,6 +130,29 @@ describe('runSplit', () => {
     expect(out.kind).toBe('split');
     expect(h.calls).toEqual(['split lib.nvim/p', 'confirm 0123456789abcdef']);
     expect(await runSplit(hub('needs_confirmation', []), 'p', { ...quick, confirm: async () => false })).toEqual({ kind: 'declined' });
+  });
+
+  it('puts the waiting job away after a no, or when the dialog was closed while it asked', async () => {
+    const no = hub('needs_confirmation', []);
+    expect(await runSplit(no, 'p', { ...quick, confirm: async () => false })).toEqual({ kind: 'declined' });
+    expect(no.calls).toEqual(['split p', 'drop 0123456789abcdef']);
+    const closed = hub('needs_confirmation', []);
+    let asked = false;
+    const confirm = async () => ((asked = true), true);
+    expect(await runSplit(closed, 'p', { ...quick, confirm, wanted: () => false })).toEqual({ kind: 'declined' });
+    expect(asked).toBe(false);
+    expect(closed.calls).toEqual(['split p', 'drop 0123456789abcdef']);
+  });
+
+  it('a job that cannot be put away (ai-desktop ended) is still a no', async () => {
+    const gone = { ...hub('needs_confirmation', []), dropSplit: async () => Promise.reject(new Error('ai-desktop is not running')) };
+    expect(await runSplit(gone, 'p', { ...quick, confirm: async () => false })).toEqual({ kind: 'declined' });
+  });
+
+  it('a job that runs without a question is never put away', async () => {
+    const h = hub('running', [{ status: 'done', block }]);
+    expect((await runSplit(h, 'p', { ...quick, confirm: async () => false })).kind).toBe('split');
+    expect(h.calls).toEqual(['split p']);
   });
 
   it('says why there are no drafts', async () => {

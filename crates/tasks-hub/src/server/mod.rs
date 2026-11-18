@@ -431,6 +431,11 @@ fn app_routes(core: &Arc<Shared>) -> Router<Arc<Shared>> {
             &r("split_confirm"),
             post(draft_confirm).layer(DefaultBodyLimit::max(small)),
         )
+        // A split nobody waits for (a no to its question, a closed dialog): put away like a draft.
+        .route(
+            &r("split_drop"),
+            post(draft_drop).layer(DefaultBodyLimit::max(small)),
+        )
         .route(
             &r("vault_pick"),
             post(vault_pick).layer(DefaultBodyLimit::max(small)),

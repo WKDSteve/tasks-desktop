@@ -58,6 +58,7 @@ export interface SplitHub {
   splitPlan(plan: string): Promise<SplitJob>;
   splitJob(job: string): Promise<SplitState>;
   confirmSplit(job: string): Promise<void>;
+  dropSplit(job: string): Promise<void>;
 }
 
 function hasControl(text: string): boolean {
@@ -246,7 +247,7 @@ export type SplitOutcome = { kind: 'split'; split: Split; job: string } | { kind
 
 /**
  * Ask ai-desktop to split `plan` and wait for the drafts: a private area on a model that is not local runs only after
- * `confirm()`. Nothing is created here.
+ * `confirm()`; a no (or a dialog closed while it asked) puts the waiting job away. Nothing is created here.
  */
 export async function runSplit(
   hub: SplitHub,
@@ -267,7 +268,17 @@ export async function runSplit(
   const job = await hub.splitPlan(plan);
   if (job.status === 'prefilled') return { kind: 'failed', why: job.note ?? 'ai-desktop runs two jobs already; try again later' };
   if (job.status === 'needs_confirmation') {
-    if (!(await opts.confirm())) return { kind: 'declined' };
+    // Nobody is there to be asked any more (the dialog was closed while the hub answered): that is a no. The job (the
+    // plan, in the memory of ai-desktop) is put away, as `runDraft` does with a draft; that it could not be (ai-desktop
+    // ended meanwhile) changes nothing here: it is tidying, not a refusal.
+    if (!wanted() || !(await opts.confirm())) {
+      try {
+        await hub.dropSplit(job.job_id);
+      } catch {
+        // it stays in the dashboard, where it can be put away by hand
+      }
+      return { kind: 'declined' };
+    }
     await hub.confirmSplit(job.job_id);
   }
   // An agent reads the vault: a split may take minutes.

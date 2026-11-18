@@ -648,6 +648,58 @@ async fn a_plan_goes_to_be_split_with_its_tasks_and_only_the_block_comes_back() 
         .0,
         401
     );
+    // A split that runs is not put away: only one that waits for a yes.
+    *fake.doc.lock().unwrap() =
+        serde_json::json!({"source": "tasks-desktop", "kind": "split-plan", "status": "running"});
+    let (status, _) = post(
+        &r,
+        "/api/tasks/split_drop",
+        r#"{"job":"0123456789abcdef"}"#,
+        true,
+    )
+    .await;
+    assert_eq!(status, 409);
+    assert!(fake.dropped.lock().unwrap().is_empty());
+    *fake.doc.lock().unwrap() = serde_json::json!({"source": "tasks-desktop", "kind": "split-plan", "status": "needs_confirmation"});
+    // The person said no to a split of a private area (or closed the dialog while it asked): the job is put away.
+    let (status, doc) = post(
+        &r,
+        "/api/tasks/split_drop",
+        r#"{"job":"0123456789abcdef"}"#,
+        true,
+    )
+    .await;
+    assert_eq!(
+        (status, doc["status"].as_str()),
+        (200, Some("dropped")),
+        "{doc}"
+    );
+    assert_eq!(
+        fake.dropped.lock().unwrap().as_slice(),
+        ["0123456789abcdef"]
+    );
+    assert_eq!(
+        post(
+            &r,
+            "/api/tasks/split_drop",
+            r#"{"job":"0123456789abcdef"}"#,
+            false
+        )
+        .await
+        .0,
+        401
+    );
+    assert_eq!(
+        post(&r, "/api/tasks/split_drop", r#"{"job":"../x"}"#, true)
+            .await
+            .0,
+        400
+    );
+    assert_eq!(
+        fake.dropped.lock().unwrap().len(),
+        1,
+        "nothing is put away without a session or with a bad id"
+    );
 }
 
 #[tokio::test]
