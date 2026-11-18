@@ -88,7 +88,15 @@ export function printSheet(doc: Document, win: Pick<Window, 'print' | 'addEventL
 export function saveText(doc: Document, name: string, text: string, type: string): boolean {
   try {
     // A byte order mark lets a spreadsheet read the umlauts of a CSV as UTF-8; a Markdown file has none.
-    const blob = new Blob(type.startsWith('text/csv') ? [BOM, text] : [text], { type });
+    return saveBlob(doc, name, new Blob(type.startsWith('text/csv') ? [BOM, text] : [text], { type }));
+  } catch {
+    return false;
+  }
+}
+
+/** `blob` as a file the browser saves under `name` (a download); false when the browser did not let it. */
+export function saveBlob(doc: Document, name: string, blob: Blob): boolean {
+  try {
     const url = URL.createObjectURL(blob);
     const link = doc.createElement('a');
     link.href = url;

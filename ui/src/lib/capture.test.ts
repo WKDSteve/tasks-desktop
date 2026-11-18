@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { captureBlocked, captureFailure, captureName, kindOf, kindOfFile, stopStream, videoFormat, type MediaEnv } from './capture';
+import { captureBlocked, captureFailure, captureName, handOver, kindOf, kindOfFile, openCamera, stopStream, videoFormat, type MediaEnv } from './capture';
 
 const env = (over: Partial<MediaEnv> = {}): MediaEnv => ({
   devices: { getUserMedia: async () => ({}) as MediaStream, getDisplayMedia: async () => ({}) as MediaStream },
@@ -99,5 +99,59 @@ describe('stopStream', () => {
     expect(stopped).toEqual(['a', 'b']);
     stopStream(null);
     stopStream(undefined);
+  });
+});
+
+const refused = (name: string): Error => Object.assign(new Error(name), { name });
+
+describe('openCamera', () => {
+  const devices = (refuseSound: string | null, refuseCamera: string | null) => {
+    const asked: MediaStreamConstraints[] = [];
+    const stream = {} as MediaStream;
+    return {
+      asked,
+      stream,
+      getUserMedia: async (c: MediaStreamConstraints) => {
+        asked.push(c);
+        if (c.audio && refuseSound) throw refused(refuseSound);
+        if (refuseCamera) throw refused(refuseCamera);
+        return stream;
+      },
+    };
+  };
+
+  it('records without sound when the microphone is blocked but the camera allowed, or there is no microphone', async () => {
+    for (const why of ['NotAllowedError', 'NotFoundError']) {
+      const d = devices(why, null);
+      expect(await openCamera(d, true)).toBe(d.stream);
+      expect(d.asked).toEqual([{ video: true, audio: true }, { video: true, audio: false }]);
+    }
+  });
+
+  it('tells what the camera alone was refused, and asks nothing again for another failure', async () => {
+    const d = devices('NotAllowedError', 'NotAllowedError');
+    await expect(openCamera(d, true)).rejects.toMatchObject({ name: 'NotAllowedError' });
+    const broken = devices('NotReadableError', null);
+    await expect(openCamera(broken, true)).rejects.toMatchObject({ name: 'NotReadableError' });
+    expect(broken.asked).toHaveLength(1);
+    const quiet = devices(null, null);
+    await openCamera(quiet, false);
+    expect(quiet.asked).toEqual([{ video: true, audio: false }]);
+  });
+});
+
+describe('handOver', () => {
+  const file = new File(['x'], 'video-20261118-101010.webm', { type: 'video/webm' });
+  const taken = { task: 'a/t', file, kind: 'video' as const };
+
+  it('attaches what was taken to its task, and keeps it when the upload fails or another one runs', async () => {
+    const sent: unknown[] = [];
+    const ok = { uploading: null, attachFile: async (...args: unknown[]) => (sent.push(args), true) };
+    expect(await handOver(ok, taken)).toBeNull();
+    expect(sent).toEqual([['a/t', file, 'video']]);
+    const failing = { uploading: null, attachFile: async () => false };
+    expect(await handOver(failing, taken)).toBe(taken);
+    const busy = { uploading: 'a/other', attachFile: async () => true };
+    expect(await handOver(busy, taken)).toBe(taken);
   });
 });

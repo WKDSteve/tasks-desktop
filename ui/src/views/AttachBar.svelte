@@ -11,16 +11,19 @@
     captureFailure,
     captureName,
     frameOf,
-    kindOf,
+    handOver,
     kindOfFile,
     mediaEnv,
+    openCamera,
     playing,
     stopStream,
     videoFormat,
     type AssetKind,
     type Blocked,
     type Capture,
+    type Taken,
   } from '../lib/capture';
+  import { saveBlob } from '../lib/exportDom';
   import { translate, type Key } from '../lib/i18n';
   import ChoiceMenu, { type Choice } from './ChoiceMenu.svelte';
 
@@ -91,25 +94,19 @@
     if (why !== 'cancelled') app.tell('error', `attach.capture.${why}` as Key);
   }
 
-  /** What was taken becomes a file of the task it was taken for; one file at a time, and a second one is told. */
-  function attach(task: string, file: File, kind: Capture): void {
-    if (app.uploading !== null) {
-      app.tell('error', 'attach.capture.busy');
-      return;
-    }
-    void app.attachFile(task, file, kindOf(kind));
+  // What was taken and is not attached (another upload ran, the upload failed): kept here to be sent again or saved.
+  let kept = $state<Taken | null>(null);
+
+  /** What was taken becomes a file of the task it was taken for; one file at a time. What is not attached is kept. */
+  async function attach(task: string, file: File, kind: Capture): Promise<void> {
+    const busyNow = app.uploading !== null;
+    kept = await handOver(app, { task, file, kind });
+    // A failed upload said why already; a second one beside a running upload is not sent at all.
+    if (kept !== null && busyNow) app.tell('error', 'attach.capture.busy');
   }
 
-  /** The camera with the sound where the page may use the microphone; a machine without one records without sound. */
-  async function camera(sound: boolean): Promise<MediaStream> {
-    const devices = env.devices as MediaDevices;
-    if (!sound) return devices.getUserMedia({ video: true, audio: false });
-    try {
-      return await devices.getUserMedia({ video: true, audio: true });
-    } catch (error) {
-      if (captureFailure('video', error) !== 'no_device') throw error;
-      return devices.getUserMedia({ video: true, audio: false });
-    }
+  function saveKept(): void {
+    if (kept !== null && !saveBlob(document, kept.file.name, kept.file)) app.tell('error', 'attach.capture.failed');
   }
 
   /** The camera, shown in the panel: for a photo, or with a recorder that runs from now on for a video. */
@@ -121,7 +118,7 @@
     const task = id;
     let got: MediaStream | null = null;
     try {
-      got = await camera(kind === 'video' && env.allows('microphone'));
+      got = await openCamera(env.devices as MediaDevices, kind === 'video' && env.allows('microphone'));
       // Discarded, or another capture started, while the browser asked: this camera goes off again at once.
       if (mine !== session) {
         stopStream(got);
@@ -151,7 +148,7 @@
             return;
           }
           const ext = type.startsWith('video/mp4') ? 'mp4' : 'webm';
-          attach(task, new File(parts, captureName('video', ext, new Date()), { type: type || 'video/webm' }), 'video');
+          void attach(task, new File(parts, captureName('video', ext, new Date()), { type: type || 'video/webm' }), 'video');
         };
         running.onerror = () => {
           if (mine === session) failed('video', new Error('recorder'));
@@ -182,7 +179,7 @@
       const blob = await frameOf(preview);
       if (mine !== session) return;
       end();
-      attach(task, new File([blob], captureName('photo', 'png', new Date()), { type: 'image/png' }), 'photo');
+      void attach(task, new File([blob], captureName('photo', 'png', new Date()), { type: 'image/png' }), 'photo');
     } catch (error) {
       if (mine === session) failed('photo', error);
     }
@@ -204,7 +201,7 @@
       video.srcObject = null;
       // The detail shows another task by now, or is gone: the picture was meant for the one that asked.
       if (mine !== session) return;
-      attach(task, new File([blob], captureName('screenshot', 'png', new Date()), { type: 'image/png' }), 'screenshot');
+      void attach(task, new File([blob], captureName('screenshot', 'png', new Date()), { type: 'image/png' }), 'screenshot');
     } catch (error) {
       if (mine === session) failed('screenshot', error);
     } finally {
@@ -292,6 +289,18 @@
     onchange={(e) => picked(e.currentTarget, 'image')}
   />
 </span>
+{#if kept !== null && taking === null}
+  <div class="taking" role="group" aria-label={t('attach.capture.kept')} data-kept={kept.kind}>
+    <p class="state">{t('attach.capture.kept')} <code>{kept.file.name}</code></p>
+    <p class="actions">
+      <button type="button" class="attach go" disabled={busy} onclick={() => kept && void attach(kept.task, kept.file, kept.kind)}
+        >{t('attach.capture.retry')}</button
+      >
+      <button type="button" class="attach" onclick={saveKept}>{t('attach.capture.save')}</button>
+      <button type="button" class="attach" onclick={() => (kept = null)}>{t('attach.capture.discard')}</button>
+    </p>
+  </div>
+{/if}
 {#if taking}
   <div class="taking" role="group" aria-label={t(taking.kind === 'video' ? 'attach.video.record' : 'attach.image.photo')} data-taking={taking.kind}>
     <!-- The camera's own picture, without sound: nothing to caption. -->

@@ -147,3 +147,42 @@ export function playing(video: HTMLVideoElement, stream: MediaStream, timeout = 
     check();
   });
 }
+
+/**
+ * The camera, with the sound when `sound`. When the camera with the microphone is refused (the microphone is blocked
+ * while the camera is allowed, or there is none), it is asked once more without sound: a video without sound is
+ * better than none. What the camera alone is refused is the error then.
+ */
+export async function openCamera(devices: Pick<MediaDevices, 'getUserMedia'>, sound: boolean): Promise<MediaStream> {
+  if (!sound) return devices.getUserMedia({ video: true, audio: false });
+  try {
+    return await devices.getUserMedia({ video: true, audio: true });
+  } catch (error) {
+    const why = captureFailure('video', error);
+    if (why !== 'no_device' && why !== 'denied') throw error;
+    return devices.getUserMedia({ video: true, audio: false });
+  }
+}
+
+/** A file that was taken for `task` and is not attached yet. */
+export interface Taken {
+  task: string;
+  file: File;
+  kind: Capture;
+}
+
+/** What the keeper needs of the page: its upload, and whether one runs. */
+export interface CaptureHost {
+  uploading: string | null;
+  attachFile(id: string, file: File, kind?: AssetKind): Promise<boolean>;
+}
+
+/**
+ * Hands what was taken to the upload; what is not attached (another upload runs, the disk is full, the hub is gone)
+ * comes back to be kept: a recording is not taken again as easily as a file is chosen again. The page offers it to be
+ * sent again or saved on this computer until it is attached or discarded. `null`: attached.
+ */
+export async function handOver(host: CaptureHost, taken: Taken): Promise<Taken | null> {
+  if (host.uploading !== null) return taken;
+  return (await host.attachFile(taken.task, taken.file, kindOf(taken.kind))) ? null : taken;
+}
