@@ -236,10 +236,77 @@ fn refused(reply: &crate::client::Reply) -> Refusal {
     }
 }
 
+/// The most a job (`GET /jobs/<id>`) may answer: its text (up to 256 KiB) and the output of its run (up to 512 KiB),
+/// escaped as JSON. The kit's client reads at most 64 KiB, too little for a job whose answer stands at its end.
+const MAX_JOB_REPLY: usize = 2 * 1024 * 1024;
+/// How long reading a job may take (a reply of up to `MAX_JOB_REPLY` on the loopback).
+const JOB_READ_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
+
+/// `GET <path>` on `port` of the loopback, read up to `MAX_JOB_REPLY`: the kit's client, with room for a whole job.
+async fn get_job_reply(port: u16, path: &str) -> std::io::Result<crate::client::Reply> {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let request = format!(
+        "GET {path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+    );
+    let exchange = async {
+        let mut stream = tokio::net::TcpStream::connect(("127.0.0.1", port)).await?;
+        stream.write_all(request.as_bytes()).await?;
+        let mut buf = Vec::new();
+        let mut chunk = [0u8; 16 * 1024];
+        loop {
+            let n = stream.read(&mut chunk).await?;
+            if n == 0 {
+                break;
+            }
+            if buf.len() + n > MAX_JOB_REPLY {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "the job is larger than expected",
+                ));
+            }
+            buf.extend_from_slice(&chunk[..n]);
+        }
+        Ok::<_, std::io::Error>(buf)
+    };
+    let bytes = tokio::time::timeout(JOB_READ_TIMEOUT, exchange)
+        .await
+        .map_err(|_| {
+            std::io::Error::new(std::io::ErrorKind::TimedOut, "ai-desktop did not answer")
+        })??;
+    parse_reply(&bytes)
+}
+
+/// A reply of HTTP/1.1 as the kit's client takes it apart: the status, the headers, the body as text.
+fn parse_reply(bytes: &[u8]) -> std::io::Result<crate::client::Reply> {
+    let bad = || std::io::Error::new(std::io::ErrorKind::InvalidData, "not an HTTP reply");
+    let text = std::str::from_utf8(bytes).map_err(|_| bad())?;
+    let (head, body) = text.split_once("\r\n\r\n").ok_or_else(bad)?;
+    let mut lines = head.split("\r\n");
+    let status = lines
+        .next()
+        .filter(|l| l.starts_with("HTTP/1."))
+        .and_then(|l| l.split(' ').nth(1))
+        .and_then(|s| s.parse::<u16>().ok())
+        .ok_or_else(bad)?;
+    let headers = lines
+        .filter_map(|l| l.split_once(':'))
+        .map(|(k, v)| (k.trim().to_owned(), v.trim().to_owned()))
+        .collect();
+    Ok(crate::client::Reply {
+        status,
+        headers,
+        body: body.to_owned(),
+    })
+}
+
 /// `GET /jobs/<id>` of the ai-desktop on `port` (the dashboard's route: no secret).
 async fn job_of(port: u16, instance: &str, id: &str) -> Result<serde_json::Value, Refusal> {
+    // The id goes into the request line: the route checked it (16 hex digits); here only letters and digits pass.
+    if id.is_empty() || !id.bytes().all(|b| b.is_ascii_alphanumeric()) {
+        return Err(Refusal::Failed("the job id is not plain".to_owned()));
+    }
     same_instance(port, instance).await?;
-    let reply = crate::client::request(port, "GET", &format!("/jobs/{id}"), &[], "")
+    let reply = get_job_reply(port, &format!("/jobs/{id}"))
         .await
         .map_err(|e| Refusal::Failed(e.to_string()))?;
     if reply.status != 200 {
@@ -623,6 +690,57 @@ mod tests {
             "{run}"
         );
         assert!(run.ends_with(r#"{"confirm_private":true}"#), "{run}");
+    }
+
+    /// A job is read with its text and the output of its run (ai-desktop keeps up to 256 KiB and 512 KiB): far more
+    /// than the 64 KiB the kit's client reads, and the draft, the drafts of a split or the review come at its end.
+    #[tokio::test]
+    async fn a_job_larger_than_64_kib_is_read_whole() {
+        let dir = Scratch::new("agent-large-job");
+        let body = serde_json::json!({
+            "id": "0123456789abcdef",
+            "status": "done",
+            "markdown": "m".repeat(200 * 1024),
+            "output": format!("{}\n<!-- split:begin -->{{}}<!-- split:end -->", "o\n".repeat(150 * 1024)),
+            "draft": { "title": "X" },
+        })
+        .to_string();
+        assert!(body.len() > 640 * 1024, "{}", body.len());
+        let (port, _) = double("inst4", (200, Box::leak(body.into_boxed_str()))).await;
+        running_at(&dir, port, "inst4");
+        let doc = intake(&dir).job("0123456789abcdef").await.unwrap();
+        assert_eq!(doc["draft"]["title"], "X");
+        assert!(doc["output"]
+            .as_str()
+            .unwrap()
+            .ends_with("<!-- split:end -->"));
+    }
+
+    #[test]
+    fn a_job_reply_is_http_and_text() {
+        let ok = parse_reply(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\n{}").unwrap();
+        assert_eq!((ok.status, ok.body.as_str()), (200, "{}"));
+        assert_eq!(ok.header("content-length"), Some("2"));
+        assert!(parse_reply(b"not http").is_err());
+        assert!(parse_reply(b"SSH-2.0 200\r\n\r\n").is_err());
+        assert!(
+            parse_reply(b"HTTP/1.1 200 OK\r\n\r\n\xff").is_err(),
+            "not UTF-8"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_job_id_that_is_not_plain_is_not_asked() {
+        let dir = Scratch::new("agent-bad-id");
+        let (port, seen) = double("inst5", (200, r#"{"status":"done"}"#)).await;
+        running_at(&dir, port, "inst5");
+        for bad in ["../health", "a b", "", "a?x=1"] {
+            assert!(
+                matches!(intake(&dir).job(bad).await, Err(Refusal::Failed(_))),
+                "{bad:?}"
+            );
+        }
+        assert!(seen.lock().unwrap().is_empty(), "nothing was asked");
     }
 
     #[tokio::test]
