@@ -487,7 +487,7 @@ pub(super) async fn search_route(
 /// the path below the task and its link, never the image. `project_new`, `plan_set` and `project_set` make a project file
 /// and change the frontmatter of an open plan or project file (the project level); the engine judges the relation.
 /// `plan_close` and `project_close` finish a plan or a project by hand; the engine refuses while something holds it open.
-pub(super) const OPS_ALLOWED: [&str; 21] = [
+pub(super) const OPS_ALLOWED: [&str; 22] = [
     "set",
     "new",
     "reorder",
@@ -509,6 +509,8 @@ pub(super) const OPS_ALLOWED: [&str; 21] = [
     "view_save",
     "view_delete",
     "attach",
+    // no task changes: the engine writes down the figures of today in its series (`tasks.history`); not for devices
+    "history_record",
 ];
 /// The fields of a request of `ops` (the engine checks the rest, strictly).
 pub(super) const OPS_FIELDS: [&str; 4] = ["schema", "client_op_id", "dry_run", "ops"];
@@ -936,6 +938,32 @@ pub(super) async fn finished(State(st): State<Arc<Shared>>, RawQuery(query): Raw
     }
     let request = serde_json::Value::Object(request);
     match ask(&st, Calls::Finished, Some(&request)).await {
+        Ok(reply) => json_response(StatusCode::OK, reply.text, None),
+        Err(response) => response,
+    }
+}
+
+/// `GET /api/tasks/history?area=&since=&until=&resolution=`: the figures of the overview over time (open, ready, with a
+/// value, ...), one point per day or week. A read; the series is the engine's (it writes the figures down below
+/// `_Telemetry/history` of the vault), the page only draws it. The days and the resolution are checked by the engine.
+pub(super) async fn history(State(st): State<Arc<Shared>>, RawQuery(query): RawQuery) -> Response {
+    let params = match parse_query(query.as_deref(), &["area", "since", "until", "resolution"]) {
+        Ok(p) => p,
+        Err(why) => return error_body(StatusCode::BAD_REQUEST, "bad_query", why),
+    };
+    if let Some(area) = params.get("area")
+        && crate::config::valid_area_name(area).is_err()
+    {
+        return error_body(StatusCode::BAD_REQUEST, "bad_query", "area is not a name");
+    }
+    let mut request = serde_json::Map::new();
+    for key in ["area", "since", "until", "resolution"] {
+        if let Some(value) = params.get(key) {
+            request.insert(key.to_owned(), json!(value));
+        }
+    }
+    let request = serde_json::Value::Object(request);
+    match ask(&st, Calls::History, Some(&request)).await {
         Ok(reply) => json_response(StatusCode::OK, reply.text, None),
         Err(response) => response,
     }

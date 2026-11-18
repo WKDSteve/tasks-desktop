@@ -353,6 +353,18 @@ export function createWebHub(deps: HubDeps): WebHub {
         }
         return passOn('finished', params);
       }
+      case 'history': {
+        const q = parseQuery(query, ['area', 'since', 'until', 'resolution']);
+        if (typeof q === 'string') return errorBody(400, 'bad_query', q);
+        const area = q.get('area');
+        if (area !== undefined && !validAreaName(area)) return errorBody(400, 'bad_query', 'area is not a name');
+        const params: Record<string, unknown> = {};
+        for (const key of ['area', 'since', 'until', 'resolution']) {
+          const v = q.get(key);
+          if (v !== undefined) params[key] = v;
+        }
+        return passOn('history', params);
+      }
       case 'waits': {
         const q = parseQuery(query, ['area']);
         if (typeof q === 'string') return errorBody(400, 'bad_query', q);
@@ -697,6 +709,7 @@ export const OPS_ALLOWED = [
   'view_save',
   'view_delete',
   'attach',
+  'history_record',
 ];
 const OPS_FIELDS = ['schema', 'client_op_id', 'dry_run', 'ops'];
 /** The most operations in one request (the engine's limit). */

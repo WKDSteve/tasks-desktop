@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { tick } from 'svelte';
+  import { metricOfTile } from '../lib/statsHistory';
   import { type App, type OrderedTile, type Tile } from '../lib/app.svelte';
   import type { TaskBrief } from '../lib/contract';
   import { narrows, waitingForMe } from '../lib/filter';
@@ -79,12 +81,34 @@
 
   /** `v` on a number walks its views; Escape closes (handled by the panel). */
   function onTileKey(event: KeyboardEvent, key: CountKey): void {
-    if (event.key === 'v' && !event.ctrlKey && !event.metaKey && !event.altKey) {
+    if (event.ctrlKey || event.metaKey || event.altKey) return;
+    if (event.key === 'v') {
       event.preventDefault();
       event.stopPropagation();
       app.cycleCountView(key);
+    } else if (event.key === 'h' && app.can('history') && metricOfTile(key)) {
+      event.preventDefault();
+      event.stopPropagation();
+      openHistory(key);
     }
   }
+
+  /** The history of a number: the statistics, with its figure chosen; the way back knows how far this page was scrolled. */
+  function openHistory(key: CountKey): void {
+    const metric = metricOfTile(key);
+    if (metric) app.openHistory(metric, document.querySelector('main')?.scrollTop ?? 0);
+  }
+
+  // back from the history: scrolled as the page was when it was left
+  $effect(() => {
+    const top = app.todayScroll;
+    if (top === null) return;
+    app.todayScroll = null;
+    void tick().then(() => {
+      const main = document.querySelector('main');
+      if (main) main.scrollTop = top;
+    });
+  });
 
   const visible = $derived(
     app.tileOrder.filter(
@@ -200,6 +224,7 @@
       </header>
       <div class="tiles">
         {#each tiles as tile (tile.key)}
+          <div class="tile-box">
           <button
             type="button"
             class="tile"
@@ -214,6 +239,19 @@
             <span class="num">{tile.value}</span>
             <span class="muted">{t(tile.key)}</span>
           </button>
+          {#if app.can('history') && metricOfTile(tile.count)}
+            <button
+              type="button"
+              class="trend"
+              data-history={tile.count}
+              aria-label={t('today.tiles.history', { what: t(tile.key) })}
+              data-hint={t('hint.tile.history', { what: t(tile.key) })}
+              onclick={() => openHistory(tile.count)}
+            >
+              <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M1.5 12.5 6 8l3 3 5.5-6.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" /></svg>
+            </button>
+          {/if}
+          </div>
         {/each}
       </div>
     </aside>
@@ -667,6 +705,30 @@
     font: inherit;
     text-align: left;
     cursor: pointer;
+  }
+  .tile-box {
+    position: relative;
+    display: grid;
+  }
+  .trend {
+    position: absolute;
+    top: 0.3rem;
+    right: 0.3rem;
+    display: grid;
+    place-items: center;
+    width: 1.5rem;
+    height: 1.5rem;
+    padding: 0;
+    border: 1px solid transparent;
+    border-radius: var(--radius);
+    background: none;
+    color: var(--muted);
+    cursor: pointer;
+  }
+  .trend:hover,
+  .trend:focus-visible {
+    color: var(--accent);
+    border-color: var(--accent);
   }
   .tile:hover,
   .tile[aria-expanded='true'] {

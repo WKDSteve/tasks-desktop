@@ -34,6 +34,7 @@ import type {
   DonePreview,
   Estimate,
   Finished,
+  History,
   Links,
   MovePlan,
   Next,
@@ -98,6 +99,7 @@ import type { DailyPrefs } from './daily';
 import { parseConflictMode, type ConflictMode } from 'appkit-ui/conflicts';
 import type { CountKey, CountView } from './counts';
 import { parseStatsPrefs, type StatDim, type StatSort } from './stats';
+import { defaultHistoryPrefs, isDefaultHistory, parseHistoryPrefs, type HistoryMetric, type HistoryPrefs } from './statsHistory';
 import { defaultTilePrefs, isDefaultTiles, parseTilePrefs, type TilePrefs } from './statsTiles';
 import { conflictsOf, conflictsOfRequest, retryOp, type Conflict } from './conflicts';
 import { browserStreamShare, Preferences, StreamSession } from 'appkit-ui/session';
@@ -423,6 +425,14 @@ export class App {
   statsTiles = $state.raw<TilePrefs>(defaultTilePrefs());
   /** Whether the filter bar of the statistics is unfolded. */
   statsFilterOpen = $state(true);
+  /** The history in the statistics: the figure, the period and the days of a period of the person's own. */
+  statsHistory = $state.raw<HistoryPrefs>(defaultHistoryPrefs());
+  /** Where the history was opened from (a number of the overview) and how far that page was scrolled: the way back. */
+  historyFrom = $state.raw<{ view: View; scroll: number } | null>(null);
+  /** Counted up each time the history is opened from elsewhere: the section then comes into view. */
+  historyShown = $state(0);
+  /** How far the overview is scrolled again once it is drawn (the way back from the history), else null. */
+  todayScroll = $state.raw<number | null>(null);
   /**
    * `auto`: a field of the detail is written as soon as it changes (the default). `manual`: the changes of the fields
    * of a task are held as a draft (`drafts`) until the person saves them, all in one write; the other ways to change
@@ -862,6 +872,7 @@ export class App {
     this.statsSort = stats.sort;
     this.statsTiles = parseTilePrefs(safe(() => env.prefs.getItem('tasks-desktop.stats-tiles')));
     this.statsFilterOpen = safe(() => env.prefs.getItem('tasks-desktop.stats-filter')) !== 'closed';
+    this.statsHistory = parseHistoryPrefs(safe(() => env.prefs.getItem('tasks-desktop.stats-history')));
     this.saveMode = safe(() => env.prefs.getItem('tasks-desktop.save-mode')) === 'manual' ? 'manual' : 'auto';
     this.listColumns = parseColumns(safe(() => env.prefs.getItem('tasks-desktop.list-columns')));
     this.folds = parseFolds(safe(() => env.prefs.getItem('tasks-desktop.folds')));
@@ -959,7 +970,13 @@ export class App {
       }
       case 'stats': {
         const stats = parseStatsPrefs(null);
-        return this.statsDim !== stats.dim || this.statsSort !== stats.sort || !isDefaultTiles(this.statsTiles) || !this.statsFilterOpen;
+        return (
+          this.statsDim !== stats.dim ||
+          this.statsSort !== stats.sort ||
+          !isDefaultTiles(this.statsTiles) ||
+          !this.statsFilterOpen ||
+          !isDefaultHistory(this.statsHistory)
+        );
       }
       case 'today':
         return this.tileOrderChanged || this.hiddenTiles.length > 0 || TODAY_TILES.some((tile) => this.tileSizes[tile] !== undefined);
@@ -986,6 +1003,7 @@ export class App {
         this.setStats(stats.dim, stats.sort);
         this.setStatsTiles(defaultTilePrefs());
         this.setStatsFilterOpen(true);
+        this.setStatsHistory(defaultHistoryPrefs());
         return;
       }
       case 'today':
@@ -3850,6 +3868,79 @@ export class App {
   setStatsFilterOpen(open: boolean): void {
     this.statsFilterOpen = open;
     safe(() => this.env.prefs.setItem('tasks-desktop.stats-filter', open ? 'open' : 'closed'));
+  }
+
+  /** The figure and the period of the history, remembered. */
+  setStatsHistory(prefs: HistoryPrefs): void {
+    this.statsHistory = prefs;
+    safe(() => this.env.prefs.setItem('tasks-desktop.stats-history', JSON.stringify(prefs)));
+  }
+
+  /** The figures of the overview over time (the engine keeps the series; the page only draws it). */
+  history(
+    query: { area?: string; since?: string; until?: string; resolution?: 'day' | 'week' },
+    signal?: AbortSignal,
+  ): Promise<History> {
+    return this.env.hub.history(query, signal);
+  }
+
+  /**
+   * The statistics with the history of one figure, from a number of another view: the filter stays as it is (the
+   * history is of the areas it names), and the way back knows the view and how far it was scrolled.
+   */
+  openHistory(metric: HistoryMetric, scroll = 0): void {
+    if (!this.can('history')) return;
+    this.setStatsHistory({ ...this.statsHistory, metric });
+    this.historyFrom = { view: this.view, scroll };
+    this.historyShown += 1;
+    this.setView('stats');
+  }
+
+  /** Back to where the history was opened from, scrolled as it was. */
+  backFromHistory(): void {
+    const from = this.historyFrom;
+    if (!from) return;
+    this.historyFrom = null;
+    if (from.view === 'today') this.todayScroll = from.scroll;
+    this.setView(from.view);
+  }
+
+  /**
+   * Have the engine write down the figures of today (the first row starts the series of a vault that has none).
+   * True when it did; a refusal is said like any other write that failed.
+   */
+  async recordHistory(): Promise<boolean> {
+    let done = false;
+    await this.write([{ op: 'history_record' } as unknown as Op], {
+      undoable: false,
+      onAnswer: (result) => {
+        done = result.results.every((r) => r.ok);
+        if (done) this.say('ok', 'stats.history.recorded');
+        return done;
+      },
+    });
+    return done;
+  }
+
+  /** The state of the vault whose figures were last handed to the engine to write down (`keepHistory`). */
+  private historyKeptRev: string | null = null;
+
+  /**
+   * Keep a history that exists going: have the engine write down the figures of today, once per state of the vault
+   * (it writes a row only for an area whose figures changed, and at most one per day). Quiet: no toast, not a
+   * write of the person, and a failure only means the line ends a day earlier. The number of rows written.
+   */
+  async keepHistory(): Promise<number> {
+    const rev = this.snapshot?.rev ?? null;
+    if (this.readOnly || this.phase !== 'ready' || rev === null || rev === this.historyKeptRev || !this.can('history')) return 0;
+    this.historyKeptRev = rev;
+    try {
+      const result = await this.env.hub.ops({ client_op_id: this.opId(), ops: [{ op: 'history_record' } as unknown as Op] });
+      const rows = (result.results[0] as { rows?: number } | undefined)?.rows;
+      return typeof rows === 'number' ? rows : 0;
+    } catch {
+      return 0;
+    }
   }
 
   /** The engine's estimate of some open tasks (the statistics ask it for the tasks the filter keeps). */

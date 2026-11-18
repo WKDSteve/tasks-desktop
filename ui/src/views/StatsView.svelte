@@ -28,6 +28,7 @@
   import { bucketClass as classOf, bucketLabel as labelOfBucket, bucketName, dimHint as hintOfDim } from '../lib/statsWords';
   import type { StatDim } from '../lib/stats';
   import StatsFilter from './StatsFilter.svelte';
+  import StatsHistory from './StatsHistory.svelte';
   import StatsTiles from './StatsTiles.svelte';
 
   let { app }: { app: App } = $props();
@@ -137,6 +138,8 @@
       </label>
     </div>
   </section>
+
+  <StatsHistory {app} />
 
   {#if legend.rows.length === 0}
     <p class="muted" role="status">{t('stats.empty')}</p>

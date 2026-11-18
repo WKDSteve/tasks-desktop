@@ -7,6 +7,7 @@ import type {
   Estimate,
   Finished,
   Groupings,
+  History,
   Links,
   NamedLists,
   Next,
@@ -671,6 +672,18 @@ export class Hub extends HubClient<Snapshot> {
       .map(([key, value]) => `${key}=${encodeURIComponent(String(value)).replace(/%2F/gi, '/')}`);
     const path = `/api/tasks/finished${parts.length > 0 ? `?${parts.join('&')}` : ''}`;
     return this.json<Finished>(path, signal ? { signal } : undefined);
+  }
+
+  /** The figures of the overview over time, one point per day or week (the engine keeps the series). */
+  history(
+    query: { area?: string; since?: string; until?: string; resolution?: 'day' | 'week' },
+    signal?: AbortSignal,
+  ): Promise<History> {
+    const parts = Object.entries(query)
+      .filter(([, value]) => value !== undefined)
+      .map(([key, value]) => `${key}=${encodeURIComponent(String(value))}`);
+    const path = `/api/tasks/history${parts.length > 0 ? `?${parts.join('&')}` : ''}`;
+    return this.json<History>(path, signal ? { signal } : undefined);
   }
 
   /** What the parked tasks wait for: per `waits_for` key the number of tasks and their areas (the engine counts). */

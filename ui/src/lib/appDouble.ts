@@ -351,6 +351,50 @@ export class FakeHub {
     keys: [{ key: 'mac', count: 2, areas: ['other', 'pub'] }],
     incomplete: [],
   };
+  /** What `history` answers, and what it was asked. */
+  historyDoc: unknown = {
+    kind: 'tasks.history',
+    since: '2026-01-01',
+    until: '2026-01-03',
+    resolution: 'day',
+    first: '2026-01-02',
+    last: '2026-01-03',
+    points: [
+      { day: '2026-01-01', recorded: false, done: 0, created: 1 },
+      {
+        day: '2026-01-02',
+        recorded: true,
+        done: 1,
+        created: 0,
+        open: 4,
+        by_status: { open: 3, doing: 1, blocked: 0, decision: 0, parked: 0 },
+        by_state: { ready: 2, decision: 0, waiting: 1, stuck: 0, freed: 0, parked: 1 },
+        with_effort: 2,
+        with_value: 3,
+        effort_days: 2.5,
+        value: 9,
+      },
+      {
+        day: '2026-01-03',
+        recorded: false,
+        done: 0,
+        created: 2,
+        open: 4,
+        by_status: { open: 3, doing: 1, blocked: 0, decision: 0, parked: 0 },
+        by_state: { ready: 2, decision: 0, waiting: 1, stuck: 0, freed: 0, parked: 1 },
+        with_effort: 2,
+        with_value: 3,
+        effort_days: 2.5,
+        value: 9,
+      },
+    ],
+    incomplete: [],
+  };
+  historyCalls: { area?: string; since?: string; until?: string; resolution?: string }[] = [];
+  async history(query: { area?: string; since?: string; until?: string; resolution?: string }) {
+    this.historyCalls.push(query);
+    return this.historyDoc as never;
+  }
   async waits() {
     this.waitsCalls += 1;
     return this.waitsDoc as never;

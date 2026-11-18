@@ -270,6 +270,28 @@ fn tasks_fill(call: &Call<'_>, doc: &mut Value) {
                 "severity": ["low", "medium", "high", "critical"],
             });
         }
+        "history" => {
+            doc["digest"] = json!("sha256:00000000000000aa");
+            doc["since"] = params.get("since").cloned().unwrap_or(json!("2026-01-01"));
+            doc["until"] = params.get("until").cloned().unwrap_or(json!("2026-01-02"));
+            doc["resolution"] = params.get("resolution").cloned().unwrap_or(json!("day"));
+            if let Some(area) = params.get("area") {
+                doc["area"] = area.clone();
+            }
+            doc["first"] = json!("2026-01-02");
+            doc["last"] = json!("2026-01-02");
+            doc["points"] = json!([
+                { "day": "2026-01-01", "recorded": false, "done": 1, "created": 2 },
+                {
+                    "day": "2026-01-02", "recorded": true, "done": 0, "created": 1,
+                    "open": 4,
+                    "by_status": { "open": 3, "doing": 1, "blocked": 0, "decision": 0, "parked": 0 },
+                    "by_state": { "ready": 2, "decision": 0, "waiting": 1, "stuck": 0, "freed": 0, "parked": 1 },
+                    "with_effort": 2, "with_value": 3, "effort_days": 2.5, "value": 9
+                },
+            ]);
+            doc["incomplete"] = json!([]);
+        }
         "waits" => {
             doc["rev"] = json!("rev:aaaaaa");
             doc["digest"] = json!("sha256:00000000000000aa");
