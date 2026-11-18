@@ -353,7 +353,7 @@ describe('the repo tiles', () => {
     ...over,
   });
 
-  it('offers the folders the hub suggests, reads them again once one became a tile, and offers none when the hub does not say', async () => {
+  it('offers the folders the hub suggests, reads them again once one became a tile or one went, and offers none when the hub does not say', async () => {
     let left = ['appkit', 'lib.nvim'];
     const h = host({ repoSuggest: vi.fn(async () => left) });
     const state = new ReposState(h);
@@ -370,6 +370,10 @@ describe('the repo tiles', () => {
     h.repoAdd = vi.fn(async () => Promise.reject(new ApiError(400, 'bad_folder', 'no')));
     expect(await state.add('nope', 'gggg0001')).toBe(false);
     expect(vi.mocked(h.repoSuggest).mock.calls.length).toBe(asked);
+    // A tile that was taken away: its folder is offered again.
+    left = ['appkit', 'lib.nvim'];
+    expect(await state.save(state.doc!.groups)).toBe(true);
+    await vi.waitFor(() => expect(state.suggestions).toEqual(['appkit', 'lib.nvim']));
     // A hub that does not answer: no list, and the tiles are read all the same.
     const quiet = new ReposState(host({ repoSuggest: vi.fn(async () => Promise.reject(new Error('down'))) }));
     await quiet.load();

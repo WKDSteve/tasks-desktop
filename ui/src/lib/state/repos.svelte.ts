@@ -72,6 +72,8 @@ export class ReposState {
     try {
       this.doc = await send();
       this.problem = null;
+      // A folder that became a tile is offered no more, and one whose tile went is offered again.
+      void this.loadSuggestions();
       return true;
     } catch (error) {
       if (error instanceof ApiError && error.code === 'stale') {
@@ -90,11 +92,7 @@ export class ReposState {
   /** A folder as a tile of a group (its name from the folder unless one is given). */
   add(path: string, group: string, name?: string): Promise<boolean> {
     const body = { path, group, ...(name !== undefined && name.trim() !== '' ? { name: name.trim() } : {}) };
-    return this.change(() => this.host.repoAdd(body)).then((done) => {
-      // The folder that became a tile is not offered again.
-      if (done) void this.loadSuggestions();
-      return done;
-    });
+    return this.change(() => this.host.repoAdd(body));
   }
 
   /** The groups as the page worked them out, and new names, on the state read. */
