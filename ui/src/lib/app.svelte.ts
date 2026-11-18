@@ -3925,7 +3925,6 @@ export class App {
   backFromHistory(): void {
     const from = this.historyFrom;
     if (!from) return;
-    this.historyFrom = null;
     if (from.view === 'today') this.todayScroll = from.scroll;
     this.setView(from.view);
   }
@@ -3935,6 +3934,11 @@ export class App {
    * True when it did; a refusal is said like any other write that failed.
    */
   async recordHistory(): Promise<boolean> {
+    // `write` drops a request while another one is on its way: say so, the button would seem to do nothing
+    if (this.saving) {
+      this.say('error', 'write.busy');
+      return false;
+    }
     let done = false;
     await this.write([{ op: 'history_record' } as unknown as Op], {
       undoable: false,
@@ -5082,6 +5086,8 @@ export class App {
     if (view === 'views' && !this.can('views')) return;
     // A window of one task becomes a page of views when one is chosen.
     this.solo = false;
+    // the way back from the history belongs to the visit it was opened for: leaving the statistics another way ends it
+    if (view !== 'stats') this.historyFrom = null;
     this.view = view;
     if (view === 'inbox') this.ensureInboxSelection(true);
     // The board is the built-in view of the tab: its bar makes views, which need the fields of the engine.

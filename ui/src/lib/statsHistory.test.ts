@@ -259,6 +259,28 @@ describe('the way to the history and back', () => {
     m.app.stop();
   });
 
+  it('forgets the way back when the statistics are left another way, and says so when a start meets a write on its way', async () => {
+    const m = make({ token: 't' });
+    m.hub.capabilities = [...(m.hub.capabilities ?? []), 'history'];
+    await m.app.start(null);
+    m.app.setView('today');
+    m.app.openHistory('ready', 120);
+    expect(m.app.historyFrom).not.toBeNull();
+    m.app.setView('list');
+    expect(m.app.historyFrom).toBeNull();
+    m.app.setView('stats');
+    expect(m.app.historyFrom).toBeNull();
+    expect(m.app.todayScroll).toBeNull();
+
+    m.app.saving = true;
+    const before = m.hub.sent.length;
+    expect(await m.app.recordHistory()).toBe(false);
+    expect(m.hub.sent).toHaveLength(before);
+    expect(m.app.toast?.kind).toBe('error');
+    m.app.saving = false;
+    m.app.stop();
+  });
+
   it('goes nowhere with an engine that keeps no history', async () => {
     const m = make({ token: 't' });
     await m.app.start(null);

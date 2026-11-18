@@ -3,7 +3,7 @@
   // for the keyboard and a screen reader. The series is the engine's (`tasks.history`: it writes the figures down per
   // day and area); the page asks for the window and draws it. Reached from the statistics, and from a number of the
   // overview, which opens it with its figure chosen.
-  import { tick } from 'svelte';
+  import { tick, untrack } from 'svelte';
   import type { App } from '../lib/app.svelte';
   import type { History } from '../lib/contract';
   import { translate, type Key } from '../lib/i18n';
@@ -44,8 +44,10 @@
     void again;
     if (!app.can('history') || app.phase !== 'ready') return;
     const abort = new AbortController();
-    const { since, until, resolution } = frame;
-    const areas = ask.areas;
+    // only the key is a reason to ask again: `frame` and `ask` are new objects whenever anything of the filter or the
+    // choice changes (a key in the search, another figure), with the same window and areas in them
+    const { since, until, resolution } = untrack(() => frame);
+    const areas = untrack(() => ask.areas);
     loading = true;
     Promise.all(areas.map((area) => app.history({ ...(area !== undefined ? { area } : {}), since, until, resolution }, abort.signal)))
       .then((docs) => {
@@ -111,6 +113,8 @@
   $effect(() => {
     if (app.historyShown === 0 || !section) return;
     const el = section;
+    // once per opening: a later visit of the statistics by the menu or Back stays where it is
+    app.historyShown = 0;
     void tick().then(() => {
       el.scrollIntoView({ block: 'start' });
       el.querySelector<HTMLElement>('select')?.focus();
