@@ -2185,6 +2185,10 @@ pub(super) fn guard_rules() -> GuardRules {
     // The phone page records a voice note for a new task: only under /m/ the microphone is let on (and media from its
     // own blobs, to hear the note before it is sent); the desktop page keeps it off.
     .with_installable_microphone()
+    // The desktop page takes a photo or records a video as an attachment of a task (the detail's Video and Image
+    // buttons): its permissions allow the camera and the microphone to this origin. The browser still asks the
+    // person each time; the phone page, the data routes and the policy of the page stay as they are.
+    .with_page_capture()
     // What a paired phone reaches (appkit `MOB-02`, fail closed): exactly the routes tasks-mobile asks, nothing the
     // desktop page alone needs (the vaults, events, search, sheets, repos ...). `ops` is released at `create` and
     // judges each operation and its fields itself (`device_op_level`, `device_op_fields`). `upload` adds a file to a

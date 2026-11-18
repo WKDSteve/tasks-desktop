@@ -632,6 +632,17 @@ folder (never a file, never a folder with something in it: nothing is merged or 
 name. It makes `<path>/<area>/ROADMAP/tasks`, the folders the engine looks for, and does not register the vault: the page
 then calls `vaults/add` as for any folder. All three routes need a session and count as mutations.
 
+## The camera and the microphone of the page
+
+The page of the hub says `camera=(self), microphone=(self)` in its `Permissions-Policy` (the guard's
+`GuardRules::with_page_capture`, appkit `SECURITY.md`): the detail of a task records a video or takes a photo as an
+attachment (README, *Attaching*). The header is a ceiling, not a grant: the browser asks the person before it hands out
+either device, for this origin, and the person can take the answer back in the browser. Nothing else of the guard
+changes: the policy of the page names no `media-src` (the preview is the stream set on the element; the recording goes
+to the hub as an upload like any file), the phone page under `/m/` keeps its own permissions (the microphone for a
+voice note, no camera), and an answer of `hello` or of a route of data carries no permissions at all. The security
+matrix holds the hub to this (`the_page_may_use_the_camera_and_nothing_else_changes`).
+
 ## Repository folders (`/api/tasks/repos`, `repos/image`, `repos/suggest`, `repos/add`, `repos/save`, `repos/open`)
 
 The repo tiles are of this device: `repos.json` in the config folder (beside `config.json`), written by the hub alone,

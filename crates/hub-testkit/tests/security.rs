@@ -26,6 +26,19 @@ async fn the_phone_page_has_its_own_policy_and_nothing_more() {
     .await;
 }
 
+/// The desktop page may use the camera and the microphone (a photo or a video attached to a task), and nothing else
+/// of the hub may: not the phone page, not an answer of data, and the policy of the page names no media.
+#[tokio::test]
+async fn the_page_may_use_the_camera_and_nothing_else_changes() {
+    appkit_testkit::security::the_page_may_capture(
+        &hub_testkit::subjects::TasksWithPhonePage::new(),
+        true,
+        Some(hub_testkit::subjects::PHONE_PREFIX),
+    )
+    .await;
+    appkit_testkit::security::the_page_may_capture(&hub_testkit::subjects::Tasks, true, None).await;
+}
+
 #[tokio::test]
 async fn a_phone_pairs_once_and_then_logs_in_with_its_key() {
     appkit_testkit::security::a_device_pairs_once_and_then_logs_in_with_its_key(

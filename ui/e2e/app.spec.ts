@@ -10203,7 +10203,7 @@ const FAKE_STREAM = `
 `;
 
 for (const scheme of ['light', 'dark'] as const) {
-  test(`the detail attaches a file, a video and an image, each into its folder (${scheme}); what the hub does not let the page do says why`, async ({ page }) => {
+  test(`the detail attaches a file, a video and an image, each into its folder (${scheme}); the hub lets the page use the camera`, async ({ page }) => {
     test.slow();
     await page.emulateMedia({ colorScheme: scheme });
     // The screen: the browser's own choice of a window cannot be driven, so a canvas stands in for what it gives.
@@ -10231,18 +10231,18 @@ for (const scheme of ['light', 'dark'] as const) {
     expect(readFileSync(join(dir, 'assets', 'videos', 'Demo-Clip.webm'), 'utf8')).toBe('not really a video');
     await expect(video).not.toHaveAttribute('open', '');
 
-    // Recording needs the camera, which this hub does not let the page use: the entry is there, says why, and a press
-    // tells it instead of doing nothing.
+    // Recording needs the camera, which the hub lets its page use (the guard's `with_page_capture`: the page says
+    // `camera=(self), microphone=(self)`): the entry can be chosen and names no reason against it. What the browser
+    // then asks the person is the matter of the tests below.
+    expect(await page.evaluate(() => (document as unknown as { featurePolicy: { allowsFeature(f: string): boolean } }).featurePolicy.allowsFeature('camera'))).toBe(true);
+    const policy = (await page.request.get('/')).headers()['permissions-policy'] ?? '';
+    expect(policy).toContain('camera=(self)');
+    expect(policy).toContain('microphone=(self)');
     await video.locator('summary').click();
     const record = videoChoices.getByRole('button', { name: /^Record a video/ });
-    await expect(record).toHaveAttribute('aria-disabled', 'true');
-    await expect(record).toContainText('This hub does not let the page use it');
+    await expect(record).not.toHaveAttribute('aria-disabled', 'true');
+    await expect(record).not.toContainText('This hub does not let the page use it');
     await expectAccessible(page, `the choice of the video button (${scheme})`);
-    // Pressed with the keyboard (an entry that cannot be chosen stays in its order).
-    await record.focus();
-    await page.keyboard.press('Enter');
-    await expect(page.getByRole('alert').filter({ hasText: 'This hub does not let the page use it' })).toBeVisible();
-    await expect(float.locator('[data-taking]')).toHaveCount(0);
     // Escape closes the choice and leaves the float open, with the focus back on the button.
     await record.focus();
     await page.keyboard.press('Escape');
@@ -10259,7 +10259,7 @@ for (const scheme of ['light', 'dark'] as const) {
       /^Take a screenshot\s*$/,
       /^From the clipboard of the hub\s*$/,
     ]);
-    await expect(imageChoices.getByRole('button', { name: /^Take a photo/ })).toHaveAttribute('aria-disabled', 'true');
+    await expect(imageChoices.getByRole('button', { name: /^Take a photo/ })).not.toHaveAttribute('aria-disabled', 'true');
     await page.keyboard.press('Escape');
     const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64');
     await float.locator('[data-image-picker]').setInputFiles({ name: 'photo one.png', mimeType: 'image/png', buffer: png });
@@ -10289,11 +10289,11 @@ for (const scheme of ['light', 'dark'] as const) {
   });
 }
 
-test('a video is recorded and a photo is taken in the page where it may use the camera: both are attached, a discarded one is not', async ({ page }) => {
+test('a video is recorded and a photo is taken: both are attached, a discarded one is not', async ({ page }) => {
   test.slow();
-  // This hub does not let the page use the camera; the test stands in for a hub that does, and for the camera.
+  // The hub lets the page use the camera; the test stands in for the camera (a canvas that is drawn on), so that the
+  // size and the count of the streams are known. The camera of the browser itself is the matter of the tests below.
   await page.addInitScript(`${FAKE_STREAM}
-    Object.defineProperty(document, 'featurePolicy', { value: { allowsFeature: () => true } });
     navigator.mediaDevices.getUserMedia = async () => window.__fakeStream();
   `);
   const { float, dir, attached } = await openAttachTask(page, 'Attach camera');
@@ -10363,7 +10363,6 @@ test('a video is recorded and a photo is taken in the page where it may use the 
 
 test('a camera that is refused or missing is told, and nothing is attached', async ({ page }) => {
   await page.addInitScript(`
-    Object.defineProperty(document, 'featurePolicy', { value: { allowsFeature: () => true } });
     window.__cameraError = 'NotAllowedError';
     navigator.mediaDevices.getUserMedia = async () => { throw new DOMException('no', window.__cameraError); };
     navigator.mediaDevices.getDisplayMedia = async () => { throw new DOMException('closed', 'NotAllowedError'); };
@@ -10389,6 +10388,61 @@ test('a camera that is refused or missing is told, and nothing is attached', asy
   await choices.getByRole('button', { name: 'Take a photo' }).click();
   await expect(page.getByRole('alert').filter({ hasText: 'No camera was found' })).toBeVisible();
   expect(existsSync(join(dir, 'assets'))).toBe(false);
+});
+
+// The question of the browser itself, with Chrome's stand-in for a camera and a microphone (a moving test picture and
+// a beep): nothing of the page is replaced, so the policy of the hub, `getUserMedia` and the recorder are the real
+// ones. A real camera and a real microphone stay a check by hand.
+test.describe('the camera of the browser', () => {
+  test.describe('allowed by the person', () => {
+    test.use({ launchOptions: { args: ['--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream'] } });
+
+    test('a video is recorded with the camera of the browser and attached, and a photo is taken and attached', async ({ page }) => {
+      test.slow();
+      const { float, dir, attached } = await openAttachTask(page, 'Attach browser camera');
+      const bar = float.getByRole('group', { name: 'Attach to this task' });
+      await bar.locator('details[data-choice="video"] summary').click();
+      await page.getByRole('group', { name: 'Video' }).getByRole('button', { name: 'Record a video' }).click();
+      const taking = float.getByRole('group', { name: 'Record a video' });
+      await expect(taking.getByRole('status')).toContainText('Recording', { timeout: 15_000 });
+      await page.waitForTimeout(1000);
+      await taking.getByRole('button', { name: 'Stop and attach' }).click();
+      await expect(attached).toHaveValue(/^\[video-\d{8}-\d{6}\.webm\]\(assets\/videos\/video-\d{8}-\d{6}\.webm\)$/, { timeout: WRITE_BUDGET });
+      const clips = readdirSync(join(dir, 'assets', 'videos'));
+      expect(clips).toHaveLength(1);
+      const clip = readFileSync(join(dir, 'assets', 'videos', clips[0] ?? ''));
+      expect(clip.subarray(0, 4).equals(Buffer.from([0x1a, 0x45, 0xdf, 0xa3]))).toBe(true);
+      expect(clip.length).toBeGreaterThan(200);
+
+      await bar.locator('details[data-choice="image"] summary').click();
+      await page.getByRole('group', { name: 'Image' }).getByRole('button', { name: 'Take a photo' }).click();
+      const photo = float.getByRole('group', { name: 'Take a photo' });
+      await expect(photo.getByRole('status')).toContainText('The camera is on', { timeout: 15_000 });
+      await photo.getByRole('button', { name: 'Take the photo' }).click();
+      await expect(attached).toHaveValue(/^!\[photo-\d{8}-\d{6}\.png\]\(assets\/images\/photo-\d{8}-\d{6}\.png\)$/, { timeout: WRITE_BUDGET });
+      const photos = readdirSync(join(dir, 'assets', 'images'));
+      expect(photos).toHaveLength(1);
+      const taken = readFileSync(join(dir, 'assets', 'images', photos[0] ?? ''));
+      expect(taken.subarray(0, 4).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47]))).toBe(true);
+      expect(taken.readUInt32BE(16)).toBeGreaterThan(0);
+      expect(consoleProblems.get(page)).toEqual([]);
+    });
+  });
+
+  test.describe('refused by the person', () => {
+    // A camera is there, but nobody says yes to the question of the browser.
+    test.use({ launchOptions: { args: ['--use-fake-device-for-media-stream'] }, permissions: [] });
+
+    test('a refused question of the browser is told, and nothing is attached', async ({ page }) => {
+      const { float, dir } = await openAttachTask(page, 'Attach browser refused');
+      const bar = float.getByRole('group', { name: 'Attach to this task' });
+      await bar.locator('details[data-choice="image"] summary').click();
+      await page.getByRole('group', { name: 'Image' }).getByRole('button', { name: 'Take a photo' }).click();
+      await expect(page.getByRole('alert').filter({ hasText: 'The camera was not allowed' })).toBeVisible({ timeout: 15_000 });
+      await expect(float.locator('[data-taking]')).toHaveCount(0);
+      expect(existsSync(join(dir, 'assets'))).toBe(false);
+    });
+  });
 });
 
 test('a number of Today is a target of the context menu: the tasks it counts are copied, by the mouse and by the keys', async ({ page, context }) => {
