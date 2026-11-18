@@ -98,6 +98,7 @@ import type { DailyPrefs } from './daily';
 import { parseConflictMode, type ConflictMode } from 'appkit-ui/conflicts';
 import type { CountKey, CountView } from './counts';
 import { parseStatsPrefs, type StatDim, type StatSort } from './stats';
+import { defaultTilePrefs, isDefaultTiles, parseTilePrefs, type TilePrefs } from './statsTiles';
 import { conflictsOf, conflictsOfRequest, retryOp, type Conflict } from './conflicts';
 import { browserStreamShare, Preferences, StreamSession } from 'appkit-ui/session';
 import type { SseMessage } from 'appkit-ui/sse';
@@ -408,6 +409,8 @@ export class App {
   /** The field the statistics cut the areas up by, and the order of the areas there (`lib/stats.ts`). */
   statsDim = $state<StatDim>('status');
   statsSort = $state<StatSort>('count');
+  /** Which tiles "The vault in numbers" shows, as what differs from the tiles it comes with (lib/statsTiles.ts). */
+  statsTiles = $state.raw<TilePrefs>(defaultTilePrefs());
   /**
    * `auto`: a field of the detail is written as soon as it changes (the default). `manual`: the changes of the fields
    * of a task are held as a draft (`drafts`) until the person saves them, all in one write; the other ways to change
@@ -824,6 +827,7 @@ export class App {
     const stats = parseStatsPrefs(safe(() => env.prefs.getItem('tasks-desktop.stats')));
     this.statsDim = stats.dim;
     this.statsSort = stats.sort;
+    this.statsTiles = parseTilePrefs(safe(() => env.prefs.getItem('tasks-desktop.stats-tiles')));
     this.saveMode = safe(() => env.prefs.getItem('tasks-desktop.save-mode')) === 'manual' ? 'manual' : 'auto';
     this.listColumns = parseColumns(safe(() => env.prefs.getItem('tasks-desktop.list-columns')));
     this.folds = parseFolds(safe(() => env.prefs.getItem('tasks-desktop.folds')));
@@ -920,7 +924,7 @@ export class App {
       }
       case 'stats': {
         const stats = parseStatsPrefs(null);
-        return this.statsDim !== stats.dim || this.statsSort !== stats.sort;
+        return this.statsDim !== stats.dim || this.statsSort !== stats.sort || !isDefaultTiles(this.statsTiles);
       }
       case 'today':
         return this.tileOrderChanged || this.hiddenTiles.length > 0 || TODAY_TILES.some((tile) => this.tileSizes[tile] !== undefined);
@@ -945,6 +949,7 @@ export class App {
       case 'stats': {
         const stats = parseStatsPrefs(null);
         this.setStats(stats.dim, stats.sort);
+        this.setStatsTiles(defaultTilePrefs());
         return;
       }
       case 'today':
@@ -3732,6 +3737,12 @@ export class App {
     this.statsDim = dim;
     this.statsSort = sort;
     safe(() => this.env.prefs.setItem('tasks-desktop.stats', JSON.stringify({ dim, sort })));
+  }
+
+  /** The tiles the statistics show, remembered. */
+  setStatsTiles(prefs: TilePrefs): void {
+    this.statsTiles = prefs;
+    safe(() => this.env.prefs.setItem('tasks-desktop.stats-tiles', JSON.stringify(prefs)));
   }
 
   /** The engine's estimate of some open tasks (the statistics ask it for the tasks the filter keeps). */

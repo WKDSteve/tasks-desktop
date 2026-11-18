@@ -144,3 +144,98 @@ test('cut up by a list field: a task counts in each of its values and the view s
   expect(await violations(page)).toEqual([]);
   expect(problems).toEqual([]);
 });
+
+test('the tiles of the vault in numbers: one is hidden with its x, the choice brings it and a field back, and it holds after a reload', async ({
+  page,
+}) => {
+  const problems = await pair(page, '/#view=stats');
+  await expect(page.getByRole('table', { name: 'The numbers per area' })).toBeVisible();
+  const tile = (id: string) => page.locator(`[data-tile="${id}"]`);
+  const hiddenNote = page.getByTestId('tiles-hidden');
+  // As it comes: every number, the fields most looked at, and the rest there to be added.
+  await expect(tile('n:ready')).toBeVisible();
+  await expect(tile('d:status')).toBeVisible();
+  await expect(tile('d:actor')).toBeVisible();
+  await expect(tile('d:tag')).toHaveCount(0);
+  await expect(hiddenNote).toHaveText('8 hidden');
+  // The tile of a field counts what "Cut up by" counts: its numbers add up to the open tasks.
+  const open = Number(await page.locator('button.figure[data-figure="open"] .n').textContent());
+  const counts = await tile('d:status').locator('.count').allTextContents();
+  expect(counts.map(Number).reduce((a, b) => a + b, 0)).toBe(open);
+
+  // The x is there for the pointer over the tile and for the focus in it, not otherwise.
+  const hide = tile('n:ready').getByRole('button', { name: 'Hide Ready' });
+  const opacity = () => hide.evaluate((el) => getComputedStyle(el).opacity);
+  await page.locator('#stats-figures').hover();
+  expect(await opacity()).toBe('0');
+  await hide.focus();
+  expect(await opacity()).toBe('1');
+  await hide.evaluate((el) => (el as HTMLElement).blur());
+  await tile('n:ready').hover();
+  expect(await opacity()).toBe('1');
+  await expectAccessible(page, 'statistics with the x of a tile shown');
+  await hide.click();
+  await expect(tile('n:ready')).toHaveCount(0);
+  await expect(hiddenNote).toHaveText('9 hidden');
+  // The focus is on the choice that brings the tile back, not lost with the x.
+  const pick = page.locator('.pick').getByRole('button', { name: /^Tiles: \d+$/ });
+  await expect(pick).toBeFocused();
+
+  await page.reload();
+  await expect(tile('d:status')).toBeVisible();
+  await expect(tile('n:ready')).toHaveCount(0);
+  await expect(hiddenNote).toHaveText('9 hidden');
+
+  // The choice lists every tile, the shown ones ticked; a tick brings a tile back, another adds a field.
+  await pick.click();
+  const popup = page.getByRole('group', { name: 'Tiles' });
+  await expect(popup.getByRole('checkbox', { name: 'Ready', exact: true })).not.toBeChecked();
+  await expect(popup.getByRole('checkbox', { name: 'Open', exact: true })).toBeChecked();
+  await expectAccessible(page, 'statistics with the choice of the tiles open');
+  await popup.getByRole('checkbox', { name: 'Ready', exact: true }).check();
+  await expect(tile('n:ready')).toBeVisible();
+  await popup.getByRole('checkbox', { name: 'By Tag', exact: true }).check();
+  await expect(tile('d:tag')).toBeVisible();
+  await expect(hiddenNote).toHaveText('7 hidden');
+  await page.keyboard.press('Escape');
+  await expect(popup).toHaveCount(0);
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('tasks-desktop.stats-tiles') ?? '{}'))).toEqual({ on: ['d:tag'], off: [] });
+
+  // A value of a tile opens its tasks in the list, like a number.
+  const value = tile('d:status').getByRole('button', { name: /^Status [^:]+: \d+ - show in the list$/ }).first();
+  const n = /: (\d+) /.exec((await value.getAttribute('aria-label')) ?? '')?.[1] ?? '';
+  await value.click();
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('List');
+  await expect(page.locator('.count [role="status"]')).toHaveText(new RegExp(`^${n} of \\d+$`));
+  const filter = await page.evaluate(() => JSON.parse(localStorage.getItem('tasks-desktop.filter') ?? '{}') as { statuses?: string[] });
+  expect(filter.statuses).toHaveLength(1);
+
+  // The reset of the choice shows the tiles as they came.
+  await page.goto('/#view=stats');
+  await page.getByRole('button', { name: 'Clear all filters' }).click();
+  await expect(tile('d:tag')).toBeVisible();
+  await page.locator('.pick').getByRole('button', { name: /^Tiles: \d+$/ }).click();
+  await page.locator('.pick .reset').click();
+  await expect(tile('d:tag')).toHaveCount(0);
+  await expect(hiddenNote).toHaveText('8 hidden');
+  await page.keyboard.press('Escape');
+  await page.evaluate(() => localStorage.removeItem('tasks-desktop.stats-tiles'));
+  expect(await violations(page)).toEqual([]);
+  expect(problems).toEqual([]);
+});
+
+test('the tiles on a narrow touch screen: the x is always there and nothing scrolls sideways', async ({ newContext }) => {
+  const context = await newContext({ viewport: { width: 380, height: 800 }, hasTouch: true, isMobile: true, locale: 'en-US' });
+  const page = await context.newPage();
+  const problems = await pair(page, '/#view=stats');
+  await expect(page.getByRole('table', { name: 'The numbers per area' })).toBeVisible();
+  const hide = page.locator('[data-tile="d:status"]').getByRole('button', { name: 'Hide By Status' });
+  expect(await hide.evaluate((el) => getComputedStyle(el).opacity)).toBe('1');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
+  await hide.tap();
+  await expect(page.locator('[data-tile="d:status"]')).toHaveCount(0);
+  await expectAccessible(page, 'statistics on a narrow touch screen');
+  await page.evaluate(() => localStorage.removeItem('tasks-desktop.stats-tiles'));
+  expect(await violations(page)).toEqual([]);
+  expect(problems).toEqual([]);
+});

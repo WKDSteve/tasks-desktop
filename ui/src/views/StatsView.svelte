@@ -7,18 +7,15 @@
   import type { Estimate } from '../lib/contract';
   import { areaLabel, NONE } from '../lib/filter';
   import { rangeOf } from '../lib/finished';
-  import { formatNumber, labelOf, translate, type Key } from '../lib/i18n';
+  import { translate, type Key } from '../lib/i18n';
   import {
     chosenBuckets,
     cutOf,
-    DAYS,
     effortSource,
-    figureFilter,
     figuresOf,
     filterFor,
     finishedPerArea,
     isMultiDim,
-    isOpenDim,
     OTHER,
     STAT_DIMS,
     STAT_SORTS,
@@ -26,12 +23,12 @@
     toggledBucket,
     TOP,
     withoutDim,
-    type Figure,
-    type StatDim,
   } from '../lib/stats';
   import { markHidden } from '../lib/text';
-  import Info from 'appkit-ui/Info.svelte';
+  import { bucketClass as classOf, bucketLabel as labelOfBucket, bucketName, dimHint as hintOfDim } from '../lib/statsWords';
+  import type { StatDim } from '../lib/stats';
   import FilterNote from './FilterNote.svelte';
+  import StatsTiles from './StatsTiles.svelte';
 
   let { app }: { app: App } = $props();
   const t = (key: Key, params: Record<string, string | number> = {}) => translate(app.lang, key, params);
@@ -48,54 +45,9 @@
   const chosen = $derived(chosenBuckets(app.filter, cut));
   const widest = $derived(Math.max(1, ...stats.rows.map((r) => r.total)));
 
-  const FIGURE_KEYS: Record<Figure, Key> = {
-    open: 'stats.open',
-    ready: 'stats.ready',
-    doing: 'stats.doing',
-    blocked: 'stats.blocked',
-    quickWins: 'stats.quick_wins',
-    noEffort: 'stats.no_effort',
-  };
-  const figureList = $derived(
-    (Object.keys(FIGURE_KEYS) as Figure[]).flatMap((f) => {
-      const n = figures[f];
-      return n === undefined ? [] : [{ figure: f, label: t(FIGURE_KEYS[f]), n }];
-    }),
-  );
-
-  /** The word of a stack: a status and a readiness in the page's words, "none" and "in days", else the value. */
-  function bucketLabel(dim: StatDim, bucket: string): string {
-    if (bucket === NONE) return dim === 'actor' ? t('actor.none') : t('stats.none');
-    if (bucket === OTHER) return t('stats.other');
-    if (dim === 'actor') return labelOf(app.lang, 'actor', bucket);
-    if (isOpenDim(dim)) return markHidden(bucket);
-    if (dim === 'effort' && bucket === DAYS) return t('stats.days');
-    if (dim === 'status' || dim === 'state') {
-      // a value this page has no word for shows as it is
-      const key = `${dim}.${bucket}` as Key;
-      const word = t(key);
-      return word === key ? bucket : word;
-    }
-    if (dim === 'prio') return `P${bucket}`;
-    return bucket;
-  }
-  /** The class that colours a stack (a value the page does not know is "other"). */
-  function bucketClass(bucket: string): string {
-    if (bucket === NONE) return 'none';
-    if (bucket === OTHER) return 'other';
-    // A value of a field the tasks name freely has no colour of its own: it takes the series of its place.
-    if (cut.named !== null) return `s-${Math.max(0, cut.named.indexOf(bucket)) % SERIES}`;
-    return /^[A-Za-z0-9]+$/.test(bucket) ? `v-${bucket}` : 'other';
-  }
-  /** How many colours the series of the named values has (`.s-0` ...); `TOP` values are named, so none is used twice. */
-  const SERIES = 10;
-  /** The name of a stack in the markup, for the tests and the styles. */
-  const bucketName = (bucket: string): string => (bucket === NONE ? 'none' : bucket === OTHER ? 'other' : bucket);
-  function dimHint(dim: StatDim): string {
-    const field = t(`stats.dim.${dim}` as Key);
-    const base = t(isMultiDim(dim) ? 'hint.stats.dim.multi' : 'hint.stats.dim', { field });
-    return isOpenDim(dim) ? `${base} ${t('hint.stats.dim.open', { n: TOP })}` : base;
-  }
+  const bucketLabel = (dim: StatDim, bucket: string): string => labelOfBucket(app.lang, dim, bucket);
+  const bucketClass = (bucket: string): string => classOf(cut, bucket);
+  const dimHint = (dim: StatDim): string => hintOfDim(app.lang, dim);
   const nameOf = (area: string) => areaLabel(area, app.allAreaNames);
 
   // The effort of the tasks the filter keeps is the engine's figure (WEB-13): asked again when they or the vault change.
@@ -149,8 +101,6 @@
     app.finishedStartArea = app.finishedArea;
     app.setView('done');
   }
-  const days = (n: number) => formatNumber(app.lang, Math.round(n * 10) / 10);
-
   function open(bucket: string | null, area: string | null): void {
     app.openStatsInList(filterFor(app.filter, cut, bucket, area, tasks));
   }
@@ -159,65 +109,7 @@
 <div class="stats">
   <FilterNote {app} />
   <section class="card head" aria-labelledby="stats-figures">
-    <div class="headline">
-      <h2 id="stats-figures" class="eyebrow">{t('stats.figures')}</h2>
-      <Info hint={t('hint.stats')} label={t('hint.about', { what: t('nav.stats') })} />
-    </div>
-    <ul class="figures">
-      {#each figureList as f (f.figure)}
-        <li>
-          {#if figureFilter(app.filter, f.figure, figures)}
-            <button
-              type="button"
-              class="figure"
-              data-figure={f.figure}
-              aria-label={t('stats.open_figure', { label: f.label, n: f.n })}
-              onclick={() => {
-                const filter = figureFilter(app.filter, f.figure, figures);
-                if (filter) app.openStatsInList(filter);
-              }}
-            >
-              <span class="label">{f.label}</span>
-              <span class="n">{f.n}</span>
-            </button>
-          {:else}
-            <!-- A number of none opens nothing. -->
-            <div class="figure" data-figure={f.figure}>
-              <span class="label">{f.label}</span>
-              <span class="n">{f.n}</span>
-            </div>
-          {/if}
-        </li>
-      {/each}
-      {#if finished}
-        <li>
-          <button
-            type="button"
-            class="figure"
-            data-figure="finished"
-            aria-label={t('stats.open_finished', { n: finished.total })}
-            onclick={openFinished}
-          >
-            <span class="label">{t('stats.finished30')}</span>
-            <span class="n">{finished.total}</span>
-          </button>
-        </li>
-      {/if}
-      {#if effort}
-        <li>
-          <div class="figure" data-figure="effort" data-hint={t('hint.stats.effort')}>
-            <span class="label">{t('stats.effort')}</span>
-            <span class="n">{t('stats.days_n', { n: days(effort.days) })}</span>
-            {#if effort.low !== undefined && effort.high !== undefined}
-              <span class="sub">{t('stats.range', { low: days(effort.low), high: days(effort.high) })}</span>
-            {/if}
-            {#if effort.without > 0}
-              <span class="sub">{t('stats.without', { n: effort.without })}</span>
-            {/if}
-          </div>
-        </li>
-      {/if}
-    </ul>
+    <StatsTiles {app} {tasks} {figures} {finished} {effort} onfinished={openFinished} />
     <div class="bar">
       <div class="dims" role="group" aria-label={t('stats.by')}>
         <span class="muted">{t('stats.by')}</span>
@@ -390,11 +282,6 @@
     border-radius: var(--radius);
     padding: 0.9rem 1rem;
   }
-  .headline {
-    display: flex;
-    align-items: center;
-    gap: 0.4rem;
-  }
   .eyebrow {
     font-size: 0.8rem;
     text-transform: uppercase;
@@ -412,44 +299,6 @@
   }
   .link:hover {
     text-decoration: underline;
-  }
-  .figures {
-    list-style: none;
-    margin: 0.6rem 0;
-    padding: 0;
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr));
-    gap: 0.6rem;
-  }
-  .figure {
-    width: 100%;
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 0.2rem;
-    padding: 0.6rem 0.8rem;
-    border: 1px solid var(--line);
-    border-radius: var(--radius);
-    background: var(--surface-2);
-    color: var(--text);
-    cursor: pointer;
-  }
-  div.figure {
-    cursor: default;
-  }
-  button.figure:hover {
-    border-color: var(--accent);
-  }
-  .figure .label {
-    color: var(--muted);
-  }
-  .figure .sub {
-    color: var(--muted);
-    font-size: 0.85em;
-  }
-  .figure .n {
-    font-size: 1.6em;
-    font-variant-numeric: tabular-nums;
   }
   .bar {
     display: flex;
@@ -608,162 +457,165 @@
     border-top: 2px solid var(--line);
   }
 
-  /* The colours of the stacks: each comes from a token, a shade by mixing it with the surface. A value without a
-     meaning of its own takes a series of the palette (--chart-*); a meaning colour (--ok, --warn, --bad) is kept for
-     what is good, waits for a decision or is in trouble, so it does not stand for a mere kind (the accent of the app
-     can be close to one of them in hue). The legend names every value. */
-  .none {
-    background: var(--line);
-  }
-  .other {
-    background: var(--muted);
-  }
-  .dim-status .v-doing {
-    background: var(--chart-1);
-  }
-  .dim-status .v-open {
-    background: var(--chart-2);
-  }
-  .dim-status .v-decision {
-    background: var(--warn);
-  }
-  .dim-status .v-blocked {
-    background: var(--bad);
-  }
-  .dim-status .v-parked {
-    background: var(--muted);
-  }
-  .dim-effort .v-XS {
-    background: color-mix(in srgb, var(--accent) 30%, var(--surface));
-  }
-  .dim-effort .v-S {
-    background: color-mix(in srgb, var(--accent) 50%, var(--surface));
-  }
-  .dim-effort .v-M {
-    background: color-mix(in srgb, var(--accent) 70%, var(--surface));
-  }
-  .dim-effort .v-L {
-    background: color-mix(in srgb, var(--accent) 85%, var(--text));
-  }
-  .dim-effort .v-XL {
-    background: color-mix(in srgb, var(--accent) 60%, var(--text));
-  }
-  .dim-effort .v-days {
-    background: var(--warn);
-  }
-  .dim-kind .v-feature {
-    background: var(--chart-1);
-  }
-  .dim-kind .v-task {
-    background: var(--chart-2);
-  }
-  .dim-kind .v-bug {
-    background: var(--bad);
-  }
-  .dim-kind .v-idea {
-    background: var(--chart-3);
-  }
-  .dim-kind .v-research {
-    background: var(--chart-4);
-  }
-  .dim-prio .v-1 {
-    background: color-mix(in srgb, var(--accent) 60%, var(--text));
-  }
-  .dim-prio .v-2 {
-    background: var(--accent);
-  }
-  .dim-prio .v-3 {
-    background: color-mix(in srgb, var(--accent) 60%, var(--surface));
-  }
-  .dim-prio .v-4 {
-    background: color-mix(in srgb, var(--accent) 30%, var(--surface));
-  }
-  .dim-state .v-ready {
-    background: var(--ok);
-  }
-  .dim-state .v-decision {
-    background: var(--warn);
-  }
-  .dim-state .v-waiting {
-    background: var(--chart-2);
-  }
-  .dim-state .v-stuck {
-    background: var(--bad);
-  }
-  .dim-state .v-freed {
-    background: color-mix(in srgb, var(--ok) 50%, var(--surface));
-  }
-  .dim-state .v-parked,
-  .dim-state .v-unknown {
-    background: var(--muted);
-  }
-  .dim-actor .v-me {
-    background: var(--chart-1);
-  }
-  .dim-actor .v-pair {
-    background: var(--chart-3);
-  }
-  .dim-actor .v-cdx {
-    background: var(--chart-2);
-  }
-  .dim-value .v-5 {
-    background: color-mix(in srgb, var(--accent) 60%, var(--text));
-  }
-  .dim-value .v-4 {
-    background: var(--accent);
-  }
-  .dim-value .v-3 {
-    background: color-mix(in srgb, var(--accent) 70%, var(--surface));
-  }
-  .dim-value .v-2 {
-    background: color-mix(in srgb, var(--accent) 50%, var(--surface));
-  }
-  .dim-value .v-1 {
-    background: color-mix(in srgb, var(--accent) 30%, var(--surface));
-  }
-  .dim-severity .v-critical {
-    background: var(--bad);
-  }
-  .dim-severity .v-high {
-    background: color-mix(in srgb, var(--bad) 55%, var(--warn));
-  }
-  .dim-severity .v-medium {
-    background: var(--warn);
-  }
-  .dim-severity .v-low {
-    background: var(--chart-2);
-  }
-  /* The values of a field the tasks name freely (category, scope, tag, plan, phase, project) have no meaning the page
-     knows: the most frequent take the series of the palette in their order, the next four the same hues mixed with
-     the surface. */
-  .s-0 {
-    background: var(--chart-1);
-  }
-  .s-1 {
-    background: var(--chart-2);
-  }
-  .s-2 {
-    background: var(--chart-3);
-  }
-  .s-3 {
-    background: var(--chart-4);
-  }
-  .s-4 {
-    background: var(--chart-5);
-  }
-  .s-5 {
-    background: var(--chart-6);
-  }
-  .s-6 {
-    background: color-mix(in srgb, var(--chart-1) 50%, var(--surface));
-  }
-  .s-7 {
-    background: color-mix(in srgb, var(--chart-2) 50%, var(--surface));
-  }
-  .s-8 {
-    background: color-mix(in srgb, var(--chart-3) 50%, var(--surface));
-  }
-  .s-9 {
-    background: color-mix(in srgb, var(--chart-4) 50%, var(--surface));
+  /* Global under the view: the tiles of the fields (StatsTiles) colour their stacks by the same classes. */
+  .stats :global {
+    /* The colours of the stacks: each comes from a token, a shade by mixing it with the surface. A value without a
+       meaning of its own takes a series of the palette (--chart-*); a meaning colour (--ok, --warn, --bad) is kept for
+       what is good, waits for a decision or is in trouble, so it does not stand for a mere kind (the accent of the app
+       can be close to one of them in hue). The legend names every value. */
+    .none {
+      background: var(--line);
+    }
+    .other {
+      background: var(--muted);
+    }
+    .dim-status .v-doing {
+      background: var(--chart-1);
+    }
+    .dim-status .v-open {
+      background: var(--chart-2);
+    }
+    .dim-status .v-decision {
+      background: var(--warn);
+    }
+    .dim-status .v-blocked {
+      background: var(--bad);
+    }
+    .dim-status .v-parked {
+      background: var(--muted);
+    }
+    .dim-effort .v-XS {
+      background: color-mix(in srgb, var(--accent) 30%, var(--surface));
+    }
+    .dim-effort .v-S {
+      background: color-mix(in srgb, var(--accent) 50%, var(--surface));
+    }
+    .dim-effort .v-M {
+      background: color-mix(in srgb, var(--accent) 70%, var(--surface));
+    }
+    .dim-effort .v-L {
+      background: color-mix(in srgb, var(--accent) 85%, var(--text));
+    }
+    .dim-effort .v-XL {
+      background: color-mix(in srgb, var(--accent) 60%, var(--text));
+    }
+    .dim-effort .v-days {
+      background: var(--warn);
+    }
+    .dim-kind .v-feature {
+      background: var(--chart-1);
+    }
+    .dim-kind .v-task {
+      background: var(--chart-2);
+    }
+    .dim-kind .v-bug {
+      background: var(--bad);
+    }
+    .dim-kind .v-idea {
+      background: var(--chart-3);
+    }
+    .dim-kind .v-research {
+      background: var(--chart-4);
+    }
+    .dim-prio .v-1 {
+      background: color-mix(in srgb, var(--accent) 60%, var(--text));
+    }
+    .dim-prio .v-2 {
+      background: var(--accent);
+    }
+    .dim-prio .v-3 {
+      background: color-mix(in srgb, var(--accent) 60%, var(--surface));
+    }
+    .dim-prio .v-4 {
+      background: color-mix(in srgb, var(--accent) 30%, var(--surface));
+    }
+    .dim-state .v-ready {
+      background: var(--ok);
+    }
+    .dim-state .v-decision {
+      background: var(--warn);
+    }
+    .dim-state .v-waiting {
+      background: var(--chart-2);
+    }
+    .dim-state .v-stuck {
+      background: var(--bad);
+    }
+    .dim-state .v-freed {
+      background: color-mix(in srgb, var(--ok) 50%, var(--surface));
+    }
+    .dim-state .v-parked,
+    .dim-state .v-unknown {
+      background: var(--muted);
+    }
+    .dim-actor .v-me {
+      background: var(--chart-1);
+    }
+    .dim-actor .v-pair {
+      background: var(--chart-3);
+    }
+    .dim-actor .v-cdx {
+      background: var(--chart-2);
+    }
+    .dim-value .v-5 {
+      background: color-mix(in srgb, var(--accent) 60%, var(--text));
+    }
+    .dim-value .v-4 {
+      background: var(--accent);
+    }
+    .dim-value .v-3 {
+      background: color-mix(in srgb, var(--accent) 70%, var(--surface));
+    }
+    .dim-value .v-2 {
+      background: color-mix(in srgb, var(--accent) 50%, var(--surface));
+    }
+    .dim-value .v-1 {
+      background: color-mix(in srgb, var(--accent) 30%, var(--surface));
+    }
+    .dim-severity .v-critical {
+      background: var(--bad);
+    }
+    .dim-severity .v-high {
+      background: color-mix(in srgb, var(--bad) 55%, var(--warn));
+    }
+    .dim-severity .v-medium {
+      background: var(--warn);
+    }
+    .dim-severity .v-low {
+      background: var(--chart-2);
+    }
+    /* The values of a field the tasks name freely (category, scope, tag, plan, phase, project) have no meaning the page
+       knows: the most frequent take the series of the palette in their order, the next four the same hues mixed with
+       the surface. */
+    .s-0 {
+      background: var(--chart-1);
+    }
+    .s-1 {
+      background: var(--chart-2);
+    }
+    .s-2 {
+      background: var(--chart-3);
+    }
+    .s-3 {
+      background: var(--chart-4);
+    }
+    .s-4 {
+      background: var(--chart-5);
+    }
+    .s-5 {
+      background: var(--chart-6);
+    }
+    .s-6 {
+      background: color-mix(in srgb, var(--chart-1) 50%, var(--surface));
+    }
+    .s-7 {
+      background: color-mix(in srgb, var(--chart-2) 50%, var(--surface));
+    }
+    .s-8 {
+      background: color-mix(in srgb, var(--chart-3) 50%, var(--surface));
+    }
+    .s-9 {
+      background: color-mix(in srgb, var(--chart-4) 50%, var(--surface));
+    }
   }
 </style>
