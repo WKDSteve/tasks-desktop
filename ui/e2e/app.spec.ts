@@ -5497,6 +5497,92 @@ test('the calendar is worked with the keys: m and Enter put a task on a day, Shi
   expect(consoleProblems.get(page)).toEqual([]);
 });
 
+/** The day `n` days from today as the page counts it (the local day of this machine), `YYYY-MM-DD`. */
+function localDay(n: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() + n);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+test('the timeline shows a task as a bar from start to due; the keys, a drag and the table move its dates through the engine', async ({ page }) => {
+  const tasks = join(state().vault, 'lib.nvim', 'ROADMAP', 'tasks');
+  const file = join(tasks, 'timeline-bar-e2e.md');
+  const next = join(tasks, 'timeline-bar-e2e-next.md');
+  writeFileSync(file, `---\ntitle: Timeline bar e2e\nstatus: open\nkind: task\nstart: ${localDay(0)}\ndue: ${localDay(3)}\n---\n\nA bar.\n`);
+  // It waits for the bar and begins before the bar ends: the arrow points back.
+  writeFileSync(next, `---\ntitle: Timeline bar e2e next\nstatus: open\nkind: task\ndue: ${localDay(1)}\nafter: [lib.nvim/timeline-bar-e2e]\n---\n\nA mark.\n`);
+  await watchViolations(page);
+  await pair(page);
+  await showList(page);
+  await page.getByRole('searchbox', { name: /search/i }).first().fill('Timeline bar e2e');
+  await chooseView(page, 'View', 'Timeline');
+  const id = 'lib.nvim/timeline-bar-e2e';
+  const bar = page.locator(`[data-bar="${id}"]`);
+  await expect(bar).toBeVisible();
+  await expect(bar).toHaveAttribute('data-from', localDay(0));
+  await expect(bar).toHaveAttribute('data-to', localDay(3));
+  await expect(page.locator('[data-timeline-today]')).toBeVisible();
+  await expect(page.locator(`[data-arrow="${id}>${id}-next"]`)).toHaveClass(/back/);
+  expect(await violations(page)).toEqual([]);
+
+  // The timeline has no card that tells a write is over: its answer is waited for, and the grip of the row is back.
+  const grip = page.locator('.row', { has: bar }).locator('.grip');
+  const answered = async (step: () => Promise<unknown>) => {
+    const answer = nextAnswer(page);
+    await step();
+    await answer;
+    await expect(grip).toBeVisible({ timeout: WRITE_BUDGET });
+  };
+
+  // The keys: on the end of the bar, Shift with the arrow twice shows where it would land; letting go writes once.
+  await page.locator(`[data-column="name"][data-task="${id}"]`).focus();
+  await page.keyboard.press('ArrowRight');
+  await page.keyboard.press('ArrowRight');
+  await page.keyboard.press('ArrowRight');
+  await expect(page.locator(`[data-column="end"][data-task="${id}"]`)).toBeFocused();
+  await page.keyboard.down('Shift');
+  await page.keyboard.press('ArrowRight');
+  await page.keyboard.press('ArrowRight');
+  await expect(bar).toHaveAttribute('data-to', localDay(5));
+  expect(readFileSync(file, 'utf8')).toContain(`due: ${localDay(3)}`);
+  await answered(() => page.keyboard.up('Shift'));
+  await expect.poll(() => readFileSync(file, 'utf8'), { timeout: WRITE_BUDGET }).toContain(`due: ${localDay(5)}`);
+  expect(readFileSync(file, 'utf8')).toContain(`start: ${localDay(0)}`);
+
+  // The mouse drags the bar two days on (a month zoom: 14 pixels a day): both dates move, and no task opens.
+  const box = (await bar.boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width / 2 + 28, box.y + box.height / 2, { steps: 4 });
+  await expect(bar).toHaveAttribute('data-from', localDay(2));
+  await answered(() => page.mouse.up());
+  await expect.poll(() => readFileSync(file, 'utf8'), { timeout: WRITE_BUDGET }).toContain(`start: ${localDay(2)}`);
+  expect(readFileSync(file, 'utf8')).toContain(`due: ${localDay(7)}`);
+  await expect(taskFloat(page)).toHaveCount(0);
+
+  // The table sets a date in a field; a start after the due date is refused by the engine and not kept in the field.
+  await page.getByText('As a list, with the dates in fields').click();
+  const start = page.getByLabel('Start of Timeline bar e2e', { exact: true });
+  await answered(() => start.fill(localDay(1)));
+  await expect.poll(() => readFileSync(file, 'utf8'), { timeout: WRITE_BUDGET }).toContain(`start: ${localDay(1)}`);
+  const refused = nextAnswer(page);
+  await start.fill(localDay(9));
+  await refused;
+  await expect(page.getByRole('alert').first()).toBeVisible();
+  await expect(start).toHaveValue(localDay(1));
+  expect(readFileSync(file, 'utf8')).toContain(`start: ${localDay(1)}`);
+
+  // Another zoom and the rows by area: the bar is still there, under the head of its area.
+  await page.locator('select[data-timeline-zoom]').selectOption('week');
+  await page.locator('select[data-timeline-group]').selectOption('area');
+  await expect(page.locator('[data-group="area:lib.nvim"]')).toHaveAttribute('aria-expanded', 'true');
+  await expect(bar).toBeVisible();
+  expect(await violations(page)).toEqual([]);
+  expect(consoleProblems.get(page)).toEqual([]);
+  removeFile(file);
+  removeFile(next);
+});
+
 test('a task past its due date is marked on its board card and found by the overdue filter', async ({ page }) => {
   await watchViolations(page);
   await pair(page);
@@ -7486,6 +7572,64 @@ test.describe('a finger', () => {
     await answered(() => touch('touchEnd'));
     await expect.poll(() => readFileSync(file, 'utf8'), { timeout: WRITE_BUDGET }).not.toContain('due:');
     await expect(row).toBeVisible();
+    expect(await violations(page)).toEqual([]);
+    removeFile(file);
+  });
+
+  test('drags a bar of the timeline by the grip of its row, and by an end: both dates move, then only the due date', async ({ page }) => {
+    const file = join(state().vault, 'lib.nvim', 'ROADMAP', 'tasks', 'timeline-touch-e2e.md');
+    writeFileSync(file, `---\ntitle: Timeline finger e2e\nstatus: open\nkind: task\nstart: ${localDay(0)}\ndue: ${localDay(3)}\n---\n\nTo be moved by a finger.\n`);
+    await watchViolations(page);
+    await pair(page);
+    await showList(page);
+    await page.getByRole('searchbox', { name: /search/i }).first().fill('Timeline finger e2e');
+    await chooseView(page, 'View', 'Timeline');
+    // A week zoom: 40 pixels a day, and an end wide enough for a finger.
+    await page.locator('select[data-timeline-zoom]').selectOption('week');
+    const id = 'lib.nvim/timeline-touch-e2e';
+    const bar = page.locator(`[data-bar="${id}"]`);
+    await expect(bar).toBeVisible();
+    const grip = page.locator('.row', { has: bar }).locator('.grip');
+
+    // A tap on the bar opens the task: a finger on the bar itself does not drag. (Before the drags: a tap right
+    // after a raw touch sequence is taken for the second half of a double tap, and no click comes.)
+    await bar.locator('.body').tap();
+    await expect(taskFloat(page)).toBeVisible();
+    await closeFloat(page);
+
+    const cdp = await page.context().newCDPSession(page);
+    const touch = (type: 'touchStart' | 'touchMove' | 'touchEnd' | 'touchCancel', at?: { x: number; y: number }) =>
+      cdp.send('Input.dispatchTouchEvent', { type, touchPoints: at ? [{ x: at.x, y: at.y }] : [] });
+    const centre = async (target: ReturnType<typeof page.locator>) => {
+      const box = (await target.boundingBox())!;
+      return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+    };
+    const answered = async (step: () => Promise<unknown>) => {
+      const answer = nextAnswer(page);
+      await step();
+      await answer;
+      await expect(grip).toBeVisible({ timeout: WRITE_BUDGET });
+    };
+
+    // The grip of the row takes the whole bar two days on.
+    const down = await centre(grip);
+    await touch('touchStart', down);
+    await touch('touchMove', { x: down.x + 40, y: down.y });
+    await touch('touchMove', { x: down.x + 80, y: down.y });
+    await expect(bar).toHaveAttribute('data-from', localDay(2));
+    await answered(() => touch('touchEnd'));
+    await expect.poll(() => readFileSync(file, 'utf8'), { timeout: WRITE_BUDGET }).toContain(`start: ${localDay(2)}`);
+    expect(readFileSync(file, 'utf8')).toContain(`due: ${localDay(5)}`);
+
+    // The end of the bar takes only the due date a day on.
+    const end = await centre(page.locator(`[data-column="end"][data-task="${id}"]`));
+    await touch('touchStart', end);
+    await touch('touchMove', { x: end.x + 40, y: end.y });
+    await expect(bar).toHaveAttribute('data-to', localDay(6));
+    await answered(() => touch('touchEnd'));
+    await expect.poll(() => readFileSync(file, 'utf8'), { timeout: WRITE_BUDGET }).toContain(`due: ${localDay(6)}`);
+    expect(readFileSync(file, 'utf8')).toContain(`start: ${localDay(2)}`);
+
     expect(await violations(page)).toEqual([]);
     removeFile(file);
   });

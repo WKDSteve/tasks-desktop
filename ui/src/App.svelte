@@ -478,6 +478,14 @@
           },
           {
             kind: 'radio',
+            label: t('nav.timeline'),
+            hint: t('hint.item.nav.timeline'),
+            checked: app.view === 'timeline',
+            onselect: () => app.setView('timeline'),
+            ...apart('timeline'),
+          },
+          {
+            kind: 'radio',
             label: t('nav.stats'),
             hint: t('hint.item.nav.stats'),
             checked: app.view === 'stats',
@@ -865,6 +873,8 @@
                     ? t('nav.cross')
                   : app.view === 'calendar'
                     ? t('nav.calendar')
+                  : app.view === 'timeline'
+                    ? t('nav.timeline')
                   : app.view === 'stats'
                     ? t('nav.stats')
                     : app.view === 'done'
@@ -893,6 +903,8 @@
           <Lazy {app} load={() => import('./views/CrossView.svelte')} />
         {:else if app.view === 'calendar'}
           <Lazy {app} load={() => import('./views/CalendarView.svelte')} />
+        {:else if app.view === 'timeline'}
+          <Lazy {app} load={() => import('./views/TimelineView.svelte')} />
         {:else if app.view === 'stats'}
           <Lazy {app} load={() => import('./views/StatsView.svelte')} />
         {:else if app.view === 'done'}

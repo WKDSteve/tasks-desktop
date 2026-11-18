@@ -147,7 +147,7 @@ const NOTE_MAX = 1000;
 
 export type Phase = 'starting' | 'needs_pairing' | 'offline' | 'unavailable' | 'ready';
 export type Connection = 'live' | 'reconnecting' | 'offline';
-export type View = 'today' | 'list' | 'board' | 'plan' | 'inbox' | 'abnahme' | 'cross' | 'calendar' | 'stats' | 'done' | 'views' | 'repos';
+export type View = 'today' | 'list' | 'board' | 'plan' | 'inbox' | 'abnahme' | 'cross' | 'calendar' | 'timeline' | 'stats' | 'done' | 'views' | 'repos';
 export type Theme = 'auto' | 'light' | 'dark';
 /** The blocks of the Today view that a person may hide. */
 export { ORDERED_TILES, TILES, type OrderedTile, type Tile } from './tiles-list';
@@ -2882,6 +2882,21 @@ export class App {
     const task = this.tasks.find((t) => t.id === id);
     if (!task || (task.due ?? null) === date) return;
     await this.setField(id, 'due', date);
+  }
+
+  /**
+   * The dates of `id` as the timeline moved them (a bar dragged, an end pulled, a field of its table): `start`, `due`
+   * or both in one write, so that one undo takes the move back; `null` takes a date away. The engine judges them.
+   */
+  async setDates(id: string, dates: { start?: string | null; due?: string | null }): Promise<void> {
+    if (this.refusedReadOnly() || this.refusedWhileSaving()) return;
+    const task = this.tasks.find((t) => t.id === id);
+    if (!task) return;
+    const patch: Record<string, string | null> = {};
+    if (dates.start !== undefined && (task.start ?? null) !== dates.start) patch['start'] = dates.start;
+    if (dates.due !== undefined && (task.due ?? null) !== dates.due) patch['due'] = dates.due;
+    if (Object.keys(patch).length === 0) return;
+    await this.write([{ op: 'set', id, patch, ...(task.etag ? { if_match: task.etag } : {}) }]);
   }
 
   /** `id` dropped on `target`: before or after it. */
