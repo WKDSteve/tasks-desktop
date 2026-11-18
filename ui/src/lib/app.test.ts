@@ -881,7 +881,7 @@ describe('App', () => {
     app.openAgent('pub/a');
     expect(app.agentFor).toBe('pub/a');
     expect(app.agentMode).toBe('prefill');
-    hub.agentAnswer = { job_id: 'j7', status: 'running', private: false };
+    hub.agentAnswer = { job_id: 'j7', status: 'running', private: false, port: 47123 };
     await app.handToAgent('run', 'handoff');
     expect(hub.agentCalls).toEqual([{ id: 'pub/a', mode: 'run', kind: 'handoff' }]);
     expect(app.agentFor).toBeNull();
@@ -890,7 +890,7 @@ describe('App', () => {
     expect(prefs.get('tasks-desktop.agent-mode')).toBe('run');
     // A private area on a model that is not local waits for the person in ai-desktop: said so.
     app.openAgent('pub/a');
-    hub.agentAnswer = { job_id: 'j8', status: 'needs_confirmation', private: true };
+    hub.agentAnswer = { job_id: 'j8', status: 'needs_confirmation', private: true, port: 47123 };
     await app.handToAgent('run', 'handoff');
     expect(app.toast?.text).toBe(translate(app.lang, 'agent.sent_confirm', { job: 'j8' }));
     // A refusal keeps the dialog open and says why, in the words of the hub.
@@ -908,6 +908,44 @@ describe('App', () => {
     app.stop();
     // The next page starts with the mode chosen last.
     expect(make({ token: 't', prefs }).app.agentMode).toBe('prefill');
+  });
+
+  it('opens the dashboard of ai-desktop at the job only when asked, in the tab opened at the click, and keeps the choice', async () => {
+    const prefs = new Map<string, string>();
+    const { app, hub } = make({ token: 't', prefs });
+    hub.aiDesktopFound = { installed: true, running: true };
+    await app.start(null);
+    await app.loadEnums();
+    await vi.waitFor(() => expect(app.aiFeatures).toBe(true));
+    expect(app.agentDashboard).toBe(false);
+    const tab = () => {
+      const seen: string[] = [];
+      return { seen, handle: { go: (url: string) => seen.push(`go ${url}`), close: () => seen.push('close') } };
+    };
+    hub.agentAnswer = { job_id: 'a b', status: 'prefilled', private: false, port: 47123 };
+    app.openAgent('pub/a');
+    const ok = tab();
+    await app.handToAgent('prefill', 'handoff', true, ok.handle);
+    expect(ok.seen).toEqual(['go http://127.0.0.1:47123/#job=a%20b']);
+    expect(app.agentDashboard).toBe(true);
+    expect(prefs.get('tasks-desktop.agent-dashboard')).toBe('on');
+    // A refusal closes the tab again; an answer without a port that could be one too.
+    app.openAgent('pub/a');
+    hub.agentRefusal = new ApiError(409, 'ai_desktop_not_running', 'ai-desktop is not running');
+    const refused = tab();
+    await app.handToAgent('prefill', 'handoff', true, refused.handle);
+    expect(refused.seen).toEqual(['close']);
+    hub.agentRefusal = null;
+    hub.agentAnswer = { job_id: 'j9', status: 'prefilled', private: false, port: 0 };
+    const noPort = tab();
+    await app.handToAgent('prefill', 'handoff', true, noPort.handle);
+    expect(noPort.seen).toEqual(['close']);
+    // Off again: kept, and the next page starts with it off.
+    app.openAgent('pub/a');
+    await app.handToAgent('prefill', 'handoff', false, null);
+    expect(prefs.get('tasks-desktop.agent-dashboard')).toBe('off');
+    app.stop();
+    expect(make({ token: 't', prefs }).app.agentDashboard).toBe(false);
   });
 
   it('offers the kinds of a job by the status of the task', () => {

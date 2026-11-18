@@ -4,7 +4,7 @@
   // "Hand to an agent": the small choice before a task goes to ai-desktop (only fill in the job or run it at once, and
   // what it asks for), with a word on the data class of the area. The hub sends it; the page never speaks to ai-desktop.
   import type { App } from '../lib/app.svelte';
-  import type { AgentKind } from '../lib/api';
+  import type { AgentKind, AgentTab } from '../lib/api';
   import { translate, type Key } from '../lib/i18n';
   import { markHidden } from '../lib/text';
 
@@ -18,6 +18,22 @@
   const shared = $derived(id === null ? false : app.agentAreaShared(task?.area ?? id.split('/')[0] ?? ''));
   let mode = $state<'prefill' | 'run'>('prefill');
   let kind = $state<AgentKind>('handoff');
+  let dashboard = $state(false);
+
+  /**
+   * The tab of the dashboard is opened in the click itself (a tab opened after the answer would be a popup the browser
+   * blocks), empty and without a way back to this page; it gets its address once ai-desktop said the job.
+   */
+  function openTab(): AgentTab | null {
+    const tab = window.open('', '_blank');
+    if (!tab) return null;
+    tab.opener = null;
+    return { go: (url) => tab.location.replace(url), close: () => tab.close() };
+  }
+
+  function send(): void {
+    void app.handToAgent(mode, kind, dashboard, dashboard ? openTab() : null);
+  }
 
   $effect(() => {
     if (!dialog) return;
@@ -25,6 +41,7 @@
       // Each time it opens: the mode chosen last, and the plain hand-over.
       mode = app.agentMode;
       kind = 'handoff';
+      dashboard = app.agentDashboard;
       dialog.showModal();
     }
     if (id === null && dialog.open) dialog.close();
@@ -62,10 +79,14 @@
         </select>
       </label>
     {/if}
+    <label class="dashboard" data-hint={t('hint.form.agent_dashboard')}>
+      <input type="checkbox" bind:checked={dashboard} />
+      {t('agent.dashboard')}
+    </label>
     <p class="class">{t(shared ? 'agent.shared' : 'agent.private')}</p>
     <div class="actions">
       <button type="button" onclick={() => app.closeAgent()}>{t('dialog.cancel')}</button>
-      <button type="button" class="primary" disabled={app.agentSending} onclick={() => void app.handToAgent(mode, kind)}
+      <button type="button" class="primary" disabled={app.agentSending} onclick={send}
         >{t('agent.send')}</button
       >
     </div>
@@ -107,6 +128,10 @@
   .kind {
     display: grid;
     gap: 0.2rem;
+    margin: 0 0 0.6rem;
+  }
+  .dashboard {
+    display: block;
     margin: 0 0 0.6rem;
   }
   .class {

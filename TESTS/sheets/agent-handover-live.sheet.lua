@@ -20,8 +20,10 @@ return {
         .. " dashboard of ai-desktop with the title, the id and the text of the task, not running?",
     },
     {
-      ask = "Where does the focus go: does the dashboard come to the front, or does its button in the task bar flash?"
-        .. " (The hub runs in the background and cannot hand the right to the foreground on; write down what happens.)",
+      ask = "Without the tick 'Open the dashboard of ai-desktop afterwards' (the default): ai-desktop does not come to"
+        .. " the front, its button in the task bar flashes (the hub runs in the background and cannot hand the"
+        .. " foreground on)? With the tick: a new tab shows the dashboard of ai-desktop with this job selected, and the"
+        .. " tick is still set the next time?",
     },
     {
       ask = "'Run at once' on a task of a public area: the page says the agent is working on it, the job runs in the"

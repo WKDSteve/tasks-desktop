@@ -457,8 +457,10 @@ reads at most 256 KiB of it. The hub then talks to ai-desktop as `:Tasks agent` 
 ai-desktop): the `hub.json` of a live ai-desktop gives the port, `GET /health` must answer as ai-desktop with the
 instance of that file (so the secret never goes to another program that took the port), and only then the
 `control.secret` beside it is read anew and sent as `Authorization: Bearer` with `POST /jobs`, without an `Origin`.
-The secret, the port and the path of ai-desktop never reach the page; the answer is the job id, its status and whether
-ai-desktop treats it as private, or a refusal in one line. An area that is private or not classified goes with
+The secret and the path of ai-desktop never reach the page; the answer is the job id, its status, whether ai-desktop
+treats it as private and its loopback port (which its `hub.json` tells any program anyway), or a refusal in one line.
+The page uses the port only when the person ticked "open the dashboard afterwards": the tab it opened at the click
+(without an `opener`) goes to `http://127.0.0.1:<port>/#job=<id>`, the dashboard's own page. An area that is private or not classified goes with
 `private: true`: ai-desktop then sends it to a local model only or asks the person in its dashboard. A paired phone
 does not reach the route (it is not one of the device routes); it counts against the limit of mutations like every
 `POST` of a session.

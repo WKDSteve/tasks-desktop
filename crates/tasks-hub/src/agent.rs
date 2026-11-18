@@ -65,6 +65,9 @@ pub struct JobAnswer {
     pub private: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub note: Option<String>,
+    /// The loopback port of ai-desktop: the page may open its dashboard at the job (`/#job=<id>`) when the person asked
+    /// for it. Not a secret (`hub.json` says it to any program); the control secret never leaves the hub.
+    pub port: u16,
 }
 
 /// Why a job did not reach ai-desktop.
@@ -220,6 +223,7 @@ async fn send_to(
         status: status.to_owned(),
         private: doc["private"].as_bool() == Some(true),
         note: doc["note"].as_str().map(str::to_owned),
+        port,
     })
 }
 
@@ -386,7 +390,8 @@ mod tests {
                 job_id: "j1".to_owned(),
                 status: "prefilled".to_owned(),
                 private: true,
-                note: None
+                note: None,
+                port
             }
         );
         let seen = seen.lock().unwrap();

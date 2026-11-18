@@ -28,7 +28,7 @@ import {
 import { addOps, type AddTarget } from './picker';
 import { connectOp, edgeOp, parseGraphOrder, phaseOp, type DepEdge, type EdgeAction, type EdgeKind, type GraphOrder } from './depGraph';
 import { COLUMNS, columnsOf, isColumn, neighbourColumn, placeNear, stepInGroup, type Column, type Move } from './board';
-import { ApiError, type AgentKind, type AiDesktop, type CheckAll, type SheetRunState, type Hub, type HubArea, type HubAreas, type SearchResult, type VaultList } from './api';
+import { ApiError, type AgentKind, type AgentTab, type AiDesktop, type CheckAll, type SheetRunState, type Hub, type HubArea, type HubAreas, type SearchResult, type VaultList } from './api';
 import { cacheableClass, cacheableList, type CachedList, type ListStore } from './cache';
 import type {
   DonePreview,
@@ -683,6 +683,12 @@ export class App {
   agentFor = $state<string | null>(null);
   /** What a hand-over does by default: only fill in the job (`prefill`) or run it at once; kept (`tasks-desktop.agent-mode`). */
   agentMode = $state<'prefill' | 'run'>('prefill');
+  /**
+   * Open the dashboard of ai-desktop at the job after a hand-over (a tab of its own): off by default, kept
+   * (`tasks-desktop.agent-dashboard`). Without it the hub cannot bring ai-desktop to the front (it runs in the
+   * background), so Windows only flashes its button in the task bar.
+   */
+  agentDashboard = $state(false);
   /** A hand-over is under way: the dialog sends nothing twice. */
   agentSending = $state(false);
   /** The plan wizard is open. */
@@ -788,6 +794,7 @@ export class App {
     this.barAreas = safe(() => env.prefs.getItem('tasks-desktop.bar-areas')) === 'on';
     this.aiWanted = safe(() => env.prefs.getItem('tasks-desktop.ai')) !== 'off';
     this.agentMode = safe(() => env.prefs.getItem('tasks-desktop.agent-mode')) === 'run' ? 'run' : 'prefill';
+    this.agentDashboard = safe(() => env.prefs.getItem('tasks-desktop.agent-dashboard')) === 'on';
     const stats = parseStatsPrefs(safe(() => env.prefs.getItem('tasks-desktop.stats')));
     this.statsDim = stats.dim;
     this.statsSort = stats.sort;
@@ -3414,18 +3421,32 @@ export class App {
    * Hand the task of the dialog to ai-desktop: the hub reads the file and sends it. Says the job (or why it did not go)
    * and keeps the mode as the next default.
    */
-  async handToAgent(mode: 'prefill' | 'run', kind: AgentKind): Promise<void> {
+  async handToAgent(mode: 'prefill' | 'run', kind: AgentKind, dashboard = false, tab: AgentTab | null = null): Promise<void> {
     const id = this.agentFor;
-    if (id === null || this.agentSending || !this.aiFeatures) return;
+    if (id === null || this.agentSending || !this.aiFeatures) {
+      tab?.close();
+      return;
+    }
     this.agentMode = mode;
     safe(() => this.env.prefs.setItem('tasks-desktop.agent-mode', mode));
+    this.agentDashboard = dashboard;
+    safe(() => this.env.prefs.setItem('tasks-desktop.agent-dashboard', dashboard ? 'on' : 'off'));
     this.agentSending = true;
     try {
       const job = await this.env.hub.handToAgent(id, mode, kind);
       this.agentFor = null;
+      // The tab opened at the click goes to the dashboard of ai-desktop at this job (the port only, never a secret).
+      if (tab) {
+        if (Number.isInteger(job.port) && job.port > 0 && job.port < 65536) {
+          tab.go(`http://127.0.0.1:${job.port}/#job=${encodeURIComponent(job.job_id)}`);
+        } else {
+          tab.close();
+        }
+      }
       const key = job.status === 'needs_confirmation' ? 'agent.sent_confirm' : mode === 'run' && job.status === 'running' ? 'agent.sent_run' : 'agent.sent';
       this.say('ok', key, { job: job.job_id });
     } catch (error) {
+      tab?.close();
       const why = error instanceof ApiError ? error.message : String(error);
       this.say('error', 'agent.failed', { why });
     } finally {

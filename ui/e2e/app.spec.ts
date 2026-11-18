@@ -8288,6 +8288,7 @@ async function aiDesktopDouble(jobs: (body: Record<string, unknown>) => { status
   writeFileSync(join(dir, 'hub.json'), JSON.stringify({ app: 'ai-desktop', port, pid: process.pid, version: '0.1.0', instance }));
   writeFileSync(join(dir, 'control.secret'), `${secret}\n`);
   return {
+    port,
     secret,
     seen,
     close: async () => {
@@ -8313,8 +8314,16 @@ test('a task goes to ai-desktop: the hub sends its file with the secret, the pag
     // An open task: only the hand-over, no choice of the kind.
     await expect(dialog.getByRole('combobox')).toHaveCount(0);
     await dialog.getByRole('radio', { name: 'Run at once' }).check();
+    // Off by default: without it Windows only flashes ai-desktop in the task bar. On: a tab of the dashboard at the job.
+    const dashboard = dialog.getByRole('checkbox', { name: 'Open the dashboard of ai-desktop afterwards' });
+    await expect(dashboard).not.toBeChecked();
+    await dashboard.check();
+    const tab = page.context().waitForEvent('page');
     await dialog.getByRole('button', { name: 'Hand over', exact: true }).click();
     await expect(page.getByText('Handed to ai-desktop, the agent is working on it (job job-e2e-1).')).toBeVisible({ timeout: 15_000 });
+    const opened = await tab;
+    await expect.poll(() => opened.url()).toBe(`http://127.0.0.1:${ai.port}/#job=job-e2e-1`);
+    await opened.close();
     await expect(dialog).toBeHidden();
     const jobs = ai.seen.filter((r) => r.path === '/jobs');
     expect(jobs).toHaveLength(1);
@@ -8330,6 +8339,8 @@ test('a task goes to ai-desktop: the hub sends its file with the secret, the pag
     // The mode chosen last comes back; a refusal of ai-desktop is said in its words and the dialog stays.
     await button.click();
     await expect(dialog.getByRole('radio', { name: 'Run at once' })).toBeChecked();
+    await expect(dashboard).toBeChecked();
+    await dashboard.uncheck();
     await dialog.getByRole('radio', { name: /Only fill in/ }).check();
     await dialog.getByRole('button', { name: 'Hand over', exact: true }).click();
     await expect(page.getByText(/Not handed over: ai-desktop refused the task \(403\): jobs are switched off/)).toBeVisible({ timeout: 15_000 });
@@ -8338,7 +8349,10 @@ test('a task goes to ai-desktop: the hub sends its file with the secret, the pag
     await expect(dialog).toBeHidden();
   } finally {
     await ai.close();
-    await page.evaluate(() => localStorage.removeItem('tasks-desktop.agent-mode'));
+    await page.evaluate(() => {
+      localStorage.removeItem('tasks-desktop.agent-mode');
+      localStorage.removeItem('tasks-desktop.agent-dashboard');
+    });
   }
   // The one refusal the test asked for (ai-desktop said 403, the hub answered 502) is the browser's only complaint.
   expect(consoleProblems.get(page)).toEqual(['error: Failed to load resource: the server responded with a status of 502 (Bad Gateway)']);

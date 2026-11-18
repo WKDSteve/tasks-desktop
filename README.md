@@ -838,7 +838,10 @@ then ai-desktop sends it to a local model only, or asks first. The hub reads the
 area and vault to the job intake of the running ai-desktop (`POST /jobs`, `docs/JOBS.md` of ai-desktop), after its
 `/health` answered with the instance of its `hub.json`; the control secret stays in the hub. The page says the job
 (*Handed to ai-desktop (job ...)*) or why it did not go (ai-desktop not running, refused, a file over 256 KiB). One
-task at a time: while several are marked the button is off and says why.
+task at a time: while several are marked the button is off and says why. The hub runs in the background and may not
+bring another program to the front, so by default Windows only flashes the button of ai-desktop in the task bar; the
+tick *Open the dashboard of ai-desktop afterwards* (off by default, kept) opens a tab of the browser at the dashboard
+of ai-desktop with the job selected (`http://127.0.0.1:<port>/#job=<id>`).
 
 <!-- connections:begin (written by the app-icons tool of the workshop; change integrations.json there, not this block) -->
 ## Connections

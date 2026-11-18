@@ -119,6 +119,14 @@ export interface AgentJob {
   status: string;
   private: boolean;
   note?: string;
+  /** The loopback port of ai-desktop, for its dashboard at the job (`http://127.0.0.1:<port>/#job=<id>`). */
+  port: number;
+}
+
+/** A browser tab opened at the click, before the answer: it goes to the dashboard of ai-desktop, or closes again. */
+export interface AgentTab {
+  go(url: string): void;
+  close(): void;
 }
 
 /** What a job asks of the agent (`kind` of ai-desktop's `POST /jobs`). */

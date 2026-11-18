@@ -467,6 +467,7 @@ async fn a_task_is_handed_to_the_agent_with_its_file_and_only_with_a_session() {
         status: "prefilled".to_owned(),
         private: false,
         note: None,
+        port: 47123,
     };
     let fake = intake(Ok(job));
     let r = rig_full(
@@ -490,6 +491,12 @@ async fn a_task_is_handed_to_the_agent_with_its_file_and_only_with_a_session() {
     assert_eq!(status, 201, "{doc}");
     assert_eq!(doc["job_id"], "3f9c0a1b2c3d4e5f", "{doc}");
     assert_eq!(doc["status"], "prefilled", "{doc}");
+    // The port of ai-desktop for its dashboard; nothing of the secret.
+    assert_eq!(doc["port"], 47123, "{doc}");
+    assert!(
+        doc.get("secret").is_none() && !doc.to_string().contains("Bearer"),
+        "{doc}"
+    );
     {
         let jobs = fake.jobs.lock().unwrap();
         assert_eq!(jobs.len(), 1);
