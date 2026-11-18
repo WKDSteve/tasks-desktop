@@ -30,6 +30,11 @@ return {
         .. " private ... Send the text there anyway?'; 'Do not send' says nothing was sent, 'Send' fills the form?",
     },
     {
+      ask = "After 'Do not send', and after closing the form while it asks (Escape): the dashboard of ai-desktop shows"
+        .. " no waiting draft-task job any more (before, it stayed there with the text)? The same after 'n' to the"
+        .. " question of ':Tasks new --draft' in Neovim?",
+    },
+    {
       ask = "In Neovim: ':Tasks new --draft Der Knopf im Formular soll blau sein' and ':'<,'>Tasks new --draft' over a"
         .. " note open the form of :Tasks new filled in the same way (the same question for a model that is not"
         .. " local); <C-s> creates, q drops? Without ai-desktop, ai.nvim answers after its question?",
