@@ -364,6 +364,45 @@ fn tasks_fill(call: &Call<'_>, doc: &mut Value) {
                 }
             }
         }
+        "intent" => {
+            // What the engine does with an intent, in short: a foreign action is refused, `tasks.show` shows a task
+            // that is there, `tasks.new` would create unless the vault names the finding as known (`.fake-finding`).
+            let intent = params.get("intent").cloned().unwrap_or(Value::Null);
+            let action = intent["action"].as_str().unwrap_or("");
+            let said_yes = params.get("yes").is_some();
+            if said_yes || !matches!(action, "tasks.new" | "tasks.show") {
+                doc["kind"] = json!(call.dialect.error_kind);
+                doc["code"] = json!("invalid_argument");
+                doc["message"] = json!(if said_yes {
+                    "the hub said yes".to_owned()
+                } else {
+                    format!("intent refused: action '{action}' is not offered")
+                });
+                doc["retryable"] = json!(false);
+            } else if action == "tasks.show" {
+                let id = intent["target"]["id"].as_str().unwrap_or("");
+                doc["action"] = json!(action);
+                doc["id"] = json!(id);
+                doc["outcome"] = json!(if id == "alpha.nvim/t1" {
+                    "shown"
+                } else {
+                    "not_found"
+                });
+            } else {
+                let fp = intent["finding"]["fp"].as_str().unwrap_or("");
+                let known =
+                    std::fs::read_to_string(vault.join(".fake-finding")).unwrap_or_default();
+                doc["action"] = json!(action);
+                doc["area"] = intent["finding"]["area"].clone();
+                doc["title"] = intent["finding"]["title"].clone();
+                if !fp.is_empty() && known.trim() == fp {
+                    doc["outcome"] = json!("exists");
+                    doc["id"] = json!("alpha.nvim/t1");
+                } else {
+                    doc["outcome"] = json!("would_create");
+                }
+            }
+        }
         "agent_answer" => {
             let output = params.get("output").and_then(Value::as_str).unwrap_or("");
             if output == "broken" {

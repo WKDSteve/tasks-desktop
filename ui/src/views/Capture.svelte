@@ -99,12 +99,12 @@
       area = app.captureArea ?? app.writeArea ?? areas[0]?.name ?? '';
       title = app.captureTitle;
       prio = '';
-      kind = '';
+      kind = app.captureFill.kind ?? '';
       effort = '';
       value = '';
       actor = '';
-      summary = '';
-      tags = '';
+      summary = app.captureFill.summary ?? '';
+      tags = app.captureFill.tags ?? '';
       categories = [];
       scopes = [];
       other = '';
@@ -114,16 +114,17 @@
       plan = app.captureFill.plan ?? '';
       phase = app.captureFill.phase ?? '';
       project = app.captureFill.project ?? '';
-      // A plan or project given from outside is shown, with the other fields it stands among.
-      more = plan !== '' || project !== '';
+      // A plan or project given from outside is shown, with the other fields it stands among (and so are the refs
+      // and links of a finding that was handed over).
+      more = plan !== '' || project !== '' || (app.captureFill.refs ?? '') !== '' || (app.captureFill.links ?? '') !== '';
       due = '';
       start = '';
       extraAreas = [];
       severity = '';
-      refs = '';
-      links = '';
+      refs = app.captureFill.refs ?? '';
+      links = app.captureFill.links ?? '';
       problem = '';
-      context = '';
+      context = app.captureFill.context ?? '';
       acceptance = '';
       notes = '';
       attach = false;

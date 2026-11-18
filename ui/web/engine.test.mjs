@@ -387,3 +387,64 @@ test('a write of the engine through its own functions leaves the files as the en
   `);
   assert.equal(result, 'true|false|exists|true|inside|8|over.md', 'no temporary file and no lock file stays behind');
 });
+
+// "Paste an intent" (wkd-intent/1): the engine in the page is the check, as it is beside a hub. The golden examples are
+// the engine's own copies of the schema's (TESTS/intent of the pinned commit), and what breaks a rule is refused with
+// nothing written: too large, a class that may not leave, an absolute path, an action of another app.
+test('an intent is checked by the engine in the page: the golden examples, and what breaks a rule', async () => {
+  const e = await engine();
+  const lock = readLock();
+  const goldens = new Map(
+    [...gitFiles(checkout('TASKS_ENGINE_DIR', 'tasks.nvim'), lock.commit, ['TESTS/intent/'])].map(([path, content]) => [
+      path.split('/').pop(),
+      JSON.parse(Buffer.from(content).toString('utf8')),
+    ]),
+  );
+  const ask = (intent) => e.call('intent', JSON.stringify({ params: { intent } }), { root: ROOT });
+  const files = () => JSON.stringify(decode(e.call('snapshot', null, { root: ROOT })).tasks.map((t) => t.id));
+  const before = files();
+
+  // The finding of the example names an area of its own vault; here it is one of this vault.
+  const fresh = structuredClone(goldens.get('tasks.new.json'));
+  fresh.finding.area = 'lib.nvim';
+  const would = decode(ask(fresh));
+  assert.equal(would.kind, 'tasks.intent');
+  assert.equal(would.outcome, 'would_create');
+  assert.equal(would.area, 'lib.nvim');
+  assert.equal(would.title, fresh.finding.title);
+  // An area this vault does not have is refused, in words.
+  const elsewhere = ask(goldens.get('tasks.new.json'));
+  assert.equal(elsewhere.code, 'invalid_argument', elsewhere.text);
+
+  // tasks.show: a task of this vault, and one that is not there.
+  const show = structuredClone(goldens.get('tasks.show.json'));
+  assert.equal(decode(ask(show)).outcome, 'not_found');
+  show.target.id = 'lib.nvim/alpha';
+  const shown = decode(ask(show));
+  assert.equal(shown.outcome, 'shown');
+  assert.equal(shown.id, 'lib.nvim/alpha');
+
+  const refused = (change, why) => {
+    const intent = structuredClone(fresh);
+    change(intent);
+    const r = ask(intent);
+    assert.equal(r.code, 'invalid_argument', `${why}: ${r.text}`);
+    assert.match(JSON.parse(r.text).message, /intent refused/, why);
+  };
+  refused((i) => (i.finding.class = 'private'), 'a class that may not leave');
+  refused((i) => (i.finding.where.file = 'C:\\Users\\x\\secret.lua'), 'an absolute path');
+  refused((i) => (i.finding.where.file = '../outside.lua'), 'a way out of the repository');
+  refused((i) => (i.finding.repro = '~/bin/run'), 'a home path in the repro');
+  refused((i) => (i.finding.excerpt = 'x'.repeat(70 * 1024)), 'larger than an intent may be');
+  refused((i) => (i.finding.title = 'x'.repeat(200)), 'a title over its length');
+  refused((i) => (i.finding.run.url = 'https://elsewhere.example/run'), 'a run that is not on GitHub');
+  refused((i) => (i.schema = 'wkd-intent/2'), 'a higher version');
+  refused((i) => (i.mode = 'agent'), 'a mode tasks does not take');
+  // The actions of the other apps: every golden example that is not tasks' is refused.
+  for (const name of ['rules.new.json', 'rules.show.json', 'ai.handoff.json']) {
+    const r = ask(goldens.get(name));
+    assert.equal(r.code, 'invalid_argument', `${name}: ${r.text}`);
+  }
+  assert.equal(files(), before, 'nothing was written by any of it');
+});
+

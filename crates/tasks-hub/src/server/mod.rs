@@ -389,6 +389,11 @@ fn app_routes(core: &Arc<Shared>) -> Router<Arc<Shared>> {
             &r("agent"),
             post(agent_send).layer(DefaultBodyLimit::max(small)),
         )
+        // "Paste an intent" (`wkd-intent/1`): at most 64 KiB of text, and the envelope around it.
+        .route(
+            &r("intent"),
+            post(intent_check).layer(DefaultBodyLimit::max(160 * 1024)),
+        )
         // "Suggest fields" of the new-task form: a draft-task job of ai-desktop; its text may be 64 KiB.
         .route(
             &r("draft"),

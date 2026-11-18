@@ -311,6 +311,7 @@ async fn a_phone_reaches_the_routes_of_the_phone_page_and_nothing_else() {
         ("GET", "/api/tasks/repos"),
         ("GET", "/api/tasks/repos/suggest"),
         ("POST", "/api/tasks/rescan"),
+        ("POST", "/api/tasks/intent"),
         ("POST", "/api/tasks/estimate"),
         ("POST", "/api/tasks/open"),
         ("GET", "/api/tasks/hello-not-a-route"),

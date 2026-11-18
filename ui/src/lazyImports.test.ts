@@ -19,6 +19,7 @@ const ON_DEMAND = [
   'StatsView',
   'FinishedView',
   'ReposView',
+  'IntentDialog',
 ];
 
 describe('the main chunk', () => {

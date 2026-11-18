@@ -338,6 +338,13 @@
             disabled: !ready,
             onselect: () => app.openCapture(),
           },
+          {
+            kind: 'action',
+            label: t('menu.intent'),
+            hint: t('hint.item.menu.intent'),
+            disabled: !ready,
+            onselect: () => app.openIntent(),
+          },
           { kind: 'section', label: t('menu.sec.find') },
           {
             kind: 'action',
@@ -1028,6 +1035,13 @@
     load={() => import('./views/InstallDialog.svelte')}
     extra={{ open: installOpen, onclose: () => (installOpen = false) }}
     onfailed={() => (installOpen = false)}
+  />
+  <Lazy
+    {app}
+    when={app.intentOpen}
+    load={() => import('./views/IntentDialog.svelte')}
+    extra={{ open: app.intentOpen, onclose: () => app.closeIntent() }}
+    onfailed={() => app.closeIntent()}
   />
   <Lazy
     {app}

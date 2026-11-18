@@ -17,6 +17,7 @@ export function paletteActions(app: App): PaletteAction[] {
   };
 
   add('capture', t('menu.capture'), () => app.openCapture());
+  add('intent', t('menu.intent'), () => app.openIntent(), t('hint.item.menu.intent'));
   if (app.can('plan_new')) add('plan.new', t('plan.new.button'), () => app.openPlanWizard());
 
   // The task that is selected: what the keys of the board and the form do, by name.

@@ -855,6 +855,16 @@ ai-desktop through the discovery of the family in appkit (`docs/FAMILY.md` there
 installer writes (`%LOCALAPPDATA%\appkit-family\installed\ai-desktop.json`), running is its `hub.json` with a live
 process. Only files are read, at the start of the page and whenever its window gets the focus.
 
+**Paste an intent.** *Work > Paste an intent ...* (also in the palette, also in the web variant) takes what another
+app hands over as a document `wkd-intent/1`: testing.nvim or testing-web copy "make a task from this finding" or "show
+this task" to the clipboard, or save it as a file. Paste it into the field (Ctrl+V; the page does not read the
+clipboard by itself) or choose the file, then *Check*. A finding opens the new-task form filled in (title, area, kind
+*bug*, the tag `testing`, the refs of the finding, its run as a link, its excerpt as the context): look at it, change
+it, and *Create* makes the task; nothing is written before. The same finding a second time is not a second task: the
+page names the task that holds it and offers to open it. "Show this task" opens the task. An intent is checked like any
+text from outside (its size before it is read, then the rules of the schema by the engine: only the actions of tasks,
+no private class, no absolute path); what is refused is told with the reason. See `docs/SECURITY.md`.
+
 **Suggest fields.** The new-task form has *Suggest fields ...* (where the AI functions are offered): write a few lines
 (a note, a piece of a mail, a thought), *Suggest*, and ai-desktop proposes title, area, kind, prio, effort, value,
 tags, category, plan, summary and acceptance. They only fill the form; every field stays editable, and the task is made

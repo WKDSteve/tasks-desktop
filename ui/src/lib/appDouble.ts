@@ -1,6 +1,7 @@
 // The app with everything around it replaced, for the tests: a hub that answers from memory (`FakeHub`), storages
 // that are maps, a clock that stands still. `make` builds an `App` on them; the tests of the state (app.test.ts) and
 // the tests that mount a component in a DOM (`*.dom.test.ts`) share it, so both test the app as it is, not a copy.
+import type { IntentAnswer } from './intent';
 import { ApiError, type Hub, type HubArea, type OpsRequest, type SetupInfo, type SetupStep, type VaultList } from './api';
 import { App, type Env } from './app.svelte';
 import type { CachedList, ListStore } from './cache';
@@ -98,6 +99,14 @@ export class FakeHub {
   confirmed: string[] = [];
   confirmDraft = async (job: string) => {
     this.confirmed.push(job);
+  };
+  /** "Paste an intent": the texts that were asked, and what the engine answers (an `ApiError`: its refusal). */
+  intents: string[] = [];
+  intentAnswer: IntentAnswer | ApiError = { action: 'tasks.new', outcome: 'would_create', area: 'pub', title: 'A finding' };
+  intent = async (text: string): Promise<IntentAnswer> => {
+    this.intents.push(text);
+    if (this.intentAnswer instanceof ApiError) throw this.intentAnswer;
+    return this.intentAnswer;
   };
   dropped: string[] = [];
   dropDraft = async (job: string) => {

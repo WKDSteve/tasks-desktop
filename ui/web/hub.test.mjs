@@ -586,3 +586,37 @@ test('the page trades any code for its one session, so the app starts without a 
   assert.equal((await h.api.fetch('/auth/other', { method: 'POST' })).status, 404);
   assert.deepEqual(h.calls, []);
 });
+
+test('intent: the text is measured before it is parsed, is one JSON object, and the engine is asked without a yes', async () => {
+  const answer = '{"kind":"tasks.intent","action":"tasks.new","outcome":"would_create","area":"lib.nvim","title":"T"}';
+  const intent = { schema: 'wkd-intent/1', action: 'tasks.new', mode: 'form', finding: { fp: 'ab', area: 'lib.nvim', title: 'T' }, target: null };
+  const h = hub({ intent: answer });
+  const ok = await h.post('intent', { text: JSON.stringify(intent) });
+  assert.equal(ok.status, 200);
+  assert.equal((await ok.json()).outcome, 'would_create');
+  // The engine got the intent and nothing else: no `yes`, whatever the page would send.
+  assert.deepEqual(h.calls, [['intent', { params: { intent } }]]);
+
+  // Too large: refused before it is parsed (it is no JSON at all), in bytes.
+  const big = await h.post('intent', { text: 'x'.repeat(64 * 1024 + 1) });
+  assert.equal(big.status, 400);
+  assert.equal((await error(big)).code, 'intent_too_large');
+  assert.equal((await error(await h.post('intent', { text: `"${'ä'.repeat(32 * 1024)}"` }))).code, 'intent_too_large');
+  for (const bad of ['', 'not json', '[1,2]', '"text"', '7', 'null']) {
+    const r = await h.post('intent', { text: bad });
+    assert.equal(r.status, 400, bad);
+    assert.equal((await error(r)).code, 'bad_intent', bad);
+  }
+  // The request itself: `text` and nothing beside it (not a yes, not the intent as an object).
+  for (const body of [{ text: JSON.stringify(intent), yes: true }, { intent }, { text: 7 }, {}, 'no json']) {
+    assert.equal((await h.post('intent', body)).status, 400, JSON.stringify(body));
+  }
+  assert.equal(h.calls.length, 1, 'nothing of these reached the engine');
+
+  // A refusal of the engine is told with its code and its words.
+  const refusing = hub({}, { intent: { kind: 'tasks.error', code: 'invalid_argument', message: "intent refused: action 'rules.new' is not offered" } });
+  const refused = await refusing.post('intent', { text: JSON.stringify({ ...intent, action: 'rules.new' }) });
+  assert.equal(refused.status, 400);
+  assert.match((await error(refused)).message, /rules\.new/);
+});
+

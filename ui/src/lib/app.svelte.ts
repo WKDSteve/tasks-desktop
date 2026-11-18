@@ -126,6 +126,7 @@ import { fromEngineList, type EngineList } from './engineLists';
 import { DEFAULT_RANGES, rangesOf, type Ranges } from './fields';
 import { sameField, type FieldValue } from './drafts';
 import { draftChoices, runDraft, type DraftChoices, type DraftOutcome } from './suggestFields';
+import { fillOfFinding, readIntent, type IntentOutcome } from './intent';
 import { createDrafts, runSplit, type DraftResult, type Split, type SplitOutcome } from './split';
 import {
   activeList as activeListOf,
@@ -169,7 +170,18 @@ export const LAYOUT_VIEWS = ['list', 'plan', 'stats', 'today'] as const;
 export type LayoutView = (typeof LAYOUT_VIEWS)[number];
 
 /** What a new task is filled with when the capture form opens from a plan or a project (fields of the engine's `new`). */
-export type CaptureFill = { plan?: string; phase?: string; project?: string };
+export type CaptureFill = {
+  plan?: string;
+  phase?: string;
+  project?: string;
+  /** From a finding another app handed over (`lib/intent.ts`): shown in the form like typed values, and as editable. */
+  kind?: string;
+  tags?: string;
+  refs?: string;
+  links?: string;
+  summary?: string;
+  context?: string;
+};
 
 /** What the last write did, in one line; `undo` is the way back, when there is one. */
 export interface Toast {
@@ -3777,6 +3789,56 @@ export class App {
     } catch (error) {
       return { kind: 'failed', why: error instanceof ApiError ? error.message : String(error) };
     }
+  }
+
+  /** The dialog "Paste an intent" is open. */
+  intentOpen = $state(false);
+
+  /** Open "Paste an intent": only where something could come of it (the list is there). */
+  openIntent(): void {
+    if (this.phase !== 'ready') return;
+    this.intentOpen = true;
+  }
+
+  closeIntent(): void {
+    this.intentOpen = false;
+  }
+
+  /**
+   * Take an intent another app handed over (`wkd-intent/1`), as the text that was pasted or read from a file. The
+   * text is untrusted: its size and that it is one JSON object are looked at here, everything else is the engine's
+   * check, asked without a yes. Nothing is written: a finding opens the new-task form filled in (a task is made by
+   * *Create*), `tasks.show` shows the task, and a finding a task holds already is told with that task.
+   */
+  async takeIntent(text: string): Promise<IntentOutcome> {
+    const read = readIntent(text);
+    if ('problem' in read) return { kind: 'refused', problem: read.problem };
+    let answer: Awaited<ReturnType<typeof this.env.hub.intent>>;
+    try {
+      answer = await this.env.hub.intent(text);
+    } catch (error) {
+      return { kind: 'refused', why: error instanceof ApiError ? error.message : String(error) };
+    }
+    if (answer.outcome === 'shown' && answer.id !== undefined) {
+      this.openIntentTask(answer.id);
+      return { kind: 'shown', id: answer.id };
+    }
+    if (answer.outcome === 'not_found') return { kind: 'not_found', id: answer.id ?? '' };
+    if (answer.outcome === 'exists' && answer.id !== undefined) return { kind: 'exists', id: answer.id };
+    if (answer.outcome !== 'would_create') return { kind: 'refused', why: answer.outcome };
+    // Nothing could be created in a vault that is read only: said here, not after the form was filled in.
+    if (this.readOnly) return { kind: 'refused', why: translate(this.lang, 'write.read_only') };
+    const fill = fillOfFinding(read.doc, this.lang);
+    this.closeIntent();
+    const { title, area, ...rest } = fill;
+    this.openCapture(title, area !== undefined && this.allAreaNames.includes(area) ? area : undefined, rest);
+    return { kind: 'form' };
+  }
+
+  /** The task an intent names (or the one that holds its finding already): shown over the view. */
+  openIntentTask(id: string): void {
+    this.closeIntent();
+    this.peek(id);
   }
 
   /** The plan the dialog "Split into tasks" is open for; null: closed. */

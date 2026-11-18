@@ -1669,6 +1669,52 @@ pub(super) async fn agent_result(State(st): State<Arc<Shared>>, body: Bytes) -> 
     axum::Json(serde_json::Value::Object(out)).into_response()
 }
 
+/// The most an intent `wkd-intent/1` weighs (UTF-8 bytes, measured before it is parsed): the limit of the schema.
+const INTENT_MAX_BYTES: usize = 64 * 1024;
+
+/// `POST /api/tasks/intent` `{ "text" }`: "Paste an intent". `text` is the intent as the person pasted it or as the
+/// file they chose holds it (`wkd-intent/1`, appkit `schemas/wkd-intent/1`). It is untrusted input: more than 64 KiB
+/// is refused before it is parsed, anything that is not one JSON object as well, and the rest is the engine's check
+/// (its `intent`: schema, an action tasks offers, the class, no absolute path, lengths, control characters, the run
+/// URL), every problem in the message. The hub asks without `yes`, always: the answer is what the engine *would* do
+/// (`would_create`, `exists` with the task that holds the finding already, `shown` or `not_found` for `tasks.show`),
+/// and nothing is written here. The page shows its form; a task is made through `ops` after the person's *Create*.
+pub(super) async fn intent_check(State(st): State<Arc<Shared>>, body: Bytes) -> Response {
+    let map = match vault_request(&body, &["text"]) {
+        Ok(m) => m,
+        Err(r) => return r,
+    };
+    let Some(text) = map.get("text").and_then(serde_json::Value::as_str) else {
+        return error_body(
+            StatusCode::BAD_REQUEST,
+            "bad_intent",
+            "text: the intent as text",
+        );
+    };
+    if text.len() > INTENT_MAX_BYTES {
+        return error_body(
+            StatusCode::BAD_REQUEST,
+            "intent_too_large",
+            "the intent is larger than 64 KiB",
+        );
+    }
+    let intent = match serde_json::from_str::<serde_json::Value>(text) {
+        Ok(doc) if doc.is_object() => doc,
+        _ => {
+            return error_body(
+                StatusCode::BAD_REQUEST,
+                "bad_intent",
+                "the intent is not one JSON object",
+            )
+        }
+    };
+    // Never `yes`: the engine says what it would do.
+    match ask(&st, Calls::Intent, Some(&json!({ "intent": intent }))).await {
+        Ok(reply) => json_response(StatusCode::OK, reply.text, None),
+        Err(response) => response,
+    }
+}
+
 /// The longest free text a draft takes (a note, a piece of a mail; ai-desktop would take more).
 const DRAFT_TEXT_MAX: usize = 64 * 1024;
 /// The lists of `choices` of a draft, as ai-desktop takes them (`docs/JOBS.md` "Drafts" of ai-desktop).

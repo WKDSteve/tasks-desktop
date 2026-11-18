@@ -9,6 +9,7 @@
 // way the Rust hub checks it and then handed to `deps.ops`, which asks the engine and writes the folder; a hub without
 // that answers every write with a refusal.
 
+import { INTENT_MAX_BYTES } from '../lib/intent.ts';
 import type { CallResult } from './engine.ts';
 import { parseQuery as parseSearchQuery, parseRequest, readCorpus, search as searchCorpus, type Corpus } from './search.ts';
 
@@ -548,6 +549,29 @@ export function createWebHub(deps: HubDeps): WebHub {
 
   async function post(name: string, body: string): Promise<Response> {
     switch (name) {
+      case 'intent': {
+        // "Paste an intent" (`wkd-intent/1`), as the hub's route: the text is measured before it is parsed, must be
+        // one JSON object, and the engine in this page checks the rest and says what it would do. Never with `yes`.
+        let text: unknown;
+        try {
+          const parsed: unknown = JSON.parse(body);
+          const map = typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : null;
+          if (map === null || Object.keys(map).some((k) => k !== 'text')) throw new Error('not the request');
+          text = map['text'];
+        } catch {
+          return errorBody(400, 'bad_request', 'the body is { "text" }');
+        }
+        if (typeof text !== 'string') return errorBody(400, 'bad_intent', 'text: the intent as text');
+        if (new TextEncoder().encode(text).length > INTENT_MAX_BYTES) return errorBody(400, 'intent_too_large', 'the intent is larger than 64 KiB');
+        let intent: unknown;
+        try {
+          intent = JSON.parse(text);
+        } catch {
+          intent = null;
+        }
+        if (typeof intent !== 'object' || intent === null || Array.isArray(intent)) return errorBody(400, 'bad_intent', 'the intent is not one JSON object');
+        return passOn('intent', { intent });
+      }
       case 'estimate': {
         const request = checkEstimateRequest(body);
         if (typeof request === 'string') return errorBody(400, 'bad_request', request);

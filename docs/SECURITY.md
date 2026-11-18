@@ -480,6 +480,33 @@ model's whole answer. A needed yes for a private area goes through `draft_confir
 routes: the page writes the sections with `ops` (`set_section`) only after the person's *Adopt*, and the follow-up task
 with `new` only after its own click. A paired phone does not reach the route.
 
+## An intent of another app (`POST /api/tasks/intent`)
+
+"Paste an intent" (menu *Work*, the palette) takes what another app hands over: a document `wkd-intent/1` (appkit
+`schemas/wkd-intent/1`) that says "make a task from this finding" (`tasks.new`) or "show this task" (`tasks.show`).
+It comes as text the person pastes into a field (Ctrl+V; the page never reads the clipboard by itself, its
+`Permissions-Policy` says `clipboard-read=()`) or as a file they choose, and it is **untrusted input** wherever it came
+from:
+
+- The page looks at the size (more than 64 KiB of UTF-8 bytes is refused, measured before anything is parsed; a file
+  larger than that is not read) and that it is one JSON object. A text that fails either never leaves the page.
+- `POST /api/tasks/intent` takes `{ "text" }` and nothing beside it: the text as it was pasted, not an object the page
+  made of it, and no `yes`. The hub measures it again before it parses it (`intent_too_large`, `bad_intent`), then
+  asks the engine (`intent`), which holds it to the rules of the schema: the version, an action tasks offers (an
+  action of another app is refused), a mode it takes, `class` `public` or `internal` only, no absolute path and no way
+  out of the repository in `finding.where.file`, `finding.repro` or `target.id`, the lengths, no control characters, a
+  run URL on `https://github.com/` only. Every problem is in the message (`400 invalid_argument`).
+- The hub never says yes for the person: the engine answers what it *would* do (`would_create`; `exists` with the
+  task that holds the ref `testing-finding:<fp>` already; `shown` or `not_found`), and nothing is written by the
+  route. The page then opens its own new-task form, filled in from the finding and as editable as typed values; the
+  task is made through `ops` by *Create*, with the limits of that door. `target.id` is looked up, never opened as a
+  path.
+
+A paired phone does not reach the route. The web variant asks the engine in the page the same way (the same checks in
+`ui/src/web/hub.ts`). Not built: a route for another *program* on this machine (`POST /intent` of the concept): the
+guard of appkit knows only its own routes outside a session, so that needs a door in the kit first
+(`appkit/tuer-fuer-absichten-anderer-programme-post-intent` in the tasks-vault).
+
 ## Suggesting the fields of a new task (`POST /api/tasks/draft`, `draft_job`, `draft_confirm`, `draft_drop`)
 
 "Suggest fields" of the new-task form sends `{ "text" }` and nothing else: the free text (up to 64 KiB; ai-desktop

@@ -1403,3 +1403,79 @@ row two
         assert!(doc.get("text").is_none(), "{name}: {doc}");
     }
 }
+
+#[tokio::test]
+async fn an_intent_is_checked_before_it_is_parsed_and_the_engine_says_what_it_would_do() {
+    let r = rig("intent", false).await;
+    let route = "/api/tasks/intent";
+    let wrap = |intent: &str| serde_json::json!({ "text": intent }).to_string();
+    let new = r#"{"schema":"wkd-intent/1","action":"tasks.new","mode":"form","source":{"app":"testing"},"finding":{"fp":"0123456789abcdef","area":"alpha.nvim","title":"parse_spec: an empty line ends the list"},"target":null}"#;
+
+    // A dry run: what would be created, and nothing was.
+    let (status, doc) = post(&r, route, &wrap(new), true).await;
+    assert_eq!(status, 200, "{doc}");
+    assert_eq!(doc["kind"], "tasks.intent");
+    assert_eq!(doc["outcome"], "would_create");
+    assert_eq!(doc["area"], "alpha.nvim");
+    assert_eq!(doc["title"], "parse_spec: an empty line ends the list");
+    // The finding is known to the vault already: the task that holds it.
+    std::fs::write(r.vault.join(".fake-finding"), "0123456789abcdef").unwrap();
+    let (status, doc) = post(&r, route, &wrap(new), true).await;
+    assert_eq!(
+        (status, doc["outcome"].as_str()),
+        (200, Some("exists")),
+        "{doc}"
+    );
+    assert_eq!(doc["id"], "alpha.nvim/t1");
+
+    // tasks.show: a task that is there, and one that is not.
+    let show = |id: &str| {
+        wrap(&format!(
+            r#"{{"schema":"wkd-intent/1","action":"tasks.show","mode":"form","source":{{"app":"testing"}},"finding":null,"target":{{"id":"{id}"}}}}"#
+        ))
+    };
+    let (_, doc) = post(&r, route, &show("alpha.nvim/t1"), true).await;
+    assert_eq!(doc["outcome"], "shown", "{doc}");
+    let (_, doc) = post(&r, route, &show("alpha.nvim/gone"), true).await;
+    assert_eq!(doc["outcome"], "not_found", "{doc}");
+
+    // An action of another app is the engine's refusal, with its words.
+    let foreign = new.replace("tasks.new", "rules.new");
+    let (status, doc) = post(&r, route, &wrap(&foreign), true).await;
+    assert_eq!(status, 400, "{doc}");
+    assert_eq!(doc["error"]["code"], "invalid_argument");
+    assert!(
+        doc["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("rules.new"),
+        "{doc}"
+    );
+
+    // Too large is refused before it is parsed (the text is no JSON at all), and so is what is no object.
+    let big = "x".repeat(64 * 1024 + 1);
+    let (status, doc) = post(&r, route, &wrap(&big), true).await;
+    assert_eq!(
+        (status, doc["error"]["code"].as_str()),
+        (400, Some("intent_too_large")),
+        "{doc}"
+    );
+    for bad in ["", "not json", "[1,2]", "\"text\"", "7"] {
+        let (status, doc) = post(&r, route, &wrap(bad), true).await;
+        assert_eq!(
+            (status, doc["error"]["code"].as_str()),
+            (400, Some("bad_intent")),
+            "{bad}: {doc}"
+        );
+    }
+    // The page cannot say yes for the person, name a vault or send the intent as an object.
+    for bad in [
+        format!(r#"{{"text":{},"yes":true}}"#, serde_json::json!(new)),
+        format!(r#"{{"intent":{new}}}"#),
+        r#"{"text":7}"#.to_owned(),
+        "{}".to_owned(),
+    ] {
+        assert_eq!(post(&r, route, &bad, true).await.0, 400, "{bad}");
+    }
+    assert_eq!(post(&r, route, &wrap(new), false).await.0, 401);
+}

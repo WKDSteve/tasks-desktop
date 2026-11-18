@@ -22,6 +22,7 @@ import type {
 } from './contract';
 import type { ViewForm } from './views';
 import { parseRepos, parseSuggestions, type HubRepos, type RepoGroup } from './repos';
+import { parseIntentAnswer, type IntentAnswer } from './intent';
 import { parseRemindersMail, type RemindersMail } from './reminders';
 import { parseRepoStatus, type RepoStatus } from './repoStatus';
 import type { About } from './about';
@@ -482,6 +483,16 @@ export class Hub extends HubClient<Snapshot> {
    */
   agentResult(job: string, id: string, kind: AnswerKind): Promise<AnswerState> {
     return this.postJson<AnswerState>('/api/tasks/agent_result', { job, id, kind });
+  }
+
+  /**
+   * What the engine would do with an intent `wkd-intent/1` (the text as it was pasted): never carried out here. A
+   * refusal of the hub or the engine is an `ApiError` with its words.
+   */
+  async intent(text: string): Promise<IntentAnswer> {
+    const answer = parseIntentAnswer(await this.postJson<unknown>('/api/tasks/intent', { text }));
+    if (answer === null) throw new ApiError(502, 'engine_failed', 'the engine did not answer the intent');
+    return answer;
   }
 
   /** Where a draft stands: its status and, once done, `draft` or `draft_error`. */
