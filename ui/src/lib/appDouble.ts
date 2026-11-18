@@ -35,6 +35,11 @@ export class FakeHub {
     if (this.setupRefusal) throw this.setupRefusal;
     return this.setupNext;
   };
+  setupExample = async (): Promise<SetupStep> => {
+    this.setupCalls.push('example');
+    if (this.setupRefusal) throw this.setupRefusal;
+    return this.setupNext;
+  };
   setupNvim = async (): Promise<SetupStep> => {
     this.setupCalls.push('nvim');
     if (this.setupRefusal) throw this.setupRefusal;

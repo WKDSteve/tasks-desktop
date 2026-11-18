@@ -36,6 +36,12 @@ pub trait FirstStart: Send + Sync {
 
     /// The person does not want the installation: it is not offered again.
     fn decline_install(&self) -> Result<(), String>;
+
+    /// The example vault the engine brings (`examples/vault` of tasks.nvim), to be copied for "Open the example
+    /// vault"; `None`: this hub has none to offer.
+    fn example_vault(&self) -> Option<PathBuf> {
+        None
+    }
 }
 
 /// The first start of the real hub: its settings, its opener and its environment.
@@ -95,5 +101,17 @@ impl FirstStart for HubFirstStart {
 
     fn decline_install(&self) -> Result<(), String> {
         appkit_hub::setup::decline_install(&crate::setup::APP, &self.env)
+    }
+
+    /// Where the engine is looked for, in the order of the start (`discovery`): `TASKS_ENGINE_DIR`, the settings, the
+    /// engine this program carries. Asked without a vault, so nothing of the discovery itself can be used here.
+    fn example_vault(&self) -> Option<PathBuf> {
+        let engine = self
+            .env
+            .path(crate::discovery::SPEC.engine_dir_var)
+            .or_else(|| self.vaults.engine_dir())
+            .or_else(|| crate::bundle::current(&self.env).map(|b| b.engine_dir.clone()))?;
+        let example = engine.join("examples").join("vault");
+        crate::newvault::example(&example).map(|_| example)
     }
 }

@@ -209,6 +209,16 @@ export interface CheckAll {
 export type InstallOffer = 'install' | 'replace' | 'installed' | 'declined';
 const INSTALL_OFFERS: InstallOffer[] = ['install', 'replace', 'installed', 'declined'];
 
+/** The example of `setup` as the page shows it: plain names of areas and a count, or `null`. */
+export function exampleOf(value: unknown): { areas: string[]; files: number } | null {
+  if (typeof value !== 'object' || value === null) return null;
+  const doc = value as Record<string, unknown>;
+  const areas = Array.isArray(doc['areas']) ? doc['areas'].filter((a): a is string => typeof a === 'string' && a !== '' && a.length <= 128).slice(0, 20) : [];
+  const files = doc['files'];
+  if (areas.length === 0 || typeof files !== 'number' || !Number.isInteger(files) || files < 1) return null;
+  return { areas, files };
+}
+
 /** What the page of the first start shows (`GET /api/tasks/setup`). */
 export interface SetupInfo {
   /** The short code of what stops the engine; `null`: nothing. */
@@ -219,6 +229,11 @@ export interface SetupInfo {
   pickProgram: boolean;
   /** The file name of that program on the machine of the hub (`nvim.exe`). */
   program: string;
+  /**
+   * What "Open the example vault" would copy (the example the engine brings): its areas and the number of its files.
+   * `null` or missing: this hub has none to offer.
+   */
+  example?: { areas: string[]; files: number } | null;
 }
 
 /** A step of the first start: whether the person chose something, and what is missing now (`null`: nothing). */
@@ -511,7 +526,17 @@ export class Hub extends HubClient<Snapshot> {
       install: INSTALL_OFFERS.includes(install as InstallOffer) ? (install as InstallOffer) : null,
       pickProgram: doc['pick_program'] === true,
       program: textOf(doc['program']) ?? 'nvim',
+      example: exampleOf(doc['example']),
     };
+  }
+
+  /**
+   * The hub shows the folder dialog, copies its example vault into the (empty) folder the person chose and keeps that
+   * copy as the vault. The page names no folder.
+   */
+  async setupExample(): Promise<SetupStep> {
+    const doc = await this.postJson<Record<string, unknown>>('/api/tasks/setup_example', {});
+    return { chosen: doc['chosen'] === true, problem: textOf(doc['problem']) };
   }
 
   /**

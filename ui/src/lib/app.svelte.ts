@@ -641,6 +641,7 @@ export class App {
   readonly setupState = new SetupState({
     setup: () => this.env.hub.setup(),
     setupVault: (area) => this.env.hub.setupVault(area),
+    setupExample: () => this.env.hub.setupExample(),
     setupNvim: () => this.env.hub.setupNvim(),
     installProgram: (autostart, shortcut) => this.env.hub.installProgram(autostart, shortcut),
     declineInstall: () => this.env.hub.declineInstall(),

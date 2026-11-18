@@ -155,7 +155,7 @@ def collect(cache):
     lua = sum(len(v) for k, v in files.items() if "/runtime/lua/" in k)
     if size > NVIM_BUDGET:
         raise SystemExit(f"pack-engine: Neovim is {size} bytes, its Lua {lua}: over the budget of {NVIM_BUDGET}")
-    files.update(checkout_files(engine_pins["repo"], engine_pins["commit"], "tasks.nvim", ["lua", "scripts", "LICENSE"]))
+    files.update(checkout_files(engine_pins["repo"], engine_pins["commit"], "tasks.nvim", ["lua", "scripts", "examples", "LICENSE"]))
     files.update(checkout_files(engine_pins["lib_repo"], engine_pins["lib_commit"], "lib.nvim", ["lua", "LICENSE"]))
     notice = (
         f"This program carries Neovim {nvim_pins['version']} ({nvim_pins['url']}, sha256 {nvim_pins['sha256']}), cut down to\n"

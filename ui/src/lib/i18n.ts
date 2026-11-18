@@ -454,6 +454,12 @@ const en = {
   'setup.page.closed': 'The dialog was closed without a choice.',
   'setup.page.busy': 'A dialog of the system is open on this computer: answer it there.',
   'setup.page.vault_failed': 'This folder was not taken as the vault.',
+  'setup.page.example_body':
+    'No vault yet and you only want to look around? The example vault of tasks.nvim ({files} files, areas: {areas}) is copied into an empty folder you choose next. Nothing is written before you chose the folder, and nothing that is there is written over.',
+  'setup.page.example_open': 'Open the example vault…',
+  'setup.page.example_failed': 'The example vault was not copied.',
+  'hint.form.setup.example':
+    'Opens the folder dialog on the machine of the hub. Choose an empty folder: the hub copies the example into it and reads that copy as your vault. The example itself stays untouched.',
   'setup.page.nvim_failed': 'This program was not taken as Neovim.',
   'setup.page.install_failed': 'The installation did not start.',
   'setup.invalid_setting.title': 'A setting is not valid',
@@ -2594,6 +2600,12 @@ const de: Record<Key, string> = {
   'setup.page.closed': 'Der Dialog wurde ohne Auswahl geschlossen.',
   'setup.page.busy': 'Auf diesem Rechner ist ein Dialog des Systems offen: dort beantworten.',
   'setup.page.vault_failed': 'Dieser Ordner wurde nicht als Vault übernommen.',
+  'setup.page.example_body':
+    'Noch kein Vault und du willst dich nur umsehen? Der Beispiel-Vault von tasks.nvim ({files} Dateien, Bereiche: {areas}) wird in einen leeren Ordner kopiert, den du als Nächstes wählst. Geschrieben wird erst, nachdem du den Ordner gewählt hast, und nichts, was dort liegt, wird überschrieben.',
+  'setup.page.example_open': 'Beispiel-Vault öffnen…',
+  'setup.page.example_failed': 'Der Beispiel-Vault wurde nicht kopiert.',
+  'hint.form.setup.example':
+    'Öffnet den Ordnerdialog auf dem Rechner des Hubs. Wähle einen leeren Ordner: der Hub kopiert das Beispiel hinein und liest diese Kopie als deinen Vault. Das Beispiel selbst bleibt unberührt.',
   'setup.page.nvim_failed': 'Dieses Programm wurde nicht als Neovim übernommen.',
   'setup.page.install_failed': 'Die Installation ist nicht gestartet.',
   'setup.invalid_setting.title': 'Eine Einstellung ist nicht gültig',

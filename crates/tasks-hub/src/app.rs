@@ -590,6 +590,11 @@ impl VaultAdmin<VaultTarget> for ConfigVaults {
 }
 
 impl ConfigVaults {
+    /// The folder of the engine the settings name by hand (`engine_dir`), if they do.
+    pub(crate) fn engine_dir(&self) -> Option<PathBuf> {
+        self.current().engine_dir
+    }
+
     /// The vault of the first start (the page chose it in the folder dialog, the hub checked it): it becomes the main
     /// vault and the one that is read. Kept even when the engine cannot read it yet (Neovim is missing, say): the page
     /// then shows the next step. Only the first start asks this (the route checks that the hub is not set up).

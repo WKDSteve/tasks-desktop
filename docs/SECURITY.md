@@ -611,6 +611,21 @@ do: a path of 260 UTF-16 units or more, and a name Windows reads differently wit
 private is opened too: it is the person at this machine who asks, and showing it here is not a use that leaves the hub.
 `TASKS_DESKTOP_EDITOR_LOG` (a file) makes the hub write the file instead of starting anything; the browser tests use it.
 
+## The example vault of the first start (`POST /api/tasks/setup_example`)
+
+While the hub has no vault it can use, the page of the first start offers *Open the example vault*. `GET
+/api/tasks/setup` says what that would copy (`example`: the names of its areas and the number of its files, no path;
+`null` where the engine brings none), so the page can say it before the click. `POST /api/tasks/setup_example` takes
+`{}` (any field is refused: the page names no folder), shows the folder dialog of the system on the machine of the hub,
+and copies `examples/vault` of the engine (found the way the engine is: `TASKS_ENGINE_DIR`, the settings, the engine
+the program carries) into the folder the person chose. The target is held to the rules of a new vault: an absolute
+path without `..`, a parent that is there, nothing there yet or an empty folder; every file is made new (`create_new`),
+so nothing is written over or merged into. The source is read only, and only when it is an example: it has the marker
+file `tasks-vault.json`, holds plain files in plain folders (a link is not followed and makes it no example), at most
+200 files of at most 1 MiB. The copy becomes the vault; the folder of the engine is never opened as one. A closed
+dialog writes nothing. A hub that has a vault answers `409`, as the other steps of the first start do. The route needs
+a session and counts as a mutation; a paired phone does not reach it.
+
 ## Showing the vault folder, choosing a folder and making a new vault (`POST /api/tasks/vault_reveal`, `POST /api/tasks/vault_pick`, `POST /api/tasks/vault_create`)
 
 `vault_reveal` takes `{}` (any field is refused): the page names no folder. The hub shows the folder of the vault it reads in

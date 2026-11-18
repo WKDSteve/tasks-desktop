@@ -365,7 +365,10 @@ but the prompt comes back at once (the shell does not wait for a window program)
 the exit code pipes it, `(& tasks-hub --version | Out-String).Trim()`.
 
 The **first** double click opens the page as every other one, and the page sets the hub up: it asks for your vault
-in the folder dialog of Windows (an existing one, or a new one made in the folder you choose, with its first area),
+in the folder dialog of Windows (an existing one, or a new one made in the folder you choose, with its first area;
+or *Open the example vault*: the small example tasks.nvim brings, `examples/vault`, is copied into an empty folder you
+choose, and that copy is your vault to look around in; the page says what is copied before you click, nothing is
+written before you chose the folder and nothing that is there is written over),
 for Neovim in the file dialog when none is found (the hub runs `nvim.exe --version` before it keeps it), and offers
 to install the program to your user folder (no administrator rights; with a link on the desktop and the start at
 login if you want them), or to replace another installed version. The installation stops the hub, copies the

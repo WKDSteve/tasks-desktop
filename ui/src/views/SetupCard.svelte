@@ -40,6 +40,15 @@
             >
           </div>
         {/if}
+        {#if setup.info.example}
+          <!-- The example the engine brings: copied into an empty folder of the person's choice, never opened where it lies. -->
+          <div class="example" id="setup-example">
+            <p>{t('setup.page.example_body', { areas: setup.info.example.areas.join(', '), files: setup.info.example.files })}</p>
+            <button type="button" disabled={setup.busy} data-hint={t('hint.form.setup.example')} onclick={() => void setup.chooseExample()}
+              >{t('setup.page.example_open')}</button
+            >
+          </div>
+        {/if}
       </section>
     {:else if setup.nvimStep && setup.info.pickProgram}
       <section aria-labelledby="setup-nvim">
@@ -101,6 +110,13 @@
   }
   p {
     margin: 0;
+  }
+  .example {
+    display: grid;
+    gap: 0.5rem;
+    justify-items: start;
+    border-top: 1px solid var(--border);
+    padding-top: 0.5rem;
   }
   .row {
     display: flex;

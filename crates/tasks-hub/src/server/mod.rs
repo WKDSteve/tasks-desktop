@@ -434,6 +434,10 @@ fn app_routes(core: &Arc<Shared>) -> Router<Arc<Shared>> {
             post(self::setup::setup_vault).layer(DefaultBodyLimit::max(small)),
         )
         .route(
+            &r("setup_example"),
+            post(self::setup::setup_example).layer(DefaultBodyLimit::max(small)),
+        )
+        .route(
             &r("setup_nvim"),
             post(self::setup::setup_nvim).layer(DefaultBodyLimit::max(small)),
         )

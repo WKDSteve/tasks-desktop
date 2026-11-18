@@ -25,6 +25,8 @@ struct FakeFirstStart {
     offer: InstallOffer,
     /// The program the file dialog "returns" (`None`: closed).
     program: Option<PathBuf>,
+    /// The example vault of the engine (`None`: this hub has none).
+    example: Option<PathBuf>,
 }
 
 fn status(problem: Option<&'static str>) -> HubStatus {
@@ -83,6 +85,10 @@ impl FirstStart for FakeFirstStart {
         Ok(())
     }
 
+    fn example_vault(&self) -> Option<PathBuf> {
+        self.example.clone()
+    }
+
     fn decline_install(&self) -> Result<(), String> {
         self.calls.lock().unwrap().push("decline".to_owned());
         Ok(())
@@ -121,10 +127,25 @@ async fn rig(
             ("TASKS_DESKTOP_PICK_RESULT", pick),
         ]),
     ));
+    // The example vault the engine brings (a rig named `...-no-example` has none).
+    let example = base.join("engine").join("examples").join("vault");
+    for (file, text) in [
+        ("tasks-vault.json", "{}"),
+        (
+            "demo.nvim/ROADMAP/tasks/first.md",
+            "---\ntitle: First\n---\n",
+        ),
+        ("docs/ROADMAP/tasks/readme.md", "---\ntitle: Readme\n---\n"),
+    ] {
+        let at = example.join(file);
+        std::fs::create_dir_all(at.parent().unwrap()).unwrap();
+        std::fs::write(at, text).unwrap();
+    }
     let first = Arc::new(FakeFirstStart {
         calls: Mutex::new(Vec::new()),
         offer,
         program: Some(base.join("nvim").join("nvim.exe")),
+        example: (!name.ends_with("no-example")).then_some(example),
     });
     let control = Secret::generate(TOKEN_BYTES).unwrap();
     let cfg = ServerConfig {
@@ -246,7 +267,17 @@ async fn a_hub_without_a_vault_says_what_is_missing_and_what_it_offers() {
     assert_eq!(doc["pick_program"], true);
     // The session comes first, for every route of the first start.
     assert_eq!(call(&r, "GET", "/api/tasks/setup", "", false).await.0, 401);
-    for route in ["setup_vault", "setup_nvim", "setup_install"] {
+    // What "Open the example vault" would copy is said before anything is written: its areas and its size, no path.
+    assert_eq!(
+        doc["example"],
+        serde_json::json!({ "areas": ["demo.nvim", "docs"], "files": 3 })
+    );
+    for route in [
+        "setup_vault",
+        "setup_example",
+        "setup_nvim",
+        "setup_install",
+    ] {
         let (status, _) = call(&r, "POST", &format!("/api/tasks/{route}"), "{}", false).await;
         assert_eq!(status, 401, "{route}");
     }
@@ -388,4 +419,102 @@ async fn the_installation_is_started_or_declined_as_the_page_says() {
         409
     );
     assert!(calls(&installed).is_empty());
+}
+
+#[tokio::test]
+async fn the_example_vault_is_copied_into_the_chosen_empty_folder_and_kept_as_the_vault() {
+    let r = rig("example", Some("no_vault"), None, InstallOffer::Install).await;
+    // The page names no folder.
+    let (status, _) = post(&r, "/api/tasks/setup_example", r#"{"path":"C:/Windows"}"#).await;
+    assert_eq!(status, 400);
+    assert!(dialogs(&r).is_empty(), "a refused request showed no dialog");
+    assert!(std::fs::read_dir(&r.folder).unwrap().next().is_none());
+
+    let (status, doc) = post(&r, "/api/tasks/setup_example", "{}").await;
+    assert_eq!(status, 200, "{doc}");
+    assert_eq!(doc["chosen"], true);
+    assert_eq!(dialogs(&r), ["pick"]);
+    // The copy is the vault: the folder the person chose, never the folder of the engine.
+    assert_eq!(calls(&r), [format!("vault {}", r.folder.display())]);
+    assert!(r.folder.join("tasks-vault.json").is_file());
+    assert_eq!(
+        std::fs::read_to_string(r.folder.join("demo.nvim/ROADMAP/tasks/first.md")).unwrap(),
+        "---\ntitle: First\n---\n"
+    );
+    // The step is closed now: no second dialog, nothing copied again.
+    assert_eq!(post(&r, "/api/tasks/setup_example", "{}").await.0, 409);
+    assert_eq!(dialogs(&r).len(), 1);
+}
+
+#[tokio::test]
+async fn the_example_is_never_copied_over_something_and_a_closed_dialog_writes_nothing() {
+    // The folder the dialog returns holds a file of the person.
+    let used = rig(
+        "example-used",
+        Some("no_vault"),
+        None,
+        InstallOffer::Install,
+    )
+    .await;
+    std::fs::write(used.folder.join("mine.txt"), "mine").unwrap();
+    let (status, doc) = post(&used, "/api/tasks/setup_example", "{}").await;
+    assert_eq!(
+        (status, doc["error"]["code"].as_str()),
+        (400, Some("not_empty")),
+        "{doc}"
+    );
+    let whole = used.folder.to_string_lossy().into_owned();
+    assert!(
+        !doc.to_string().contains(&whole),
+        "no path in a refusal: {doc}"
+    );
+    assert_eq!(
+        std::fs::read_dir(&used.folder).unwrap().count(),
+        1,
+        "nothing was copied beside the file"
+    );
+    assert!(
+        calls(&used).is_empty(),
+        "the folder was not kept as the vault"
+    );
+    assert_eq!(hello_problem(&used).await, "no_vault");
+
+    // The dialog was closed.
+    let closed = rig(
+        "example-closed",
+        Some("no_vault"),
+        Some(""),
+        InstallOffer::Install,
+    )
+    .await;
+    let (status, doc) = post(&closed, "/api/tasks/setup_example", "{}").await;
+    assert_eq!(
+        (status, doc["chosen"].as_bool()),
+        (200, Some(false)),
+        "{doc}"
+    );
+    assert!(calls(&closed).is_empty());
+
+    // A hub that has no example offers none and shows no dialog for it.
+    let none = rig(
+        "example-no-example",
+        Some("no_vault"),
+        None,
+        InstallOffer::Install,
+    )
+    .await;
+    let (_, state) = call(&none, "GET", "/api/tasks/setup", "", true).await;
+    assert!(state["example"].is_null(), "{state}");
+    let (status, doc) = post(&none, "/api/tasks/setup_example", "{}").await;
+    assert_eq!(
+        (status, doc["error"]["code"].as_str()),
+        (404, Some("no_example")),
+        "{doc}"
+    );
+    assert!(dialogs(&none).is_empty());
+
+    // A hub that is set up does not open an example over its vault.
+    let ready = rig("example-ready", None, None, InstallOffer::Installed).await;
+    assert_eq!(post(&ready, "/api/tasks/setup_example", "{}").await.0, 409);
+    assert!(dialogs(&ready).is_empty());
 }

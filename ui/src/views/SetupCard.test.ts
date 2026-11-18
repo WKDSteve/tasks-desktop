@@ -2,7 +2,7 @@
 // server side of Svelte (what it offers for each thing the hub misses; the page of the tests speaks German).
 import { render } from 'svelte/server';
 import { describe, expect, it } from 'vitest';
-import { ApiError } from '../lib/api';
+import { ApiError, exampleOf } from '../lib/api';
 import { make } from '../lib/appDouble';
 import SetupCard from './SetupCard.svelte';
 
@@ -38,6 +38,38 @@ describe('the first start in the page', () => {
     expect(app.setupState.refusal).toEqual({ key: 'setup.page.vault_failed', detail: 'there is no such folder' });
     expect(app.setupState.closed).toBe(false);
     expect(reloads()).toBe(0);
+  });
+
+  it('offers the example vault where the hub has one, says what is copied before the click, and copies only on it', async () => {
+    const made = await page('no_vault');
+    // A hub without an example (an older engine): the card does not offer it.
+    expect(html(made.app)).not.toContain('setup-example');
+    made.hub.setupInfo = { ...made.hub.setupInfo, example: { areas: ['demo.nvim', 'docs'], files: 15 } };
+    await made.app.setupState.load();
+    const card = html(made.app);
+    expect(card).toContain('id="setup-example"');
+    expect(card).toContain('15 Dateien, Bereiche: demo.nvim, docs');
+    expect(card).toContain('Beispiel-Vault öffnen…');
+    // Reading the card asked the hub for nothing but the state.
+    expect(made.hub.setupCalls).toEqual(['setup', 'setup']);
+    await made.app.setupState.chooseExample();
+    expect(made.hub.setupCalls).toEqual(['setup', 'setup', 'example']);
+    expect(made.reloads()).toBe(1);
+    // A folder that is not empty: the words of the hub beside the page's own, and nothing loads again.
+    made.hub.setupRefusal = new ApiError(400, 'not_empty', 'the folder is not empty');
+    await made.app.setupState.chooseExample();
+    expect(made.app.setupState.refusal).toEqual({ key: 'setup.page.example_failed', detail: 'the folder is not empty' });
+    expect(made.reloads()).toBe(1);
+    // Once the vault is there the example is not offered any more (the step is Neovim's).
+    const later = await page('nvim_not_found');
+    later.hub.setupInfo = { ...later.hub.setupInfo, example: { areas: ['demo.nvim'], files: 3 } };
+    await later.app.setupState.load();
+    expect(html(later.app)).not.toContain('setup-example');
+  });
+
+  it('takes the example of the hub only as plain names and a count', () => {
+    expect(exampleOf({ areas: ['demo.nvim', 7, ''], files: 15 })).toEqual({ areas: ['demo.nvim'], files: 15 });
+    for (const none of [null, 'x', {}, { areas: [], files: 3 }, { areas: ['a'], files: 0 }, { areas: ['a'], files: '3' }]) expect(exampleOf(none)).toBeNull();
   });
 
   it('offers the file dialog for Neovim once the vault is there', async () => {

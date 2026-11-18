@@ -9,6 +9,7 @@ import type { Key } from '../i18n';
 export interface SetupHost {
   setup(): Promise<SetupInfo>;
   setupVault(area: string | null): Promise<SetupStep>;
+  setupExample(): Promise<SetupStep>;
   setupNvim(): Promise<SetupStep>;
   installProgram(autostart: boolean, shortcut: boolean): Promise<void>;
   declineInstall(): Promise<void>;
@@ -81,6 +82,11 @@ export class SetupState {
   /** The folder dialog for the vault; with `area` the chosen folder becomes a new vault with that area. */
   chooseVault(area: string | null): Promise<void> {
     return this.step(() => this.host.setupVault(area), 'setup.page.vault_failed');
+  }
+
+  /** The folder dialog for a copy of the example vault: the hub copies it into the empty folder that is chosen. */
+  chooseExample(): Promise<void> {
+    return this.step(() => this.host.setupExample(), 'setup.page.example_failed');
   }
 
   chooseNvim(): Promise<void> {

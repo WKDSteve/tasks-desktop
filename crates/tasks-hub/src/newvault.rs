@@ -66,6 +66,132 @@ pub fn create(path: &Path, area: &str) -> Result<(), Refused> {
         .map_err(|_| refused("not_writable", "the folders could not be made"))
 }
 
+/// The most files an example vault holds, and the most one of them weighs: the one of tasks.nvim has 15 small files.
+pub const EXAMPLE_MAX_FILES: usize = 200;
+pub const EXAMPLE_MAX_FILE_BYTES: u64 = 1024 * 1024;
+/// The marker file of a vault (`tasks-vault.json`, docs/ENGINE.md of tasks.nvim): an example has one.
+const MARKER: &str = "tasks-vault.json";
+
+/// What an example vault holds, for the page to say before anything is copied: its areas and how many files.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Example {
+    pub areas: Vec<String>,
+    pub files: usize,
+}
+
+/// The files of the example at `from`, relative, in a fixed order: plain files in plain folders only (a link is not
+/// followed and not copied), within the limits above. `None` when it is no example vault (no marker file), holds a
+/// link, or is larger than an example is.
+fn example_files(from: &Path) -> Option<Vec<std::path::PathBuf>> {
+    if !from.join(MARKER).is_file() {
+        return None;
+    }
+    let mut files = Vec::new();
+    let mut dirs = vec![std::path::PathBuf::new()];
+    while let Some(rel) = dirs.pop() {
+        let mut entries: Vec<_> = std::fs::read_dir(from.join(&rel))
+            .ok()?
+            .filter_map(Result::ok)
+            .collect();
+        entries.sort_by_key(std::fs::DirEntry::file_name);
+        for entry in entries {
+            let kind = entry.file_type().ok()?;
+            let name = rel.join(entry.file_name());
+            if kind.is_symlink() {
+                return None;
+            } else if kind.is_dir() {
+                dirs.push(name);
+            } else if kind.is_file() {
+                if entry.metadata().ok()?.len() > EXAMPLE_MAX_FILE_BYTES {
+                    return None;
+                }
+                files.push(name);
+                if files.len() > EXAMPLE_MAX_FILES {
+                    return None;
+                }
+            }
+        }
+    }
+    files.sort();
+    Some(files)
+}
+
+/// What the example at `from` holds; `None` when there is none to offer.
+#[must_use]
+pub fn example(from: &Path) -> Option<Example> {
+    let files = example_files(from)?;
+    let mut areas: Vec<String> = files
+        .iter()
+        .filter(|f| f.components().count() > 1)
+        .filter_map(|f| f.components().next())
+        .map(|c| c.as_os_str().to_string_lossy().into_owned())
+        .filter(|name| valid_area_name(name).is_ok())
+        .collect();
+    areas.dedup();
+    (!areas.is_empty()).then_some(Example {
+        areas,
+        files: files.len(),
+    })
+}
+
+/// Copy the example vault at `from` into `to`, which becomes a vault of its own: the example is never opened where it
+/// lies (the folder of the plugin is not a place to write tasks into). `to` is held to the rules of [`create`]: an
+/// absolute path without `..`, a parent that exists, and nothing there yet or an empty folder. Nothing that is there
+/// is written over.
+///
+/// # Errors
+///
+/// [`Refused`] when the target is not acceptable, there is no example, or the disk says no.
+pub fn copy_example(from: &Path, to: &Path) -> Result<usize, Refused> {
+    let plain = to.components().all(|c| {
+        matches!(
+            c,
+            Component::Prefix(_) | Component::RootDir | Component::Normal(_)
+        )
+    });
+    if !to.is_absolute() || !plain {
+        return Err(refused(
+            "bad_path",
+            "the folder must be an absolute path without . or ..",
+        ));
+    }
+    if !to.parent().is_some_and(Path::is_dir) {
+        return Err(refused("no_parent", "the folder above it does not exist"));
+    }
+    match std::fs::symlink_metadata(to) {
+        Ok(meta) if meta.is_dir() && !meta.file_type().is_symlink() => {
+            let empty = std::fs::read_dir(to)
+                .map_err(|_| refused("not_readable", "the folder cannot be read"))?
+                .next()
+                .is_none();
+            if !empty {
+                return Err(refused("not_empty", "the folder is not empty"));
+            }
+        }
+        Ok(_) => return Err(refused("exists", "something is there already")),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+        Err(_) => return Err(refused("not_readable", "the folder cannot be read")),
+    }
+    let files =
+        example_files(from).ok_or(refused("no_example", "there is no example vault to copy"))?;
+    let failed = || refused("not_writable", "the example could not be copied");
+    for rel in &files {
+        let target = to.join(rel);
+        if let Some(dir) = target.parent() {
+            std::fs::create_dir_all(dir).map_err(|_| failed())?;
+        }
+        // `create_new`: nothing that appeared meanwhile is written over.
+        let mut out = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&target)
+            .map_err(|_| failed())?;
+        let mut source = std::fs::File::open(from.join(rel)).map_err(|_| failed())?;
+        std::io::copy(&mut source, &mut out).map_err(|_| failed())?;
+    }
+    Ok(files.len())
+}
+
 /// Is `dir` a plain folder that holds exactly one plain folder called `name`, and nothing else? Gives that folder.
 fn only_folder(dir: &Path, name: &str) -> Option<std::path::PathBuf> {
     let mut entries = std::fs::read_dir(dir).ok()?;
@@ -94,6 +220,122 @@ mod tests {
     /// A folder of its own, removed when the value drops.
     fn scratch(name: &str) -> Scratch {
         Scratch::new(&format!("newvault-{name}"))
+    }
+
+    /// An example vault as the engine brings one: a marker, two areas, a task and a finished one.
+    fn an_example(base: &Path) -> std::path::PathBuf {
+        let from = base.join("engine").join("examples").join("vault");
+        for (file, text) in [
+            ("tasks-vault.json", "{}"),
+            ("README.md", "An example."),
+            (
+                "demo.nvim/ROADMAP/tasks/first.md",
+                "---\ntitle: First\n---\n",
+            ),
+            ("demo.nvim/ROADMAP/TASKS.md", "# Tasks"),
+            (
+                "docs/Backlog/TASKS/2026-01-05_done.md",
+                "---\ntitle: Done\n---\n",
+            ),
+        ] {
+            let at = from.join(file);
+            std::fs::create_dir_all(at.parent().unwrap()).unwrap();
+            std::fs::write(at, text).unwrap();
+        }
+        from
+    }
+
+    #[test]
+    fn the_example_says_its_areas_and_is_copied_whole_into_an_empty_folder_only() {
+        let base = scratch("example");
+        let from = an_example(&base);
+        assert_eq!(
+            example(&from),
+            Some(Example {
+                areas: vec!["demo.nvim".to_owned(), "docs".to_owned()],
+                files: 5
+            })
+        );
+        // Into a folder that is not there yet, and into an empty one.
+        let fresh = base.join("fresh");
+        assert_eq!(copy_example(&from, &fresh), Ok(5));
+        assert_eq!(
+            std::fs::read_to_string(fresh.join("demo.nvim/ROADMAP/tasks/first.md")).unwrap(),
+            "---\ntitle: First\n---\n"
+        );
+        assert!(fresh.join("tasks-vault.json").is_file());
+        assert!(fresh
+            .join("docs/Backlog/TASKS/2026-01-05_done.md")
+            .is_file());
+        let empty = base.join("empty");
+        std::fs::create_dir(&empty).unwrap();
+        assert_eq!(copy_example(&from, &empty), Ok(5));
+        // The example itself is as it was: it is read, never written.
+        assert_eq!(example(&from).unwrap().files, 5);
+
+        // Nothing is written over or merged into: a folder with anything in it, a file, the copy made just now.
+        let used = base.join("used");
+        std::fs::create_dir(&used).unwrap();
+        std::fs::write(used.join("mine.txt"), "mine").unwrap();
+        for target in [&used, &fresh, &used.join("mine.txt")] {
+            let before = std::fs::read_dir(&used).unwrap().count();
+            let code = copy_example(&from, target).unwrap_err().code;
+            assert!(matches!(code, "not_empty" | "exists"), "{code}");
+            assert_eq!(std::fs::read_dir(&used).unwrap().count(), before);
+        }
+        assert_eq!(
+            std::fs::read_to_string(used.join("mine.txt")).unwrap(),
+            "mine"
+        );
+        // The target is held to the rules of a new vault.
+        assert_eq!(
+            copy_example(&from, Path::new("relative/x"))
+                .unwrap_err()
+                .code,
+            "bad_path"
+        );
+        assert_eq!(
+            copy_example(&from, &base.join("a").join("..").join("b"))
+                .unwrap_err()
+                .code,
+            "bad_path"
+        );
+        assert_eq!(
+            copy_example(&from, &base.join("no").join("parent"))
+                .unwrap_err()
+                .code,
+            "no_parent"
+        );
+    }
+
+    #[test]
+    fn what_is_no_example_is_not_offered_and_not_copied() {
+        let base = scratch("no-example");
+        let from = an_example(&base);
+        // Without the marker file it is some folder, not a vault to hand out.
+        std::fs::remove_file(from.join("tasks-vault.json")).unwrap();
+        assert_eq!(example(&from), None);
+        let target = base.join("target");
+        assert_eq!(copy_example(&from, &target).unwrap_err().code, "no_example");
+        assert!(!target.exists(), "nothing was made");
+        assert_eq!(example(&base.join("nowhere")), None);
+        // A marker and no area: nothing to show.
+        let bare = base.join("bare");
+        std::fs::create_dir_all(&bare).unwrap();
+        std::fs::write(bare.join("tasks-vault.json"), "{}").unwrap();
+        assert_eq!(example(&bare), None);
+        // Larger than an example is: not offered (the hub copies no tree it does not know the size of).
+        let big = an_example(&base.join("big"));
+        for n in 0..=EXAMPLE_MAX_FILES {
+            std::fs::write(big.join("docs").join(format!("f{n}.md")), "x").unwrap();
+        }
+        assert_eq!(example(&big), None);
+        assert_eq!(
+            copy_example(&big, &base.join("big-target"))
+                .unwrap_err()
+                .code,
+            "no_example"
+        );
     }
 
     #[test]
