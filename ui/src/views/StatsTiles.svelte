@@ -5,7 +5,6 @@
   // is counted comes from the view (`StatsView`), the spread per field is the same counting as "Cut up by"
   // (`lib/stats.ts`). The colours of the stacks are the view's (`.stats :global` there): this component lives in it.
   import { tick } from 'svelte';
-  import Info from 'appkit-ui/Info.svelte';
   import MultiSelect from 'appkit-ui/MultiSelect.svelte';
   import type { App } from '../lib/app.svelte';
   import type { TaskEntry } from '../lib/contract';
@@ -115,10 +114,9 @@
 {/snippet}
 
 <div class="tiles" bind:this={root}>
-  <div class="headline">
-    <h2 id="stats-figures" class="eyebrow">{t('stats.figures')}</h2>
-    <Info hint={t('hint.stats')} label={t('hint.about', { what: t('nav.stats') })} />
-    {#if hidden > 0 || inPick}
+  <!-- The name of the tiles and their hint are the head of their card (StatsView); the choice of the tiles stands here. -->
+  {#if hidden > 0 || inPick}
+    <div class="headline">
       <!-- The listeners only note that the person is in the choice; the box itself is not interactive. -->
       <!-- svelte-ignore a11y_no_static_element_interactions -->
       <div
@@ -141,8 +139,8 @@
           searchLabel={t('multi.search')}
         />
       </div>
-    {/if}
-  </div>
+    </div>
+  {/if}
   <ul class="figures">
     {#each counted as f (f.figure)}
       {#if isShown(f.id)}
@@ -254,13 +252,6 @@
     flex-wrap: wrap;
     align-items: center;
     gap: 0.4rem;
-  }
-  .eyebrow {
-    font-size: 0.8rem;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    color: var(--muted);
-    margin: 0;
   }
   /* The choice of the tiles: in the corner at the top right of the section. */
   .pick {

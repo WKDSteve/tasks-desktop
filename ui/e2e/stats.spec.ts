@@ -340,3 +340,125 @@ test('the effort tile keeps its figure readable while the next one is asked: mar
   expect(await violations(page)).toEqual([]);
   expect(problems).toEqual([]);
 });
+
+test('the cards of the statistics: their order, "Cut up by" over the bars, a fold that holds, and buttons that come with the pointer', async ({
+  page,
+}) => {
+  const problems = await pair(page, '/#view=stats');
+  await expect(page.getByRole('table', { name: 'The numbers per area' })).toBeVisible();
+  const cards = page.locator('[data-card]');
+  await expect.poll(() => cards.evaluateAll((els) => els.map((el) => el.getAttribute('data-card')))).toEqual([
+    'figures',
+    'chart',
+    'history',
+    'table',
+  ]);
+  // The choice of the field stands in the card of the bars, above them.
+  const chart = page.getByRole('region', { name: 'Open tasks per area' });
+  await expect(chart.getByRole('group', { name: 'Cut up by' })).toBeVisible();
+  const above = await chart.evaluate((card) => {
+    const dims = card.querySelector('[role="group"][aria-label="Cut up by"]');
+    const bars = card.querySelector('.chart');
+    return dims !== null && bars !== null && dims.getBoundingClientRect().bottom <= bars.getBoundingClientRect().top;
+  });
+  expect(above).toBe(true);
+
+  // The buttons of a card are there for the pointer over it and the focus in it, not otherwise.
+  const table = page.getByRole('region', { name: 'The numbers per area' });
+  const tools = table.locator('.tools');
+  const opacity = (): Promise<string> => tools.evaluate((el) => getComputedStyle(el).opacity);
+  await page.mouse.move(1, 1);
+  await expect.poll(opacity).toBe('0');
+  await table.hover();
+  await expect.poll(opacity).toBe('1');
+  await expect(table.getByRole('button', { name: 'Open "The numbers per area" in a window of its own' })).toHaveAttribute('data-hint', /new window/);
+
+  // The head folds the card, by the pointer and by Enter and Space; it stays folded after a reload.
+  const head = page.getByRole('button', { name: 'The numbers per area', exact: true });
+  await expect(head).toHaveAttribute('aria-expanded', 'true');
+  await head.click();
+  await expect(head).toHaveAttribute('aria-expanded', 'false');
+  await expect(table.getByRole('table')).toHaveCount(0);
+  await head.press('Enter');
+  await expect(head).toHaveAttribute('aria-expanded', 'true');
+  await head.press('Space');
+  await expect(head).toHaveAttribute('aria-expanded', 'false');
+  await page.mouse.move(1, 1);
+  await head.focus();
+  await expect.poll(opacity).toBe('1');
+  for (const scheme of ['light', 'dark'] as const) {
+    await page.emulateMedia({ colorScheme: scheme });
+    await expectAccessible(page, `statistics with a folded card, ${scheme}`);
+  }
+  await page.emulateMedia({ colorScheme: 'light' });
+  await page.reload();
+  await expect(page.getByRole('button', { name: 'The numbers per area', exact: true })).toHaveAttribute('aria-expanded', 'false');
+  expect(await page.evaluate(() => localStorage.getItem('tasks-desktop.stats-folds'))).toBe('["table"]');
+  await page.getByRole('button', { name: 'The numbers per area', exact: true }).click();
+  await expect(page.getByRole('table', { name: 'The numbers per area' })).toBeVisible();
+  expect(await violations(page)).toEqual([]);
+  expect(problems).toEqual([]);
+});
+
+test('a card alone: in a window of its own with the same field, on paper without the others, and as files', async ({ page, context }) => {
+  const problems = await pair(page, '/#view=stats');
+  const dims = page.getByRole('group', { name: 'Cut up by' });
+  await dims.getByRole('button', { name: 'Kind' }).click();
+  const chart = page.getByRole('region', { name: 'Open tasks per area' });
+  await chart.hover();
+
+  // A window of its own: only this card, cut up by the same field; the whole statistics are one press away.
+  const [tab] = await Promise.all([
+    context.waitForEvent('page'),
+    chart.getByRole('button', { name: 'Open "Open tasks per area" in a window of its own' }).click(),
+  ]);
+  await expect(tab.locator('[data-card]')).toHaveCount(1);
+  await expect(tab.getByRole('region', { name: 'Open tasks per area' })).toBeVisible();
+  await expect(tab.getByRole('group', { name: 'Cut up by' }).getByRole('button', { name: 'Kind' })).toHaveAttribute('aria-pressed', 'true');
+  expect(new URL(tab.url()).hash).toMatch(/^#view=stats&card=chart&stats=kind%3A/);
+  await expectAccessible(tab, 'one card of the statistics in a window of its own');
+  await tab.getByRole('button', { name: 'Show all statistics' }).click();
+  await expect(tab.locator('[data-card]')).toHaveCount(4);
+  await tab.close();
+
+  // The menu of the card: print leaves the other cards off the paper.
+  await page.evaluate(() => {
+    (window as unknown as { printed: number }).printed = 0;
+    window.print = () => void ((window as unknown as { printed: number }).printed += 1);
+  });
+  // the menu opens from a summary (a disclosure, not a button)
+  const menu = chart.locator('[data-tool="menu"]');
+  await expect(menu).toHaveAccessibleName('Print or export "Open tasks per area"');
+  await menu.click();
+  const ways = chart.getByRole('group', { name: 'Print or export "Open tasks per area"' });
+  await expect(ways).toBeVisible();
+  await expectAccessible(page, 'the menu of a card of the statistics');
+  await page.keyboard.press('Escape');
+  await expect(ways).toBeHidden();
+  await expect(menu).toBeFocused();
+  await menu.click();
+  await ways.getByRole('button', { name: 'Print' }).click();
+  expect(await page.evaluate(() => (window as unknown as { printed: number }).printed)).toBe(1);
+  await page.emulateMedia({ media: 'print' });
+  await expect(chart).toBeVisible();
+  await expect(page.getByRole('region', { name: 'The numbers per area' })).toBeHidden();
+  await expect(chart.locator('.tools')).toBeHidden();
+  await page.evaluate(() => window.dispatchEvent(new Event('afterprint')));
+  await page.emulateMedia({ media: 'screen' });
+  await expect(page.getByRole('region', { name: 'The numbers per area' })).toBeVisible();
+
+  // Its numbers as CSV and its drawing as SVG.
+  await menu.click();
+  const [csv] = await Promise.all([page.waitForEvent('download'), ways.getByRole('button', { name: 'Save as CSV ...' }).click()]);
+  expect(csv.suggestedFilename()).toMatch(/^tasks-stats-chart-\d{4}-\d{2}-\d{2}\.csv$/);
+  // a byte order mark first, for the umlauts in a spreadsheet
+  expect(readFileSync((await csv.path())!, 'utf8')).toMatch(new RegExp(`^${String.fromCharCode(0xfeff)}Area,Total,`));
+  await menu.click();
+  const [svg] = await Promise.all([page.waitForEvent('download'), ways.getByRole('button', { name: 'Save as SVG ...' }).click()]);
+  const drawing = readFileSync((await svg.path())!, 'utf8');
+  expect(drawing).toContain('<svg xmlns="http://www.w3.org/2000/svg"');
+  expect(drawing).toMatch(/<rect [^>]*fill="rgb/);
+  await page.evaluate(() => localStorage.removeItem('tasks-desktop.stats'));
+  expect(await violations(page)).toEqual([]);
+  expect(problems).toEqual([]);
+});

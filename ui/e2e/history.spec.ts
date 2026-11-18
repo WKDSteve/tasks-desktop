@@ -53,9 +53,13 @@ test('a number of the overview opens the history of its figure; the period is re
   }
   await expect(chart).toBeVisible();
   await expect(chart).toHaveAccessibleName(/^With a value from \d{4}-\d{2}-\d{2} to \d{4}-\d{2}-\d{2}$/);
-  // the same numbers as a table, for the keyboard and a screen reader
-  await section.getByText('The numbers', { exact: true }).click();
-  await expect(section.getByRole('table')).toBeVisible();
+  // the same numbers as a table for a screen reader only: nothing of it is seen, no fold to open
+  await expect(section.getByText('The numbers', { exact: true })).toHaveCount(0);
+  const numbers = section.locator('table[data-history-numbers]');
+  await expect(numbers).toBeAttached();
+  const box = numbers.locator('xpath=..');
+  await expect(box).toHaveClass(/sr-only/);
+  expect(await box.evaluate((el) => el.getBoundingClientRect().width * el.getBoundingClientRect().height)).toBeLessThanOrEqual(1);
   await expect(section.getByRole('rowheader').last()).toHaveText(/^\d{4}-\d{2}-\d{2}$/);
 
   // another figure and another period: asked of the engine, and remembered
@@ -106,5 +110,60 @@ test('the key h on a number of the overview opens its history; a custom period a
   // what the files say about every day needs no series: a line even for a window before it
   await section.locator('[data-history-metric]').selectOption('created');
   await expect(section.getByRole('img')).toHaveAccessibleName('Created per day from 2026-01-05 to 2026-01-20');
+  expect(problems).toEqual([]);
+});
+
+test('the history follows "Cut up by": the open tasks as bands per status, a value taken out by the legend, a field without a series says so', async ({
+  page,
+}) => {
+  test.slow();
+  const problems = await pair(page, '/#view=stats');
+  const section = page.getByRole('region', { name: 'History' });
+  await expect(section).toBeVisible();
+  const chart = section.getByRole('img');
+  const none = section.locator('[data-history-empty="no-series"]');
+  await expect(chart.or(none)).toBeVisible();
+  if (await none.isVisible()) {
+    const answered = page.waitForResponse((r) => r.url().includes('/api/tasks/ops') && r.request().method() === 'POST');
+    await none.getByRole('button', { name: 'Start the history today' }).click();
+    expect((await answered).status()).toBe(200);
+  }
+  const dims = page.getByRole('group', { name: 'Cut up by' });
+  await dims.getByRole('button', { name: 'Status' }).click();
+  await section.locator('[data-history-metric]').selectOption('ready');
+  // by status the series counts the open tasks only: one line, and the way to the bands
+  const offer = section.locator('[data-history-split="metric"]');
+  await expect(offer).toContainText('counts the open tasks only');
+  await offer.getByRole('button', { name: 'Show the open tasks by Status' }).click();
+  await expect(section.locator('[data-history-metric]')).toHaveValue('open');
+  await expect(chart).toHaveAccessibleName(/^Open tasks by Status from /);
+  const layers = section.locator('path.layer');
+  await expect(layers.first()).toBeVisible();
+  const before = await layers.count();
+  // a band is coloured as its value in the bars
+  const first = (await layers.first().getAttribute('data-layer')) ?? '';
+  const fill = await layers.first().evaluate((el) => getComputedStyle(el).fill);
+  const bar = page.locator(`.legend [data-bucket="${first}"] .swatch`).first();
+  expect(await bar.evaluate((el) => getComputedStyle(el).backgroundColor)).toBe(fill);
+  for (const scheme of ['light', 'dark'] as const) {
+    await page.emulateMedia({ colorScheme: scheme });
+    await expectAccessible(page, `the history cut up by status, ${scheme}`);
+  }
+  await page.emulateMedia({ colorScheme: 'light' });
+  const entry = section.locator(`[data-history-legend] [data-bucket="${first}"]`);
+  await entry.click();
+  await expect(entry).toHaveAttribute('aria-pressed', 'false');
+  await expect(layers).toHaveCount(before - 1);
+
+  // a field the series does not count per value: one line and a word
+  await dims.getByRole('button', { name: 'Priority' }).click();
+  await expect(section.locator('[data-history-split="none"]')).toContainText('no figures per Priority');
+  await expect(layers).toHaveCount(0);
+  // (a vault of the tests may have one day only: a line of one point is not drawn wide)
+  await expect(section.locator('path.line')).toHaveCount(1);
+  await page.evaluate(() => {
+    localStorage.removeItem('tasks-desktop.stats');
+    localStorage.removeItem('tasks-desktop.stats-history');
+  });
   expect(problems).toEqual([]);
 });

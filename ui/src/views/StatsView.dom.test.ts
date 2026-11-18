@@ -85,3 +85,104 @@ describe('StatsView, the effort of the tasks the filter keeps', () => {
     await vi.waitFor(() => expect(target.querySelector('[data-figure="effort"]')).not.toBeNull());
   });
 });
+
+describe('StatsView, the cards', () => {
+  async function shown(opened: string[] = []): Promise<{ m: Made; page: HTMLElement }> {
+    const m = make({ token: 't', openWindow: (route) => (opened.push(route), true) });
+    made = m;
+    m.hub.capabilities = [...(m.hub.capabilities ?? []), 'history'];
+    m.hub.doc = snapshot([task('pub/alpha', { status: 'open' }), task('pub/beta', { status: 'doing' })]);
+    await m.app.start(null);
+    m.app.setLang('en');
+    const page = document.createElement('div');
+    document.body.append(page);
+    mounted = mount(StatsView, { target: page, props: { app: m.app } });
+    flushSync();
+    await settle();
+    return { m, page };
+  }
+  const cards = (page: HTMLElement): string[] => [...page.querySelectorAll('[data-card]')].map((el) => el.getAttribute('data-card') ?? '');
+
+  it('stand below the filter in their order, and "Cut up by" stands in the card of the bars, over them', async () => {
+    const { page } = await shown();
+    expect(cards(page)).toEqual(['figures', 'chart', 'history', 'table']);
+    const chart = page.querySelector('[data-card="chart"]');
+    const dims = chart?.querySelector('[role="group"][aria-label="Cut up by"]');
+    expect(dims).not.toBeNull();
+    // the choice of the field comes before the bars it cuts up
+    const bars = chart?.querySelector('.chart');
+    expect(dims && bars && dims.compareDocumentPosition(bars) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(page.querySelector('[data-card="figures"] [role="group"][aria-label="Cut up by"]')).toBeNull();
+  });
+
+  it('fold by their head, remembered per card and part of the layout of the view', async () => {
+    const { m, page } = await shown();
+    const head = page.querySelector<HTMLButtonElement>('#stats-table');
+    expect(head?.getAttribute('aria-expanded')).toBe('true');
+    expect(page.querySelector('#stats-table-body table')).not.toBeNull();
+    head?.click();
+    await settle();
+    expect(page.querySelector('#stats-table')?.getAttribute('aria-expanded')).toBe('false');
+    expect(page.querySelector('#stats-table-body')).toBeNull();
+    expect(m.prefs.get('tasks-desktop.stats-folds')).toBe('["table"]');
+    expect(m.app.layoutChanged('stats')).toBe(true);
+    m.app.resetLayout('stats');
+    await settle();
+    expect(page.querySelector('#stats-table')?.getAttribute('aria-expanded')).toBe('true');
+    expect(m.app.layoutChanged('stats')).toBe(false);
+  });
+
+  it('open alone in a window with the field and the filter; a window of one card shows only it, until all are asked for', async () => {
+    const opened: string[] = [];
+    const { m, page } = await shown(opened);
+    m.app.setStats('state', 'name');
+    await settle();
+    page.querySelector<HTMLButtonElement>('[data-card="history"] [data-tool="window"]')?.click();
+    expect(opened).toEqual(['#view=stats&card=history&stats=state%3Aname']);
+
+    m.app.openCardRoute({ card: 'table', dim: 'kind' });
+    await settle();
+    expect(cards(page)).toEqual(['table']);
+    expect(m.app.statsDim).toBe('kind');
+    // alone it cannot be folded or opened apart again
+    expect(page.querySelector('[data-card="table"] [data-tool="window"]')).toBeNull();
+    expect(page.querySelector('#stats-table')?.tagName).toBe('SPAN');
+    [...page.querySelectorAll<HTMLButtonElement>('button')].find((b) => b.textContent === 'Show all statistics')?.click();
+    await settle();
+    expect(cards(page)).toEqual(['figures', 'chart', 'history', 'table']);
+  });
+
+  it('have no window button where the page cannot open a window', async () => {
+    const m = make({ token: 't' });
+    made = m;
+    m.hub.doc = snapshot([task('pub/alpha', { status: 'open' })]);
+    await m.app.start(null);
+    const page = document.createElement('div');
+    document.body.append(page);
+    mounted = mount(StatsView, { target: page, props: { app: m.app } });
+    flushSync();
+    await settle();
+    expect(page.querySelector('[data-card="chart"] [data-tool="menu"]')).not.toBeNull();
+    expect(page.querySelector('[data-tool="window"]')).toBeNull();
+  });
+
+  it('export their numbers: the table of the bars as CSV, the headline numbers as Markdown', async () => {
+    const { m, page } = await shown();
+    const out = async (card: string, what: string): Promise<void> => {
+      page.querySelector<HTMLElement>(`[data-card="${card}"] [data-tool="menu"]`)?.click();
+      await settle();
+      page.querySelector<HTMLButtonElement>(`[data-card="${card}"] [data-out="${what}"]`)?.click();
+      await settle();
+    };
+    await out('table', 'csv');
+    const csv = m.files.at(-1);
+    expect(csv?.name).toMatch(/^tasks-stats-table-\d{4}-\d{2}-\d{2}\.csv$/);
+    const sep = m.app.csvSeparator;
+    expect(csv?.text.split('\r\n').slice(0, 3)).toEqual(['Area|Total|doing|open', 'pub|2|1|1', 'All areas|2|1|1'].map((l) => l.replaceAll('|', sep)));
+    await out('figures', 'copy');
+    const md = m.copied.at(-1) ?? '';
+    expect(md.startsWith('# The vault in numbers\n')).toBe(true);
+    expect(md).toContain('| Open | 2 |');
+    expect(md).toContain('| By Status | doing | 1 |');
+  });
+});

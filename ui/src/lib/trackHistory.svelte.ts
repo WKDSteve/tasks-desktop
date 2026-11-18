@@ -13,7 +13,8 @@ export function trackHistory(
   const history = installAppHistory(
     app,
     win,
-    placeAddress(win.location, () => app.oneTask),
+    // A window of one task or of one card keeps the address it was opened with.
+    placeAddress(win.location, () => app.oneTask || app.statsCard !== null),
   );
   const stopEffect = $effect.root(() => {
     $effect(() => {
@@ -22,6 +23,7 @@ export function trackHistory(
       void app.selectedId;
       void app.peeking;
       void app.solo;
+      void app.statsCard;
       void app.filter;
       void app.planChoice;
       void app.sort;

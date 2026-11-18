@@ -16,6 +16,9 @@ import {
   metricValue,
   parseHistoryPrefs,
   seriesOf,
+  splitOf,
+  splitSeriesOf,
+  stackChartOf,
   sumHistories,
   TILE_METRIC,
   windowOf,
@@ -322,5 +325,53 @@ describe('the way to the history and back', () => {
     m.app.resetLayout('stats');
     expect(m.app.statsHistory).toEqual(defaultHistoryPrefs());
     m.app.stop();
+  });
+});
+
+describe('the history cut up by the field of the bars', () => {
+  it('splits the open tasks by status and readiness; another figure is one line, another field has no history', () => {
+    expect(splitOf('status', 'open')).toBe('split');
+    expect(splitOf('state', 'open')).toBe('split');
+    expect(splitOf('status', 'ready')).toBe('metric');
+    expect(splitOf('kind', 'open')).toBe('none');
+    expect(splitOf('effort', 'ready')).toBe('none');
+  });
+
+  it('takes the counts per value of every known day, in the order of the bars, a value no day counts left out', () => {
+    const series = splitSeriesOf(
+      doc([bare('2026-01-01'), level('2026-01-02', 4, 2), level('2026-01-03', 5, 3, { by_status: { open: 3, doing: 1, review: 1 } })]),
+      'status',
+      ['doing', 'decision', 'blocked', 'open', 'parked'],
+    );
+    // blocked, decision and parked are 0 on every day: no band; a value the bars do not know comes after them
+    expect(series.buckets).toEqual(['doing', 'open', 'review']);
+    expect(series.points[0]).toEqual({ day: '2026-01-01', recorded: false, values: null });
+    expect(series.points[2]?.values).toMatchObject({ open: 3, doing: 1, review: 1 });
+  });
+
+  it('stacks the bands from the base line up; a hidden value is left out, a day without figures breaks every band', () => {
+    const series = {
+      buckets: ['a', 'b'],
+      points: [
+        { day: 'd1', recorded: true, values: { a: 2, b: 2 } },
+        { day: 'd2', recorded: true, values: { a: 4, b: 4 } },
+        { day: 'd3', recorded: false, values: null },
+        { day: 'd4', recorded: true, values: { a: 1, b: 3 } },
+      ],
+    };
+    const chart = stackChartOf(series, new Set(), 300, 100);
+    expect(chart.max).toBe(8);
+    expect(chart.layers.map((l) => l.bucket)).toEqual(['a', 'b']);
+    // a: from 0 to its value; b: on top of a (its top edge is the total)
+    expect(chart.layers[0]?.line).toBe('M0 75L100 50M300 87.5');
+    expect(chart.layers[1]?.line).toBe('M0 50L100 0M300 50');
+    // two runs: the gap at d3 closes the band before it, the single day after it is drawn a little wide
+    expect(chart.layers[1]?.area).toBe('M0 50L100 0L100 50L0 75ZM298 50L302 50L302 87.5L298 87.5Z');
+    expect(chart.ticks[0]).toEqual({ value: 0, y: 100 });
+
+    const without = stackChartOf(series, new Set(['a']), 300, 100);
+    expect(without.layers.map((l) => l.bucket)).toEqual(['b']);
+    expect(without.max).toBe(4);
+    expect(stackChartOf(series, new Set(['a', 'b']), 300, 100).layers).toEqual([]);
   });
 });

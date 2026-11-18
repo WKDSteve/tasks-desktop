@@ -300,3 +300,111 @@ export function emptyReason(doc: History, metric: HistoryMetric): 'no-series' | 
   if (doc.first === undefined) return 'no-series';
   return doc.points.some((p) => p.open !== undefined) ? null : 'before-series';
 }
+
+/** The fields of "Cut up by" whose values the series of the engine counts per day: the status and the readiness. */
+export type SplitDim = 'status' | 'state';
+const SPLIT_DIMS: readonly string[] = ['status', 'state'];
+export const isSplitDim = (dim: string): dim is SplitDim => SPLIT_DIMS.includes(dim);
+
+/**
+ * How the history follows the field of "Cut up by": `split` draws the open tasks per value of the field; `metric`
+ * means the field has a history, but only of the open tasks (another figure is one line); `none` means the series
+ * has no counts per value of the field (yet).
+ */
+export function splitOf(dim: string, metric: HistoryMetric): 'split' | 'metric' | 'none' {
+  if (!isSplitDim(dim)) return 'none';
+  return metric === 'open' ? 'split' : 'metric';
+}
+
+export interface SplitPoint {
+  day: string;
+  recorded: boolean;
+  /** The open tasks per value on that day; null: the series does not know the day. */
+  values: Record<string, number> | null;
+}
+
+export interface SplitSeries {
+  /** The values that are counted on some day, in the order `order` gives (the bars'), others after them by name. */
+  buckets: string[];
+  points: SplitPoint[];
+}
+
+/** The open tasks of every point of a history per value of `dim`; `order` is the order of the values in the bars. */
+export function splitSeriesOf(doc: History, dim: SplitDim, order: readonly string[]): SplitSeries {
+  const seen = new Set<string>();
+  const points = doc.points.map((p): SplitPoint => {
+    if (p.open === undefined) return { day: p.day, recorded: p.recorded, values: null };
+    const values: Record<string, number> = { ...((dim === 'status' ? p.by_status : p.by_state) ?? {}) };
+    for (const [key, n] of Object.entries(values)) if (n > 0) seen.add(key);
+    return { day: p.day, recorded: p.recorded, values };
+  });
+  const known = order.filter((b) => seen.has(b));
+  const rest = [...seen].filter((b) => !order.includes(b)).sort();
+  return { buckets: [...known, ...rest], points };
+}
+
+export interface StackLayer {
+  bucket: string;
+  /** The band of the value, closed (to be filled); one run per stretch without a gap. */
+  area: string;
+  /** Its upper edge. */
+  line: string;
+}
+
+export interface StackChart {
+  layers: StackLayer[];
+  ticks: { value: number; y: number }[];
+  max: number;
+}
+
+/**
+ * The values of a split series stacked from the base line up, in the order of `buckets` (the hidden ones left out),
+ * inside a frame of `width` x `height`. A day the series does not know breaks every band.
+ */
+export function stackChartOf(series: SplitSeries, hidden: ReadonlySet<string>, width: number, height: number): StackChart {
+  const buckets = series.buckets.filter((b) => !hidden.has(b));
+  const totals = series.points.map((p) => (p.values === null ? null : buckets.reduce((sum, b) => sum + (p.values?.[b] ?? 0), 0)));
+  const known = totals.filter((n): n is number => n !== null);
+  if (known.length === 0 || buckets.length === 0) return { layers: [], ticks: [], max: 1 };
+  const step = stepOf(Math.max(...known, 1));
+  const max = Math.max(Math.ceil(Math.max(...known) / step) * step, step);
+  const n = series.points.length;
+  const xOf = (i: number): number => (n === 1 ? width / 2 : round1((i / (n - 1)) * width));
+  const yOf = (v: number): number => round1(height - (v / max) * height);
+  // the stretches of known days, as indexes
+  const runs: number[][] = [];
+  let run: number[] = [];
+  series.points.forEach((p, i) => {
+    if (p.values === null) {
+      if (run.length > 0) runs.push(run);
+      run = [];
+    } else run.push(i);
+  });
+  if (run.length > 0) runs.push(run);
+  const below = series.points.map(() => 0);
+  const layers = buckets.map((bucket): StackLayer => {
+    const lower = [...below];
+    series.points.forEach((p, i) => {
+      below[i] = (below[i] ?? 0) + (p.values?.[bucket] ?? 0);
+    });
+    const area = runs
+      .map((r) => {
+        // a single day is a band of no width: drawn a little wide so it is seen
+        const xs = r.length === 1 ? [xOf(r[0] ?? 0) - 2, xOf(r[0] ?? 0) + 2] : r.map(xOf);
+        const idx = r.length === 1 ? [r[0] ?? 0, r[0] ?? 0] : r;
+        const top = idx.map((i, k) => `${k === 0 ? 'M' : 'L'}${xs[k]} ${yOf(below[i] ?? 0)}`).join('');
+        const back = [...idx]
+          .map((i, k) => ({ i, x: xs[k] }))
+          .reverse()
+          .map(({ i, x }) => `L${x} ${yOf(lower[i] ?? 0)}`)
+          .join('');
+        return `${top}${back}Z`;
+      })
+      .join('');
+    const line = runs.map((r) => r.map((i, k) => `${k === 0 ? 'M' : 'L'}${xOf(i)} ${yOf(below[i] ?? 0)}`).join('')).join('');
+    return { bucket, area, line };
+  });
+  const ticks: { value: number; y: number }[] = [];
+  for (let v = 0; v <= max + step / 1000; v += step) ticks.push({ value: Math.round(v * 100) / 100, y: yOf(v) });
+  return { layers, ticks, max };
+}

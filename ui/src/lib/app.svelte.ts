@@ -74,7 +74,7 @@ export type PlanDisplay = 'stages' | 'graph' | 'compare';
 import { parsePrefs, type Prefs as FinishedPrefs } from './finished';
 import { groupedByArea } from './areaBands';
 import { kindOfFile, type AssetKind } from './capture';
-import { activeFilters, applyFilter, areaCounts, filterOfText, filterVaultOf, freshFilter, moveSelection, NONE as NO_VALUE, parseFilter, serializeFilter, type Filter } from './filter';
+import { activeFilters, applyFilter, areaCounts, filterOfText, filterText, filterVaultOf, freshFilter, moveSelection, NONE as NO_VALUE, parseFilter, serializeFilter, type Filter } from './filter';
 import { chipLabel } from './filter-chips';
 import { inboxOf, triageKey } from './inbox';
 import type { Finding } from './check';
@@ -150,6 +150,7 @@ import { COLUMN_KEYS, defaultColumns, parseColumns, serializeColumns, type ListC
 import { emptyFolds, foldOf, parseFolds, serializeFolds, type FoldMemory, type Folds, type FoldView } from './fold';
 import { parseSizes, serializeSizes, withSize, type Size, type Sizes } from './sizes';
 import { taskRoute, viewRoute } from './route';
+import { cardRoute, parseCardFolds, withCardFolded, type CardRoute, type StatsCard } from './statsCards';
 
 /** No task: the learning tasks that are hidden while none is. */
 const NO_IDS: ReadonlySet<string> = new Set();
@@ -455,6 +456,10 @@ export class App {
   statsTiles = $state.raw<TilePrefs>(defaultTilePrefs());
   /** Whether the filter bar of the statistics is unfolded. */
   statsFilterOpen = $state(true);
+  /** The cards of the statistics that are folded to their head (lib/statsCards.ts). */
+  statsFolded = $state.raw<StatsCard[]>([]);
+  /** The page is a window of one card of the statistics (`#view=stats&card=...`): it shows that card alone. */
+  statsCard = $state<StatsCard | null>(null);
   /** The history in the statistics: the figure, the period and the days of a period of the person's own. */
   statsHistory = $state.raw<HistoryPrefs>(defaultHistoryPrefs());
   /** Where the history was opened from (a number of the overview) and how far that page was scrolled: the way back. */
@@ -905,6 +910,7 @@ export class App {
     this.statsSort = stats.sort;
     this.statsTiles = parseTilePrefs(safe(() => env.prefs.getItem('tasks-desktop.stats-tiles')));
     this.statsFilterOpen = safe(() => env.prefs.getItem('tasks-desktop.stats-filter')) !== 'closed';
+    this.statsFolded = parseCardFolds(safe(() => env.prefs.getItem('tasks-desktop.stats-folds')));
     this.statsHistory = parseHistoryPrefs(safe(() => env.prefs.getItem('tasks-desktop.stats-history')));
     this.saveMode = safe(() => env.prefs.getItem('tasks-desktop.save-mode')) === 'manual' ? 'manual' : 'auto';
     this.listColumns = parseColumns(safe(() => env.prefs.getItem('tasks-desktop.list-columns')));
@@ -1009,6 +1015,7 @@ export class App {
           this.statsSort !== stats.sort ||
           !isDefaultTiles(this.statsTiles) ||
           !this.statsFilterOpen ||
+          this.statsFolded.length > 0 ||
           !isDefaultHistory(this.statsHistory)
         );
       }
@@ -1037,6 +1044,8 @@ export class App {
         this.setStats(stats.dim, stats.sort);
         this.setStatsTiles(defaultTilePrefs());
         this.setStatsFilterOpen(true);
+        this.statsFolded = [];
+        safe(() => this.env.prefs.setItem('tasks-desktop.stats-folds', '[]'));
         this.setStatsHistory(defaultHistoryPrefs());
         return;
       }
@@ -3969,6 +3978,56 @@ export class App {
     safe(() => this.env.prefs.setItem('tasks-desktop.stats-filter', open ? 'open' : 'closed'));
   }
 
+  /** A card of the statistics folded or unfolded, remembered. */
+  setStatsCardOpen(card: StatsCard, open: boolean): void {
+    this.statsFolded = withCardFolded(this.statsFolded, card, !open);
+    safe(() => this.env.prefs.setItem('tasks-desktop.stats-folds', JSON.stringify(this.statsFolded)));
+  }
+
+  /**
+   * The address named a card of the statistics alone (a window it was opened in): the page shows that card, with the
+   * field and the order it was opened with. They are not remembered: the window of the card shows what it was told.
+   */
+  openCardRoute(route: CardRoute): void {
+    this.view = 'stats';
+    this.statsCard = route.card;
+    if (route.dim !== undefined) this.statsDim = route.dim;
+    if (route.sort !== undefined) this.statsSort = route.sort;
+  }
+
+  /** A window of one card shows the whole statistics; the address becomes the view's again. */
+  showAllStats(): void {
+    this.statsCard = null;
+  }
+
+  /** Open a card of the statistics alone in a new window, with the filter, the field and the order of now. */
+  openCardApart(card: StatsCard): void {
+    const route = cardRoute(card, this.statsDim, this.statsSort, filterText(this.filter));
+    if (!(this.env.openWindow?.(route) ?? false)) this.say('error', 'peek.detach_failed');
+  }
+
+  /** May the name of this area leave the app (an export of the statistics)? Its class decides, as for an export of its tasks. */
+  areaMayLeave(area: string): boolean {
+    return this.mayRememberArea(area);
+  }
+
+  /** Save the text of an export of a card as a file, or copy it; told either way. */
+  async putCardText(name: string, text: string, type: string, how: 'save' | 'copy'): Promise<void> {
+    const ok = how === 'save' ? this.env.out.save(name, text, type) : await this.env.out.copy(text);
+    if (ok) this.say('ok', how === 'save' ? 'stats.card.saved' : 'stats.card.copied');
+    else this.say('error', how === 'save' ? 'stats.card.save_failed' : 'stats.card.copy_failed');
+  }
+
+  /** The separator of a CSV for the spreadsheet of this browser's locale. */
+  get csvSeparator(): ',' | ';' {
+    return csvSeparatorFor(this.env.preferredLanguages[0]);
+  }
+
+  /** The page for the printer of a card could not be made. */
+  sayPrintFailed(): void {
+    this.say('error', 'print.failed');
+  }
+
   /** The figure and the period of the history, remembered. */
   setStatsHistory(prefs: HistoryPrefs): void {
     this.statsHistory = prefs;
@@ -5238,8 +5297,9 @@ export class App {
     if (view === 'board' && !this.can('reorder')) return;
     // The views are the vault's: an engine that keeps none has no tab of them.
     if (view === 'views' && !this.can('views')) return;
-    // A window of one task becomes a page of views when one is chosen.
+    // A window of one task (or of one card of the statistics) becomes a page of views when one is chosen.
     this.solo = false;
+    this.statsCard = null;
     // the way back from the history belongs to the visit it was opened for: leaving the statistics another way ends it
     if (view !== 'stats') this.historyFrom = null;
     this.view = view;

@@ -11,6 +11,7 @@ import { followTaskRoute } from './lib/followRoute.svelte';
 import { placeAddress } from './lib/history';
 import { takeInjected } from './lib/inject';
 import { routedTask } from './lib/route';
+import { routedCard } from './lib/statsCards';
 import { askForSession, shareSession, type ChannelLike } from 'appkit-ui/handoff';
 import { placeOf } from 'appkit-ui/nav';
 import { takePairingCode } from 'appkit-ui/pair';
@@ -25,6 +26,8 @@ const injected = takeInjected(window, '__TASKS_PAIR');
 const code = takePairingCode(window.location, window.history, injected, { keepRoute: true });
 // A window a task was detached into names the task in the fragment (route.ts).
 const routed = routedTask(window.location.hash);
+// A window a card of the statistics was opened in names the card in the fragment (statsCards.ts).
+const routedStats = routedCard(window.location.hash);
 // A view (and the task open in it) named by the address: a link opened in a new tab, a reload.
 const place = placeOf(placeAddress(window.location, () => false));
 
@@ -77,6 +80,7 @@ if (place !== null) state.openPlace(place.view, place.selectedId, place.filter, 
     ...(place.sort !== undefined ? { sort: place.sort } : {}),
   });
 if (routed !== null) state.openRoute(routed);
+if (routedStats !== null) state.openCardRoute(routedStats);
 if (channel) {
   shareSession({
     channel,

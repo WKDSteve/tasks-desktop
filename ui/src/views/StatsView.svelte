@@ -1,6 +1,9 @@
 <script lang="ts">
-  // The statistics of the vault: the headline numbers, a bar per area cut up by one field, and the same numbers as a
-  // table. Only the tasks the filter keeps are counted; every number and every part of a bar opens its tasks in the
+  // The statistics of the vault, one card under the other below the filter: the headline numbers, a bar per area cut
+  // up by one field (the choice of the field stands over the bars), the history of a figure (cut up by the same field
+  // where the series of the engine counts it), and the numbers of the bars as a table. A card folds, opens alone in
+  // a window and is printed or exported (StatsCard). A window of one card (`app.statsCard`) shows that card alone.
+  // Only the tasks the filter keeps are counted; every number and every part of a bar opens its tasks in the
   // list, an entry of the legend narrows the filter and stays here. The counting is `lib/stats.ts`; the bars are drawn for the eye and the table is what the keyboard and a
   // screen reader take (the bars repeat its buttons, out of the tab order).
   import type { App } from '../lib/app.svelte';
@@ -28,6 +31,11 @@
   import { bucketClass as classOf, bucketLabel as labelOfBucket, bucketName, dimHint as hintOfDim } from '../lib/statsWords';
   import type { StatDim } from '../lib/stats';
   import { tileShown } from '../lib/statsTiles';
+  import Info from 'appkit-ui/Info.svelte';
+  import type { CardTable } from '../lib/statsExport';
+  import { barsSvgOf } from '../lib/statsSvg';
+  import FilterNote from './FilterNote.svelte';
+  import StatsCard from './StatsCard.svelte';
   import StatsFilter from './StatsFilter.svelte';
   import StatsHistory from './StatsHistory.svelte';
   import StatsTiles from './StatsTiles.svelte';
@@ -54,7 +62,11 @@
 
   // The effort of the tasks the filter keeps is the engine's figure (WEB-13): asked again when they or the vault change.
   // Not asked while its tile is hidden: nobody reads the answer.
-  const source = $derived(app.can('estimate') && tileShown(app.statsTiles, 'n:effort') ? effortSource(tasks, app.tasks) : null);
+  const shows = (card: 'chart' | 'history' | 'table' | 'figures'): boolean => app.statsCard === null || app.statsCard === card;
+  const figuresDrawn = $derived(shows('figures') && (app.statsCard === 'figures' || !app.statsFolded.includes('figures')));
+  const source = $derived(
+    app.can('estimate') && figuresDrawn && tileShown(app.statsTiles, 'n:effort') ? effortSource(tasks, app.tasks) : null,
+  );
   const askKey = $derived(source?.from === 'engine' ? `${app.snapshot?.rev ?? ''}|${source.ids.join(',')}` : '');
   let asked = $state.raw<{ key: string; figure: Estimate } | null>(null);
   // The first figure is asked at once. A change of the tasks waits a moment before it asks: the search of the filter
@@ -124,100 +136,176 @@
   function open(bucket: string | null, area: string | null): void {
     app.openStatsInList(filterFor(app.filter, cut, bucket, area, tasks));
   }
+
+  // What a card exports: the names of the areas that may not leave the app (their class) are not written into a file.
+  const exportArea = (area: string): string => (app.areaMayLeave(area) ? nameOf(area) : t('stats.card.hidden_area'));
+  function areaTable(withFinished: boolean): CardTable[] {
+    const fin = withFinished ? finished : null;
+    const headers = [
+      t('stats.area'),
+      t('stats.total'),
+      ...stats.buckets.map((b) => bucketLabel(app.statsDim, b)),
+      ...(fin ? [t('stats.finished30')] : []),
+    ];
+    const rows = stats.rows.map((row) => [
+      exportArea(row.area),
+      String(row.total),
+      ...stats.buckets.map((b) => String(row.counts[b] ?? 0)),
+      ...(fin ? [String(fin.counts[row.area] ?? 0)] : []),
+    ]);
+    rows.push([
+      t('stats.all_areas'),
+      String(stats.total),
+      ...stats.buckets.map((b) => String(stats.totals[b] ?? 0)),
+      ...(fin ? [String(fin.total)] : []),
+    ]);
+    return [{ title: t('stats.card.by', { field: t(`stats.dim.${app.statsDim}` as Key) }), headers, rows }];
+  }
+  let chartEl: HTMLElement | undefined = $state();
+  let chartCard: HTMLElement | undefined = $state();
+  let figuresCard: HTMLElement | undefined = $state();
+  const backgroundOf = (el: HTMLElement | undefined): string => (el ? getComputedStyle(el).backgroundColor : 'transparent');
+  function chartSvg(): string | null {
+    return chartEl ? barsSvgOf(chartEl, backgroundOf(chartCard), t('stats.chart')) : null;
+  }
+  /** The headline numbers and the tiles of the fields as they are shown. */
+  function figuresTables(): CardTable[] {
+    const root = figuresCard;
+    if (!root) return [];
+    const text = (el: Element | null): string => el?.textContent?.replace(/\s+/g, ' ').trim() ?? '';
+    const numbers = [...root.querySelectorAll('.figures .figure')].map((el) => [
+      text(el.querySelector('.label')),
+      [...el.querySelectorAll('.n, .sub')].map(text).join(' · '),
+    ]);
+    const spreads = [...root.querySelectorAll('.spreads .spread')].flatMap((tile) =>
+      [...tile.querySelectorAll('.value')].map((v) => [
+        text(tile.querySelector(':scope > .label')),
+        text(v.querySelector('.name')),
+        text(v.querySelector('.count')),
+      ]),
+    );
+    return [
+      { title: t('stats.figures'), headers: [t('stats.card.figure'), t('stats.card.number')], rows: numbers },
+      ...(spreads.length > 0
+        ? [{ title: t('stats.card.fields'), headers: [t('stats.card.field'), t('stats.card.value'), t('stats.card.number')], rows: spreads }]
+        : []),
+    ];
+  }
 </script>
 
 <div class="stats">
-  <StatsFilter {app} />
-  <section class="card head" aria-labelledby="stats-figures">
-    <StatsTiles {app} {tasks} {figures} {finished} {effort} onfinished={openFinished} />
-    <div class="bar">
-      <div class="dims" role="group" aria-label={t('stats.by')}>
-        <span class="muted">{t('stats.by')}</span>
-        {#each STAT_DIMS as dim (dim)}
-          <button
-            type="button"
-            class="dim"
-            aria-pressed={app.statsDim === dim}
-            data-dim={dim}
-            data-hint={dimHint(dim)}
-            onclick={() => app.setStats(dim, app.statsSort)}>{t(`stats.dim.${dim}` as Key)}</button
-          >
-        {/each}
-      </div>
-      <label class="sort" data-hint={t('hint.form.stats.sort')}>
-        <span class="muted">{t('stats.sort')}</span>
-        <select
-          value={app.statsSort}
-          onchange={(e) => app.setStats(app.statsDim, e.currentTarget.value as (typeof STAT_SORTS)[number])}
-        >
-          {#each STAT_SORTS as sort (sort)}
-            <option value={sort}>{t(`stats.sort.${sort}` as Key)}</option>
-          {/each}
-        </select>
-      </label>
-    </div>
-  </section>
-
-  <StatsHistory {app} />
-
-  {#if legend.rows.length === 0}
-    <p class="muted" role="status">{t('stats.empty')}</p>
+  {#if app.statsCard === null}
+    <StatsFilter {app} />
   {:else}
-    <section class="card" aria-labelledby="stats-chart">
-      <h3 id="stats-chart" class="eyebrow">{t('stats.chart')}</h3>
-      <ul class="legend dim-{app.statsDim}" class:narrowed={chosen.size > 0}>
-        {#each legend.buckets as bucket (bucket)}
-          <li>
+    <!-- A window of one card: what the filter keeps is named, the whole statistics are one press away. -->
+    <div class="alone">
+      <FilterNote {app} />
+      <button type="button" class="linkish" data-hint={t('hint.stats.card.all')} onclick={() => app.showAllStats()}
+        >{t('stats.card.all')}</button
+      >
+    </div>
+  {/if}
+
+  {#if shows('figures')}
+    <StatsCard {app} card="figures" title={t('stats.figures')} tables={figuresTables} bind:section={figuresCard}>
+      {#snippet head()}
+        <Info hint={t('hint.stats')} label={t('hint.about', { what: t('nav.stats') })} />
+      {/snippet}
+      <StatsTiles {app} {tasks} {figures} {finished} {effort} onfinished={openFinished} />
+    </StatsCard>
+  {/if}
+
+  {#if shows('chart')}
+    <StatsCard {app} card="chart" title={t('stats.chart')} tables={() => areaTable(false)} svg={chartSvg} bind:section={chartCard}>
+      <div class="bar">
+        <div class="dims" role="group" aria-label={t('stats.by')}>
+          <span class="muted">{t('stats.by')}</span>
+          {#each STAT_DIMS as dim (dim)}
             <button
               type="button"
-              class="entry"
-              data-bucket={bucketName(bucket)}
-              aria-pressed={chosen.has(bucket)}
-              aria-label={t('stats.legend_entry', { bucket: bucketLabel(app.statsDim, bucket), n: legend.totals[bucket] ?? 0 })}
-              onclick={() => app.narrowStats(toggledBucket(app.filter, cut, bucket, legendTasks))}
+              class="dim"
+              aria-pressed={app.statsDim === dim}
+              data-dim={dim}
+              data-hint={dimHint(dim)}
+              onclick={() => app.setStats(dim, app.statsSort)}>{t(`stats.dim.${dim}` as Key)}</button
             >
-              <span class="swatch {bucketClass(bucket)}" aria-hidden="true"></span>{bucketLabel(app.statsDim, bucket)}
-              <span class="muted">{legend.totals[bucket]}</span>
-            </button>
-          </li>
-        {/each}
-      </ul>
-      {#if isMultiDim(app.statsDim)}
-        <p class="note" data-note="multi">{t('stats.multi_note', { n: stats.total })}</p>
-      {/if}
-      {#if legend.totals[OTHER]}
-        <p class="note" data-note="other">{t('stats.other_note', { n: TOP })}</p>
-      {/if}
-      <!-- The bars repeat the table below for the eye; their buttons are for the pointer and out of the tab order. -->
-      <div class="chart dim-{app.statsDim}" aria-hidden="true">
-        {#each stats.rows as row (row.area)}
-          <button type="button" class="area" tabindex="-1" title={row.area} onclick={() => open(null, row.area)}
-            >{markHidden(nameOf(row.area))}</button
+          {/each}
+        </div>
+        <label class="sort" data-hint={t('hint.form.stats.sort')}>
+          <span class="muted">{t('stats.sort')}</span>
+          <select
+            value={app.statsSort}
+            onchange={(e) => app.setStats(app.statsDim, e.currentTarget.value as (typeof STAT_SORTS)[number])}
           >
-          <div class="track">
-            <div class="stack" style:width="{(row.total / widest) * 100}%">
-              {#each stats.buckets as bucket (bucket)}
-                {#if row.counts[bucket]}
-                  <button
-                    type="button"
-                    tabindex="-1"
-                    class="seg {bucketClass(bucket)}"
-                    data-bucket={bucketName(bucket)}
-                    style:flex-grow={row.counts[bucket]}
-                    title="{bucketLabel(app.statsDim, bucket)}: {row.counts[bucket]}"
-                    onclick={() => open(bucket, row.area)}
-                  ></button>
-                {/if}
-              {/each}
-            </div>
-          </div>
-          <span class="total">{row.total}</span>
-        {/each}
+            {#each STAT_SORTS as sort (sort)}
+              <option value={sort}>{t(`stats.sort.${sort}` as Key)}</option>
+            {/each}
+          </select>
+        </label>
       </div>
-    </section>
+      {#if legend.rows.length === 0}
+        <p class="muted" role="status">{t('stats.empty')}</p>
+      {:else}
+        <ul class="legend dim-{app.statsDim}" class:narrowed={chosen.size > 0}>
+          {#each legend.buckets as bucket (bucket)}
+            <li>
+              <button
+                type="button"
+                class="entry"
+                data-bucket={bucketName(bucket)}
+                aria-pressed={chosen.has(bucket)}
+                aria-label={t('stats.legend_entry', { bucket: bucketLabel(app.statsDim, bucket), n: legend.totals[bucket] ?? 0 })}
+                onclick={() => app.narrowStats(toggledBucket(app.filter, cut, bucket, legendTasks))}
+              >
+                <span class="swatch {bucketClass(bucket)}" aria-hidden="true"></span>{bucketLabel(app.statsDim, bucket)}
+                <span class="muted">{legend.totals[bucket]}</span>
+              </button>
+            </li>
+          {/each}
+        </ul>
+        {#if isMultiDim(app.statsDim)}
+          <p class="note" data-note="multi">{t('stats.multi_note', { n: stats.total })}</p>
+        {/if}
+        {#if legend.totals[OTHER]}
+          <p class="note" data-note="other">{t('stats.other_note', { n: TOP })}</p>
+        {/if}
+        <!-- The bars repeat the table "The numbers per area" for the eye; their buttons are for the pointer and out of
+             the tab order. -->
+        <div class="chart dim-{app.statsDim}" aria-hidden="true" bind:this={chartEl}>
+          {#each stats.rows as row (row.area)}
+            <button type="button" class="area" tabindex="-1" title={row.area} onclick={() => open(null, row.area)}
+              >{markHidden(nameOf(row.area))}</button
+            >
+            <div class="track">
+              <div class="stack" style:width="{(row.total / widest) * 100}%">
+                {#each stats.buckets as bucket (bucket)}
+                  {#if row.counts[bucket]}
+                    <button
+                      type="button"
+                      tabindex="-1"
+                      class="seg {bucketClass(bucket)}"
+                      data-bucket={bucketName(bucket)}
+                      style:flex-grow={row.counts[bucket]}
+                      title="{bucketLabel(app.statsDim, bucket)}: {row.counts[bucket]}"
+                      onclick={() => open(bucket, row.area)}
+                    ></button>
+                  {/if}
+                {/each}
+              </div>
+            </div>
+            <span class="total">{row.total}</span>
+          {/each}
+        </div>
+      {/if}
+    </StatsCard>
+  {/if}
 
-    <section class="card" aria-labelledby="stats-table">
-      <h3 id="stats-table" class="eyebrow">{t('stats.table')}</h3>
+  {#if shows('history')}
+    <StatsHistory {app} classOf={bucketClass} />
+  {/if}
+
+  {#if shows('table') && legend.rows.length > 0}
+    <StatsCard {app} card="table" title={t('stats.table')} tables={() => areaTable(true)}>
       <!-- A wide table scrolls in its own box, which the keyboard can reach. -->
       <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
       <div class="scroll" tabindex="0">
@@ -288,7 +376,7 @@
           </tfoot>
         </table>
       </div>
-    </section>
+    </StatsCard>
   {/if}
 </div>
 
@@ -298,18 +386,22 @@
     flex-direction: column;
     gap: 1rem;
   }
-  .card {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 0.9rem 1rem;
+  .alone {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.4rem 1rem;
   }
-  .eyebrow {
-    font-size: 0.8rem;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    color: var(--muted);
-    margin: 0;
+  .linkish {
+    background: none;
+    border: 0;
+    padding: 0;
+    color: var(--accent);
+    font: inherit;
+    cursor: pointer;
+  }
+  .linkish:hover {
+    text-decoration: underline;
   }
   .link {
     background: none;
@@ -328,6 +420,7 @@
     align-items: center;
     justify-content: space-between;
     gap: 0.6rem;
+    margin-bottom: 0.4rem;
   }
   .dims {
     display: flex;
@@ -481,163 +574,177 @@
 
   /* Global under the view: the tiles of the fields (StatsTiles) colour their stacks by the same classes. */
   .stats :global {
+    /* Every coloured part paints with the colour its value gives it: a box its ground, a band of the history its fill
+       and a line its stroke. */
+    .seg,
+    .swatch {
+      background: var(--seg, var(--muted));
+    }
+    .layer {
+      fill: var(--seg, var(--muted));
+      stroke: none;
+    }
+    .layer-line {
+      fill: none;
+      stroke: var(--seg, var(--muted));
+    }
     /* The colours of the stacks: each comes from a token, a shade by mixing it with the surface. A value without a
        meaning of its own takes a series of the palette (--chart-*); a meaning colour (--ok, --warn, --bad) is kept for
        what is good, waits for a decision or is in trouble, so it does not stand for a mere kind (the accent of the app
        can be close to one of them in hue). The legend names every value. */
     .none {
-      background: var(--line);
+      --seg: var(--line);
     }
     .other {
-      background: var(--muted);
+      --seg: var(--muted);
     }
     .dim-status .v-doing {
-      background: var(--chart-1);
+      --seg: var(--chart-1);
     }
     .dim-status .v-open {
-      background: var(--chart-2);
+      --seg: var(--chart-2);
     }
     .dim-status .v-decision {
-      background: var(--warn);
+      --seg: var(--warn);
     }
     .dim-status .v-blocked {
-      background: var(--bad);
+      --seg: var(--bad);
     }
     .dim-status .v-parked {
-      background: var(--muted);
+      --seg: var(--muted);
     }
     .dim-effort .v-XS {
-      background: color-mix(in srgb, var(--accent) 30%, var(--surface));
+      --seg: color-mix(in srgb, var(--accent) 30%, var(--surface));
     }
     .dim-effort .v-S {
-      background: color-mix(in srgb, var(--accent) 50%, var(--surface));
+      --seg: color-mix(in srgb, var(--accent) 50%, var(--surface));
     }
     .dim-effort .v-M {
-      background: color-mix(in srgb, var(--accent) 70%, var(--surface));
+      --seg: color-mix(in srgb, var(--accent) 70%, var(--surface));
     }
     .dim-effort .v-L {
-      background: color-mix(in srgb, var(--accent) 85%, var(--text));
+      --seg: color-mix(in srgb, var(--accent) 85%, var(--text));
     }
     .dim-effort .v-XL {
-      background: color-mix(in srgb, var(--accent) 60%, var(--text));
+      --seg: color-mix(in srgb, var(--accent) 60%, var(--text));
     }
     .dim-effort .v-days {
-      background: var(--warn);
+      --seg: var(--warn);
     }
     .dim-kind .v-feature {
-      background: var(--chart-1);
+      --seg: var(--chart-1);
     }
     .dim-kind .v-task {
-      background: var(--chart-2);
+      --seg: var(--chart-2);
     }
     .dim-kind .v-bug {
-      background: var(--bad);
+      --seg: var(--bad);
     }
     .dim-kind .v-idea {
-      background: var(--chart-3);
+      --seg: var(--chart-3);
     }
     .dim-kind .v-research {
-      background: var(--chart-4);
+      --seg: var(--chart-4);
     }
     .dim-prio .v-1 {
-      background: color-mix(in srgb, var(--accent) 60%, var(--text));
+      --seg: color-mix(in srgb, var(--accent) 60%, var(--text));
     }
     .dim-prio .v-2 {
-      background: var(--accent);
+      --seg: var(--accent);
     }
     .dim-prio .v-3 {
-      background: color-mix(in srgb, var(--accent) 60%, var(--surface));
+      --seg: color-mix(in srgb, var(--accent) 60%, var(--surface));
     }
     .dim-prio .v-4 {
-      background: color-mix(in srgb, var(--accent) 30%, var(--surface));
+      --seg: color-mix(in srgb, var(--accent) 30%, var(--surface));
     }
     .dim-state .v-ready {
-      background: var(--ok);
+      --seg: var(--ok);
     }
     .dim-state .v-decision {
-      background: var(--warn);
+      --seg: var(--warn);
     }
     .dim-state .v-waiting {
-      background: var(--chart-2);
+      --seg: var(--chart-2);
     }
     .dim-state .v-stuck {
-      background: var(--bad);
+      --seg: var(--bad);
     }
     .dim-state .v-freed {
-      background: color-mix(in srgb, var(--ok) 50%, var(--surface));
+      --seg: color-mix(in srgb, var(--ok) 50%, var(--surface));
     }
     .dim-state .v-parked,
     .dim-state .v-unknown {
-      background: var(--muted);
+      --seg: var(--muted);
     }
     .dim-actor .v-me {
-      background: var(--chart-1);
+      --seg: var(--chart-1);
     }
     .dim-actor .v-pair {
-      background: var(--chart-3);
+      --seg: var(--chart-3);
     }
     .dim-actor .v-cdx {
-      background: var(--chart-2);
+      --seg: var(--chart-2);
     }
     .dim-value .v-5 {
-      background: color-mix(in srgb, var(--accent) 60%, var(--text));
+      --seg: color-mix(in srgb, var(--accent) 60%, var(--text));
     }
     .dim-value .v-4 {
-      background: var(--accent);
+      --seg: var(--accent);
     }
     .dim-value .v-3 {
-      background: color-mix(in srgb, var(--accent) 70%, var(--surface));
+      --seg: color-mix(in srgb, var(--accent) 70%, var(--surface));
     }
     .dim-value .v-2 {
-      background: color-mix(in srgb, var(--accent) 50%, var(--surface));
+      --seg: color-mix(in srgb, var(--accent) 50%, var(--surface));
     }
     .dim-value .v-1 {
-      background: color-mix(in srgb, var(--accent) 30%, var(--surface));
+      --seg: color-mix(in srgb, var(--accent) 30%, var(--surface));
     }
     .dim-severity .v-critical {
-      background: var(--bad);
+      --seg: var(--bad);
     }
     .dim-severity .v-high {
-      background: color-mix(in srgb, var(--bad) 55%, var(--warn));
+      --seg: color-mix(in srgb, var(--bad) 55%, var(--warn));
     }
     .dim-severity .v-medium {
-      background: var(--warn);
+      --seg: var(--warn);
     }
     .dim-severity .v-low {
-      background: var(--chart-2);
+      --seg: var(--chart-2);
     }
     /* The values of a field the tasks name freely (category, scope, tag, plan, phase, project) have no meaning the page
        knows: the most frequent take the series of the palette in their order, the next four the same hues mixed with
        the surface. */
     .s-0 {
-      background: var(--chart-1);
+      --seg: var(--chart-1);
     }
     .s-1 {
-      background: var(--chart-2);
+      --seg: var(--chart-2);
     }
     .s-2 {
-      background: var(--chart-3);
+      --seg: var(--chart-3);
     }
     .s-3 {
-      background: var(--chart-4);
+      --seg: var(--chart-4);
     }
     .s-4 {
-      background: var(--chart-5);
+      --seg: var(--chart-5);
     }
     .s-5 {
-      background: var(--chart-6);
+      --seg: var(--chart-6);
     }
     .s-6 {
-      background: color-mix(in srgb, var(--chart-1) 50%, var(--surface));
+      --seg: color-mix(in srgb, var(--chart-1) 50%, var(--surface));
     }
     .s-7 {
-      background: color-mix(in srgb, var(--chart-2) 50%, var(--surface));
+      --seg: color-mix(in srgb, var(--chart-2) 50%, var(--surface));
     }
     .s-8 {
-      background: color-mix(in srgb, var(--chart-3) 50%, var(--surface));
+      --seg: color-mix(in srgb, var(--chart-3) 50%, var(--surface));
     }
     .s-9 {
-      background: color-mix(in srgb, var(--chart-4) 50%, var(--surface));
+      --seg: color-mix(in srgb, var(--chart-4) 50%, var(--surface));
     }
   }
 </style>

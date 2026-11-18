@@ -17,6 +17,7 @@ import { detectLang, translate } from './lib/i18n';
 import { logo } from './lib/logo';
 import { trackHistory } from './lib/trackHistory.svelte';
 import { routedTask } from './lib/route';
+import { routedCard } from './lib/statsCards';
 import { placeAddress } from './lib/history';
 import { placeOf } from 'appkit-ui/nav';
 import { followTaskRoute } from './lib/followRoute.svelte';
@@ -47,6 +48,8 @@ const lang = detectLang(navigator.languages);
 // shows that task alone: there is no code to hide here, and a reload of that window opens the task again (once the
 // folder is open). It leaves the address when the window lets go of the task (followRoute.svelte.ts).
 const routed = routedTask(window.location.hash);
+// A window a card of the statistics was opened in names the card in the fragment (statsCards.ts).
+const routedStats = routedCard(window.location.hash);
 // A view (and the task open in it) named by the address: a link opened in a new tab, a reload. The history keeps the
 // place in the address from here on (history.ts).
 const place = placeOf(placeAddress(window.location, () => false));
@@ -250,6 +253,7 @@ async function begin(folder: string | null, name: string, readOnly: boolean): Pr
     ...(place.sort !== undefined ? { sort: place.sort } : {}),
   });
   if (routed !== null) state.openRoute(routed);
+  if (routedStats !== null) state.openCardRoute(routedStats);
   installTooltips(document, window, { regionLabel: () => translate(state.lang, 'hint.region') });
   void unmount(entryUi);
   target.replaceChildren();
