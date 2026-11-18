@@ -475,22 +475,26 @@ export class FakeHub {
     return status;
   }
   /** The reminders by e-mail: what was asked, and what the hub answers (an error to throw, or the mail). */
-  mailAsked: { to: string; ids: string[]; lang: string; send: boolean }[] = [];
+  mailAsked: { to: string; ids: string[]; lang: string; send: boolean; digest?: string }[] = [];
   mailAnswer: RemindersMail | ApiError | null = null;
-  async remindersMail(body: { to: string; ids: string[]; lang: string; send: boolean }): Promise<RemindersMail> {
+  /** Held until resolved: the answer of the hub that is on its way (a test lets the page go on meanwhile). */
+  mailHold: Promise<void> | null = null;
+  async remindersMail(body: { to: string; ids: string[]; lang: string; send: boolean; digest?: string }): Promise<RemindersMail> {
     this.mailAsked.push(body);
-    if (this.mailAnswer instanceof ApiError) throw this.mailAnswer;
-    return (
-      this.mailAnswer ?? {
-        account: true,
-        sent: body.send,
-        to: body.to,
-        subject: `Reminders: ${body.ids.length} tasks`,
-        text: body.ids.join('\n'),
-        included: body.ids,
-        leftOut: [],
-      }
-    );
+    const answer = this.mailAnswer;
+    if (this.mailHold) await this.mailHold;
+    if (answer instanceof ApiError) throw answer;
+    if (answer) return answer;
+    return {
+      account: true,
+      sent: body.send,
+      to: body.to,
+      subject: `Reminders: ${body.ids.length} tasks`,
+      text: body.ids.join('\n'),
+      included: body.ids,
+      leftOut: [],
+      digest: `digest of ${body.to} ${body.ids.join(' ')}`,
+    };
   }
   sent: OpsRequest[] = [];
   /** What the next write answers (an error to throw, or a result). */

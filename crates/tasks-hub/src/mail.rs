@@ -30,6 +30,24 @@ pub struct Message {
     pub text: String,
 }
 
+impl Message {
+    /// What stands for exactly this mail: a hash over the address, the subject and the text. The page gets it with
+    /// the preview and hands it back when it sends, so the hub sends the mail that was shown and no other (the list
+    /// may have changed in between, or the page may ask for another choice than the one it showed).
+    #[must_use]
+    pub fn digest(&self) -> String {
+        use sha2::{Digest, Sha256};
+        let mut hash = Sha256::new();
+        for part in [&self.to, &self.subject, &self.text] {
+            // The length first: no two mails share a hash by moving a character from one part to the next.
+            hash.update((part.len() as u64).to_le_bytes());
+            hash.update(part.as_bytes());
+        }
+        let hex: String = hash.finalize().iter().map(|b| format!("{b:02x}")).collect();
+        format!("sha256:{hex}")
+    }
+}
+
 /// Where a mail leaves the hub.
 pub trait Transport: Send + Sync {
     /// Send `message`. The error is a short reason for the person, without an address of a server, a user name or
@@ -367,6 +385,30 @@ mod tests {
             .text
             .starts_with("Erinnerungen aus tasks-desktop:\n"));
         assert!(mail.message.text.contains("(own/old, erledigt)"));
+    }
+
+    #[test]
+    fn a_mail_has_a_digest_that_changes_with_every_part_of_it() {
+        let mail = |to: &str, subject: &str, text: &str| Message {
+            to: to.to_owned(),
+            subject: subject.to_owned(),
+            text: text.to_owned(),
+        };
+        let one = mail("me@example.org", "Reminder: 1 task", "a\n").digest();
+        assert!(one.starts_with("sha256:") && one.len() == 7 + 64, "{one}");
+        assert_eq!(
+            one,
+            mail("me@example.org", "Reminder: 1 task", "a\n").digest()
+        );
+        for other in [
+            mail("you@example.org", "Reminder: 1 task", "a\n"),
+            mail("me@example.org", "Reminders: 2 tasks", "a\n"),
+            mail("me@example.org", "Reminder: 1 task", "b\n"),
+            // The same characters, cut elsewhere.
+            mail("me@example.org", "Reminder: 1 taska", "\n"),
+        ] {
+            assert_ne!(one, other.digest(), "{other:?}");
+        }
     }
 
     #[test]

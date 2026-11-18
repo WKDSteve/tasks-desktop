@@ -4,6 +4,7 @@
   // its own list and leaves out the tasks of areas that may not leave it (private, or without a class), so what the
   // page shows before sending is the hub's answer, the mail word for word. A hub without a mail account shows the mail
   // and says that it cannot send. The web variant has no hub: it lists, and says so.
+  import { untrack } from 'svelte';
   import type { App } from '../lib/app.svelte';
   import { ApiError } from '../lib/api';
   import { translate, type Key } from '../lib/i18n';
@@ -26,16 +27,30 @@
   const addressOk = $derived(looksLikeAddress(to.trim()));
 
   // The mail the hub wrote for the choice and the address it was asked with; another choice or address asks again.
+  // What is sent is this mail and no other: the send names its address, its ids and its digest (the hub refuses
+  // when it would write another mail now), never the boxes and the field as they stand at that moment.
   let mail = $state<RemindersMail | null>(null);
   let busy = $state(false);
   let problem = $state('');
   let done = $state('');
+  // Each question has a number: an answer that comes after the choice, the address or the list changed is dropped.
+  let asked = 0;
 
   function forget(): void {
+    asked += 1;
+    busy = false;
     mail = null;
     problem = '';
     done = '';
   }
+  // The list changed under the preview (a task renamed, finished, its reminder moved): what is shown is not the mail
+  // of the list any more. A mail that went out stays said.
+  $effect(() => {
+    void app.snapshot?.rev;
+    untrack(() => {
+      if (mail !== null && !mail.sent) forget();
+    });
+  });
   function pick(ids: readonly string[]): void {
     picked = new Set(ids);
     forget();
@@ -54,22 +69,39 @@
     if (code === 'mail_not_set_up') return t('reminders.no_account');
     if (code === 'nothing_to_send') return t('reminders.nothing');
     if (code === 'bad_address') return t('reminders.bad_address');
+    if (code === 'mail_changed') return t('reminders.changed');
     return t('reminders.failed', { message: error instanceof Error ? error.message : '' });
   }
-  async function ask(send: boolean): Promise<void> {
-    if (busy || chosen.length === 0 || !addressOk) return;
+  /** Ask the hub; its answer counts only while nothing changed since the question. */
+  async function through(question: () => Promise<RemindersMail>): Promise<void> {
+    asked += 1;
+    const mine = asked;
     busy = true;
     problem = '';
     done = '';
     try {
-      const answer = await app.remindersMail(to.trim(), chosen, send);
+      const answer = await question();
+      if (mine !== asked) return;
       mail = answer;
       if (answer.sent) done = t('reminders.sent', { n: answer.included.length, to: answer.to });
     } catch (error) {
+      if (mine !== asked) return;
+      // The mail the hub would send now is not the one shown: it is not shown as if it were.
+      if (error instanceof ApiError && error.code === 'mail_changed') mail = null;
       problem = wordsFor(error);
     } finally {
-      busy = false;
+      if (mine === asked) busy = false;
     }
+  }
+  function preview(): void {
+    if (busy || chosen.length === 0 || !addressOk) return;
+    const [address, ids] = [to.trim(), [...chosen]];
+    void through(() => app.remindersMail(address, ids));
+  }
+  function send(): void {
+    const shown = mail;
+    if (busy || shown === null || shown.sent || !shown.account || shown.included.length === 0) return;
+    void through(() => app.remindersMail(shown.to, [...shown.included], shown));
   }
 </script>
 
@@ -135,7 +167,7 @@
         aria-label={t('reminders.mail')}
         onsubmit={(e) => {
           e.preventDefault();
-          void ask(false);
+          preview();
         }}
       >
         <label data-hint={t('hint.form.reminders.to')}>
@@ -185,7 +217,7 @@
         {/if}
         {#if !mail.account}<p class="note" data-no-account>{t('reminders.no_account')}</p>{/if}
         {#if !mail.sent}
-          <button type="button" data-send disabled={busy || !mail.account || mail.included.length === 0} onclick={() => void ask(true)}>
+          <button type="button" data-send disabled={busy || !mail.account || mail.included.length === 0} onclick={send}>
             {t('reminders.send', { n: mail.included.length })}
           </button>
         {/if}

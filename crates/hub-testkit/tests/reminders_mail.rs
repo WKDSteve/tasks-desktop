@@ -265,8 +265,9 @@ async fn the_preview_is_the_mail_and_a_private_or_unclassified_task_is_never_in_
 async fn a_send_hands_the_previewed_mail_to_the_transport_and_says_why_it_failed() {
     let _one = ONE_AT_A_TIME.lock().await;
     let r = Rig::new("send", true).await;
-    let body = json!({ "to": "me@example.org", "ids": ALL, "send": true });
     let (_, preview) = r.post(&json!({ "to": "me@example.org", "ids": ALL })).await;
+    let body =
+        json!({ "to": "me@example.org", "ids": ALL, "send": true, "digest": preview["digest"] });
     let (status, doc) = r.post(&body).await;
     assert_eq!(status, 200, "{doc}");
     assert_eq!(doc["sent"], true);
@@ -278,8 +279,10 @@ async fn a_send_hands_the_previewed_mail_to_the_transport_and_says_why_it_failed
     assert!(!sent[0].text.contains("secret.nvim"));
 
     // Only tasks that may not go: refused, nothing reaches the transport.
+    let none = json!({ "to": "me@example.org", "ids": ["secret.nvim/s1", "new.nvim/n1"] });
+    let (_, empty) = r.post(&none).await;
     let (status, doc) = r
-        .post(&json!({ "to": "me@example.org", "ids": ["secret.nvim/s1", "new.nvim/n1"], "send": true }))
+        .post(&json!({ "to": "me@example.org", "ids": ["secret.nvim/s1", "new.nvim/n1"], "send": true, "digest": empty["digest"] }))
         .await;
     assert_eq!(status, 400, "{doc}");
     assert_eq!(doc["error"]["code"], "nothing_to_send");
@@ -295,6 +298,72 @@ async fn a_send_hands_the_previewed_mail_to_the_transport_and_says_why_it_failed
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn only_the_mail_that_was_shown_is_sent() {
+    let _one = ONE_AT_A_TIME.lock().await;
+    let r = Rig::new("bound", true).await;
+    let (status, shown) = r
+        .post(&json!({ "to": "me@example.org", "ids": ["alpha.nvim/t1"] }))
+        .await;
+    assert_eq!(status, 200, "{shown}");
+    let digest = shown["digest"].as_str().unwrap().to_owned();
+    assert!(digest.starts_with("sha256:"), "{digest}");
+    // The same question has the same digest; another choice, address or language another one.
+    let (_, again) = r
+        .post(&json!({ "to": "me@example.org", "ids": ["alpha.nvim/t1"] }))
+        .await;
+    assert_eq!(again["digest"], shown["digest"]);
+
+    for (body, status, code) in [
+        // A send says which mail was shown.
+        (
+            json!({ "to": "me@example.org", "ids": ["alpha.nvim/t1"], "send": true }),
+            400,
+            "bad_request",
+        ),
+        // Another choice than the one shown (a box ticked after the preview).
+        (
+            json!({ "to": "me@example.org", "ids": ["alpha.nvim/t1", "alpha.nvim/t2"], "send": true, "digest": digest }),
+            409,
+            "mail_changed",
+        ),
+        // Another address than the one shown.
+        (
+            json!({ "to": "you@example.org", "ids": ["alpha.nvim/t1"], "send": true, "digest": digest }),
+            409,
+            "mail_changed",
+        ),
+        // Another language than the one shown.
+        (
+            json!({ "to": "me@example.org", "ids": ["alpha.nvim/t1"], "lang": "de", "send": true, "digest": digest }),
+            409,
+            "mail_changed",
+        ),
+        (
+            json!({ "to": "me@example.org", "ids": ["alpha.nvim/t1"], "send": true, "digest": "sha256:00" }),
+            409,
+            "mail_changed",
+        ),
+    ] {
+        let (got, doc) = r.post(&body).await;
+        assert_eq!(got, status, "{body}: {doc}");
+        assert_eq!(doc["error"]["code"], code, "{body}");
+        // A refusal tells nothing of the mail it would have been.
+        assert!(doc["text"].is_null() && doc["subject"].is_null(), "{doc}");
+    }
+    assert!(r.sent().is_empty(), "nothing was sent");
+
+    // The mail that was shown goes out, and it is that mail.
+    let (status, doc) = r
+        .post(&json!({ "to": "me@example.org", "ids": ["alpha.nvim/t1"], "send": true, "digest": digest }))
+        .await;
+    assert_eq!(status, 200, "{doc}");
+    let sent = r.sent();
+    assert_eq!(sent.len(), 1);
+    assert_eq!(sent[0].text, shown["text"].as_str().unwrap());
+    assert_eq!(sent[0].digest(), digest);
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn a_hub_without_a_mail_account_shows_the_mail_and_sends_nothing() {
     let _one = ONE_AT_A_TIME.lock().await;
     let r = Rig::new("no-account", false).await;
@@ -304,8 +373,9 @@ async fn a_hub_without_a_mail_account_shows_the_mail_and_sends_nothing() {
     assert_eq!(status, 200, "{doc}");
     assert_eq!(doc["account"], false);
     assert_eq!(doc["included"], json!(["alpha.nvim/t1"]));
+    let shown = doc["digest"].clone();
     let (status, doc) = r
-        .post(&json!({ "to": "me@example.org", "ids": ["alpha.nvim/t1"], "send": true }))
+        .post(&json!({ "to": "me@example.org", "ids": ["alpha.nvim/t1"], "send": true, "digest": shown }))
         .await;
     assert_eq!(status, 409, "{doc}");
     assert_eq!(doc["error"]["code"], "mail_not_set_up");

@@ -102,6 +102,7 @@ describe('RemindersView', () => {
       text: 'Reminders from tasks-desktop:\n\nthe line of the hub\n',
       included: ['pub/due'],
       leftOut: [{ id: 'pub/old', reason: 'private' }],
+      digest: 'sha256:shown',
     };
     preview().click();
     await settle();
@@ -111,6 +112,59 @@ describe('RemindersView', () => {
     expect(shown.textContent).toContain('Reminders: 1 task');
     expect(shown.querySelector('[data-left-out="pub/old"]')?.textContent).toContain('Finished one');
     expect(button(root, 'send').disabled).toBe(false);
+
+    // What is sent is the mail that was shown: its address, its ids and its digest, whatever the hub left out.
+    button(root, 'send').click();
+    await settle();
+    expect(m.hub.mailAsked[1]).toEqual({ to: 'me@example.org', ids: ['pub/due'], lang: 'de', send: true, digest: 'sha256:shown' });
+  });
+
+  it('drops an answer that comes after the choice changed: the preview is never the mail of another choice', async () => {
+    const { m, root } = await show();
+    tick_(box(root, 'pub/due'), true);
+    type(root, 'me@example.org');
+    let release: () => void = () => undefined;
+    m.hub.mailHold = new Promise<void>((resolve) => (release = resolve));
+    button(root, 'preview').click();
+    await settle();
+    // The answer is on its way; another box is ticked meanwhile.
+    tick_(box(root, 'pub/later'), true);
+    release();
+    m.hub.mailHold = null;
+    await settle();
+    expect(root.querySelector('[data-reminders-preview]'), 'the late answer is not shown').toBeNull();
+    expect(root.querySelector('[data-send]')).toBeNull();
+    // Asked again, the preview is the one of both.
+    button(root, 'preview').click();
+    await settle();
+    expect(m.hub.mailAsked.map((a) => a.ids)).toEqual([['pub/due'], ['pub/due', 'pub/later']]);
+    expect(root.querySelector('[data-reminders-preview] pre')?.textContent).toBe('pub/due\npub/later');
+  });
+
+  it('forgets the preview when the list changes under it, and says so when the hub would send another mail', async () => {
+    const { m, root, today } = await show();
+    tick_(box(root, 'pub/due'), true);
+    type(root, 'me@example.org');
+    button(root, 'preview').click();
+    await settle();
+    expect(root.querySelector('[data-reminders-preview]')).not.toBeNull();
+    // The vault moves on (a task was renamed): what is shown is not the mail of the list any more.
+    m.hub.doc = {
+      ...snapshot([task('pub/due', { title: 'Renamed', remind: addDays(today, -1) })], 'rev:2'),
+      reminders: [],
+    } as unknown as Snapshot;
+    await m.app.refresh();
+    await settle();
+    expect(root.querySelector('[data-reminders-preview]')).toBeNull();
+
+    // The hub refuses a send whose mail is not the one shown: said in words, and the stale preview goes.
+    button(root, 'preview').click();
+    await settle();
+    m.hub.mailAnswer = new ApiError(409, 'mail_changed', 'the mail would not be the one that was shown');
+    button(root, 'send').click();
+    await settle();
+    expect(root.querySelector('[role="alert"]')?.textContent).toContain('nichts gesendet');
+    expect(root.querySelector('[data-reminders-preview]')).toBeNull();
   });
 
   it('sends from the preview, and forgets the preview when the choice or the address changes', async () => {
@@ -122,6 +176,7 @@ describe('RemindersView', () => {
     button(root, 'send').click();
     await settle();
     expect(m.hub.mailAsked.map((a) => a.send)).toEqual([false, true]);
+    expect(m.hub.mailAsked[1]?.digest).toBe('digest of me@example.org pub/later');
     expect(root.querySelector('[data-reminders-sent]')?.textContent).toContain('me@example.org');
     expect(root.querySelector('[data-send]'), 'a mail that went out is not sent twice').toBeNull();
     // Another choice: what was shown is not the mail of this choice any more.
@@ -139,7 +194,7 @@ describe('RemindersView', () => {
     const { m, root } = await show();
     tick_(box(root, 'pub/due'), true);
     type(root, 'me@example.org');
-    m.hub.mailAnswer = { account: false, sent: false, to: 'me@example.org', subject: 'S', text: 'T\n', included: ['pub/due'], leftOut: [] };
+    m.hub.mailAnswer = { account: false, sent: false, to: 'me@example.org', subject: 'S', text: 'T\n', included: ['pub/due'], leftOut: [], digest: 'sha256:x' };
     button(root, 'preview').click();
     await settle();
     expect(root.querySelector('[data-no-account]')).not.toBeNull();

@@ -315,10 +315,10 @@ export class Hub extends HubClient<Snapshot> {
   /** The fields the open tasks can be grouped by, with their values and how each is written (the engine's). */
   /**
    * The mail with the chosen reminders, as the hub writes it for `to` (only tasks of public and internal areas are in
-   * it; the rest is named with the reason). With `send` it is sent; a hub without a mail account refuses that with the
-   * code `mail_not_set_up`.
+   * it; the rest is named with the reason). With `send` it is sent, and `digest` names the mail that was shown: the
+   * hub refuses with `mail_changed` when it would send another one, and with `mail_not_set_up` without a mail account.
    */
-  async remindersMail(body: { to: string; ids: string[]; lang: 'de' | 'en'; send: boolean }): Promise<RemindersMail> {
+  async remindersMail(body: { to: string; ids: string[]; lang: 'de' | 'en'; send: boolean; digest?: string }): Promise<RemindersMail> {
     return parseRemindersMail(await this.postJson<unknown>('/api/tasks/reminders/mail', body));
   }
 

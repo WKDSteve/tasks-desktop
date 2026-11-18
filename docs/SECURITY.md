@@ -720,9 +720,14 @@ session and is not released for a paired phone.
 ## Reminders by e-mail (`POST /api/tasks/reminders/mail`)
 
 The view *Reminders* sends a choice of reminders to one e-mail address. The page names task ids and the address
-(`{ to, ids, lang?, send? }`, at most 100 ids, 16 KiB); the hub writes the mail from the snapshot it holds and answers
-with it (`hub.reminders_mail`: `subject`, `text`, `included`, `left_out`, `account`, `sent`), so what the page shows
-before sending is the mail that goes out. **Only a task of a `public` or `internal` area is ever in a mail** (decision
+(`{ to, ids, lang?, send?, digest? }`, at most 100 ids, 16 KiB); the hub writes the mail from the snapshot it holds and
+answers with it (`hub.reminders_mail`: `subject`, `text`, `included`, `left_out`, `account`, `sent`, `digest`). **Only
+the mail that was shown is sent:** `digest` is a SHA-256 over the address, the subject and the text, and a `send` must
+name the digest of the preview. The hub writes the mail again from the list as it is at that moment and sends it only
+when it is that very mail; otherwise (a task renamed, finished or moved meanwhile, another choice or address than the
+one shown) it answers 409 `mail_changed`, sends nothing and tells nothing of the mail it would have been. The page
+sends the address and the ids of the preview, not what its fields hold at that moment, and drops a preview whose
+question was overtaken. **Only a task of a `public` or `internal` area is ever in a mail** (decision
 2026-11-13): one of a private area, or of an area without a class, is left out and named by its id with the reason
 (`private`, `unclassified`; `unknown` for an id without a reminder). The classes are those of this device
 (`areas.json`), never something the page says. A mail holds the day, the time of day, the title (as one line, without

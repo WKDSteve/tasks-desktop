@@ -15,6 +15,9 @@ describe('the list of all reminders', () => {
         task('pub/none', { title: 'None' }),
         task('pub/a', { title: 'A', remind: '2026-11-18', remind_to: ['me@example.org'] }),
         task('pub/word', { title: 'Word', remind: 'soon' }),
+        // The shape of a date, but no day of the calendar: formatting it would throw.
+        task('pub/never', { title: 'Never', remind: '2026-13-45' }),
+        task('pub/feb', { title: 'Feb', remind: '2026-02-30' }),
       ],
       finished,
       '2026-11-18',
@@ -61,6 +64,7 @@ describe('the mail of the hub', () => {
     to: 'me@example.org',
     subject: 'Reminders: 2 tasks',
     text: 'Reminders from tasks-desktop:\n',
+    digest: 'sha256:abc',
     included: ['pub/a', 'pub/b', 7],
     left_out: [{ id: 'sec/x', reason: 'private' }, { id: 'new/y', reason: 'made-up' }, 'x'],
   };
@@ -74,12 +78,15 @@ describe('the mail of the hub', () => {
       text: 'Reminders from tasks-desktop:\n',
       included: ['pub/a', 'pub/b'],
       leftOut: [{ id: 'sec/x', reason: 'private' }],
+      digest: 'sha256:abc',
     });
   });
 
   it('is refused when it is not one', () => {
     expect(() => parseRemindersMail({ ...answer, kind: 'tasks.result' })).toThrow();
     expect(() => parseRemindersMail({ ...answer, text: undefined })).toThrow();
+    // Without its digest a mail could not be sent as the one that was shown.
+    expect(() => parseRemindersMail({ ...answer, digest: undefined })).toThrow();
     expect(() => parseRemindersMail(null)).toThrow();
   });
 });

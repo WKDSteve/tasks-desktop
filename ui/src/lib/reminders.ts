@@ -3,6 +3,7 @@
 // (the classes of the areas), and the mail the page shows is the hub's answer, word for word.
 
 import type { TaskEntry } from './contract';
+import { parseDate } from './calendar';
 import { isDue, type DoneReminder } from './remind';
 
 /** One reminder of the list. */
@@ -22,17 +23,16 @@ export interface ReminderRow {
   due: boolean;
 }
 
-const DATE = /^\d{4}-\d{2}-\d{2}$/;
-
 /**
  * Every reminder: the open tasks that carry one and the finished ones the snapshot lists, the earliest day first (in
- * a day: without a time of day first, then by time, then by title). A `remind` that is no date is left out.
+ * a day: without a time of day first, then by time, then by title). A `remind` that is no day of the calendar
+ * (`soon`, `2026-13-45`) is left out: the view formats the day, and a day that is none cannot be formatted.
  */
 export function reminderRows(tasks: readonly TaskEntry[], finished: readonly DoneReminder[] | undefined, today: string): ReminderRow[] {
   const rows: ReminderRow[] = [];
   const add = (entry: Pick<TaskEntry, 'id' | 'area' | 'title'> & { remind?: unknown; remind_at?: string; remind_to?: readonly string[] }, done: boolean): void => {
     const day = typeof entry.remind === 'string' ? entry.remind : '';
-    if (!DATE.test(day)) return;
+    if (!parseDate(day)) return;
     rows.push({
       id: entry.id,
       title: entry.title,
@@ -70,6 +70,8 @@ export interface RemindersMail {
   text: string;
   included: string[];
   leftOut: { id: string; reason: LeftOutReason }[];
+  /** What stands for exactly this mail: handed back with a send, so the hub sends the mail that was shown. */
+  digest: string;
 }
 
 const REASONS: readonly string[] = ['private', 'unclassified', 'unknown'];
@@ -78,7 +80,13 @@ const REASONS: readonly string[] = ['private', 'unclassified', 'unknown'];
 export function parseRemindersMail(doc: unknown): RemindersMail {
   const d = (doc ?? {}) as Record<string, unknown>;
   const strings = (value: unknown): string[] => (Array.isArray(value) ? value.filter((v): v is string => typeof v === 'string') : []);
-  if (d['kind'] !== 'hub.reminders_mail' || typeof d['subject'] !== 'string' || typeof d['text'] !== 'string' || typeof d['to'] !== 'string') {
+  if (
+    d['kind'] !== 'hub.reminders_mail' ||
+    typeof d['subject'] !== 'string' ||
+    typeof d['text'] !== 'string' ||
+    typeof d['to'] !== 'string' ||
+    typeof d['digest'] !== 'string'
+  ) {
     throw new Error('not a mail of the hub');
   }
   const leftOut = (Array.isArray(d['left_out']) ? d['left_out'] : []).flatMap((entry) => {
@@ -95,5 +103,6 @@ export function parseRemindersMail(doc: unknown): RemindersMail {
     text: d['text'],
     included: strings(d['included']),
     leftOut,
+    digest: d['digest'],
   };
 }

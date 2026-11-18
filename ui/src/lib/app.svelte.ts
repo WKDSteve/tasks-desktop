@@ -564,11 +564,13 @@ export class App {
   });
 
   /**
-   * The mail the hub writes for the reminders of `ids` to the address `to`, in the language of the page; with `send`
-   * the hub sends it. A refusal is an `ApiError` with the hub's code (the view of the reminders words it).
+   * The mail the hub writes for the reminders of `ids` to the address `to`, in the language of the page. With `shown`
+   * (the mail the page showed) the hub sends it, and only if it is still that mail. A refusal is an `ApiError` with
+   * the hub's code (the view of the reminders words it).
    */
-  remindersMail(to: string, ids: string[], send: boolean): Promise<RemindersMail> {
-    return this.env.hub.remindersMail({ to, ids, lang: this.lang === 'de' ? 'de' : 'en', send });
+  remindersMail(to: string, ids: string[], shown?: RemindersMail): Promise<RemindersMail> {
+    const lang = this.lang === 'de' ? 'de' : 'en';
+    return this.env.hub.remindersMail(shown ? { to, ids, lang, send: true, digest: shown.digest } : { to, ids, lang, send: false });
   }
 
   /** The state of the repo of a tile (its checkout, the CI of its newest push), as the hub asks `git` and `gh`. */

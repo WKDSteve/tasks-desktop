@@ -21,21 +21,28 @@ struct Request {
     /// Send it; left out or false: only say what would be sent.
     #[serde(default)]
     send: bool,
+    /// With `send`: the `digest` of the mail the page showed (from the answer without `send`). The hub sends only
+    /// when the mail it would write now is that one.
+    #[serde(default)]
+    digest: Option<String>,
 }
 
 /// `POST /api/tasks/reminders/mail` `{ "to", "ids", "lang"?, "send"? }`: the mail with the chosen reminders.
 ///
 /// The answer is `hub.reminders_mail`: `subject` and `text` as they are sent, `included` (the ids in the mail),
 /// `left_out` (`{ id, reason }` with `private`, `unclassified` or `unknown`: only tasks of `public` and `internal`
-/// areas are ever in a mail), `account` (whether this hub can send at all) and `sent`. With `send`: 400
-/// `nothing_to_send` when no chosen reminder may go, 409 `mail_not_set_up` on a hub without a mail account, 502
-/// `mail_failed` with the reason of the transport. Nothing of a left out task but its id is in the answer.
+/// areas are ever in a mail), `account` (whether this hub can send at all), `sent` and `digest` (what stands for
+/// exactly this mail). With `send` the request names the `digest` of the mail the page showed: the hub writes the mail
+/// again from the list as it is now and sends it only when it is that mail, else 409 `mail_changed` (a task was
+/// renamed, finished or moved to another day meanwhile, or the page asks for another choice than it showed). Also
+/// with `send`: 400 `nothing_to_send` when no chosen reminder may go, 409 `mail_not_set_up` on a hub without a mail
+/// account, 502 `mail_failed` with the reason of the transport. Nothing of a left out task but its id is in the answer.
 pub(super) async fn reminders_mail(State(st): State<Arc<Shared>>, body: Bytes) -> Response {
     let Ok(request) = serde_json::from_slice::<Request>(&body) else {
         return error_body(
             StatusCode::BAD_REQUEST,
             "bad_request",
-            "the body is { to, ids, lang?, send? }",
+            "the body is { to, ids, lang?, send?, digest? }",
         );
     };
     if !mail::valid_address(&request.to) {
@@ -89,8 +96,28 @@ pub(super) async fn reminders_mail(State(st): State<Arc<Shared>>, body: Bytes) -
         );
     };
     let transport = rt.mail.clone();
+    let digest = composed.message.digest();
     let mut sent = false;
     if request.send {
+        // Only the mail that was shown is sent: before anything else, so that no answer of a send tells more than a
+        // preview does.
+        match request.digest.as_deref() {
+            None => {
+                return error_body(
+                    StatusCode::BAD_REQUEST,
+                    "bad_request",
+                    "send names the digest of the mail that was shown",
+                );
+            }
+            Some(shown) if shown != digest => {
+                return error_body(
+                    StatusCode::CONFLICT,
+                    "mail_changed",
+                    "the mail would not be the one that was shown: look at it again",
+                );
+            }
+            Some(_) => {}
+        }
         if composed.included.is_empty() {
             return error_body(
                 StatusCode::BAD_REQUEST,
@@ -122,6 +149,7 @@ pub(super) async fn reminders_mail(State(st): State<Arc<Shared>>, body: Bytes) -
         "kind": "hub.reminders_mail",
         "account": transport.is_some(),
         "sent": sent,
+        "digest": digest,
         "to": composed.message.to,
         "subject": composed.message.subject,
         "text": composed.message.text,
