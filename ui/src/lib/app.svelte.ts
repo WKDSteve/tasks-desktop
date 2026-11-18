@@ -412,6 +412,8 @@ export class App {
   statsSort = $state<StatSort>('count');
   /** Which tiles "The vault in numbers" shows, as what differs from the tiles it comes with (lib/statsTiles.ts). */
   statsTiles = $state.raw<TilePrefs>(defaultTilePrefs());
+  /** Whether the filter bar of the statistics is unfolded. */
+  statsFilterOpen = $state(true);
   /**
    * `auto`: a field of the detail is written as soon as it changes (the default). `manual`: the changes of the fields
    * of a task are held as a draft (`drafts`) until the person saves them, all in one write; the other ways to change
@@ -837,6 +839,7 @@ export class App {
     this.statsDim = stats.dim;
     this.statsSort = stats.sort;
     this.statsTiles = parseTilePrefs(safe(() => env.prefs.getItem('tasks-desktop.stats-tiles')));
+    this.statsFilterOpen = safe(() => env.prefs.getItem('tasks-desktop.stats-filter')) !== 'closed';
     this.saveMode = safe(() => env.prefs.getItem('tasks-desktop.save-mode')) === 'manual' ? 'manual' : 'auto';
     this.listColumns = parseColumns(safe(() => env.prefs.getItem('tasks-desktop.list-columns')));
     this.folds = parseFolds(safe(() => env.prefs.getItem('tasks-desktop.folds')));
@@ -933,7 +936,7 @@ export class App {
       }
       case 'stats': {
         const stats = parseStatsPrefs(null);
-        return this.statsDim !== stats.dim || this.statsSort !== stats.sort || !isDefaultTiles(this.statsTiles);
+        return this.statsDim !== stats.dim || this.statsSort !== stats.sort || !isDefaultTiles(this.statsTiles) || !this.statsFilterOpen;
       }
       case 'today':
         return this.tileOrderChanged || this.hiddenTiles.length > 0 || TODAY_TILES.some((tile) => this.tileSizes[tile] !== undefined);
@@ -959,6 +962,7 @@ export class App {
         const stats = parseStatsPrefs(null);
         this.setStats(stats.dim, stats.sort);
         this.setStatsTiles(defaultTilePrefs());
+        this.setStatsFilterOpen(true);
         return;
       }
       case 'today':
@@ -3752,6 +3756,12 @@ export class App {
   setStatsTiles(prefs: TilePrefs): void {
     this.statsTiles = prefs;
     safe(() => this.env.prefs.setItem('tasks-desktop.stats-tiles', JSON.stringify(prefs)));
+  }
+
+  /** The filter bar of the statistics folded or unfolded, remembered. */
+  setStatsFilterOpen(open: boolean): void {
+    this.statsFilterOpen = open;
+    safe(() => this.env.prefs.setItem('tasks-desktop.stats-filter', open ? 'open' : 'closed'));
   }
 
   /** The engine's estimate of some open tasks (the statistics ask it for the tasks the filter keeps). */

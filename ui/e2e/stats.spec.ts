@@ -239,3 +239,69 @@ test('the tiles on a narrow touch screen: the x is always there and nothing scro
   expect(await violations(page)).toEqual([]);
   expect(problems).toEqual([]);
 });
+
+test('the filter bar of the list stands over the statistics: a status chosen there narrows the numbers and the list alike, and the bar folds away and stays so', async ({
+  page,
+}) => {
+  const problems = await pair(page, '/#view=stats');
+  await expect(page.getByRole('table', { name: 'The numbers per area' })).toBeVisible();
+  const bar = page.getByRole('region', { name: 'Filter', exact: true });
+  const counted = page.getByTestId('stats-filter-count');
+  const open = page.locator('button.figure[data-figure="open"] .n');
+  // Unfolded at first: the search, the quick filters and "More filters", and what only the list needs is not there.
+  await expect(bar.getByRole('searchbox')).toBeVisible();
+  await expect(bar.locator('summary', { hasText: 'More filters' })).toBeVisible();
+  await expect(bar.locator('select[data-sort]')).toHaveCount(0);
+  await expect(bar.locator('select[data-lists]')).toHaveCount(0);
+  const all = Number(await open.textContent());
+  await expect(counted).toHaveText(`${all} of ${all} open tasks are counted`);
+  await expectAccessible(page, 'statistics with the filter bar');
+
+  // A status chosen in the bar: the numbers follow at once.
+  await bar.getByRole('button', { name: 'Status', exact: true }).click();
+  const popup = bar.getByRole('group', { name: 'Status' });
+  const box = popup.getByRole('checkbox').first();
+  await box.check();
+  await page.keyboard.press('Escape');
+  await expect(popup).toHaveCount(0);
+  const kept = Number(/^(\d+) of/.exec((await counted.textContent()) ?? '')?.[1]);
+  expect(kept).toBeGreaterThan(0);
+  expect(kept).toBeLessThan(all);
+  await expect(open).toHaveText(String(kept));
+  await expect(page.getByRole('table', { name: 'The numbers per area' }).locator('tfoot td').first()).toHaveText(String(kept));
+  // The bar names what is on, once (the strip of the other views is for the folded bar).
+  await expect(bar.getByRole('list', { name: 'Filters that are on' })).toBeVisible();
+  await expect(page.getByTestId('filter-note')).toHaveCount(0);
+  const status = await page.evaluate(() => (JSON.parse(localStorage.getItem('tasks-desktop.filter') ?? '{}') as { statuses?: string[] }).statuses);
+  expect(status).toHaveLength(1);
+
+  // It is the filter of the list: the list shows as many, with the same status chosen.
+  await page.goto('/#view=list');
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('List');
+  await expect(page.locator('.count [role="status"]')).toHaveText(`${kept} of ${all}`);
+  await expect(page.getByRole('list', { name: 'Filters that are on' })).toBeVisible();
+
+  // Folded: one line and the strip that names the filter; it stays folded over a reload.
+  await page.goto('/#view=stats');
+  const fold = bar.getByRole('button', { name: 'Filter', exact: true });
+  await expect(fold).toHaveAttribute('aria-expanded', 'true');
+  await fold.click();
+  await expect(fold).toHaveAttribute('aria-expanded', 'false');
+  await expect(bar.getByRole('searchbox')).toHaveCount(0);
+  await expect(counted).toHaveText(`${kept} of ${all} open tasks are counted`);
+  await expect(page.getByTestId('filter-note')).toBeVisible();
+  await expectAccessible(page, 'statistics with the filter bar folded');
+  await page.reload();
+  await expect(page.getByRole('table', { name: 'The numbers per area' })).toBeVisible();
+  await expect(fold).toHaveAttribute('aria-expanded', 'false');
+  await expect(bar.getByRole('searchbox')).toHaveCount(0);
+  // The keyboard unfolds it again, and the reset of the bar takes the filter away.
+  await fold.focus();
+  await page.keyboard.press('Enter');
+  await expect(fold).toHaveAttribute('aria-expanded', 'true');
+  await bar.getByRole('button', { name: 'Clear all filters' }).click();
+  await expect(open).toHaveText(String(all));
+  await page.evaluate(() => localStorage.removeItem('tasks-desktop.stats-filter'));
+  expect(await violations(page)).toEqual([]);
+  expect(problems).toEqual([]);
+});

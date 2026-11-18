@@ -27,7 +27,7 @@
   import { markHidden } from '../lib/text';
   import { bucketClass as classOf, bucketLabel as labelOfBucket, bucketName, dimHint as hintOfDim } from '../lib/statsWords';
   import type { StatDim } from '../lib/stats';
-  import FilterNote from './FilterNote.svelte';
+  import StatsFilter from './StatsFilter.svelte';
   import StatsTiles from './StatsTiles.svelte';
 
   let { app }: { app: App } = $props();
@@ -107,7 +107,7 @@
 </script>
 
 <div class="stats">
-  <FilterNote {app} />
+  <StatsFilter {app} />
   <section class="card head" aria-labelledby="stats-figures">
     <StatsTiles {app} {tasks} {figures} {finished} {effort} onfinished={openFinished} />
     <div class="bar">
