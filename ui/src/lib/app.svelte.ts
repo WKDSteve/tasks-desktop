@@ -4832,10 +4832,16 @@ export class App {
       token = await this.env.askSession();
     } else {
       this.#lateListening = true;
-      token = await this.env.askSession((late) => {
+      try {
+        token = await this.env.askSession((late) => {
+          this.#lateListening = false;
+          void this.pairAgain({ token: late });
+        });
+      } catch {
+        // The question could not be asked: it listens for nothing, and the next focus asks with a listener again.
         this.#lateListening = false;
-        void this.pairAgain({ token: late });
-      });
+        return;
+      }
       // Answered in time: the question listens no more.
       if (token) this.#lateListening = false;
     }

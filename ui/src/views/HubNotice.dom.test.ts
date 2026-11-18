@@ -223,6 +223,28 @@ describe('a page whose hub is gone', () => {
     expect(lateAsked).toEqual([true, false, false]);
   });
 
+  it('a question to the other tabs that could not be asked leaves no late listener behind', async () => {
+    const lateAsked: boolean[] = [];
+    let fail = true;
+    const m = await page({
+      askSession: async (onLate) => {
+        lateAsked.push(onLate !== undefined);
+        if (fail) throw new Error('no channel');
+        return null;
+      },
+    });
+    m.hub.instance = 'another';
+    m.hub.onUnauthorized();
+    await vi.waitFor(() => expect(m.app.hubState).toBe('replaced'));
+    await m.app.focused();
+    await settle();
+    fail = false;
+    await m.app.focused();
+    await settle();
+    // The question after the failed one listens for a late answer again.
+    expect(lateAsked).toEqual([true, true]);
+  });
+
   it('a session of another tab that the new hub refuses is not taken: the page stays as it was and says so', async () => {
     const m = await page({ askSession: async () => 'a-session-that-died' });
     m.hub.instance = 'another';
