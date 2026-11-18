@@ -7672,9 +7672,8 @@ test.describe('a finger', () => {
     const over = await centre(doing.locator('h2'));
     await touch('touchMove', over);
     await expect(doing).toHaveClass(/target/);
-    // The write is answered and the board at rest before the tap below: the hub's event shows the card in its new
-    // column before the answer is there, and a tap that falls together with the answer is lost (CI run 43636854784:
-    // every step took milliseconds, the detail never opened; 1 of 30 here with the answer held back 120 to 380 ms).
+    // The write is answered and the board at rest before the tap below (a card is held back while a write is on its
+    // way). The tap that was lost here (CI run 43636854784) had nothing to do with the answer: see the test below.
     await write(page, () => touch('touchEnd'));
     await expect(column('doing').locator('.card', { hasText: 'Board finger e2e' })).toBeVisible();
     expect(readFileSync(file, 'utf8')).toContain('status: doing');
@@ -7683,6 +7682,63 @@ test.describe('a finger', () => {
     await column('doing').locator('.card', { hasText: 'Board finger e2e' }).locator('.title').tap();
     await expect(page.locator('aside.detail')).toBeVisible();
     expect(await violations(page)).toEqual([]);
+    removeFile(file);
+  });
+
+  test('flicks a card of the board into another column: the tap right after it is a tap, and a tap on the grip selects', async ({ page }) => {
+    const slug = 'board-flick-e2e';
+    const file = join(state().vault, 'lib.nvim', 'ROADMAP', 'tasks', `${slug}.md`);
+    writeFileSync(file, `---
+title: Board flick e2e
+status: open
+kind: task
+---
+
+To be flicked by a finger.
+`);
+    await pair(page);
+    await showList(page);
+    await page.getByRole('searchbox', { name: /search/i }).first().fill('Board flick e2e');
+    await chooseView(page, 'View', 'Board');
+    const column = (name: string) => page.getByRole('region', { name, exact: true });
+    const card = (name: string) => column(name).locator('.card', { hasText: 'Board flick e2e' });
+    await expect(card('open')).toBeVisible();
+
+    // The touch of the grip is taken, so the browser makes no click of a tap on it: the grip tells it. It selects the
+    // card and opens nothing, as before.
+    await expect(card('open')).not.toHaveAttribute('aria-current', 'true');
+    await card('open').locator('.grip').tap();
+    await expect(card('open')).toHaveAttribute('aria-current', 'true');
+    await expect(taskFloat(page)).toHaveCount(0);
+
+    // The times of the events are given, 8 ms apart: the finger lifts at full speed, whatever the machine does. To
+    // Chrome that is the start of a fling, and a tap while it runs only stops it (12 of 12 taps lost, 2026-11-18),
+    // unless the grip takes its touch.
+    const cdp = await page.context().newCDPSession(page);
+    let clock = Date.now() / 1000;
+    const flick = (type: 'touchStart' | 'touchMove' | 'touchEnd', at?: { x: number; y: number }) => {
+      clock += 0.008;
+      return cdp.send('Input.dispatchTouchEvent', { type, touchPoints: at ? [{ x: at.x, y: at.y }] : [], timestamp: clock });
+    };
+    const centre = async (target: Locator) => {
+      const box = (await target.boundingBox())!;
+      return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+    };
+    const grip = await centre(card('open').locator('.grip'));
+    await flick('touchStart', grip);
+    await flick('touchMove', { x: grip.x + 8, y: grip.y + 8 });
+    const over = await centre(column('doing').locator('h2'));
+    await flick('touchMove', over);
+    await expect(column('doing')).toHaveClass(/target/);
+    await write(page, () => flick('touchEnd'));
+    await expect(card('doing')).toBeVisible();
+    expect(readFileSync(file, 'utf8')).toContain('status: doing');
+
+    // At once, while the fling of the flick would still run: the tap opens the task.
+    await card('doing').locator('.title').tap();
+    await expect(taskFloat(page)).toHaveCount(1);
+    await closeFloat(page);
+
     removeFile(file);
   });
 });

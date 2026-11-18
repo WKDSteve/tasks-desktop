@@ -2,17 +2,76 @@
 // pointer (touch or pen) and the places to drop on are found by the point the finger is on. The grip and the lookup of
 // a place are the kit's (`appkit-ui/pointerDrag`); the places of this app (an area, the board) are here.
 
-import type { PointSource } from 'appkit-ui/pointerDrag';
-
-export {
-  createGrip,
+import {
+  createGrip as kitGrip,
   farEnough,
-  GRAB,
-  placeAt,
   startsOnGrip,
   type PointerDragEvent,
   type PointSource,
 } from 'appkit-ui/pointerDrag';
+
+export { farEnough, GRAB, placeAt, startsOnGrip, type PointerDragEvent, type PointSource } from 'appkit-ui/pointerDrag';
+
+/** The touch a grip is held by, from its `pointerdown` to the end of the drag. */
+interface Held {
+  el: Element;
+  x: number;
+  y: number;
+  /** The browser was told that this touch is no gesture of its own (the `touchstart` was taken). */
+  taken: boolean;
+  drop: () => void;
+}
+
+/**
+ * The kit's grip, and the touch that holds it taken from the browser. A finger that lifts while it still moves (a
+ * flick) is the start of a fling to Chrome, although the grip scrolls nothing (`touch-action: none`), and a tap while
+ * that fling runs only stops it: no click, for up to about two seconds after the drop (measured 2026-11-18: 12 of 12
+ * taps lost after a flick, none when the finger rested before it lifted or the `touchstart` was taken). A `touchstart`
+ * that is taken makes no gesture at all. It makes no click either, so a tap on the grip (the finger did not go `GRAB`
+ * far) is told as the click it would have been: whatever listens for one (the card that selects, the hint popup) hears
+ * it as before. A pen sends no touch events; its click is the browser's.
+ */
+export function createGrip(
+  sink: () => ((event: PointerDragEvent) => void) | undefined,
+  blocked: () => boolean,
+): (e: PointerEvent, id: string, phase: PointerDragEvent['phase']) => void {
+  const grip = kitGrip(sink, blocked);
+  let held: Held | null = null;
+  return (e, id, phase) => {
+    const el = e.currentTarget as Element | null;
+    if (phase === 'start' && startsOnGrip(e.pointerType) && typeof el?.addEventListener === 'function') {
+      held?.drop();
+      // The `touchstart` of this touch comes after its `pointerdown`, to the same element.
+      const take = (touch: Event): void => {
+        if (!touch.cancelable) return;
+        touch.preventDefault();
+        now.taken = true;
+      };
+      const now: Held = { el, x: e.clientX, y: e.clientY, taken: false, drop: () => el.removeEventListener('touchstart', take) };
+      el.addEventListener('touchstart', take, { passive: false, once: true });
+      held = now;
+    }
+    grip(e, id, phase);
+    if ((phase === 'end' || phase === 'cancel') && held !== null) {
+      const was = held;
+      held = null;
+      was.drop();
+      if (phase === 'end' && was.taken && !farEnough(was, { x: e.clientX, y: e.clientY })) {
+        was.el.dispatchEvent(
+          new PointerEvent('click', {
+            bubbles: true,
+            cancelable: true,
+            composed: true,
+            pointerType: e.pointerType,
+            pointerId: e.pointerId,
+            clientX: e.clientX,
+            clientY: e.clientY,
+          }),
+        );
+      }
+    }
+  };
+}
 
 /** The area whose place to drop is under the point, if any (a place carries `data-area`). */
 export function areaAt(doc: PointSource, x: number, y: number): string | null {
