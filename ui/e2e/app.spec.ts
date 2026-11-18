@@ -5583,6 +5583,41 @@ test('the timeline shows a task as a bar from start to due; the keys, a drag and
   removeFile(next);
 });
 
+test('the reminders view lists a reminder by its day and shows the mail of the hub; a hub without a mail account sends nothing', async ({ page }) => {
+  const file = join(state().vault, 'lib.nvim', 'ROADMAP', 'tasks', 'reminder-mail-e2e.md');
+  writeFileSync(file, `---\ntitle: Reminder mail e2e\nstatus: open\nkind: task\nremind: ${localDay(-1)}\n---\n\nThe text of the task is not for a mail.\n`);
+  await watchViolations(page);
+  await pair(page);
+  await chooseView(page, 'View', 'Reminders');
+  const id = 'lib.nvim/reminder-mail-e2e';
+  const row = page.locator(`[data-reminder="${id}"]`);
+  await expect(row).toBeVisible();
+  await expect(row.locator('[data-due]')).toBeVisible();
+  expect(await violations(page)).toEqual([]);
+
+  // Nothing is asked of the hub before a reminder is chosen and the address is one.
+  const preview = page.getByRole('button', { name: 'Show the mail' });
+  await expect(preview).toBeDisabled();
+  await row.getByRole('checkbox').check();
+  await page.getByLabel('To', { exact: true }).fill('me@example');
+  await expect(preview).toBeDisabled();
+  await page.getByLabel('To', { exact: true }).fill('me@example.org');
+  await preview.click();
+
+  // The mail is the hub's: the day, the title and the id, nothing of the text of the task.
+  const mail = page.getByRole('region', { name: 'The mail' });
+  await expect(mail).toBeVisible();
+  await expect(mail).toContainText('Reminder: 1 task');
+  await expect(mail.locator('pre')).toContainText(`${localDay(-1)}  Reminder mail e2e  (${id})`);
+  await expect(mail.locator('pre')).not.toContainText('not for a mail');
+  // This hub has no mail account: it says so, and the mail cannot be sent.
+  await expect(mail.locator('[data-no-account]')).toBeVisible();
+  await expect(mail.getByRole('button', { name: /Send 1 reminders/ })).toBeDisabled();
+  expect(await violations(page)).toEqual([]);
+  expect(consoleProblems.get(page)).toEqual([]);
+  removeFile(file);
+});
+
 test('a task past its due date is marked on its board card and found by the overdue filter', async ({ page }) => {
   await watchViolations(page);
   await pair(page);

@@ -20,6 +20,7 @@ export const START_VIEWS: readonly View[] = [
   'cross',
   'calendar',
   'timeline',
+  'reminders',
   'stats',
   'done',
   'views',

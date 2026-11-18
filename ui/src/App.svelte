@@ -486,6 +486,14 @@
           },
           {
             kind: 'radio',
+            label: t('nav.reminders'),
+            hint: t('hint.item.nav.reminders'),
+            checked: app.view === 'reminders',
+            onselect: () => app.setView('reminders'),
+            ...apart('reminders'),
+          },
+          {
+            kind: 'radio',
             label: t('nav.stats'),
             hint: t('hint.item.nav.stats'),
             checked: app.view === 'stats',
@@ -875,6 +883,8 @@
                     ? t('nav.calendar')
                   : app.view === 'timeline'
                     ? t('nav.timeline')
+                  : app.view === 'reminders'
+                    ? t('nav.reminders')
                   : app.view === 'stats'
                     ? t('nav.stats')
                     : app.view === 'done'
@@ -905,6 +915,8 @@
           <Lazy {app} load={() => import('./views/CalendarView.svelte')} />
         {:else if app.view === 'timeline'}
           <Lazy {app} load={() => import('./views/TimelineView.svelte')} />
+        {:else if app.view === 'reminders'}
+          <Lazy {app} load={() => import('./views/RemindersView.svelte')} />
         {:else if app.view === 'stats'}
           <Lazy {app} load={() => import('./views/StatsView.svelte')} />
         {:else if app.view === 'done'}

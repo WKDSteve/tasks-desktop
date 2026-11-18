@@ -840,6 +840,9 @@ pub async fn serve(opts: ServeOptions) -> Result<(), String> {
         sheet_run: Some(Arc::clone(&sheet_run)),
         testing: Some(Arc::clone(&testing)),
         repos: Some(Arc::clone(&repos)),
+        // No mail account yet (the SMTP account of the settings is a task of its own): the route of the reminders
+        // by e-mail shows the mail and says that it cannot be sent.
+        mail: None,
     };
     let running = match server::start_with(make_cfg(want), extras()).await {
         Ok(r) => r,

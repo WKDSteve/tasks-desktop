@@ -199,6 +199,7 @@ row two
             sheet_run: runs,
             testing: None,
             repos: None,
+            mail: None,
             tailnet: None,
             push: None,
         },

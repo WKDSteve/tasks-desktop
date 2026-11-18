@@ -21,6 +21,7 @@ import type {
 } from './contract';
 import type { ViewForm } from './views';
 import { parseRepos, type HubRepos, type RepoGroup } from './repos';
+import { parseRemindersMail, type RemindersMail } from './reminders';
 import type { About } from './about';
 import { ApiError, failure, HubClient, textOf, type Hello, type SnapshotResult as KitSnapshotResult } from 'appkit-ui/client';
 
@@ -295,6 +296,15 @@ export class Hub extends HubClient<Snapshot> {
   }
 
   /** The fields the open tasks can be grouped by, with their values and how each is written (the engine's). */
+  /**
+   * The mail with the chosen reminders, as the hub writes it for `to` (only tasks of public and internal areas are in
+   * it; the rest is named with the reason). With `send` it is sent; a hub without a mail account refuses that with the
+   * code `mail_not_set_up`.
+   */
+  async remindersMail(body: { to: string; ids: string[]; lang: 'de' | 'en'; send: boolean }): Promise<RemindersMail> {
+    return parseRemindersMail(await this.postJson<unknown>('/api/tasks/reminders/mail', body));
+  }
+
   /** The repo tiles of this device (`hub.repos`): no path, ever. */
   async repos(): Promise<HubRepos> {
     return parseRepos(await this.json<unknown>('/api/tasks/repos'));

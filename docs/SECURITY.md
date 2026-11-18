@@ -651,6 +651,25 @@ session: the page reads the image with it and shows it from a `blob:` address it
 the page allows `img-src 'self' blob:` (a `data:` image stays refused). A repository folder has no data class: nothing
 of it but this image and the folder's last name leaves the hub, and only to the paired page of this device.
 
+## Reminders by e-mail (`POST /api/tasks/reminders/mail`)
+
+The view *Reminders* sends a choice of reminders to one e-mail address. The page names task ids and the address
+(`{ to, ids, lang?, send? }`, at most 100 ids, 16 KiB); the hub writes the mail from the snapshot it holds and answers
+with it (`hub.reminders_mail`: `subject`, `text`, `included`, `left_out`, `account`, `sent`), so what the page shows
+before sending is the mail that goes out. **Only a task of a `public` or `internal` area is ever in a mail** (decision
+2026-11-13): one of a private area, or of an area without a class, is left out and named by its id with the reason
+(`private`, `unclassified`; `unknown` for an id without a reminder). The classes are those of this device
+(`areas.json`), never something the page says. A mail holds the day, the time of day, the title (as one line, without
+control characters, at most 200 characters) and the id of each task; nothing of its text and no path. The address is
+one mailbox (`local@domain.tld`, ASCII, no space, comma, bracket or line break: nothing that could name a second
+recipient or start a header); the subject is the hub's own words and a number.
+
+The mail leaves through a transport (`mail::Transport`). **This hub has none yet**: the SMTP account of the settings,
+with its password in the key store of the system, is a task of its own. Until then `send` is refused with 409
+`mail_not_set_up` and nothing leaves the machine; the preview still answers (`account: false`). The route needs a
+session, is not released for a paired phone (`MOB-02`, fail closed), and a refusal of the transport reaches the page as
+one line of at most 200 characters.
+
 ## The ranges of the fields (`GET /api/tasks/enums`)
 
 A read without parameters (a query is `400`), a session needed. The hub asks the engine `hello` and passes on only its

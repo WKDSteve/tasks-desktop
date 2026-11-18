@@ -138,6 +138,7 @@ import {
   type NamedList,
 } from './lists';
 import { localToday } from './remind';
+import type { RemindersMail } from './reminders';
 import { COLUMN_KEYS, defaultColumns, parseColumns, serializeColumns, type ListColumns } from './columns';
 import { emptyFolds, foldOf, parseFolds, serializeFolds, type FoldMemory, type Folds, type FoldView } from './fold';
 import { parseSizes, serializeSizes, withSize, type Size, type Sizes } from './sizes';
@@ -148,7 +149,7 @@ const NOTE_MAX = 1000;
 
 export type Phase = 'starting' | 'needs_pairing' | 'offline' | 'unavailable' | 'ready';
 export type Connection = 'live' | 'reconnecting' | 'offline';
-export type View = 'today' | 'list' | 'board' | 'plan' | 'inbox' | 'abnahme' | 'cross' | 'calendar' | 'timeline' | 'stats' | 'done' | 'views' | 'repos';
+export type View = 'today' | 'list' | 'board' | 'plan' | 'inbox' | 'abnahme' | 'cross' | 'calendar' | 'timeline' | 'reminders' | 'stats' | 'done' | 'views' | 'repos';
 export type Theme = 'auto' | 'light' | 'dark';
 /** The blocks of the Today view that a person may hide. */
 export { ORDERED_TILES, TILES, type OrderedTile, type Tile } from './tiles-list';
@@ -533,6 +534,14 @@ export class App {
     repoAdd: (body) => this.env.hub.repoAdd(body),
     repoSave: (body) => this.env.hub.repoSave(body),
   });
+
+  /**
+   * The mail the hub writes for the reminders of `ids` to the address `to`, in the language of the page; with `send`
+   * the hub sends it. A refusal is an `ApiError` with the hub's code (the view of the reminders words it).
+   */
+  remindersMail(to: string, ids: string[], send: boolean): Promise<RemindersMail> {
+    return this.env.hub.remindersMail({ to, ids, lang: this.lang === 'de' ? 'de' : 'en', send });
+  }
 
   /** The image of a tile, read with the session. */
   repoImage(id: string): Promise<Blob | null> {

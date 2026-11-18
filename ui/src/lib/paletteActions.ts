@@ -46,6 +46,7 @@ export function paletteActions(app: App): PaletteAction[] {
   add('go.cross', t('palette.go', { view: t('nav.cross') }), () => app.setView('cross'));
   add('go.calendar', t('palette.go', { view: t('nav.calendar') }), () => app.setView('calendar'));
   add('go.timeline', t('palette.go', { view: t('nav.timeline') }), () => app.setView('timeline'));
+  add('go.reminders', t('palette.go', { view: t('nav.reminders') }), () => app.setView('reminders'));
   add('go.stats', t('palette.go', { view: t('nav.stats') }), () => app.setView('stats'));
   if (app.can('finished')) add('go.done', t('palette.go', { view: t('nav.done') }), () => app.setView('done'));
   add('go.repos', t('palette.go', { view: t('nav.repos') }), () => app.setView('repos'));

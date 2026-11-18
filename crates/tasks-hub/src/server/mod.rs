@@ -60,6 +60,7 @@ mod answer;
 mod check;
 pub(crate) mod device_cut;
 mod events;
+mod mail;
 mod push;
 mod repos;
 mod routes;
@@ -144,6 +145,8 @@ pub struct Extras {
     pub snapshot_root: Option<std::path::PathBuf>,
     /// The repo tiles of this device (`repos.json` in the config folder); none: the routes say this hub keeps none.
     pub repos: Option<Arc<crate::repos::Store>>,
+    /// Where a mail with reminders leaves the hub (`crate::mail`); none: the route says this hub has no mail account.
+    pub mail: Option<Arc<dyn crate::mail::Transport>>,
     /// The name of this machine in the tailnet (`pc.example.ts.net`), for a phone that comes through Tailscale Serve;
     /// none: only loopback. Needs the devices of `ServerConfig`.
     pub tailnet: Option<String>,
@@ -178,6 +181,7 @@ pub async fn start_with(cfg: ServerConfig, extras: Extras) -> std::io::Result<Ru
         upload_engine,
         snapshot_root,
         repos,
+        mail,
         tailnet,
         push,
     } = extras;
@@ -211,6 +215,7 @@ pub async fn start_with(cfg: ServerConfig, extras: Extras) -> std::io::Result<Ru
         upload_dir: upload_dir.map(Arc::new),
         upload_engine,
         repos,
+        mail,
         push,
         attach_dirs: Arc::new(
             attach_dirs
@@ -445,6 +450,10 @@ fn app_routes(core: &Arc<Shared>) -> Router<Arc<Shared>> {
             &r("repos/open"),
             post(self::repos::repo_open).layer(DefaultBodyLimit::max(small)),
         )
+        .route(
+            &r("reminders/mail"),
+            post(self::mail::reminders_mail).layer(DefaultBodyLimit::max(16 * 1024)),
+        )
 }
 
 #[cfg(test)]
@@ -573,6 +582,7 @@ mod tests {
                 upload_dir: None,
                 upload_engine: None,
                 repos: None,
+                mail: None,
             },
         ))
     }

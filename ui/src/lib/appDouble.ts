@@ -7,6 +7,7 @@ import type { CachedList, ListStore } from './cache';
 import type { DonePreview, Groupings, Result, Snapshot, TaskDocument, TaskEntry, View, Views } from './contract';
 import { task } from './fixtures';
 import type { PrintSheet } from './export';
+import type { RemindersMail } from './reminders';
 
 export function snapshot(tasks: TaskEntry[], rev = 'rev:1'): Snapshot {
   return {
@@ -399,6 +400,24 @@ export class FakeHub {
   async selectVault(name: string): Promise<void> {
     this.vaultCalls.push(`select ${name}`);
     if (this.vaultError) throw this.vaultError;
+  }
+  /** The reminders by e-mail: what was asked, and what the hub answers (an error to throw, or the mail). */
+  mailAsked: { to: string; ids: string[]; lang: string; send: boolean }[] = [];
+  mailAnswer: RemindersMail | ApiError | null = null;
+  async remindersMail(body: { to: string; ids: string[]; lang: string; send: boolean }): Promise<RemindersMail> {
+    this.mailAsked.push(body);
+    if (this.mailAnswer instanceof ApiError) throw this.mailAnswer;
+    return (
+      this.mailAnswer ?? {
+        account: true,
+        sent: body.send,
+        to: body.to,
+        subject: `Reminders: ${body.ids.length} tasks`,
+        text: body.ids.join('\n'),
+        included: body.ids,
+        leftOut: [],
+      }
+    );
   }
   sent: OpsRequest[] = [];
   /** What the next write answers (an error to throw, or a result). */
