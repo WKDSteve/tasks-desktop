@@ -1909,6 +1909,36 @@ fn job_of(map: &serde_json::Map<String, serde_json::Value>) -> Result<String, Re
     }
 }
 
+/// The job `id` of ai-desktop, if this hub sent it (`source`) as one of `kinds` and, with `waiting`, it still waits for
+/// the person's yes (`needs_confirmation`). The draft and split routes act on no other job: an id the page knows (a
+/// running review) is neither shown, run nor put away through them.
+#[allow(clippy::result_large_err)]
+async fn own_job(
+    intake: &Arc<dyn crate::agent::JobIntake>,
+    id: &str,
+    kinds: &[&str],
+    waiting: bool,
+) -> Result<serde_json::Value, Response> {
+    let doc = intake.job(id).await.map_err(|r| agent_refusal(&r))?;
+    let own = doc["source"].as_str() == Some(crate::agent::SOURCE)
+        && doc["kind"].as_str().is_some_and(|k| kinds.contains(&k));
+    if !own {
+        return Err(error_body(
+            StatusCode::CONFLICT,
+            "not_own_job",
+            "this job is not one this route acts on",
+        ));
+    }
+    if waiting && doc["status"].as_str() != Some("needs_confirmation") {
+        return Err(error_body(
+            StatusCode::CONFLICT,
+            "not_waiting",
+            "this job does not wait for a yes",
+        ));
+    }
+    Ok(doc)
+}
+
 /// `POST /api/tasks/draft_job` `{ "job" }`: where a draft stands. The page asks until `status` is no longer `running`;
 /// then `draft` (the checked fields, schema `tasks-draft/1`) or `draft_error` says what to fill in. Only these fields
 /// of the job reach the page (not the text it was given, not the model's whole answer).
@@ -1924,7 +1954,7 @@ pub(super) async fn draft_job(State(st): State<Arc<Shared>>, body: Bytes) -> Res
             "this hub hands no task to an agent",
         );
     };
-    match intake.job(&id).await {
+    match own_job(&intake, &id, &["draft-task"], false).await {
         Ok(doc) => {
             let mut out = serde_json::Map::new();
             for key in ["status", "draft", "draft_error", "error", "note", "private"] {
@@ -1934,7 +1964,7 @@ pub(super) async fn draft_job(State(st): State<Arc<Shared>>, body: Bytes) -> Res
             }
             axum::Json(serde_json::Value::Object(out)).into_response()
         }
-        Err(refusal) => agent_refusal(&refusal),
+        Err(r) => r,
     }
 }
 
@@ -1952,6 +1982,10 @@ pub(super) async fn draft_confirm(State(st): State<Arc<Shared>>, body: Bytes) ->
             "this hub hands no task to an agent",
         );
     };
+    // Also the yes of a split (`split_confirm` is this route).
+    if let Err(r) = own_job(&intake, &id, &["draft-task", "split-plan"], true).await {
+        return r;
+    }
     match intake.confirm(&id).await {
         Ok(()) => axum::Json(json!({ "status": "running" })).into_response(),
         Err(refusal) => agent_refusal(&refusal),
@@ -1974,6 +2008,9 @@ pub(super) async fn draft_drop(State(st): State<Arc<Shared>>, body: Bytes) -> Re
             "this hub hands no task to an agent",
         );
     };
+    if let Err(r) = own_job(&intake, &id, &["draft-task"], true).await {
+        return r;
+    }
     match intake.discard(&id).await {
         Ok(()) => axum::Json(json!({ "status": "dropped" })).into_response(),
         Err(refusal) => agent_refusal(&refusal),

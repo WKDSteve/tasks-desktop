@@ -619,6 +619,16 @@ async fn a_plan_goes_to_be_split_with_its_tasks_and_only_the_block_comes_back() 
     )
     .await;
     assert!(doc["block"].is_null(), "no block before it is done: {doc}");
+    // A split that runs already is not run a second time; one that waits for a yes is.
+    let (status, _) = post(
+        &r,
+        "/api/tasks/split_confirm",
+        r#"{"job":"0123456789abcdef"}"#,
+        true,
+    )
+    .await;
+    assert_eq!(status, 409);
+    *fake.doc.lock().unwrap() = serde_json::json!({"source": "tasks-desktop", "kind": "split-plan", "status": "needs_confirmation"});
     let (status, _) = post(
         &r,
         "/api/tasks/split_confirm",
@@ -715,6 +725,45 @@ async fn a_draft_goes_as_private_with_the_choices_and_only_its_result_comes_back
     }
     assert_eq!(fake.jobs.lock().unwrap().len(), 1, "nothing more was sent");
 
+    // The draft routes act only on a draft of this hub that waits for a yes: a running review the page knows the id
+    // of is neither run nor put away, nor is a draft that runs already.
+    let waiting = serde_json::json!({
+        "source": "tasks-desktop", "task_id": "draft/new", "kind": "draft-task", "status": "needs_confirmation"
+    });
+    for (other, code) in [
+        (
+            serde_json::json!({"source": "tasks-desktop", "task_id": "alpha.nvim/t1", "kind": "review-done", "status": "running"}),
+            "not_own_job",
+        ),
+        (
+            serde_json::json!({"source": "tasks-desktop", "task_id": "alpha.nvim/t1", "kind": "review-done", "status": "needs_confirmation"}),
+            "not_own_job",
+        ),
+        (
+            serde_json::json!({"source": "another", "task_id": "draft/new", "kind": "draft-task", "status": "needs_confirmation"}),
+            "not_own_job",
+        ),
+        (
+            serde_json::json!({"source": "tasks-desktop", "task_id": "draft/new", "kind": "draft-task", "status": "running"}),
+            "not_waiting",
+        ),
+    ] {
+        *fake.doc.lock().unwrap() = other.clone();
+        for route in ["/api/tasks/draft_drop", "/api/tasks/draft_confirm"] {
+            let (status, doc) = post(&r, route, r#"{"job":"0123456789abcdef"}"#, true).await;
+            assert_eq!(
+                (status, doc["error"]["code"].as_str()),
+                (409, Some(code)),
+                "{route} {other} {doc}"
+            );
+        }
+    }
+    assert!(
+        fake.dropped.lock().unwrap().is_empty() && fake.confirmed.lock().unwrap().is_empty(),
+        "no other job was touched"
+    );
+    *fake.doc.lock().unwrap() = waiting;
+
     // The person said yes on the page: the hub runs the job.
     let (status, doc) = post(
         &r,
@@ -801,6 +850,9 @@ async fn a_draft_goes_as_private_with_the_choices_and_only_its_result_comes_back
     // Only the result of the job reaches the page, not the text or the model's answer.
     *fake.doc.lock().unwrap() = serde_json::json!({
         "id": "0123456789abcdef",
+        "source": "tasks-desktop",
+        "task_id": "draft/new",
+        "kind": "draft-task",
         "status": "done",
         "markdown": "Der Knopf soll blau sein",
         "output": "the whole answer",
