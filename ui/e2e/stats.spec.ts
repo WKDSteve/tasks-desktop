@@ -348,8 +348,8 @@ test('the cards of the statistics: their order, "Cut up by" over the bars, a fol
   await expect(page.getByRole('table', { name: 'The numbers per area' })).toBeVisible();
   const cards = page.locator('[data-card]');
   await expect.poll(() => cards.evaluateAll((els) => els.map((el) => el.getAttribute('data-card')))).toEqual([
-    'figures',
     'chart',
+    'figures',
     'history',
     'table',
   ]);
