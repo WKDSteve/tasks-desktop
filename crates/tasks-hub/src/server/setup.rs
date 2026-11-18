@@ -192,6 +192,7 @@ pub(super) async fn setup_example(State(st): State<Arc<Shared>>, body: Bytes) ->
         return not_now("the hub has a vault; choose another in the list of vaults");
     }
     let at = folder.clone();
+    let existed = folder.exists();
     match tokio::task::spawn_blocking(move || crate::newvault::copy_example(&source, &at)).await {
         Ok(Ok(_)) => {}
         Ok(Err(refused)) => return error_body(StatusCode::BAD_REQUEST, refused.code, refused.why),
@@ -203,9 +204,17 @@ pub(super) async fn setup_example(State(st): State<Arc<Shared>>, body: Bytes) ->
             )
         }
     }
-    match first.set_vault(folder).await {
+    match first.set_vault(folder.clone()).await {
         Ok(target) => after_step(&st, target),
-        Err(why) => error_body(StatusCode::BAD_REQUEST, "vault_refused", &why),
+        Err(why) => {
+            // The copy is no vault: it goes again, so that the same folder can be chosen for a second try (it would be
+            // refused as "not empty").
+            let _ = tokio::task::spawn_blocking(move || {
+                crate::newvault::remove_copy(&folder, existed);
+            })
+            .await;
+            error_body(StatusCode::BAD_REQUEST, "vault_refused", &why)
+        }
     }
 }
 

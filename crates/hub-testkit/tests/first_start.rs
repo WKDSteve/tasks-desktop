@@ -27,6 +27,8 @@ struct FakeFirstStart {
     program: Option<PathBuf>,
     /// The example vault of the engine (`None`: this hub has none).
     example: Option<PathBuf>,
+    /// How many of the next `set_vault` are refused.
+    refuse_vault: Mutex<usize>,
 }
 
 fn status(problem: Option<&'static str>) -> HubStatus {
@@ -73,6 +75,12 @@ impl FirstStart for FakeFirstStart {
             .lock()
             .unwrap()
             .push(format!("vault {}", folder.display()));
+        let mut refuse = self.refuse_vault.lock().unwrap();
+        if *refuse > 0 {
+            *refuse -= 1;
+            return Box::pin(async { Err("the engine did not start on it".to_owned()) });
+        }
+        drop(refuse);
         // The vault is there now; Neovim is what is missing next.
         Box::pin(async { Ok(target(Some("nvim_not_found"))) })
     }
@@ -146,6 +154,7 @@ async fn rig(
         offer,
         program: Some(base.join("nvim").join("nvim.exe")),
         example: (!name.ends_with("no-example")).then_some(example),
+        refuse_vault: Mutex::new(0),
     });
     let control = Secret::generate(TOKEN_BYTES).unwrap();
     let cfg = ServerConfig {
@@ -444,6 +453,32 @@ async fn the_example_vault_is_copied_into_the_chosen_empty_folder_and_kept_as_th
     // The step is closed now: no second dialog, nothing copied again.
     assert_eq!(post(&r, "/api/tasks/setup_example", "{}").await.0, 409);
     assert_eq!(dialogs(&r).len(), 1);
+}
+
+#[tokio::test]
+async fn a_copy_the_hub_does_not_take_as_its_vault_goes_again() {
+    let r = rig(
+        "example-refused",
+        Some("no_vault"),
+        None,
+        InstallOffer::Install,
+    )
+    .await;
+    *r.first.refuse_vault.lock().unwrap() = 1;
+    let (status, doc) = post(&r, "/api/tasks/setup_example", "{}").await;
+    assert_eq!(
+        (status, doc["error"]["code"].as_str()),
+        (400, Some("vault_refused")),
+        "{doc}"
+    );
+    assert!(
+        std::fs::read_dir(&r.folder).unwrap().next().is_none(),
+        "the copy was taken back"
+    );
+    // The same folder, chosen again, is taken.
+    let (status, doc) = post(&r, "/api/tasks/setup_example", "{}").await;
+    assert_eq!(status, 200, "{doc}");
+    assert!(r.folder.join("tasks-vault.json").is_file());
 }
 
 #[tokio::test]

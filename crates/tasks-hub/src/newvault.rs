@@ -184,24 +184,31 @@ pub fn copy_example(from: &Path, to: &Path) -> Result<usize, Refused> {
     let existed = to.exists();
     let copied = copy_files(from, to, &files);
     if copied.is_err() {
-        // What this call wrote goes again (the folder was empty or not there): a second try into the same folder must
-        // not be refused as "not empty" by the half of the first.
-        if existed {
-            if let Ok(entries) = std::fs::read_dir(to) {
-                for entry in entries.filter_map(Result::ok) {
-                    let path = entry.path();
-                    let _ = if path.is_dir() {
-                        std::fs::remove_dir_all(&path)
-                    } else {
-                        std::fs::remove_file(&path)
-                    };
-                }
-            }
-        } else {
-            let _ = std::fs::remove_dir_all(to);
-        }
+        // What this call wrote goes again: a second try into the same folder must not be refused as "not empty" by the
+        // half of the first.
+        remove_copy(to, existed);
     }
     copied.map(|()| files.len())
+}
+
+/// Take back a copy of the example in `to` that is not kept (the copy broke off, or the hub did not take the folder as
+/// its vault): the folder was empty (`existed`) or not there before [`copy_example`], so what is in it now is the copy.
+/// An empty folder stays empty, one that was not there goes. Nothing reports: what cannot go stays.
+pub fn remove_copy(to: &Path, existed: bool) {
+    if existed {
+        if let Ok(entries) = std::fs::read_dir(to) {
+            for entry in entries.filter_map(Result::ok) {
+                let path = entry.path();
+                let _ = if entry.file_type().is_ok_and(|t| t.is_dir()) {
+                    std::fs::remove_dir_all(&path)
+                } else {
+                    std::fs::remove_file(&path)
+                };
+            }
+        }
+    } else {
+        let _ = std::fs::remove_dir_all(to);
+    }
 }
 
 /// Write `files` of `from` below `to`, each made new and no longer than a file of an example may be.
