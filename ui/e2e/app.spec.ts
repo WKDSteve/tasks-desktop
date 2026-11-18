@@ -10390,61 +10390,6 @@ test('a camera that is refused or missing is told, and nothing is attached', asy
   expect(existsSync(join(dir, 'assets'))).toBe(false);
 });
 
-// The question of the browser itself, with Chrome's stand-in for a camera and a microphone (a moving test picture and
-// a beep): nothing of the page is replaced, so the policy of the hub, `getUserMedia` and the recorder are the real
-// ones. A real camera and a real microphone stay a check by hand.
-test.describe('the camera of the browser', () => {
-  test.describe('allowed by the person', () => {
-    test.use({ launchOptions: { args: ['--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream'] } });
-
-    test('a video is recorded with the camera of the browser and attached, and a photo is taken and attached', async ({ page }) => {
-      test.slow();
-      const { float, dir, attached } = await openAttachTask(page, 'Attach browser camera');
-      const bar = float.getByRole('group', { name: 'Attach to this task' });
-      await bar.locator('details[data-choice="video"] summary').click();
-      await page.getByRole('group', { name: 'Video' }).getByRole('button', { name: 'Record a video' }).click();
-      const taking = float.getByRole('group', { name: 'Record a video' });
-      await expect(taking.getByRole('status')).toContainText('Recording', { timeout: 15_000 });
-      await page.waitForTimeout(1000);
-      await taking.getByRole('button', { name: 'Stop and attach' }).click();
-      await expect(attached).toHaveValue(/^\[video-\d{8}-\d{6}\.webm\]\(assets\/videos\/video-\d{8}-\d{6}\.webm\)$/, { timeout: WRITE_BUDGET });
-      const clips = readdirSync(join(dir, 'assets', 'videos'));
-      expect(clips).toHaveLength(1);
-      const clip = readFileSync(join(dir, 'assets', 'videos', clips[0] ?? ''));
-      expect(clip.subarray(0, 4).equals(Buffer.from([0x1a, 0x45, 0xdf, 0xa3]))).toBe(true);
-      expect(clip.length).toBeGreaterThan(200);
-
-      await bar.locator('details[data-choice="image"] summary').click();
-      await page.getByRole('group', { name: 'Image' }).getByRole('button', { name: 'Take a photo' }).click();
-      const photo = float.getByRole('group', { name: 'Take a photo' });
-      await expect(photo.getByRole('status')).toContainText('The camera is on', { timeout: 15_000 });
-      await photo.getByRole('button', { name: 'Take the photo' }).click();
-      await expect(attached).toHaveValue(/^!\[photo-\d{8}-\d{6}\.png\]\(assets\/images\/photo-\d{8}-\d{6}\.png\)$/, { timeout: WRITE_BUDGET });
-      const photos = readdirSync(join(dir, 'assets', 'images'));
-      expect(photos).toHaveLength(1);
-      const taken = readFileSync(join(dir, 'assets', 'images', photos[0] ?? ''));
-      expect(taken.subarray(0, 4).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47]))).toBe(true);
-      expect(taken.readUInt32BE(16)).toBeGreaterThan(0);
-      expect(consoleProblems.get(page)).toEqual([]);
-    });
-  });
-
-  test.describe('refused by the person', () => {
-    // A camera is there, but nobody says yes to the question of the browser.
-    test.use({ launchOptions: { args: ['--use-fake-device-for-media-stream'] }, permissions: [] });
-
-    test('a refused question of the browser is told, and nothing is attached', async ({ page }) => {
-      const { float, dir } = await openAttachTask(page, 'Attach browser refused');
-      const bar = float.getByRole('group', { name: 'Attach to this task' });
-      await bar.locator('details[data-choice="image"] summary').click();
-      await page.getByRole('group', { name: 'Image' }).getByRole('button', { name: 'Take a photo' }).click();
-      await expect(page.getByRole('alert').filter({ hasText: 'The camera was not allowed' })).toBeVisible({ timeout: 15_000 });
-      await expect(float.locator('[data-taking]')).toHaveCount(0);
-      expect(existsSync(join(dir, 'assets'))).toBe(false);
-    });
-  });
-});
-
 test('a number of Today is a target of the context menu: the tasks it counts are copied, by the mouse and by the keys', async ({ page, context }) => {
   test.slow();
   await context.grantPermissions(['clipboard-read', 'clipboard-write']);

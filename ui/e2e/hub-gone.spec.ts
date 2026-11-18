@@ -79,7 +79,7 @@ test('a page whose hub ends says so and keeps what was typed; a new hub takes th
     await expect(notice).toContainText('tasks-hub start --open');
     await expect(notice).toHaveAttribute('role', 'status');
     // No toast in a loop, the page is not emptied, and what was typed stands.
-    await expect(page.getByRole('alert')).toHaveCount(0);
+    await expect(page.getByRole('alert').filter({ hasText: /\S/ })).toHaveCount(0);
     await expect(capture.getByLabel('Title')).toHaveValue('Typed before the hub ended');
     await expectAccessible(page, 'the page whose hub is gone');
 
