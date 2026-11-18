@@ -8424,6 +8424,81 @@ test('"Suggest fields" fills the new-task form from a text; asks before the text
   }
 });
 
+test('"Split into tasks": the plan and its tasks go to ai-desktop, only the ticked drafts are made, a new phase only after its yes', async ({ page }) => {
+  test.slow();
+  const info = test.info();
+  const tag = `r${String(info.repeatEachIndex).padStart(3, '0')}t${info.retry}`;
+  const plan = `split-e2e-${tag}`;
+  const dir = join(state().vault, 'lib.nvim', 'ROADMAP');
+  const planFile = join(dir, 'plans', `${plan}.md`);
+  const member = join(dir, 'tasks', `${plan}-member.md`);
+  writeFileSync(planFile, `---\ntitle: Split ${tag}\nstatus: doing\nareas: [lib.nvim]\nphase_order: [build]\ncreated: 2026-01-01\nupdated: 2026-01-01\n---\n\nThe definition of done of ${tag}.\n`);
+  writeFileSync(member, `---\ntitle: Member ${tag}\nstatus: open\nkind: task\nplan: lib.nvim/${plan}\nphase: build\n---\n\nText.\n`);
+  const drafts = {
+    phases: [
+      { name: 'build', new: false },
+      { name: 'polish', new: true },
+    ],
+    tasks: [
+      { title: `Built ${tag}`, area: 'lib.nvim', kind: 'task', prio: 2, effort: 'S', value: 3, phase: 'build', summary: 'It is built.', acceptance: ['it runs'] },
+      { title: `Polished ${tag}`, area: 'lib.nvim', kind: 'task', phase: 'polish', after: ['#1'] },
+      { title: `Broken ${tag}`, area: 'lib.nvim', prio: 1.5 },
+    ],
+  };
+  const ai = await aiDesktopDouble((_, path) => {
+    if (path === '/jobs') return { status: 201, body: { job_id: '0123456789abcdef', status: 'running', private: false } };
+    if (path === '/jobs/0123456789abcdef') {
+      return { status: 200, body: { id: '0123456789abcdef', status: 'done', output: `Read it.\n<!-- split:begin -->\n${JSON.stringify(drafts)}\n<!-- split:end -->` } };
+    }
+    return { status: 404, body: { error: { message: 'no such route' } } };
+  });
+  const tasksDir = join(dir, 'tasks');
+  const made = (): string[] =>
+    readdirSync(tasksDir).filter((f) => f !== `${plan}-member.md` && readFileSync(join(tasksDir, f), 'utf8').includes(`plan: lib.nvim/${plan}`));
+  try {
+    await pair(page);
+    await chooseView(page, 'View', 'Plan');
+    const select = page.getByRole('combobox', { name: 'Plan' });
+    await expect(select.locator(`option[value="lib.nvim/${plan}"]`)).toBeAttached({ timeout: 15_000 });
+    await select.selectOption(`lib.nvim/${plan}`);
+    await page.getByRole('button', { name: 'Split into tasks …' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Split into tasks' });
+    await expect(dialog.getByText(`Built ${tag}`)).toBeVisible({ timeout: 15_000 });
+    const job = ai.seen.find((r) => r.path === '/jobs');
+    expect(job?.body).toMatchObject({ kind: 'split-plan', mode: 'run', task_id: `lib.nvim/${plan}`, area: 'lib.nvim' });
+    expect(String(job?.body['markdown'])).toContain(`The definition of done of ${tag}.`);
+    expect(String(job?.body['markdown'])).toContain(`## Tasks of this plan\n\n- lib.nvim/${plan}-member (open, phase build): Member ${tag}`);
+    // Nothing ticked at first; the broken draft cannot be ticked.
+    const boxes = dialog.getByRole('checkbox');
+    await expect(boxes).toHaveCount(3);
+    for (const i of [0, 1, 2]) await expect(boxes.nth(i)).not.toBeChecked();
+    await expect(boxes.nth(2)).toBeDisabled();
+    await expect(dialog.getByText('Cannot be created: prio is not a whole number')).toBeVisible();
+    await boxes.nth(0).check();
+    await boxes.nth(1).check();
+    await dialog.getByRole('button', { name: 'Create the ticked (2)' }).click();
+    await expect(dialog.getByText(`Create 2 task(s) in the plan lib.nvim/${plan}?`)).toBeVisible();
+    await dialog.getByRole('button', { name: 'Create', exact: true }).click();
+    // The new phase asks on its own; without it its draft is refused, the other is made.
+    await expect(dialog.getByText(/name phase\(s\) the plan .* does not have: polish/)).toBeVisible();
+    await dialog.getByRole('button', { name: 'Without them' }).click();
+    await expect(dialog.getByText(/^Created as lib\.nvim\//)).toBeVisible({ timeout: WRITE_BUDGET });
+    await expect(dialog.getByText('Not created: its phase polish is not in the plan')).toBeVisible();
+    expect(made()).toHaveLength(1);
+    const text = readFileSync(join(tasksDir, made()[0]!), 'utf8');
+    expect(text).toMatch(/^phase: build$/m);
+    expect(text).toContain('- [ ] it runs');
+    expect(readFileSync(planFile, 'utf8')).toMatch(/^phase_order: \[build\]$/m);
+    await dialog.getByRole('button', { name: 'Close' }).click();
+    await expect(dialog).toHaveCount(0);
+  } finally {
+    await ai.close();
+    for (const f of made()) rmSync(join(tasksDir, f), { force: true });
+    rmSync(member, { force: true });
+    rmSync(planFile, { force: true });
+  }
+});
+
 test('the switch "Show AI functions" off: no AI place in the task, kept over a reload', async ({ page }) => {
   await page.route('**/api/tasks/ai_desktop', (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: '{"installed":true,"running":true}' }),

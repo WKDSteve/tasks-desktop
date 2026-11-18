@@ -839,6 +839,16 @@ yet, so the text counts as private: a model of ai-desktop on this machine answer
 said yes in the form (*Send*). A value that is not one of this vault (a tag nobody uses, a plan that is gone) is left
 out and named under the form.
 
+**Split into tasks.** The plan view has *Split into tasks …* for the chosen plan (where the AI functions are offered):
+ai-desktop reads the plan and the list of its tasks, open and finished, and proposes the tasks still missing to reach
+its definition of done (`kind: split-plan`, `docs/JOBS.md` of ai-desktop, "Splitting a plan"). The drafts stand in a
+dialog with a box each, none ticked; a draft of the wrong form is shown with its reason and cannot be ticked. *Create
+the ticked* asks once, and a phase the plan does not have yet asks on its own ("add it to the phase order?"; without
+the yes the drafts of that phase are not made). Each ticked draft is made through the engine (`new` with plan, phase,
+summary and its acceptance, then `blocked_by`), in order; `#N` in its `after`/`blocked_by` becomes the id of draft N.
+A draft the engine refuses is refused alone, with its reason in the dialog; the others are made. A private or
+unclassified area asks before it goes to a model that does not run on this machine.
+
 **Hand to an agent.** The button *Hand to an agent ...* in the detail of a task (also in its float, its context menu
 and the palette) opens a small choice: *Only fill in* (the default; the job stands ready in the dashboard of
 ai-desktop) or *Run at once*, kept for the next time, and for a finished task *Review against the acceptance*, for a

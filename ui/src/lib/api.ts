@@ -130,6 +130,7 @@ export interface AgentTab {
 }
 
 export type { DraftChoices, DraftJob, DraftState } from './suggestFields';
+import type { SplitJob, SplitState } from './split';
 import type { DraftChoices, DraftJob, DraftState } from './suggestFields';
 
 /** What a job asks of the agent (`kind` of ai-desktop's `POST /jobs`). */
@@ -431,6 +432,24 @@ export class Hub extends HubClient<Snapshot> {
   /** Run a draft that waits for a yes (the model of ai-desktop is not local), after the person said yes. */
   async confirmDraft(job: string): Promise<void> {
     await this.postJson<unknown>('/api/tasks/draft_confirm', { job });
+  }
+
+  /**
+   * "Split into tasks" of a plan: the hub sends the plan file and the list of its tasks to ai-desktop as a job of the
+   * kind `split-plan`. The answer is the job.
+   */
+  splitPlan(plan: string): Promise<SplitJob> {
+    return this.postJson<SplitJob>('/api/tasks/split', { plan });
+  }
+
+  /** Where a split stands: its status and, once done, the block of drafts (`block`) or why there is none. */
+  splitJob(job: string): Promise<SplitState> {
+    return this.postJson<SplitState>('/api/tasks/split_job', { job });
+  }
+
+  /** Run a split that waits for a yes (a private area on a model that is not local), after the person said yes. */
+  async confirmSplit(job: string): Promise<void> {
+    await this.postJson<unknown>('/api/tasks/split_confirm', { job });
   }
 
   /** Give a hub in the background the order to stay, or take it back; what the settings say afterwards. */

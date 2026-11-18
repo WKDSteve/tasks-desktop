@@ -476,6 +476,160 @@ fn intake(answer: Result<JobAnswer, Refusal>) -> Arc<FakeIntake> {
 }
 
 #[tokio::test]
+async fn a_plan_goes_to_be_split_with_its_tasks_and_only_the_block_comes_back() {
+    let job = JobAnswer {
+        job_id: "0123456789abcdef".to_owned(),
+        status: "running".to_owned(),
+        private: true,
+        note: None,
+        port: 47123,
+    };
+    let fake = intake(Ok(job));
+    let r = rig_full(
+        "split",
+        false,
+        None,
+        None,
+        None,
+        None,
+        None,
+        Some(Arc::clone(&fake) as Arc<dyn JobIntake>),
+    )
+    .await;
+    let plans = r.vault.join("alpha.nvim/ROADMAP/plans");
+    std::fs::create_dir_all(&plans).unwrap();
+    std::fs::write(
+        plans.join("p1.md"),
+        "---\ntitle: Plan one\nphase_order: [build]\n---\n\n## Definition of done\n\nIt ships.\n",
+    )
+    .unwrap();
+    std::fs::write(
+        r.vault.join(".fake-merge-snapshot.json"),
+        r#"{"plans":[{"id":"alpha.nvim/p1","title":"Plan one","areas":["alpha.nvim"],"phase_order":["build"],"valid":true}],
+            "tasks":[{"id":"alpha.nvim/t1","area":"alpha.nvim","title":"t1","status":"open","plan":"alpha.nvim/p1","phase":"build","tags":[]}]}"#,
+    )
+    .unwrap();
+    std::fs::write(
+        r.vault.join(".fake-merge-finished.json"),
+        r#"{"items":[{"id":"alpha.nvim/old","area":"alpha.nvim","slug":"old","title":"Old one","plan":"alpha.nvim/p1","tags":[]}]}"#,
+    )
+    .unwrap();
+    // The vault moved on: the snapshot is read again with the plan in it.
+    std::fs::write(r.vault.join(".fake-n"), "2").unwrap();
+    let route = "/api/tasks/split";
+    let mut sent = (0, Value::Null);
+    for _ in 0..50 {
+        sent = post(&r, route, r#"{"plan":"alpha.nvim/p1"}"#, true).await;
+        if sent.0 == 201 {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    assert_eq!(sent.0, 201, "{}", sent.1);
+    {
+        let jobs = fake.jobs.lock().unwrap();
+        let job = jobs.last().unwrap();
+        assert_eq!(
+            (job.kind.as_str(), job.mode.as_str(), job.task_id.as_str()),
+            ("split-plan", "run", "alpha.nvim/p1")
+        );
+        assert_eq!(job.area, "alpha.nvim");
+        assert_eq!(job.title, "Plan one");
+        assert!(job.private, "an unclassified area goes as private");
+        assert!(job.markdown.contains("It ships."), "{}", job.markdown);
+        assert!(
+            job.markdown
+                .contains("## Tasks of this plan\n\n- alpha.nvim/old (done, phase -): Old one\n- alpha.nvim/t1 (open, phase build): t1\n"),
+            "{}",
+            job.markdown
+        );
+    }
+    assert_eq!(
+        post(&r, route, r#"{"plan":"alpha.nvim/p1"}"#, false)
+            .await
+            .0,
+        401
+    );
+    let (status, doc) = post(&r, route, r#"{"plan":"alpha.nvim/none"}"#, true).await;
+    assert_eq!(
+        (status, doc["error"]["code"].as_str()),
+        (404, Some("plan_not_found")),
+        "{doc}"
+    );
+    for bad in [
+        r#"{"plan":"../p1"}"#,
+        r#"{"plan":"alpha.nvim/p1","mode":"run"}"#,
+        r#"{}"#,
+    ] {
+        assert_eq!(post(&r, route, bad, true).await.0, 400, "{bad}");
+    }
+
+    // The block of the answer, nothing else of it.
+    *fake.doc.lock().unwrap() = serde_json::json!({
+        "id": "0123456789abcdef",
+        "status": "done",
+        "markdown": "the plan",
+        "output": "Thinking.\n<!-- split:begin -->\n{\"tasks\":[]}\n<!-- split:end -->\nmore\n<!-- split:begin -->\n{\"tasks\":[{\"title\":\"B\"}]}\n<!-- split:end -->"
+    });
+    let (status, doc) = post(
+        &r,
+        "/api/tasks/split_job",
+        r#"{"job":"0123456789abcdef"}"#,
+        true,
+    )
+    .await;
+    assert_eq!(status, 200, "{doc}");
+    assert_eq!(
+        doc["block"], "{\"tasks\":[{\"title\":\"B\"}]}",
+        "the last block"
+    );
+    assert!(
+        doc.get("output").is_none() && doc.get("markdown").is_none(),
+        "{doc}"
+    );
+    *fake.doc.lock().unwrap() = serde_json::json!({"status": "done", "output": "no block"});
+    let (_, doc) = post(
+        &r,
+        "/api/tasks/split_job",
+        r#"{"job":"0123456789abcdef"}"#,
+        true,
+    )
+    .await;
+    assert!(
+        doc["block"].is_null() && doc["block_error"].is_string(),
+        "{doc}"
+    );
+    *fake.doc.lock().unwrap() = serde_json::json!({"status": "running", "output": "<!-- split:begin -->{}<!-- split:end -->"});
+    let (_, doc) = post(
+        &r,
+        "/api/tasks/split_job",
+        r#"{"job":"0123456789abcdef"}"#,
+        true,
+    )
+    .await;
+    assert!(doc["block"].is_null(), "no block before it is done: {doc}");
+    let (status, _) = post(
+        &r,
+        "/api/tasks/split_confirm",
+        r#"{"job":"0123456789abcdef"}"#,
+        true,
+    )
+    .await;
+    assert_eq!(status, 200);
+    assert_eq!(
+        post(
+            &r,
+            "/api/tasks/split_job",
+            r#"{"job":"0123456789abcdef"}"#,
+            false
+        )
+        .await
+        .0,
+        401
+    );
+}
+
+#[tokio::test]
 async fn a_draft_goes_as_private_with_the_choices_and_only_its_result_comes_back() {
     let job = JobAnswer {
         job_id: "0123456789abcdef".to_owned(),

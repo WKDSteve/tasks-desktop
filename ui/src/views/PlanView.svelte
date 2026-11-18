@@ -215,6 +215,11 @@
             >{t('add.button')}</button
           >
         {/if}
+        {#if app.aiFeatures && chosen && !app.readOnly}
+          <button type="button" class="newplan" data-hint={t('hint.ui.plan.split')} onclick={() => app.openSplit(chosen.id)}
+            >{t('plan.split')}</button
+          >
+        {/if}
         {#if canClose && chosen}
           <button type="button" class="newplan" data-hint={t('hint.ui.plan.close')} aria-expanded={closingShown} onclick={() => (closing = chosen.id)}
             >{t('plan.close')}</button

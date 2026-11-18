@@ -957,6 +957,7 @@
     <ConflictCenter {app} />
     <Lazy {app} when={app.managingVaults} load={() => import('./views/VaultsDialog.svelte')} />
     <Lazy {app} when={app.agentFor !== null} load={() => import('./views/AgentDialog.svelte')} />
+    <Lazy {app} when={app.splitFor !== null} load={() => import('./views/SplitDialog.svelte')} />
   {/if}
   <!-- Outside the ready block: the Info dialog and its report are there when the engine is not (app.canAbout). -->
   <Lazy {app} when={app.about.state !== 'closed'} load={() => import('./views/AboutDialog.svelte')} />

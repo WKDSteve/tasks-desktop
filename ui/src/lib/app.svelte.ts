@@ -108,6 +108,7 @@ import { fromEngineList, type EngineList } from './engineLists';
 import { DEFAULT_RANGES, rangesOf, type Ranges } from './fields';
 import { sameField, type FieldValue } from './drafts';
 import { draftChoices, runDraft, type DraftChoices, type DraftOutcome } from './suggestFields';
+import { createDrafts, runSplit, type DraftResult, type Split, type SplitOutcome } from './split';
 import {
   activeList as activeListOf,
   cleanName,
@@ -3482,6 +3483,71 @@ export class App {
     } catch (error) {
       return { kind: 'failed', why: error instanceof ApiError ? error.message : String(error) };
     }
+  }
+
+  /** The plan the dialog "Split into tasks" is open for; null: closed. */
+  splitFor = $state<string | null>(null);
+
+  /** Open "Split into tasks" for the plan `id`: only where the AI functions are offered and the vault can be written. */
+  openSplit(id: string): void {
+    if (!this.aiFeatures || this.readOnly) return;
+    this.splitFor = id;
+  }
+
+  closeSplit(): void {
+    this.splitFor = null;
+  }
+
+  /** Ask ai-desktop for the drafts of the plan `id`; `confirm` before a private area goes to a model that is not local. */
+  async askSplit(id: string, confirm: () => Promise<boolean>): Promise<SplitOutcome> {
+    if (!this.aiFeatures) return { kind: 'failed', why: 'the AI functions are off' };
+    try {
+      return await runSplit(this.env.hub, id, { confirm });
+    } catch (error) {
+      return { kind: 'failed', why: error instanceof ApiError ? error.message : String(error) };
+    }
+  }
+
+  /**
+   * Create the ticked drafts of a split in the plan `plan` through the engine (`new`, then `set blocked_by`), one at a
+   * time, so that a draft the engine refuses refuses only itself. With `addPhases` the new phases go into the plan's
+   * `phase_order` first; without it (or when that is refused) the drafts of those phases are refused.
+   */
+  async createSplit(
+    plan: string,
+    split: Split,
+    ticked: readonly number[],
+    job: string,
+    newPhases: readonly string[],
+    addPhases: boolean,
+  ): Promise<DraftResult[]> {
+    let phasesOk = newPhases.length === 0;
+    if (newPhases.length > 0 && addPhases) {
+      const order = (this.snapshot?.plans ?? []).find((p) => p.id === plan)?.phase_order ?? [];
+      phasesOk = await this.setPlanFile('plan', plan, { phase_order: [...order, ...newPhases.filter((p) => !order.includes(p))] });
+    }
+    const quiet = { undoable: false, onAnswer: () => true };
+    const results = await createDrafts(
+      {
+        create: async (area, title, fields, body) => {
+          const result = await this.write([{ op: 'new', area, title, fields, body }], quiet);
+          const entry = result?.results[0];
+          if (entry?.ok && entry.id) return { id: entry.id };
+          return { error: entry?.error?.message ?? entry?.error?.code ?? 'not written' };
+        },
+        setBlockedBy: async (id, ids) => {
+          const result = await this.write([{ op: 'set', id, patch: { blocked_by: ids } }], quiet);
+          const entry = result?.results[0];
+          return entry?.ok ? null : (entry?.error?.message ?? entry?.error?.code ?? 'not written');
+        },
+      },
+      split,
+      ticked,
+      { plan, job, lang: this.lang, newPhases, phasesOk },
+    );
+    const made = results.filter((r) => 'id' in r).length;
+    this.say(made === results.length ? 'ok' : 'error', 'split.summary', { made, n: results.length });
+    return results;
   }
 
   /** A read that fails (a hub that is restarting) keeps what was known: the switch does not come and go with it. */

@@ -391,6 +391,20 @@ fn app_routes(core: &Arc<Shared>) -> Router<Arc<Shared>> {
             &r("draft_confirm"),
             post(draft_confirm).layer(DefaultBodyLimit::max(small)),
         )
+        // "Split into tasks" of a plan: a split-plan job of ai-desktop; its yes for a private area is the same route
+        // as a draft's.
+        .route(
+            &r("split"),
+            post(split_send).layer(DefaultBodyLimit::max(small)),
+        )
+        .route(
+            &r("split_job"),
+            post(split_job).layer(DefaultBodyLimit::max(small)),
+        )
+        .route(
+            &r("split_confirm"),
+            post(draft_confirm).layer(DefaultBodyLimit::max(small)),
+        )
         .route(
             &r("vault_pick"),
             post(vault_pick).layer(DefaultBodyLimit::max(small)),

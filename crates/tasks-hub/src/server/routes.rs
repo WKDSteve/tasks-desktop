@@ -1730,6 +1730,234 @@ pub(super) async fn draft_confirm(State(st): State<Arc<Shared>>, body: Bytes) ->
     }
 }
 
+/// The plan file of `id` (`<area>/<slug>`): `<area>/ROADMAP/plans/<slug>.md`, or its folder form
+/// `<area>/ROADMAP/plans/<slug>/<slug>.md`; checked to lie in the vault.
+fn plan_file(vault: &std::path::Path, id: &str) -> Option<PathBuf> {
+    let (area, slug) = id.split_once('/')?;
+    [
+        format!("{area}/ROADMAP/plans/{slug}.md"),
+        format!("{area}/ROADMAP/plans/{slug}/{slug}.md"),
+    ]
+    .into_iter()
+    .find_map(|name| {
+        crate::editor::file_in_vault(vault, &name)
+            .ok()
+            .filter(|f| f.is_file())
+    })
+}
+
+/// One line of the list of a plan's tasks: `- <id> (<status>, phase <phase>): <title>`.
+fn plan_task_line(task: &serde_json::Value, status: &str) -> Option<String> {
+    let id = task["id"].as_str()?;
+    let one = |s: &str| s.replace(['\r', '\n'], " ");
+    Some(format!(
+        "- {id} ({status}, phase {}): {}",
+        one(task["phase"].as_str().unwrap_or("-")),
+        one(task["title"].as_str().unwrap_or(""))
+    ))
+}
+
+/// `POST /api/tasks/split` `{ "plan" }`: "Split into tasks" of a plan. The hub reads the plan file and appends the list
+/// of the plan's tasks, open (the snapshot) and finished (the engine's `finished`), so that the drafts do not repeat
+/// them, and sends it to ai-desktop as a job of the kind `split-plan`, run at once (`docs/JOBS.md` "Splitting a plan"
+/// of ai-desktop). A private or unclassified area goes as private. Nothing is created: the page reads the drafts
+/// (`split_job`), the person ticks them, and the page creates the ticked ones through `ops`.
+pub(super) async fn split_send(State(st): State<Arc<Shared>>, body: Bytes) -> Response {
+    let map = match vault_request(&body, &["plan"]) {
+        Ok(m) => m,
+        Err(r) => return r,
+    };
+    let id = match vault_text(&map, "plan", 200) {
+        Ok(id) if valid_task_id(&id) => id,
+        Ok(_) => {
+            return error_body(
+                StatusCode::BAD_REQUEST,
+                "bad_plan",
+                "plan must be <area>/<slug>",
+            )
+        }
+        Err(r) => return r,
+    };
+    let rt = st.rt();
+    let Some(intake) = rt.agent.clone() else {
+        return error_body(
+            StatusCode::NOT_FOUND,
+            "agent_unavailable",
+            "this hub hands no task to an agent",
+        );
+    };
+    let Some(vault) = rt.vault.clone() else {
+        return engine_unavailable(&st);
+    };
+    let cached = match rt.store.current().await {
+        Ok(c) => c,
+        Err(error) => return engine_failure(error),
+    };
+    let snapshot = serde_json::from_slice::<serde_json::Value>(&cached.text).unwrap_or_default();
+    let Some(plan) = snapshot["plans"]
+        .as_array()
+        .and_then(|plans| plans.iter().find(|p| p["id"].as_str() == Some(id.as_str())))
+        .cloned()
+    else {
+        return error_body(
+            StatusCode::NOT_FOUND,
+            "plan_not_found",
+            "there is no open plan of this id",
+        );
+    };
+    let mut lines: Vec<String> = snapshot["tasks"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|t| t["plan"].as_str() == Some(id.as_str()))
+        .filter_map(|t| plan_task_line(t, t["status"].as_str().unwrap_or("open")))
+        .collect();
+    // The finished ones: one page of the engine's list is plenty for a plan.
+    if let Ok(reply) = ask(
+        &st,
+        Calls::Finished,
+        Some(&json!({ "plan": id, "limit": 200 })),
+    )
+    .await
+    {
+        let doc = serde_json::from_str::<serde_json::Value>(&reply.text).unwrap_or_default();
+        lines.extend(
+            doc["items"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(|t| plan_task_line(t, "done")),
+        );
+    }
+    lines.sort();
+    lines.dedup();
+    let file = {
+        let vault = vault.clone();
+        let id = id.clone();
+        tokio::task::spawn_blocking(move || -> Result<String, &'static str> {
+            let file = plan_file(&vault, &id).ok_or("missing")?;
+            let size = std::fs::metadata(&file).map_err(|_| "missing")?.len();
+            if size > crate::agent::MAX_MARKDOWN / 2 {
+                return Err("too_large");
+            }
+            std::fs::read_to_string(&file).map_err(|_| "missing")
+        })
+        .await
+    };
+    let text = match file {
+        Ok(Ok(text)) => text,
+        Ok(Err("too_large")) => {
+            return error_body(
+                StatusCode::PAYLOAD_TOO_LARGE,
+                "plan_too_large",
+                "the plan file is larger than 128 KiB",
+            )
+        }
+        _ => {
+            return error_body(
+                StatusCode::BAD_GATEWAY,
+                "plan_unreadable",
+                "the plan file cannot be read",
+            )
+        }
+    };
+    let listed = if lines.is_empty() {
+        "(none yet)".to_owned()
+    } else {
+        lines.join("\n")
+    };
+    let mut markdown = format!("{}\n\n## Tasks of this plan\n\n{listed}\n", text.trim());
+    if markdown.len() as u64 > crate::agent::MAX_MARKDOWN {
+        // Many tasks: the list is cut at a line, and says so.
+        let mut cut = (crate::agent::MAX_MARKDOWN as usize).saturating_sub(64);
+        while !markdown.is_char_boundary(cut) {
+            cut -= 1;
+        }
+        let at = markdown[..cut].rfind('\n').unwrap_or(cut);
+        markdown.truncate(at);
+        markdown.push_str("\n- (the list is cut here)\n");
+    }
+    let area = id.split('/').next().unwrap_or_default().to_owned();
+    let title = plan["title"]
+        .as_str()
+        .filter(|t| !t.trim().is_empty())
+        .unwrap_or(&id)
+        .replace(['\r', '\n'], " ");
+    let job = crate::agent::Job {
+        source: crate::agent::SOURCE.to_owned(),
+        task_id: id,
+        title,
+        markdown,
+        vault: vault.to_string_lossy().replace('\\', "/"),
+        area: area.clone(),
+        mode: "run".to_owned(),
+        kind: "split-plan".to_owned(),
+        private: !rt.classes.allows(&area, crate::classes::Use::CloudRunner),
+        choices: None,
+    };
+    match intake.send(&job).await {
+        Ok(answer) => (StatusCode::CREATED, axum::Json(answer)).into_response(),
+        Err(refusal) => agent_refusal(&refusal),
+    }
+}
+
+/// The last block between `<!-- split:begin -->` and `<!-- split:end -->` of an answer, or None.
+fn split_block(output: &str) -> Option<&str> {
+    const BEGIN: &str = "<!-- split:begin -->";
+    const END: &str = "<!-- split:end -->";
+    let start = output.rfind(BEGIN)? + BEGIN.len();
+    let end = output[start..].find(END)? + start;
+    Some(output[start..end].trim())
+}
+
+/// `POST /api/tasks/split_job` `{ "job" }`: where a split stands. Once it is done, `block` is the JSON of its drafts
+/// (the last block of the answer, at most 64 KiB), `block_error` says why there is none. The rest of the answer and the
+/// text sent do not reach the page.
+pub(super) async fn split_job(State(st): State<Arc<Shared>>, body: Bytes) -> Response {
+    let id = match draft_job_id(&body) {
+        Ok(id) => id,
+        Err(r) => return r,
+    };
+    let Some(intake) = st.rt().agent.clone() else {
+        return error_body(
+            StatusCode::NOT_FOUND,
+            "agent_unavailable",
+            "this hub hands no task to an agent",
+        );
+    };
+    match intake.job(&id).await {
+        Ok(doc) => {
+            let mut out = serde_json::Map::new();
+            for key in ["status", "error", "note", "private"] {
+                if let Some(v) = doc.get(key).filter(|v| !v.is_null()) {
+                    out.insert(key.to_owned(), v.clone());
+                }
+            }
+            if doc["status"].as_str() == Some("done") {
+                match doc["output"].as_str().and_then(split_block) {
+                    Some(block) if block.len() <= 64 * 1024 => {
+                        out.insert("block".to_owned(), json!(block));
+                    }
+                    Some(_) => {
+                        out.insert(
+                            "block_error".to_owned(),
+                            json!("the drafts are larger than 64 KiB"),
+                        );
+                    }
+                    None => {
+                        out.insert(
+                            "block_error".to_owned(),
+                            json!("the answer holds no block of drafts"),
+                        );
+                    }
+                }
+            }
+            axum::Json(serde_json::Value::Object(out)).into_response()
+        }
+        Err(refusal) => agent_refusal(&refusal),
+    }
+}
+
 /// The body of a switch, `{ "on": true | false }` and nothing else; `Err`: the answer to send.
 // The error is the answer to send, as with `ask`: a response is large, and rare.
 #[allow(clippy::result_large_err)]
