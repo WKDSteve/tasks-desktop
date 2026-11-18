@@ -123,7 +123,7 @@ impl Refusal {
 pub trait JobIntake: Send + Sync {
     fn send<'a>(&'a self, job: &'a Job) -> BoxFuture<'a, Result<JobAnswer, Refusal>>;
 
-    /// The job as ai-desktop keeps it (`GET /jobs/<id>`, no secret): its status and, for a draft, `draft` or
+    /// The job as ai-desktop keeps it (`GET /jobs/<id>` with the secret): its status and, for a draft, `draft` or
     /// `draft_error`. An intake without jobs to read says it is not running.
     fn job<'a>(&'a self, _id: &'a str) -> BoxFuture<'a, Result<serde_json::Value, Refusal>> {
         Box::pin(async { Err(Refusal::NotRunning) })
@@ -182,8 +182,8 @@ impl JobIntake for AiDesktop {
 
     fn job<'a>(&'a self, id: &'a str) -> BoxFuture<'a, Result<serde_json::Value, Refusal>> {
         Box::pin(async move {
-            let (_, record) = self.found().await?;
-            job_of(record.port, &record.instance, id).await
+            let (dir, record) = self.found().await?;
+            job_of(record.port, &record.instance, &dir, id).await
         })
     }
 
@@ -257,16 +257,29 @@ const JOB_READ: crate::client::ReadLimits = crate::client::ReadLimits {
     timeout: std::time::Duration::from_secs(10),
 };
 
-/// `GET /jobs/<id>` of the ai-desktop on `port` (the dashboard's route: no secret).
-async fn job_of(port: u16, instance: &str, id: &str) -> Result<serde_json::Value, Refusal> {
+/// `GET /jobs/<id>` of the ai-desktop on `port`, with the secret of `dir`: ai-desktop reads a job only to the person
+/// since its management API has a login. Without a readable secret it asks without one, which an ai-desktop older
+/// than the login still answers (a newer one refuses, and the refusal says why).
+async fn job_of(
+    port: u16,
+    instance: &str,
+    dir: &std::path::Path,
+    id: &str,
+) -> Result<serde_json::Value, Refusal> {
     // The id goes into the request line: the route checked it (16 hex digits); here only letters and digits pass.
     if id.is_empty() || !id.bytes().all(|b| b.is_ascii_alphanumeric()) {
         return Err(Refusal::Failed("the job id is not plain".to_owned()));
     }
     same_instance(port, instance).await?;
-    let reply = crate::client::request_with(port, "GET", &format!("/jobs/{id}"), &[], "", JOB_READ)
-        .await
-        .map_err(|e| Refusal::Failed(e.to_string()))?;
+    let auth = secret_in(dir).ok().map(|secret| format!("Bearer {secret}"));
+    let headers: Vec<(&str, &str)> = auth
+        .as_deref()
+        .map(|auth| vec![("Authorization", auth)])
+        .unwrap_or_default();
+    let reply =
+        crate::client::request_with(port, "GET", &format!("/jobs/{id}"), &headers, "", JOB_READ)
+            .await
+            .map_err(|e| Refusal::Failed(e.to_string()))?;
     if reply.status != 200 {
         return Err(refused(&reply));
     }
@@ -650,7 +663,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn a_job_is_read_without_the_secret_and_confirmed_with_it() {
+    async fn a_job_is_read_and_confirmed_with_the_secret() {
         let dir = Scratch::new("agent-draft");
         let (port, seen) = double(
             "inst2",
@@ -671,7 +684,11 @@ mod tests {
             "{}",
             seen[1]
         );
-        assert!(!seen[1].contains(SECRET), "reading a job needs no secret");
+        assert!(
+            seen[1].contains(&format!("Authorization: Bearer {SECRET}")),
+            "ai-desktop reads a job only with the secret: {}",
+            seen[1]
+        );
         let run = &seen[3];
         assert!(run.starts_with("POST /jobs/0123456789abcdef/run "), "{run}");
         assert!(
