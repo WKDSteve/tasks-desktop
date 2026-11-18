@@ -1812,14 +1812,18 @@ pub(super) async fn split_send(State(st): State<Arc<Shared>>, body: Bytes) -> Re
         .filter(|t| t["plan"].as_str() == Some(id.as_str()))
         .filter_map(|t| plan_task_line(t, t["status"].as_str().unwrap_or("open")))
         .collect();
-    // The finished ones: one page of the engine's list is plenty for a plan.
-    if let Ok(reply) = ask(
-        &st,
-        Calls::Finished,
-        Some(&json!({ "plan": id, "limit": 200 })),
-    )
-    .await
-    {
+    // The finished ones, page by page (the engine gives at most `LIST_PAGE` a page; five pages are plenty for a plan).
+    let mut offset = 0u64;
+    for _ in 0..5 {
+        let Ok(reply) = ask(
+            &st,
+            Calls::Finished,
+            Some(&json!({ "plan": id, "limit": crate::engine::LIST_PAGE, "offset": offset })),
+        )
+        .await
+        else {
+            break;
+        };
         let doc = serde_json::from_str::<serde_json::Value>(&reply.text).unwrap_or_default();
         lines.extend(
             doc["items"]
@@ -1828,6 +1832,10 @@ pub(super) async fn split_send(State(st): State<Arc<Shared>>, body: Bytes) -> Re
                 .flatten()
                 .filter_map(|t| plan_task_line(t, "done")),
         );
+        match doc["next_offset"].as_u64() {
+            Some(next) if next > offset => offset = next,
+            _ => break,
+        }
     }
     lines.sort();
     lines.dedup();

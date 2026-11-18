@@ -114,6 +114,24 @@ async fn a_read_leaves_the_vault_as_it_was() {
     assert_eq!(listing(&vault), before, "a read changed the vault");
 }
 
+/// "Split into tasks" asks the finished tasks of a plan a page of `LIST_PAGE` at a time: the engine takes that size.
+#[tokio::test]
+async fn a_page_of_finished_tasks_of_a_plan_has_the_size_the_engine_takes() {
+    let Some((engine, _)) = engine().await else {
+        return;
+    };
+    let params = json!({ "plan": "ALL/none", "limit": tasks_hub::engine::LIST_PAGE, "offset": 0 });
+    engine
+        .call(Calls::Finished, Some(&params))
+        .await
+        .expect("a page of LIST_PAGE is taken");
+    let more = json!({ "plan": "ALL/none", "limit": tasks_hub::engine::LIST_PAGE + 1 });
+    assert!(
+        engine.call(Calls::Finished, Some(&more)).await.is_err(),
+        "one more is refused: LIST_PAGE is the engine's limit"
+    );
+}
+
 #[tokio::test]
 async fn the_engine_is_found_and_probed() {
     let Some((engine, setup)) = engine().await else {
