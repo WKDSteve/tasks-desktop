@@ -443,8 +443,9 @@ the device routes). The order only keeps a hub running; it starts nothing and re
 
 ## ai-desktop on this machine (`GET /api/tasks/ai_desktop`)
 
-A session reads whether ai-desktop is installed and running (`{ "installed": bool, "running": bool }`, nothing else):
-no port, no path, no secret of the other app. The hub asks no other hub for it; it reads the files the discovery of
+A session reads whether ai-desktop is installed and running (`{ "installed": bool, "running": bool, "port": number |
+null }`, nothing else): the loopback port only while it runs (its `hub.json` tells it to any program, and the page
+links the dashboard of an agent's job there), no path, no secret of the other app. The hub asks no other hub for it; it reads the files the discovery of
 the family in appkit reads (the manifest of the installer, the `hub.json` of a running ai-desktop) and starts nothing. A paired phone does not reach the route (it is not one
 of the device routes), and nothing can be changed through it.
 

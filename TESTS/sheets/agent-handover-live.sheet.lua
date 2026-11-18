@@ -39,6 +39,11 @@ return {
         .. " ALL/ki-erledigte-task-gegen-akzeptanz-pruefen.)",
     },
     {
+      ask = "A job that runs with Claude Code: the agent claims the task, and without a click the list marks it"
+        .. " 'agent', the page says 'Agent <job> works on ...', and the detail's 'Open the job in ai-desktop' shows that"
+        .. " job? When the agent finishes it: 'Finished by agent <job>: ...' and the task leaves the list?",
+    },
+    {
       ask = "ai-desktop ended: Hand over says 'Not handed over: ai-desktop is not running', and after the next focus of"
         .. " the window the button is still there (installed) or gone (a build without installer)?",
     },

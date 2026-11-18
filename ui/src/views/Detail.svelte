@@ -1,5 +1,6 @@
 <script lang="ts">
   import ClaimTag from './ClaimTag.svelte';
+  import { agentJob } from '../lib/claims';
   import { tick } from 'svelte';
   import type { App } from '../lib/app.svelte';
   import { formatNumber, hintOf, labelOf, translate, type Key } from '../lib/i18n';
@@ -827,11 +828,20 @@
     <dl>
       <dt>{t('prop.status')}</dt>
       <dd>{labelOf(app.lang, 'status', task.status)}</dd>
-      {#if task.claim && !task.claim.expired}
+      {#if task.claim && (!task.claim.expired || agentJob(task.claim.by) !== null)}
+        {@const job = agentJob(task.claim.by)}
+        {@const jobUrl = job === null ? null : app.agentJobUrl(job)}
         <dt>{t('prop.claim')}</dt>
         <dd data-testid="detail-claim">
           <ClaimTag {task} lang={app.lang} me={app.claimName} />
           {t('claim.detail', { by: task.claim.by, until: task.claim.until })}
+          {#if job !== null && jobUrl !== null}
+            <!-- The run of the agent in ai-desktop, where it can be followed: only while ai-desktop runs and the AI
+                 functions are on. A link like any other of the page, in a tab of its own. -->
+            <a class="agent-job" href={jobUrl} target="_blank" rel="noopener noreferrer" data-hint={t('hint.ui.detail.agent_job', { job })}
+              >{t('agent.open_job')}</a
+            >
+          {/if}
         </dd>
       {/if}
       <dt data-hint={hintOf(app.lang, 'hint.field', 'state')}>{t('prop.state')}</dt>

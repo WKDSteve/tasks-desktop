@@ -51,7 +51,7 @@ import type { Op } from './api';
 import { indexOfLinks, touchedAreas } from './cross';
 import { planProjects, projectOfTask, projectsOf, type ClosePreview, type Project } from './projects';
 import { parseCompareSort, serializeCompareSort, type CompareSort } from './planCompare';
-import { cleanClaimName } from './claims';
+import { cleanClaimName, agentNews, type AgentNews } from './claims';
 
 /** How the plan view draws: the stages or the graph of a plan, or the plans compared. */
 export type PlanDisplay = 'stages' | 'graph' | 'compare';
@@ -3399,6 +3399,28 @@ export class App {
     return this.marks.length > 1 ? 'agent.one_only' : null;
   }
 
+  /**
+   * Where the job of an agent can be looked at: the dashboard of the running ai-desktop at that job, or null (ai-desktop
+   * is not running, the AI functions are off, or its port is not known).
+   */
+  agentJobUrl(job: string): string | null {
+    const found = this.aiDesktop;
+    if (!this.aiFeatures || !found?.running || !found.port) return null;
+    return `http://127.0.0.1:${found.port}/#job=${encodeURIComponent(job)}`;
+  }
+
+  /**
+   * The feedback of the agents as one line: the first change in words ("Finished by agent ...: ..."), and how many more
+   * came with the same list. Nothing to say: nothing is shown.
+   */
+  private sayAgentNews(news: readonly AgentNews[]): void {
+    const [first] = news;
+    if (!first) return;
+    const text = translate(this.lang, `agent.news.${first.kind}` as Key, { job: first.job, title: first.title });
+    if (news.length === 1) this.toast = { kind: 'ok', text };
+    else this.toast = { kind: 'ok', text: translate(this.lang, 'agent.news.more', { first: text, n: news.length - 1 }) };
+  }
+
   /** Is the area public or internal (ai-desktop may send it to a model in the cloud), not private or unclassified? */
   agentAreaShared(area: string): boolean {
     return cacheableClass(this.hubAreas.find((a) => a.name === area)?.data_class);
@@ -4189,8 +4211,11 @@ export class App {
       const result = await hub.snapshot(this.snapshot ? this.etag : null);
       if (named) await within(named, 1500);
       if (result.kind === 'fresh') {
+        // What the agents did since the list before (only against a whole list the page held, not the first one).
+        const before = this.snapshot ? this.tasks : null;
         this.snapshot = result.doc;
         this.tasks = result.doc.tasks;
+        if (before && this.aiFeatures) this.sayAgentNews(agentNews(before, result.doc.tasks));
         this.etag = result.etag;
         if (this.sort !== 'default') void this.readOrder();
         this.checkState.listChanged();

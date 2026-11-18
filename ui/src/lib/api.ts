@@ -110,6 +110,8 @@ export interface AiDesktop {
   installed: boolean;
   /** Its hub runs now. */
   running: boolean;
+  /** Its loopback port while it runs: the dashboard of a job is `http://127.0.0.1:<port>/#job=<id>`. */
+  port?: number | null;
 }
 
 /** A task handed to an agent: the job ai-desktop made of it (`POST /api/tasks/agent`). */
@@ -402,7 +404,8 @@ export class Hub extends HubClient<Snapshot> {
   async aiDesktop(): Promise<AiDesktop | null> {
     try {
       const doc = await this.json<Partial<AiDesktop>>('/api/tasks/ai_desktop');
-      return { installed: doc.installed === true, running: doc.running === true };
+      const port = Number.isInteger(doc.port) && (doc.port ?? 0) > 0 && (doc.port ?? 0) < 65536 ? doc.port : null;
+      return { installed: doc.installed === true, running: doc.running === true, port };
     } catch {
       return null;
     }

@@ -948,6 +948,44 @@ describe('App', () => {
     expect(make({ token: 't', prefs }).app.agentDashboard).toBe(false);
   });
 
+  it('tells what an agent did when the list comes again, only where the AI functions are offered', async () => {
+    const claim = (expired = false) => ({ by: 'ai-desktop:job42', since: '2026-01-01T00:00:00Z', until: '2099-01-01T00:00:00Z', expired });
+    const { app, hub } = make({ token: 't' });
+    hub.aiDesktopFound = { installed: true, running: true };
+    hub.doc = snapshot([task('pub/a', { etag: 'e1', title: 'Alpha' })], 'rev:1');
+    await app.start(null);
+    await app.loadEnums();
+    await vi.waitFor(() => expect(app.aiFeatures).toBe(true));
+    app.dismissToast();
+    hub.doc = snapshot([task('pub/a', { etag: 'e2', title: 'Alpha', claim: claim() })], 'rev:2');
+    await app.refresh();
+    expect(app.toast?.text).toBe(translate(app.lang, 'agent.news.claimed', { job: 'job42', title: 'Alpha' }));
+    hub.doc = snapshot([], 'rev:3');
+    await app.refresh();
+    expect(app.toast?.text).toBe(translate(app.lang, 'agent.news.finished', { job: 'job42', title: 'Alpha' }));
+    // Switched off: the list changes without a word about agents.
+    app.setAiWanted(false);
+    app.dismissToast();
+    hub.doc = snapshot([task('pub/b', { etag: 'e1', title: 'Beta' })], 'rev:4');
+    await app.refresh();
+    hub.doc = snapshot([task('pub/b', { etag: 'e2', title: 'Beta', claim: claim() })], 'rev:5');
+    await app.refresh();
+    expect(app.toast).toBeNull();
+    app.stop();
+  });
+
+  it('opens the job of an agent in ai-desktop only while it runs with a known port and the AI functions are on', () => {
+    const { app } = make();
+    expect(app.agentJobUrl('j1')).toBeNull();
+    app.aiDesktop = { installed: true, running: true, port: 47123 };
+    expect(app.agentJobUrl('j 1')).toBe('http://127.0.0.1:47123/#job=j%201');
+    app.aiDesktop = { installed: true, running: false, port: null };
+    expect(app.agentJobUrl('j1')).toBeNull();
+    app.aiDesktop = { installed: true, running: true, port: 47123 };
+    app.setAiWanted(false);
+    expect(app.agentJobUrl('j1')).toBeNull();
+  });
+
   it('offers the kinds of a job by the status of the task', () => {
     const { app } = make();
     expect(app.agentKinds('open')).toEqual(['handoff']);

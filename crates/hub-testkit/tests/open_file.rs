@@ -964,6 +964,7 @@ async fn ai_desktop_is_reported_as_the_family_finds_it_and_only_with_a_session()
     let found = Presence {
         installed: true,
         running: true,
+        port: Some(47124),
     };
     let r = rig_full(
         "ai-found",
@@ -983,6 +984,7 @@ async fn ai_desktop_is_reported_as_the_family_finds_it_and_only_with_a_session()
         (Some(true), Some(true)),
         "{doc}"
     );
+    assert_eq!(doc["port"], 47124, "{doc}");
     // Without a session the hub says nothing about the machine.
     let origin = format!("http://127.0.0.1:{}", r.server.addr().port());
     let reply = patient::request(
@@ -1009,7 +1011,7 @@ async fn ai_desktop_is_reported_as_the_family_finds_it_and_only_with_a_session()
         assert_eq!(status, 200, "{name}: {doc}");
         assert_eq!(
             doc,
-            serde_json::json!({ "installed": false, "running": false }),
+            serde_json::json!({ "installed": false, "running": false, "port": null }),
             "{name}"
         );
     }

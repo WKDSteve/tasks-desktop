@@ -862,6 +862,14 @@ bring another program to the front, so by default Windows only flashes the butto
 tick *Open the dashboard of ai-desktop afterwards* (off by default, kept) opens a tab of the browser at the dashboard
 of ai-desktop with the job selected (`http://127.0.0.1:<port>/#job=<id>`).
 
+**What the agent does.** An agent of ai-desktop claims the task under its own name `ai-desktop:<job>`; the list, the
+board and the detail mark it *agent* like any other claim (no colour of its own), and the detail links *Open the job
+in ai-desktop* while ai-desktop runs. When the list comes again the page says what an agent did since: it took a task,
+finished it (*Finished by agent ...*), gave it back, or its claim ran out (a claim of an agent that ran out stays
+named in a quiet mark: the agent stopped without giving the task back). Nothing is asked of ai-desktop for that: the
+page reads the claims and the status the engine writes, as with every change of the vault. With *Show AI functions*
+off the mark stays (it says who holds the task), the link and the messages do not.
+
 <!-- connections:begin (written by the app-icons tool of the workshop; change integrations.json there, not this block) -->
 ## Connections
 

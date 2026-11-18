@@ -19,6 +19,49 @@ export function claimClass(task: Pick<TaskEntry, 'claim'>, me: string): ClaimCla
   return me !== '' && claim.by === me ? 'own' : 'foreign';
 }
 
+/**
+ * The job of an agent of ai-desktop that holds the claim: such a claim is named `ai-desktop:<job>` (ai-desktop's
+ * docs/JOBS.md); null for any other name.
+ */
+export function agentJob(by: string | undefined): string | null {
+  const found = /^ai-desktop:([A-Za-z0-9._-]{1,64})$/.exec(by ?? '');
+  return found ? (found[1] ?? null) : null;
+}
+
+/** What an agent did to a task between two lists of the engine. */
+export interface AgentNews {
+  kind: 'claimed' | 'finished' | 'released' | 'expired';
+  id: string;
+  title: string;
+  job: string;
+}
+
+/**
+ * The feedback of the agents between the list `before` and the list `after`: a task an agent took, one it held that is
+ * no longer open (finished; a finished task leaves the list of open tasks), one it gave back, one whose claim ran out.
+ * Only the engine's words are read (the claim and its `expired`); nothing is judged by a clock here (WEB-13).
+ */
+export function agentNews(before: readonly TaskEntry[], after: readonly TaskEntry[]): AgentNews[] {
+  const was = new Map(before.map((t) => [t.id, t]));
+  const now = new Map(after.map((t) => [t.id, t]));
+  const news: AgentNews[] = [];
+  for (const task of after) {
+    const job = agentJob(task.claim?.by);
+    const old = was.get(task.id);
+    if (!old || job === null || task.claim?.expired) continue;
+    if (agentJob(old.claim?.by) !== job || old.claim?.expired) news.push({ kind: 'claimed', id: task.id, title: task.title, job });
+  }
+  for (const task of before) {
+    const job = agentJob(task.claim?.by);
+    if (job === null || task.claim?.expired) continue;
+    const next = now.get(task.id);
+    if (!next || next.status === 'done') news.push({ kind: 'finished', id: task.id, title: task.title, job });
+    else if (agentJob(next.claim?.by) !== job) news.push({ kind: 'released', id: task.id, title: next.title, job });
+    else if (next.claim?.expired) news.push({ kind: 'expired', id: task.id, title: next.title, job });
+  }
+  return news;
+}
+
 /** A name a claim can have (as the engine takes it): 1 to 64 letters, digits and `. _ : - @`; `''` is no name. */
 export function cleanClaimName(text: string): string {
   const name = text.trim();

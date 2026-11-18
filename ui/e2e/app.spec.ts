@@ -8251,7 +8251,7 @@ test('without ai-desktop the real hub offers no AI: the switch is greyed out wit
   const asked = page.waitForResponse((r) => r.url().endsWith('/api/tasks/ai_desktop'));
   await pair(page);
   await showList(page);
-  expect(await (await asked).json()).toEqual({ installed: false, running: false });
+  expect(await (await asked).json()).toEqual({ installed: false, running: false, port: null });
   await page.getByRole('menuitem', { name: 'Options', exact: true }).click();
   await expect(page.getByRole('menuitem', { name: 'Show AI functions (ai-desktop not found)' })).toBeDisabled();
   await expect(page.getByRole('menuitemcheckbox', { name: 'Show AI functions', exact: true })).toHaveCount(0);
@@ -8297,6 +8297,62 @@ async function aiDesktopDouble(jobs: (body: Record<string, unknown>, path: strin
     },
   };
 }
+
+/** The engine's command line on the vault of the run: what an agent of ai-desktop runs (`tasks claim`, `tasks done`). */
+function engineCli(...args: string[]): string {
+  const engine = process.env.TASKS_ENGINE_DIR;
+  if (!engine) throw new Error('TASKS_ENGINE_DIR is not set');
+  return execFileSync('nvim', ['--headless', '-u', 'NONE', '-l', join(engine, 'scripts', 'tasks.lua'), `--vault=${state().vault}`, ...args], {
+    encoding: 'utf8',
+  });
+}
+
+test('an agent that claims a task and finishes it is seen: the mark, the job in ai-desktop, and what it did', async ({ page }) => {
+  test.slow();
+  const { vault } = state();
+  const slug = 'e2e-agentwork-a001';
+  const id = `nvim-config/${slug}`;
+  const file = join(vault, 'nvim-config', 'ROADMAP', 'tasks', `${slug}.md`);
+  const by = 'ai-desktop:job-e2e-7';
+  mkdirSync(join(file, '..'), { recursive: true });
+  writeFileSync(file, `---\ntitle: Agentwork a001\nstatus: open\nkind: task\ncreated: 2026-11-18\nupdated: 2026-11-18\n---\n\nA task an agent works on.\n`);
+  const ai = await aiDesktopDouble(() => ({ status: 404, body: {} }));
+  try {
+    await pair(page);
+    await showList(page);
+    await page.getByRole('searchbox', { name: /search/i }).first().fill('Agentwork');
+    const row = page.locator('button.row', { hasText: 'Agentwork a001' });
+    await expect(row).toHaveCount(1);
+
+    // The agent claims it under its own name: the list marks it "agent", the page says so on its own.
+    engineCli('claim', id, `--by=${by}`, '--for=2h');
+    await expect(row.locator('[data-agent="job-e2e-7"]')).toHaveText(/agent/, { timeout: 15_000 });
+    await expect(page.getByText('Agent job-e2e-7 works on Agentwork a001.')).toBeVisible({ timeout: 15_000 });
+    // The detail names the job and leads to its run in ai-desktop.
+    await open(page, id);
+    const claim = page.getByTestId('detail-claim');
+    await expect(claim).toContainText(`${by} until`);
+    await expect(claim.getByRole('link', { name: 'Open the job in ai-desktop' })).toHaveAttribute('href', `http://127.0.0.1:${ai.port}/#job=job-e2e-7`);
+    await expectAccessible(page, 'the claim of an agent in the detail');
+    await closeFloat(page);
+
+    // It finishes the task: the task leaves the list and the page says who finished it.
+    engineCli('done', id, `--by=${by}`, '--no-next');
+    await expect(page.getByText('Finished by agent job-e2e-7: Agentwork a001.')).toBeVisible({ timeout: 15_000 });
+    await expect(row).toHaveCount(0);
+    expect(consoleProblems.get(page)).toEqual([]);
+  } finally {
+    await ai.close();
+    rmSync(file, { force: true });
+    rmSync(join(vault, '.claims', 'nvim-config', `${slug}.json`), { force: true });
+    for (const kind of ['TASKS', 'FEATURES', 'BUGS']) {
+      const dir = join(vault, 'nvim-config', 'Backlog', kind);
+      if (!existsSync(dir)) continue;
+      for (const name of readdirSync(dir)) if (name.endsWith(`_${slug}.md`)) rmSync(join(dir, name), { force: true });
+    }
+    await page.evaluate(() => localStorage.removeItem('tasks-desktop.filter'));
+  }
+});
 
 test('a task goes to ai-desktop: the hub sends its file with the secret, the page says the job and keeps the mode', async ({ page }) => {
   const ai = await aiDesktopDouble((body) =>

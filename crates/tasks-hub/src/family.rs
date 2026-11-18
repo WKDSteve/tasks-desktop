@@ -23,6 +23,9 @@ pub struct Presence {
     pub installed: bool,
     /// Its hub runs now.
     pub running: bool,
+    /// The loopback port while it runs (its `hub.json` says it to any program): the page opens the dashboard of a job of
+    /// ai-desktop there (`/#job=<id>`). No path, no secret.
+    pub port: Option<u16>,
 }
 
 /// Where the hub learns which apps of the family are there.
@@ -51,6 +54,7 @@ impl FamilyApps for Discovered {
         Presence {
             installed: app.installed,
             running: app.running,
+            port: app.running.then_some(app.port).flatten(),
         }
     }
 }
@@ -109,7 +113,8 @@ mod tests {
             found.ai_desktop(),
             Presence {
                 installed: true,
-                running: false
+                running: false,
+                port: None
             }
         );
         // Running: a hub.json whose process is alive (this test stands in for it).
@@ -128,7 +133,8 @@ mod tests {
             found.ai_desktop(),
             Presence {
                 installed: true,
-                running: true
+                running: true,
+                port: Some(8080)
             }
         );
         // A program that is gone leaves a leftover manifest: not installed, but still running.
@@ -137,29 +143,27 @@ mod tests {
             found.ai_desktop(),
             Presence {
                 installed: false,
-                running: true
+                running: true,
+                port: Some(8080)
             }
         );
     }
 
     #[test]
     fn not_wired_finds_nothing() {
-        assert_eq!(
-            NotWired.ai_desktop(),
-            Presence {
-                installed: false,
-                running: false
-            }
-        );
+        assert_eq!(NotWired.ai_desktop(), Presence::default());
     }
 
     #[test]
     fn presence_is_sent_with_both_fields() {
         let text = serde_json::to_string(&Presence {
             installed: true,
-            running: false,
+            running: true,
+            port: Some(8080),
         })
         .unwrap();
-        assert_eq!(text, r#"{"installed":true,"running":false}"#);
+        assert_eq!(text, r#"{"installed":true,"running":true,"port":8080}"#);
+        let text = serde_json::to_string(&Presence::default()).unwrap();
+        assert_eq!(text, r#"{"installed":false,"running":false,"port":null}"#);
     }
 }
