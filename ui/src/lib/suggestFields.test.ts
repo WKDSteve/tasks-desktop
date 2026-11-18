@@ -137,6 +137,22 @@ describe('runDraft', () => {
     expect(yes.calls).toEqual(['send x', 'confirm 0123456789abcdef', 'job 0123456789abcdef']);
   });
 
+  it('a form closed before the hub answered is not asked: the job that waits is put away', async () => {
+    const h = hub('needs_confirmation', []);
+    let asked = 0;
+    const out = await runDraft(h, 'x', choices, {
+      ...quick,
+      confirm: async () => {
+        asked += 1;
+        return true;
+      },
+      wanted: () => false,
+    });
+    expect(out).toEqual({ kind: 'declined' });
+    expect(asked).toBe(0);
+    expect(h.calls).toEqual(['send x', 'drop 0123456789abcdef']);
+  });
+
   it('says why there is no draft', async () => {
     const none = await runDraft(hub('running', [{ status: 'done', draft_error: 'the answer holds no draft block' }]), 'x', choices, {
       ...quick,

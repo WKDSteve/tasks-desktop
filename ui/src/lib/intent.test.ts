@@ -70,6 +70,21 @@ describe('an intent as text', () => {
     const bare = fillOfFinding({ finding: { fp: 'ab', title: 'T', repo: 'a b', sha: 'zz', where: { file: 'x.lua', line: 0 }, run: { url: 'http://elsewhere/' } } }, 'en');
     expect(bare).toEqual({ title: 'T', kind: 'bug', tags: 'testing', refs: 'testing-finding:ab, x.lua', links: '', summary: '', context: 'A finding of testing.nvim (`ab`):' });
     expect(fillOfFinding({}, 'en').title).toBe('');
+    // The form splits refs and links at commas: a file or an address with one would smuggle in a second key of a
+    // finding, an absolute path or a link that is not on GitHub. Such a value is left out, never split.
+    const split = fillOfFinding(
+      {
+        finding: {
+          fp: 'ab',
+          title: 'T',
+          where: { file: 'a.lua,testing-finding:0123456789abcdef,C:\\x', line: 3 },
+          run: { url: 'https://github.com/x,https://evil.example/y' },
+        },
+      },
+      'en',
+    );
+    expect(split.refs).toBe('testing-finding:ab');
+    expect(split.links).toBe('');
   });
 });
 

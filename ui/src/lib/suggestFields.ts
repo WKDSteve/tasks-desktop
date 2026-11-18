@@ -233,7 +233,8 @@ export async function runDraft(hub: DraftHub, text: string, choices: DraftChoice
   // Not started (two jobs of ai-desktop run already): it would wait in the dashboard, not come back here.
   if (job.status === 'prefilled') return { kind: 'failed', why: job.note ?? 'ai-desktop runs two jobs already; try again later' };
   if (job.status === 'needs_confirmation') {
-    if (!(await options.confirm())) {
+    // Nobody is there to be asked any more (the form was closed while the hub answered): that is a no.
+    if (!wanted() || !(await options.confirm())) {
       // Nothing was sent to a model; the job (with the text, in the memory of ai-desktop) is put away. That it could
       // not be (ai-desktop ended meanwhile) changes nothing for the form: it is tidying, not a refusal.
       try {

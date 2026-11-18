@@ -69,6 +69,8 @@ pub fn create(path: &Path, area: &str) -> Result<(), Refused> {
 /// The most files an example vault holds, and the most one of them weighs: the one of tasks.nvim has 15 small files.
 pub const EXAMPLE_MAX_FILES: usize = 200;
 pub const EXAMPLE_MAX_FILE_BYTES: u64 = 1024 * 1024;
+/// The most folders of an example vault: a tree of empty folders is no example either.
+pub const EXAMPLE_MAX_DIRS: usize = 200;
 /// The marker file of a vault (`tasks-vault.json`, docs/ENGINE.md of tasks.nvim): an example has one.
 const MARKER: &str = "tasks-vault.json";
 
@@ -88,7 +90,12 @@ fn example_files(from: &Path) -> Option<Vec<std::path::PathBuf>> {
     }
     let mut files = Vec::new();
     let mut dirs = vec![std::path::PathBuf::new()];
+    let mut seen_dirs = 0usize;
     while let Some(rel) = dirs.pop() {
+        seen_dirs += 1;
+        if seen_dirs > EXAMPLE_MAX_DIRS {
+            return None;
+        }
         let mut entries: Vec<_> = std::fs::read_dir(from.join(&rel))
             .ok()?
             .filter_map(Result::ok)
@@ -174,8 +181,34 @@ pub fn copy_example(from: &Path, to: &Path) -> Result<usize, Refused> {
     }
     let files =
         example_files(from).ok_or(refused("no_example", "there is no example vault to copy"))?;
+    let existed = to.exists();
+    let copied = copy_files(from, to, &files);
+    if copied.is_err() {
+        // What this call wrote goes again (the folder was empty or not there): a second try into the same folder must
+        // not be refused as "not empty" by the half of the first.
+        if existed {
+            if let Ok(entries) = std::fs::read_dir(to) {
+                for entry in entries.filter_map(Result::ok) {
+                    let path = entry.path();
+                    let _ = if path.is_dir() {
+                        std::fs::remove_dir_all(&path)
+                    } else {
+                        std::fs::remove_file(&path)
+                    };
+                }
+            }
+        } else {
+            let _ = std::fs::remove_dir_all(to);
+        }
+    }
+    copied.map(|()| files.len())
+}
+
+/// Write `files` of `from` below `to`, each made new and no longer than a file of an example may be.
+fn copy_files(from: &Path, to: &Path, files: &[std::path::PathBuf]) -> Result<(), Refused> {
+    use std::io::Read as _;
     let failed = || refused("not_writable", "the example could not be copied");
-    for rel in &files {
+    for rel in files {
         let target = to.join(rel);
         if let Some(dir) = target.parent() {
             std::fs::create_dir_all(dir).map_err(|_| failed())?;
@@ -186,10 +219,15 @@ pub fn copy_example(from: &Path, to: &Path) -> Result<usize, Refused> {
             .create_new(true)
             .open(&target)
             .map_err(|_| failed())?;
-        let mut source = std::fs::File::open(from.join(rel)).map_err(|_| failed())?;
-        std::io::copy(&mut source, &mut out).map_err(|_| failed())?;
+        let source = std::fs::File::open(from.join(rel)).map_err(|_| failed())?;
+        // The size was looked at when the files were listed; a file that grew since is not copied beyond it.
+        let mut limited = source.take(EXAMPLE_MAX_FILE_BYTES + 1);
+        let n = std::io::copy(&mut limited, &mut out).map_err(|_| failed())?;
+        if n > EXAMPLE_MAX_FILE_BYTES {
+            return Err(failed());
+        }
     }
-    Ok(files.len())
+    Ok(())
 }
 
 /// Is `dir` a plain folder that holds exactly one plain folder called `name`, and nothing else? Gives that folder.
@@ -306,6 +344,41 @@ mod tests {
                 .code,
             "no_parent"
         );
+    }
+
+    #[test]
+    fn a_tree_of_many_folders_is_no_example_and_a_failed_copy_leaves_nothing_behind() {
+        let base = scratch("example-limits");
+        let deep = an_example(&base.join("deep"));
+        for n in 0..=EXAMPLE_MAX_DIRS {
+            std::fs::create_dir_all(deep.join("docs").join(format!("d{n}"))).unwrap();
+        }
+        assert_eq!(example(&deep), None, "folders are counted, not only files");
+
+        // A copy that cannot be finished (a name of the example is taken by a folder of that name, made between the
+        // look and the copy) fails, and what it wrote is gone: the same folder takes the next try.
+        let from = an_example(&base.join("ok"));
+        let empty = base.join("target");
+        std::fs::create_dir(&empty).unwrap();
+        let files = example_files(&from).unwrap();
+        let blocked = empty.join(files.last().unwrap());
+        std::fs::create_dir_all(&blocked).unwrap();
+        assert_eq!(
+            copy_files(&from, &empty, &files).unwrap_err().code,
+            "not_writable"
+        );
+        std::fs::remove_dir_all(&empty).unwrap();
+        std::fs::create_dir(&empty).unwrap();
+        assert_eq!(copy_example(&from, &empty), Ok(5));
+        // And a folder that is not there yet is made for the copy.
+        let gone = base.join("gone");
+        let no_source = base.join("ok2");
+        std::fs::create_dir_all(&no_source).unwrap();
+        std::fs::write(no_source.join("tasks-vault.json"), "{}").unwrap();
+        std::fs::create_dir_all(no_source.join("a")).unwrap();
+        std::fs::write(no_source.join("a").join("t.md"), "x").unwrap();
+        assert_eq!(copy_example(&no_source, &gone), Ok(2));
+        assert!(gone.join("a").join("t.md").is_file());
     }
 
     #[test]

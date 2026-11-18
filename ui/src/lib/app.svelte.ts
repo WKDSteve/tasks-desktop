@@ -272,6 +272,8 @@ export const EXCHANGE_RETRIES = 3;
 const EXCHANGE_RETRY_MS = 3000;
 /** How long the page waits between two questions to a hub that does not answer (`App.watchHub`). */
 export const HUB_PROBE_MS = 3000;
+/** How long a pairing code offered to a page that still believed in its old hub is kept (a code lives a minute). */
+const LATE_CODE_MS = 60_000;
 /** Where the hub of the page is (`App.hubState`). */
 export type HubState = 'here' | 'gone' | 'replaced';
 /** The saved view that was open last (its id). */
@@ -4534,7 +4536,12 @@ export class App {
    * page that is still starting picks it up when it gets there; a paired page keeps its session.
    */
   offerCode(code: string): void {
-    if (this.sessionHeld) return;
+    if (this.sessionHeld) {
+      // The page may not know yet that its hub was replaced (the link was pasted before the next look at the hub):
+      // kept for the moment it finds out, as long as a pairing code lives.
+      this.#lateCode = { code, at: this.env.now() };
+      return;
+    }
     // A page that outlived its hub pairs with the new one where it stands: a start anew would throw away what is typed.
     if (this.hubState === 'replaced') {
       void this.pairAgain({ code });
@@ -4650,6 +4657,7 @@ export class App {
   private newHub(): void {
     if (this.hubState === 'replaced') return;
     this.hubState = 'replaced';
+    this.#sessionGen += 1;
     this.sessionHeld = false;
     this.pairRefused = false;
     this.pairLimited = false;
@@ -4657,7 +4665,15 @@ export class App {
     this.env.hub.setToken(null);
     this.stream.cut();
     this.connection = 'offline';
+    // A link that was pasted a moment before the page knew: used now.
+    const late = this.#lateCode;
+    this.#lateCode = null;
+    if (late !== null && this.env.now() - late.at <= LATE_CODE_MS) void this.pairAgain({ code: late.code });
   }
+  /** A pairing code offered while the page still believed in its old hub, and when. */
+  #lateCode: { code: string; at: number } | null = null;
+  /** Counts the sessions of the page: a judgement of a lost session that was asked for an earlier one is dropped. */
+  #sessionGen = 0;
 
   /**
    * The page takes the new hub: with a pairing code (a link pasted into this tab) or with the session of the tab the
@@ -4668,15 +4684,37 @@ export class App {
     if (this.hubState !== 'replaced' || this.#pairingAgain) return;
     this.#pairingAgain = true;
     try {
-      const instance = await this.hubNow();
-      if (instance === null) return;
+      let hello: Awaited<ReturnType<typeof this.env.hub.hello>>;
+      try {
+        hello = await this.env.hub.hello();
+      } catch {
+        return;
+      }
       const token = 'code' in by ? await this.env.hub.exchange(by.code) : by.token;
-      safe(() => this.env.session.setItem(TOKEN_KEY, token));
+      // A session handed over by another tab is tried before the page believes in it: one the hub refuses must not
+      // become the page's own (its refusal would empty the page). A refusal here throws, and the page stays as it was.
+      this.env.hub.onUnauthorized = () => undefined;
       this.env.hub.setToken(token);
+      try {
+        if (!('code' in by)) await this.env.hub.snapshot(null);
+      } catch (error) {
+        this.env.hub.setToken(null);
+        throw error;
+      }
+      safe(() => this.env.session.setItem(TOKEN_KEY, token));
       this.env.hub.onUnauthorized = () => this.lostSession();
-      this.#hubInstance = instance;
+      this.#hubInstance = hello.instance;
+      this.#sessionGen += 1;
       this.sessionHeld = true;
       this.hubState = 'here';
+      // The new hub is often a new build: what it can do and what it is called are its own.
+      this.appVersion = hello.build ? `${hello.version} (${hello.build})` : hello.version;
+      if (!hello.engine.ready) {
+        // Its engine is not up: the start of the page knows how to wait for it.
+        void this.start(null);
+        return;
+      }
+      this.capabilities = hello.engine.capabilities;
       await this.refresh();
       if (!this.env.hub.hasToken || this.stopped) return;
       void this.followStream();
@@ -4709,8 +4747,11 @@ export class App {
     }
     if (this.#judgingLoss) return;
     this.#judgingLoss = true;
+    const asked = this.#sessionGen;
     void this.hubNow().then((instance) => {
       this.#judgingLoss = false;
+      // Judged for the session that was refused: the page found a new hub meanwhile, or paired again since.
+      if (this.#sessionGen !== asked || (this.hubState as HubState) === 'replaced') return;
       if (!this.stopped && instance !== null && instance !== this.#hubInstance) this.newHub();
       else this.dropSession();
     });

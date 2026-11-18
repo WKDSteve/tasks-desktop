@@ -84,8 +84,10 @@ export function fillOfFinding(doc: Record<string, unknown>, lang: 'de' | 'en'): 
   const fp = text(finding['fp']);
   const refs: string[] = [];
   if (fp !== '') refs.push(`testing-finding:${fp}`);
+  // The form takes its refs and links as lists separated by commas: a file name or an address with a comma in it
+  // would become several entries there (a second key of a finding, a link the engine never saw), so it is left out.
   const file = text(where['file']);
-  if (file !== '') {
+  if (file !== '' && !file.includes(',')) {
     const line = where['line'];
     refs.push(typeof line === 'number' && Number.isInteger(line) && line >= 1 ? `${file}:${line}` : file);
   }
@@ -107,7 +109,7 @@ export function fillOfFinding(doc: Record<string, unknown>, lang: 'de' | 'en'): 
     kind: 'bug',
     tags: 'testing',
     refs: refs.join(', '),
-    links: url.startsWith('https://github.com/') ? url : '',
+    links: url.startsWith('https://github.com/') && !url.includes(',') && !/\s/.test(url) ? url : '',
     summary: firstLine(excerpt, 300),
     context: context.join('\n').trim(),
   };

@@ -4,6 +4,7 @@
 // into it stay; a hub of the same instance is taken up again without a word, a new one needs the new link.
 import { flushSync, mount, tick, unmount } from 'svelte';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { ApiError } from '../lib/api';
 import { make } from '../lib/appDouble';
 import { translate, type Key } from '../lib/i18n';
 import HubNotice from './HubNotice.svelte';
@@ -157,6 +158,39 @@ describe('a page whose hub is gone', () => {
     expect(m.hub.token).toBe('session-of-the-new-tab');
     expect(m.app.drafts).toEqual({ 'pub/a': { prio: 1 } });
     expect(m.hub.exchanged).toEqual([]);
+  });
+
+  it('a session of another tab that the new hub refuses is not taken: the page stays as it was and says so', async () => {
+    const m = await page({ askSession: async () => 'a-session-that-died' });
+    m.hub.instance = 'another';
+    m.hub.onUnauthorized();
+    await vi.waitFor(() => expect(m.app.hubState).toBe('replaced'));
+    // The new hub does not know that session.
+    m.hub.snapshot = async () => {
+      throw new ApiError(401, 'unauthorized', 'x');
+    };
+    await m.app.focused();
+    await vi.waitFor(() => expect(m.app.toast?.text).toBe(t(m, 'hub.replaced.refused')));
+    expect(m.app.hubState).toBe('replaced');
+    expect(m.hub.token).toBeNull();
+    expect(m.session.has('tasks-desktop.session')).toBe(false);
+    // Not emptied: the list and what was typed are still there.
+    expect(m.app.tasks.map((x) => x.id)).toEqual(['pub/a']);
+    expect(m.app.drafts).toEqual({ 'pub/a': { prio: 1 } });
+    expect(m.app.phase).toBe('ready');
+  });
+
+  it('a link pasted a moment before the page knew of the new hub is used once it knows', async () => {
+    const m = await page();
+    // The new hub runs, the page has not looked yet: it still holds its old session, and takes no code.
+    m.hub.instance = 'another';
+    m.app.offerCode('pasted-early');
+    expect(m.hub.exchanged).toEqual([]);
+    m.hub.onUnauthorized();
+    await vi.waitFor(() => expect(m.hub.exchanged).toEqual(['pasted-early']));
+    await vi.waitFor(() => expect(m.app.hubState).toBe('here'));
+    expect(m.app.drafts).toEqual({ 'pub/a': { prio: 1 } });
+    expect(m.app.tasks.map((x) => x.id)).toEqual(['pub/a']);
   });
 
   it('a session the same hub refuses is lost as before: the page is emptied and asks to pair', async () => {
