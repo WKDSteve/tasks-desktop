@@ -29,7 +29,7 @@
     /** What the engine counted as finished in the last 30 days; null without an answer. */
     finished: { total: number } | null;
     /** The engine's figure of the effort; null without one. */
-    effort: { days: number; low?: number; high?: number; without: number } | null;
+    effort: { days: number; low?: number; high?: number; without: number; waiting?: boolean } | null;
     onfinished: () => void;
   } = $props();
   const t = (key: Key, params: Record<string, string | number> = {}) => translate(app.lang, key, params);
@@ -191,7 +191,7 @@
     {/if}
     {#if effort && isShown('n:effort')}
       <li class="tile" data-tile="n:effort">
-        <div class="figure" data-figure="effort" data-hint={t('hint.stats.effort')}>
+        <div class="figure" class:waiting={effort.waiting} aria-busy={effort.waiting ? 'true' : undefined} data-figure="effort" data-hint={t('hint.stats.effort')}>
           <span class="label">{t('stats.effort')}</span>
           <span class="n">{t('stats.days_n', { n: days(effort.days) })}</span>
           {#if effort.low !== undefined && effort.high !== undefined}
@@ -312,6 +312,11 @@
   }
   div.figure {
     cursor: default;
+  }
+  /* The figure of the tasks before, while the one for the tasks of now is asked. */
+  .figure.waiting .n,
+  .figure.waiting .sub {
+    opacity: 0.55;
   }
   button.figure:hover {
     border-color: var(--accent);

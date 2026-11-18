@@ -5,6 +5,7 @@ import { flushSync, mount, tick, unmount } from 'svelte';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { make, snapshot } from '../lib/appDouble';
 import { task } from '../lib/fixtures';
+import { withTile } from '../lib/statsTiles';
 import StatsView from './StatsView.svelte';
 
 type Made = ReturnType<typeof make>;
@@ -50,12 +51,37 @@ describe('StatsView, the effort of the tasks the filter keeps', () => {
     }
     expect(m.app.shown.map((t) => t.id).sort()).toEqual(['pub/alpha', 'pub/alphabet']);
     expect(m.hub.estimates.length).toBe(1);
+    // The tile stays while the answer is awaited, with the figure of before marked as waiting: nothing jumps.
+    expect(target.querySelector('[data-figure="effort"]')?.getAttribute('aria-busy')).toBe('true');
     // Once the typing stopped: one question, for the tasks the whole word keeps.
     await vi.waitFor(() => expect(m.hub.estimates.length).toBe(2), { timeout: 2000 });
     expect([...(m.hub.estimates[1]?.ids ?? [])].sort()).toEqual(['pub/alpha', 'pub/alphabet']);
-    await vi.waitFor(() => expect(target.querySelector('[data-figure="effort"]')).not.toBeNull());
+    await vi.waitFor(() => expect(target.querySelector('[data-figure="effort"]')?.getAttribute('aria-busy')).toBeNull());
     // And no late one after it.
     await new Promise((resolve) => setTimeout(resolve, 400));
     expect(m.hub.estimates.length).toBe(2);
+  });
+
+  it('is not asked while its tile is hidden, and is asked when the tile comes back', async () => {
+    const m = make({ token: 't' });
+    made = m;
+    m.hub.doc = snapshot([task('pub/alpha', { status: 'open' }), task('lib/beta', { status: 'open' })]);
+    await m.app.start(null);
+    m.app.setStatsTiles(withTile(m.app.statsTiles, 'n:effort', false));
+    const target = document.createElement('div');
+    document.body.append(target);
+    mounted = mount(StatsView, { target, props: { app: m.app } });
+    flushSync();
+    await settle();
+    m.app.setQuery('alpha');
+    await settle();
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    expect(m.hub.estimates.length).toBe(0);
+    expect(target.querySelector('[data-figure="effort"]')).toBeNull();
+
+    m.app.setStatsTiles(withTile(m.app.statsTiles, 'n:effort', true));
+    await settle();
+    await vi.waitFor(() => expect(m.hub.estimates.length).toBe(1));
+    await vi.waitFor(() => expect(target.querySelector('[data-figure="effort"]')).not.toBeNull());
   });
 });

@@ -5,7 +5,7 @@
 
 import { NONE } from './filter';
 import { labelOf, translate, type Key, type Lang } from './i18n';
-import { DAYS, isMultiDim, isOpenDim, OTHER, TOP, type StatCut, type StatDim } from './stats';
+import { bucketsOf, DAYS, isMultiDim, isOpenDim, OTHER, TOP, type StatCut, type StatDim } from './stats';
 import { markHidden } from './text';
 
 /** The word of a stack: a status, a readiness and a who in the page's words, "none", "in days" and "further", else the value. */
@@ -30,14 +30,15 @@ export function bucketLabel(lang: Lang, dim: StatDim, bucket: string): string {
 export const SERIES = 10;
 
 /**
- * The class that colours a stack (a value the page does not know is "other"). A value of a field the tasks name
- * freely has no colour of its own: it takes the series of its place among the named values.
+ * The class that colours a stack. A value of a field the tasks name freely has no colour of its own: it takes the
+ * series of its place among the named values. A value of another field the page has no colour for (a who or a
+ * severity a later engine names) is "other": a class without a rule would leave its part of the bar unseen.
  */
 export function bucketClass(cut: StatCut, bucket: string): string {
   if (bucket === NONE) return 'none';
   if (bucket === OTHER) return 'other';
   if (cut.named !== null) return `s-${Math.max(0, cut.named.indexOf(bucket)) % SERIES}`;
-  return /^[A-Za-z0-9]+$/.test(bucket) ? `v-${bucket}` : 'other';
+  return bucketsOf(cut.dim).includes(bucket) ? `v-${bucket}` : 'other';
 }
 
 /** The name of a stack in the markup, for the tests and the styles. */

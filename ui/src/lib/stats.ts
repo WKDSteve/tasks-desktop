@@ -291,8 +291,10 @@ export function filterFor(
   const values = isFolded(bucket) ? writtenIn(c, bucket, tasks, area) : [bucket];
   if (!isMultiDim(c.dim)) return withChosen(out, c.dim, values);
   const chosen = chosenValues(base, c.dim);
-  const joins =
-    !isFolded(bucket) && bucket !== NONE && chosen.length > 0 && !chosen.includes(NONE) && (chosen.length === 1 || wantsAll(base, c.dim as FieldKey));
+  const narrow = chosen.length === 1 || wantsAll(base, c.dim as FieldKey);
+  // The stack of a value the choice already asks for: the filter says it as it is, and how its values combine stays.
+  if (narrow && chosen.includes(bucket)) return out;
+  const joins = !isFolded(bucket) && bucket !== NONE && chosen.length > 0 && !chosen.includes(NONE) && narrow;
   return joins ? withChosen(out, c.dim, [...new Set([...chosen, bucket])], 'all') : withChosen(out, c.dim, values, 'any');
 }
 

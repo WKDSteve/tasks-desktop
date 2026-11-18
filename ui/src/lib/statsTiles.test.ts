@@ -119,6 +119,11 @@ describe('the words and the colours of a stack', () => {
   it('colour a known value by its name and a value the tasks name by its place, each named value its own colour', () => {
     expect(bucketClass(cutOf([], 'status'), 'doing')).toBe('v-doing');
     expect(bucketClass(cutOf([], 'status'), 'two words')).toBe('other');
+    // A who or a severity the page has no colour for is drawn as "other", not left without a colour.
+    expect(bucketClass(cutOf([], 'actor'), 'me')).toBe('v-me');
+    expect(bucketClass(cutOf([], 'actor'), 'team')).toBe('other');
+    expect(bucketClass(cutOf([], 'severity'), 'blocker')).toBe('other');
+    expect(bucketClass(cutOf([], 'effort'), 'days')).toBe('v-days');
     expect(bucketClass(cutOf([], 'status'), NONE)).toBe('none');
     const many = Array.from({ length: TOP + 3 }, (_, i) => task(`a/t${i}`, { tags: [`tag${String(i).padStart(2, '0')}`] }));
     const cut = cutOf(many, 'tag');

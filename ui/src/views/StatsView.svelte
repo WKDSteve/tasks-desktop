@@ -27,6 +27,7 @@
   import { markHidden } from '../lib/text';
   import { bucketClass as classOf, bucketLabel as labelOfBucket, bucketName, dimHint as hintOfDim } from '../lib/statsWords';
   import type { StatDim } from '../lib/stats';
+  import { tileShown } from '../lib/statsTiles';
   import StatsFilter from './StatsFilter.svelte';
   import StatsHistory from './StatsHistory.svelte';
   import StatsTiles from './StatsTiles.svelte';
@@ -52,7 +53,8 @@
   const nameOf = (area: string) => areaLabel(area, app.allAreaNames);
 
   // The effort of the tasks the filter keeps is the engine's figure (WEB-13): asked again when they or the vault change.
-  const source = $derived(app.can('estimate') ? effortSource(tasks, app.tasks) : null);
+  // Not asked while its tile is hidden: nobody reads the answer.
+  const source = $derived(app.can('estimate') && tileShown(app.statsTiles, 'n:effort') ? effortSource(tasks, app.tasks) : null);
   const askKey = $derived(source?.from === 'engine' ? `${app.snapshot?.rev ?? ''}|${source.ids.join(',')}` : '');
   let asked = $state.raw<{ key: string; figure: Estimate } | null>(null);
   // The first figure is asked at once. A change of the tasks waits a moment before it asks: the search of the filter
@@ -84,14 +86,16 @@
       abort.abort();
     };
   });
-  const effort = $derived.by((): { days: number; low?: number; high?: number; without: number } | null => {
+  // Until the answer for the tasks of now is in, the figure of the tasks before stays (marked as waiting): a tile that
+  // went and came with every letter typed would make the others jump.
+  const effort = $derived.by((): { days: number; low?: number; high?: number; without: number; waiting?: boolean } | null => {
     if (source?.from === 'snapshot') {
       const all = app.snapshot?.estimate;
       return all ? { days: all.days, without: all.n_without_effort } : null;
     }
-    if (source?.from !== 'engine' || asked?.key !== askKey) return null;
+    if (source?.from !== 'engine' || asked === null) return null;
     const f = asked.figure;
-    return { days: f.days, low: f.range.low, high: f.range.high, without: f.n_without_effort };
+    return { days: f.days, low: f.range.low, high: f.range.high, without: f.n_without_effort, waiting: asked.key !== askKey };
   });
   // What was finished in the last 30 days comes from the engine too: a question of its own, asked again when the vault
   // changes. No answer: the number and the column stay away, the rest of the view stands.

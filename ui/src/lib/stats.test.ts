@@ -287,6 +287,10 @@ describe('the further fields', () => {
     const all = { ...freshFilter(), fields: { category: ['bug'] }, matchAll: ['category' as const] };
     const both = filterFor(all, cutOf(rich, 'category'), 'security', null, rich);
     expect(applyFilter(rich, both, '2026-11-01').map((t) => t.id)).toEqual(['a/r1']);
+    // The stack of the value that is chosen already: nothing changes, and "any of them" stays "any of them" (a second
+    // tag added in the list must add its tasks, not narrow).
+    expect(filterFor(base, cut, 'x', null, kept)).toEqual(base);
+    expect(filterFor(all, cutOf(rich, 'category'), 'bug', 'a', rich)).toEqual({ ...all, areas: ['a'] });
     // The stack of the tasks without a value cannot join a value: it is chosen alone.
     expect(filterFor(base, cut, NONE, null, rich)).toMatchObject({ fields: { tag: [NONE] }, matchAll: [] });
   });
