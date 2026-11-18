@@ -160,6 +160,7 @@
             resolve(yes);
           };
         }),
+      () => run === opened && app.capturing,
     );
     if (run !== opened || !app.capturing) return;
     draftBusy = false;

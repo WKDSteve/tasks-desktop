@@ -206,6 +206,8 @@ export type DraftOutcome =
 export interface DraftOptions {
   /** Asked when the job waits for a yes (the text would leave this machine); false: nothing runs. */
   confirm(): Promise<boolean>;
+  /** False once nobody waits for the draft (the form was closed): the job is no longer asked after. */
+  wanted?(): boolean;
   /** Waits between two looks at the job (default: a timer of `interval` ms). */
   sleep?(ms: number): Promise<void>;
   interval?: number;
@@ -223,6 +225,7 @@ export interface DraftOptions {
 export async function runDraft(hub: DraftHub, text: string, choices: DraftChoices, options: DraftOptions): Promise<DraftOutcome> {
   const sleep = options.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
   const now = options.now ?? Date.now;
+  const wanted = options.wanted ?? (() => true);
   const job = await hub.sendDraft(text, choices);
   // Not started (two jobs of ai-desktop run already): it would wait in the dashboard, not come back here.
   if (job.status === 'prefilled') return { kind: 'failed', why: job.note ?? 'ai-desktop runs two jobs already; try again later' };
@@ -232,6 +235,8 @@ export async function runDraft(hub: DraftHub, text: string, choices: DraftChoice
   }
   const deadline = now() + (options.maxMs ?? 10 * 60 * 1000);
   for (;;) {
+    // A closed form leaves the job to the dashboard of ai-desktop; asking on would cost a request every interval.
+    if (!wanted()) return { kind: 'declined' };
     const state = await hub.draftJob(job.job_id);
     if (state.status === 'done') {
       if (state.draft === undefined) return { kind: 'failed', why: state.draft_error ?? 'ai-desktop gave no draft' };

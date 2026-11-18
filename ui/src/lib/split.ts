@@ -251,10 +251,19 @@ export type SplitOutcome = { kind: 'split'; split: Split; job: string } | { kind
 export async function runSplit(
   hub: SplitHub,
   plan: string,
-  opts: { confirm(): Promise<boolean>; sleep?(ms: number): Promise<void>; interval?: number; maxMs?: number; now?(): number },
+  opts: {
+    confirm(): Promise<boolean>;
+    /** False once nobody waits for the drafts (the dialog was closed): the job is no longer asked after. */
+    wanted?(): boolean;
+    sleep?(ms: number): Promise<void>;
+    interval?: number;
+    maxMs?: number;
+    now?(): number;
+  },
 ): Promise<SplitOutcome> {
   const sleep = opts.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
   const now = opts.now ?? Date.now;
+  const wanted = opts.wanted ?? (() => true);
   const job = await hub.splitPlan(plan);
   if (job.status === 'prefilled') return { kind: 'failed', why: job.note ?? 'ai-desktop runs two jobs already; try again later' };
   if (job.status === 'needs_confirmation') {
@@ -264,6 +273,8 @@ export async function runSplit(
   // An agent reads the vault: a split may take minutes.
   const deadline = now() + (opts.maxMs ?? 30 * 60 * 1000);
   for (;;) {
+    // A closed dialog leaves the job to the dashboard of ai-desktop; asking on would cost a request every interval.
+    if (!wanted()) return { kind: 'declined' };
     const state = await hub.splitJob(job.job_id);
     if (state.status === 'done') {
       if (state.block === undefined) return { kind: 'failed', why: state.block_error ?? 'ai-desktop gave no drafts' };

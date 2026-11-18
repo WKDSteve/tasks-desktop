@@ -44,6 +44,7 @@
             resolve(yes);
           };
         }),
+      () => run === opened && app.splitFor === id,
     );
     if (run !== opened) return;
     if (outcome.kind === 'split') {

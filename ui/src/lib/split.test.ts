@@ -140,4 +140,24 @@ describe('runSplit', () => {
     });
     expect((await runSplit(hub('prefilled', []), 'p', { ...quick, confirm: async () => true })).kind).toBe('failed');
   });
+
+  it('stops asking once the dialog is closed (the job stays in the dashboard of ai-desktop)', async () => {
+    const h = hub('running', []);
+    let asked = 0;
+    const counting: SplitHub = { ...h, splitJob: async (job) => (asked++, h.splitJob(job)) };
+    let open = true;
+    const out = await runSplit(counting, 'p', {
+      confirm: async () => true,
+      interval: 0,
+      sleep: async () => {
+        if (asked === 3) open = false;
+      },
+      wanted: () => open,
+      // Without the stop it would ask until its time is up (ten more times here).
+      now: () => asked * 100,
+      maxMs: 1000,
+    });
+    expect(out).toEqual({ kind: 'declined' });
+    expect(asked).toBe(3);
+  });
 });

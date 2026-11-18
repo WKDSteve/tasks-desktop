@@ -89,6 +89,24 @@ function hub(status: string, states: DraftState[]): DraftHub & { calls: string[]
 const quick = { sleep: async () => undefined, interval: 0 };
 
 describe('runDraft', () => {
+  it('stops asking once the form is closed (the job stays in the dashboard of ai-desktop)', async () => {
+    const h = hub('running', []);
+    let open = true;
+    const out = await runDraft(h, 'x', choices, {
+      confirm: async () => true,
+      interval: 0,
+      sleep: async () => {
+        if (h.calls.length === 3) open = false;
+      },
+      wanted: () => open,
+      // Without the stop it would ask until its time is up (ten more times here).
+      now: () => h.calls.length * 100,
+      maxMs: 1000,
+    });
+    expect(out).toEqual({ kind: 'declined' });
+    expect(h.calls).toEqual(['send x', 'job 0123456789abcdef', 'job 0123456789abcdef']);
+  });
+
   it('waits for the job and checks its draft', async () => {
     const h = hub('running', [
       { status: 'running' },

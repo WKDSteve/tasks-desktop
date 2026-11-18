@@ -3603,12 +3603,13 @@ export class App {
 
   /**
    * "Suggest fields": ask ai-desktop for the fields of a new task from `text` (only where the AI functions are offered).
-   * `confirm` is asked before the text goes to a model that does not run on this machine. Nothing is created.
+   * `confirm` is asked before the text goes to a model that does not run on this machine; `wanted` false (the form was
+   * closed) stops the asking. Nothing is created.
    */
-  async suggestFields(text: string, confirm: () => Promise<boolean>): Promise<DraftOutcome> {
+  async suggestFields(text: string, confirm: () => Promise<boolean>, wanted: () => boolean = () => true): Promise<DraftOutcome> {
     if (!this.aiFeatures) return { kind: 'failed', why: 'the AI functions are off' };
     try {
-      return await runDraft(this.env.hub, text, this.draftChoices(), { confirm });
+      return await runDraft(this.env.hub, text, this.draftChoices(), { confirm, wanted });
     } catch (error) {
       return { kind: 'failed', why: error instanceof ApiError ? error.message : String(error) };
     }
@@ -3627,11 +3628,14 @@ export class App {
     this.splitFor = null;
   }
 
-  /** Ask ai-desktop for the drafts of the plan `id`; `confirm` before a private area goes to a model that is not local. */
-  async askSplit(id: string, confirm: () => Promise<boolean>): Promise<SplitOutcome> {
+  /**
+   * Ask ai-desktop for the drafts of the plan `id`; `confirm` before a private area goes to a model that is not local,
+   * `wanted` false (the dialog was closed) stops the asking.
+   */
+  async askSplit(id: string, confirm: () => Promise<boolean>, wanted: () => boolean = () => true): Promise<SplitOutcome> {
     if (!this.aiFeatures) return { kind: 'failed', why: 'the AI functions are off' };
     try {
-      return await runSplit(this.env.hub, id, { confirm });
+      return await runSplit(this.env.hub, id, { confirm, wanted });
     } catch (error) {
       return { kind: 'failed', why: error instanceof ApiError ? error.message : String(error) };
     }
