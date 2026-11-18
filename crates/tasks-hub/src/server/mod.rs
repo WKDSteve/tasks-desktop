@@ -378,6 +378,19 @@ fn app_routes(core: &Arc<Shared>) -> Router<Arc<Shared>> {
             &r("agent"),
             post(agent_send).layer(DefaultBodyLimit::max(small)),
         )
+        // "Suggest fields" of the new-task form: a draft-task job of ai-desktop; its text may be 64 KiB.
+        .route(
+            &r("draft"),
+            post(draft_send).layer(DefaultBodyLimit::max(128 * 1024)),
+        )
+        .route(
+            &r("draft_job"),
+            post(draft_job).layer(DefaultBodyLimit::max(small)),
+        )
+        .route(
+            &r("draft_confirm"),
+            post(draft_confirm).layer(DefaultBodyLimit::max(small)),
+        )
         .route(
             &r("vault_pick"),
             post(vault_pick).layer(DefaultBodyLimit::max(small)),

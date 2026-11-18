@@ -107,6 +107,7 @@ import { DEFAULTS_KEY, FACTORY_DEFAULTS, parseDefaults, serializeDefaults, start
 import { fromEngineList, type EngineList } from './engineLists';
 import { DEFAULT_RANGES, rangesOf, type Ranges } from './fields';
 import { sameField, type FieldValue } from './drafts';
+import { draftChoices, runDraft, type DraftChoices, type DraftOutcome } from './suggestFields';
 import {
   activeList as activeListOf,
   cleanName,
@@ -3451,6 +3452,35 @@ export class App {
       this.say('error', 'agent.failed', { why });
     } finally {
       this.agentSending = false;
+    }
+  }
+
+  /**
+   * The values a draft of "Suggest fields" may use: the areas of the vault, the kinds and categories of the form, the
+   * tags of the tasks and the ids of the plans.
+   */
+  draftChoices(): DraftChoices {
+    const tags = new Set<string>();
+    for (const task of this.tasks) for (const tag of task.tags ?? []) tags.add(tag);
+    return draftChoices({
+      areas: [...this.allAreaNames],
+      kinds: [...this.ranges.kinds],
+      tags: [...tags],
+      categories: [...this.ranges.categories],
+      plans: (this.snapshot?.plans ?? []).map((p) => p.id),
+    });
+  }
+
+  /**
+   * "Suggest fields": ask ai-desktop for the fields of a new task from `text` (only where the AI functions are offered).
+   * `confirm` is asked before the text goes to a model that does not run on this machine. Nothing is created.
+   */
+  async suggestFields(text: string, confirm: () => Promise<boolean>): Promise<DraftOutcome> {
+    if (!this.aiFeatures) return { kind: 'failed', why: 'the AI functions are off' };
+    try {
+      return await runDraft(this.env.hub, text, this.draftChoices(), { confirm });
+    } catch (error) {
+      return { kind: 'failed', why: error instanceof ApiError ? error.message : String(error) };
     }
   }
 

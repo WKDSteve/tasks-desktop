@@ -54,6 +54,9 @@ pub struct Job {
     pub kind: String,
     /// The area is private or not classified: ai-desktop sends it to a local model only, or asks first.
     pub private: bool,
+    /// `draft-task` only: the values the vault allows (`areas`, `kinds`, `tags`, `categories`, `plans`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub choices: Option<serde_json::Value>,
 }
 
 /// What ai-desktop answered (`201`).
@@ -119,6 +122,18 @@ impl Refusal {
 /// Where a job goes.
 pub trait JobIntake: Send + Sync {
     fn send<'a>(&'a self, job: &'a Job) -> BoxFuture<'a, Result<JobAnswer, Refusal>>;
+
+    /// The job as ai-desktop keeps it (`GET /jobs/<id>`, no secret): its status and, for a draft, `draft` or
+    /// `draft_error`. An intake without jobs to read says it is not running.
+    fn job<'a>(&'a self, _id: &'a str) -> BoxFuture<'a, Result<serde_json::Value, Refusal>> {
+        Box::pin(async { Err(Refusal::NotRunning) })
+    }
+
+    /// Runs a job that waits for a yes (`needs_confirmation`), after the person said yes on the page:
+    /// `POST /jobs/<id>/run` with `confirm_private` and the secret.
+    fn confirm<'a>(&'a self, _id: &'a str) -> BoxFuture<'a, Result<(), Refusal>> {
+        Box::pin(async { Err(Refusal::NotRunning) })
+    }
 }
 
 /// The running ai-desktop of this machine, found in the environment `env`.
@@ -136,21 +151,132 @@ impl AiDesktop {
         let vars = |name: &str| self.env.path(name);
         family::config_dir(&vars, APP, ENV_PREFIX)
     }
+
+    /// The config folder and the record of the running ai-desktop.
+    async fn found(&self) -> Result<(PathBuf, registry::HubRecord), Refusal> {
+        let dir = self.config_dir().ok_or(Refusal::NotRunning)?;
+        let record = {
+            let dir = dir.clone();
+            tokio::task::spawn_blocking(move || family::running_record(&dir, APP))
+                .await
+                .map_err(|e| Refusal::Failed(e.to_string()))?
+                .ok_or(Refusal::NotRunning)?
+        };
+        Ok((dir, record))
+    }
 }
 
 impl JobIntake for AiDesktop {
     fn send<'a>(&'a self, job: &'a Job) -> BoxFuture<'a, Result<JobAnswer, Refusal>> {
         Box::pin(async move {
-            let dir = self.config_dir().ok_or(Refusal::NotRunning)?;
-            let record = {
-                let dir = dir.clone();
-                tokio::task::spawn_blocking(move || family::running_record(&dir, APP))
-                    .await
-                    .map_err(|e| Refusal::Failed(e.to_string()))?
-                    .ok_or(Refusal::NotRunning)?
-            };
+            let (dir, record) = self.found().await?;
             send_to(record.port, &record.instance, &dir, job).await
         })
+    }
+
+    fn job<'a>(&'a self, id: &'a str) -> BoxFuture<'a, Result<serde_json::Value, Refusal>> {
+        Box::pin(async move {
+            let (_, record) = self.found().await?;
+            job_of(record.port, &record.instance, id).await
+        })
+    }
+
+    fn confirm<'a>(&'a self, id: &'a str) -> BoxFuture<'a, Result<(), Refusal>> {
+        Box::pin(async move {
+            let (dir, record) = self.found().await?;
+            confirm_at(record.port, &record.instance, &dir, id).await
+        })
+    }
+}
+
+/// Whether the program on `port` is the ai-desktop of `instance` (`GET /health`): nothing is sent to another one.
+async fn same_instance(port: u16, instance: &str) -> Result<(), Refusal> {
+    let health = crate::client::request(port, "GET", "/health", &[], "")
+        .await
+        .map_err(|e| Refusal::Failed(e.to_string()))?;
+    let doc = (health.status == 200)
+        .then(|| serde_json::from_str::<serde_json::Value>(&body_of(&health)).ok())
+        .flatten();
+    let same = doc.as_ref().is_some_and(|d| {
+        d["app"].as_str() == Some(APP) && d["instance"].as_str() == Some(instance)
+    });
+    if same {
+        Ok(())
+    } else {
+        Err(Refusal::NotAiDesktop)
+    }
+}
+
+/// The control secret beside `hub.json`, read anew: 64 hex digits, lower case.
+fn secret_in(dir: &std::path::Path) -> Result<String, Refusal> {
+    registry::read_secret(dir)
+        .ok()
+        .flatten()
+        .map(|s| s.trim().to_ascii_lowercase())
+        .filter(|s| s.len() == 64 && s.bytes().all(|b| b.is_ascii_hexdigit()))
+        .ok_or(Refusal::NoSecret)
+}
+
+/// The refusal of an answer that is not the one wanted: its status and the first line of its message.
+fn refused(reply: &crate::client::Reply) -> Refusal {
+    let doc = serde_json::from_str::<serde_json::Value>(&body_of(reply)).ok();
+    let message = doc
+        .as_ref()
+        .and_then(|d| d["error"]["message"].as_str())
+        .map_or_else(|| format!("HTTP {}", reply.status), str::to_owned);
+    Refusal::Refused {
+        status: reply.status,
+        message: message
+            .lines()
+            .next()
+            .unwrap_or("")
+            .chars()
+            .take(300)
+            .collect(),
+    }
+}
+
+/// `GET /jobs/<id>` of the ai-desktop on `port` (the dashboard's route: no secret).
+async fn job_of(port: u16, instance: &str, id: &str) -> Result<serde_json::Value, Refusal> {
+    same_instance(port, instance).await?;
+    let reply = crate::client::request(port, "GET", &format!("/jobs/{id}"), &[], "")
+        .await
+        .map_err(|e| Refusal::Failed(e.to_string()))?;
+    if reply.status != 200 {
+        return Err(refused(&reply));
+    }
+    serde_json::from_str::<serde_json::Value>(&body_of(&reply))
+        .ok()
+        .filter(serde_json::Value::is_object)
+        .ok_or_else(|| Refusal::Failed("ai-desktop answered, but not with the job".to_owned()))
+}
+
+/// `POST /jobs/<id>/run` `{ "confirm_private": true }` with the secret of `dir`.
+async fn confirm_at(
+    port: u16,
+    instance: &str,
+    dir: &std::path::Path,
+    id: &str,
+) -> Result<(), Refusal> {
+    same_instance(port, instance).await?;
+    let secret = secret_in(dir)?;
+    let auth = format!("Bearer {secret}");
+    let reply = crate::client::request(
+        port,
+        "POST",
+        &format!("/jobs/{id}/run"),
+        &[
+            ("Authorization", auth.as_str()),
+            ("Content-Type", "application/json"),
+        ],
+        r#"{"confirm_private":true}"#,
+    )
+    .await
+    .map_err(|e| Refusal::Failed(e.to_string()))?;
+    if reply.status == 200 {
+        Ok(())
+    } else {
+        Err(refused(&reply))
     }
 }
 
@@ -161,24 +287,8 @@ async fn send_to(
     dir: &std::path::Path,
     job: &Job,
 ) -> Result<JobAnswer, Refusal> {
-    let health = crate::client::request(port, "GET", "/health", &[], "")
-        .await
-        .map_err(|e| Refusal::Failed(e.to_string()))?;
-    let doc = (health.status == 200)
-        .then(|| serde_json::from_str::<serde_json::Value>(&body_of(&health)).ok())
-        .flatten();
-    let same = doc.as_ref().is_some_and(|d| {
-        d["app"].as_str() == Some(APP) && d["instance"].as_str() == Some(instance)
-    });
-    if !same {
-        return Err(Refusal::NotAiDesktop);
-    }
-    let secret = registry::read_secret(dir)
-        .ok()
-        .flatten()
-        .map(|s| s.trim().to_ascii_lowercase())
-        .filter(|s| s.len() == 64 && s.bytes().all(|b| b.is_ascii_hexdigit()))
-        .ok_or(Refusal::NoSecret)?;
+    same_instance(port, instance).await?;
+    let secret = secret_in(dir)?;
     let body = serde_json::to_string(job).map_err(|e| Refusal::Failed(e.to_string()))?;
     let auth = format!("Bearer {secret}");
     let reply = crate::client::request(
@@ -193,24 +303,10 @@ async fn send_to(
     )
     .await
     .map_err(|e| Refusal::Failed(e.to_string()))?;
-    let doc = serde_json::from_str::<serde_json::Value>(&body_of(&reply)).ok();
     if reply.status != 201 {
-        let message = doc
-            .as_ref()
-            .and_then(|d| d["error"]["message"].as_str())
-            .map_or_else(|| format!("HTTP {}", reply.status), str::to_owned);
-        let line = message
-            .lines()
-            .next()
-            .unwrap_or("")
-            .chars()
-            .take(300)
-            .collect();
-        return Err(Refusal::Refused {
-            status: reply.status,
-            message: line,
-        });
+        return Err(refused(&reply));
     }
+    let doc = serde_json::from_str::<serde_json::Value>(&body_of(&reply)).ok();
     let doc =
         doc.ok_or_else(|| Refusal::Failed("ai-desktop answered, but not with a job".to_owned()))?;
     let (Some(job_id), Some(status)) = (doc["job_id"].as_str(), doc["status"].as_str()) else {
@@ -288,6 +384,7 @@ mod tests {
             mode: "prefill".to_owned(),
             kind: "handoff".to_owned(),
             private: false,
+            choices: None,
         }
     }
 
@@ -494,5 +591,65 @@ mod tests {
         assert!(!kind_fits("prepare-decision", "open"));
         assert!(!kind_fits("split-plan", "open"), "a plan, not a task");
         assert!(!kind_fits("anything", "open"));
+    }
+
+    #[tokio::test]
+    async fn a_job_is_read_without_the_secret_and_confirmed_with_it() {
+        let dir = Scratch::new("agent-draft");
+        let (port, seen) = double(
+            "inst2",
+            (
+                200,
+                r#"{"id":"0123456789abcdef","status":"done","draft":{"title":"X"}}"#,
+            ),
+        )
+        .await;
+        running_at(&dir, port, "inst2");
+        let doc = intake(&dir).job("0123456789abcdef").await.unwrap();
+        assert_eq!(doc["draft"]["title"], "X");
+        intake(&dir).confirm("0123456789abcdef").await.unwrap();
+        let seen = seen.lock().unwrap();
+        assert_eq!(seen.len(), 4, "health and the job, health and the run");
+        assert!(
+            seen[1].starts_with("GET /jobs/0123456789abcdef "),
+            "{}",
+            seen[1]
+        );
+        assert!(!seen[1].contains(SECRET), "reading a job needs no secret");
+        let run = &seen[3];
+        assert!(run.starts_with("POST /jobs/0123456789abcdef/run "), "{run}");
+        assert!(
+            run.contains(&format!("Authorization: Bearer {SECRET}")),
+            "{run}"
+        );
+        assert!(run.ends_with(r#"{"confirm_private":true}"#), "{run}");
+    }
+
+    #[tokio::test]
+    async fn a_refused_run_or_another_program_says_so() {
+        let dir = Scratch::new("agent-draft-refused");
+        let (port, _) = double(
+            "inst3",
+            (409, r#"{"error":{"message":"the area is private\nmore"}}"#),
+        )
+        .await;
+        running_at(&dir, port, "inst3");
+        assert_eq!(
+            intake(&dir).confirm("0123456789abcdef").await,
+            Err(Refusal::Refused {
+                status: 409,
+                message: "the area is private".to_owned()
+            })
+        );
+        assert!(matches!(
+            intake(&dir).job("0123456789abcdef").await,
+            Err(Refusal::Refused { status: 409, .. })
+        ));
+        // hub.json names another instance: nothing is asked of that program.
+        running_at(&dir, port, "other");
+        assert_eq!(
+            intake(&dir).job("0123456789abcdef").await,
+            Err(Refusal::NotAiDesktop)
+        );
     }
 }

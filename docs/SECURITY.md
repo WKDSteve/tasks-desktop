@@ -465,6 +465,21 @@ The page uses the port only when the person ticked "open the dashboard afterward
 does not reach the route (it is not one of the device routes); it counts against the limit of mutations like every
 `POST` of a session.
 
+## Suggesting the fields of a new task (`POST /api/tasks/draft`, `draft_job`, `draft_confirm`)
+
+"Suggest fields" of the new-task form sends `{ "text", "choices" }` and nothing else: the free text (up to 64 KiB;
+ai-desktop refuses a control character but line breaks and tabs) and the values of the vault (`areas`, `kinds`, `tags`,
+`categories`, `plans`: names of `[A-Za-z0-9._/-]`, at most 1000 a list, areas and kinds not empty). The hub sends them
+as a job of the kind `draft-task` the way of `/api/tasks/agent` above (`hub.json`, `/health` with its instance, the
+secret read anew), with an empty area and always `private: true`: the area is not chosen yet, so the strictest class
+holds, and ai-desktop runs it at once only on a local model. Otherwise the job waits (`needs_confirmation`); the form
+asks the person, and only a yes sends `POST /api/tasks/draft_confirm { "job" }`, on which the hub runs it with the
+secret (`POST /jobs/<id>/run` with `confirm_private`). `POST /api/tasks/draft_job { "job" }` reads where it stands
+(`GET /jobs/<id>` of ai-desktop, no secret) and passes on only `status`, `draft`, `draft_error`, `error`, `note` and
+`private`: not the text it was given and not the model's whole answer. A job id is the 16 hex digits ai-desktop gives,
+nothing else. The draft only fills the form; the page checks it once more against its own lists, and nothing is
+written before *Create*. A paired phone does not reach these routes.
+
 ## Vaults (`/api/vaults`)
 
 The hub reads one vault at a time. `config.json` may hold more (`vaults`: a name and an absolute folder each, at most 16)

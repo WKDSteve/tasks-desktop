@@ -129,6 +129,9 @@ export interface AgentTab {
   close(): void;
 }
 
+export type { DraftChoices, DraftJob, DraftState } from './suggestFields';
+import type { DraftChoices, DraftJob, DraftState } from './suggestFields';
+
 /** What a job asks of the agent (`kind` of ai-desktop's `POST /jobs`). */
 export type AgentKind = 'handoff' | 'review-done' | 'prepare-decision';
 
@@ -410,6 +413,24 @@ export class Hub extends HubClient<Snapshot> {
    */
   handToAgent(id: string, mode: 'prefill' | 'run', kind: AgentKind): Promise<AgentJob> {
     return this.postJson<AgentJob>('/api/tasks/agent', { id, mode, kind });
+  }
+
+  /**
+   * "Suggest fields" of the new-task form: the hub sends the free text and the values of the vault to ai-desktop as a
+   * job of the kind `draft-task`, as private (the area is not chosen yet). The answer is the job.
+   */
+  sendDraft(text: string, choices: DraftChoices): Promise<DraftJob> {
+    return this.postJson<DraftJob>('/api/tasks/draft', { text, choices });
+  }
+
+  /** Where a draft stands: its status and, once done, `draft` or `draft_error`. */
+  draftJob(job: string): Promise<DraftState> {
+    return this.postJson<DraftState>('/api/tasks/draft_job', { job });
+  }
+
+  /** Run a draft that waits for a yes (the model of ai-desktop is not local), after the person said yes. */
+  async confirmDraft(job: string): Promise<void> {
+    await this.postJson<unknown>('/api/tasks/draft_confirm', { job });
   }
 
   /** Give a hub in the background the order to stay, or take it back; what the settings say afterwards. */

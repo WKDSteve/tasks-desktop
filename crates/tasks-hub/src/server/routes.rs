@@ -1527,6 +1527,7 @@ pub(super) async fn agent_send(State(st): State<Arc<Shared>>, body: Bytes) -> Re
         mode,
         kind,
         private: !rt.classes.allows(&area, crate::classes::Use::CloudRunner),
+        choices: None,
     };
     match intake.send(&job).await {
         Ok(answer) => (StatusCode::CREATED, axum::Json(answer)).into_response(),
@@ -1538,6 +1539,194 @@ pub(super) async fn agent_send(State(st): State<Arc<Shared>>, body: Bytes) -> Re
             };
             error_body(status, refusal.code(), &refusal.message())
         }
+    }
+}
+
+/// The longest free text a draft takes (a note, a piece of a mail; ai-desktop would take more).
+const DRAFT_TEXT_MAX: usize = 64 * 1024;
+/// The lists of `choices` of a draft, as ai-desktop takes them (`docs/JOBS.md` "Drafts" of ai-desktop).
+const DRAFT_LISTS: [&str; 5] = ["areas", "kinds", "tags", "categories", "plans"];
+
+/// The `choices` of a draft: an object of the lists above, each of names `[A-Za-z0-9._/-]` (1-200 bytes, at most
+/// 1000), `areas` and `kinds` not empty. An empty list is left out (ai-desktop takes a missing one as empty).
+fn draft_choices(value: Option<&serde_json::Value>) -> Result<serde_json::Value, &'static str> {
+    let Some(serde_json::Value::Object(map)) = value else {
+        return Err("choices must be an object of lists");
+    };
+    if map.keys().any(|k| !DRAFT_LISTS.contains(&k.as_str())) {
+        return Err("choices has a list ai-desktop does not take");
+    }
+    let mut out = serde_json::Map::new();
+    for key in DRAFT_LISTS {
+        let Some(list) = map.get(key) else { continue };
+        let Some(items) = list.as_array().filter(|a| a.len() <= 1000) else {
+            return Err("every list of choices has at most 1000 names");
+        };
+        let good = items.iter().all(|v| {
+            v.as_str().is_some_and(|s| {
+                !s.is_empty()
+                    && s.len() <= 200
+                    && s != "."
+                    && s != ".."
+                    && s.bytes()
+                        .all(|b| b.is_ascii_alphanumeric() || b"._/-".contains(&b))
+            })
+        });
+        if !good {
+            return Err("a name of choices is not [A-Za-z0-9._/-]");
+        }
+        if !items.is_empty() {
+            out.insert(key.to_owned(), list.clone());
+        }
+    }
+    if !out.contains_key("areas") || !out.contains_key("kinds") {
+        return Err("choices must name the areas and the kinds");
+    }
+    Ok(serde_json::Value::Object(out))
+}
+
+/// The answer to the page when the job did not reach ai-desktop.
+fn agent_refusal(refusal: &crate::agent::Refusal) -> Response {
+    let status = if *refusal == crate::agent::Refusal::NotRunning {
+        StatusCode::CONFLICT
+    } else {
+        StatusCode::BAD_GATEWAY
+    };
+    error_body(status, refusal.code(), &refusal.message())
+}
+
+/// `POST /api/tasks/draft` `{ "text", "choices" }`: "Suggest fields" of the new-task form. The free text and the values
+/// of the vault go to ai-desktop as a job of the kind `draft-task`; its area is not chosen yet, so it goes as private
+/// (ai-desktop runs a local model at once and holds any other for a yes, `draft_confirm`). Nothing is created: the
+/// page reads the draft (`draft_job`) and fills its form. The answer is the job (`job_id`, `status`, `private`, `note`).
+pub(super) async fn draft_send(State(st): State<Arc<Shared>>, body: Bytes) -> Response {
+    let map = match vault_request(&body, &["text", "choices"]) {
+        Ok(m) => m,
+        Err(r) => return r,
+    };
+    // Lines are allowed in the text (vault_text refuses them); ai-desktop refuses any other control character.
+    let text = match map.get("text").and_then(serde_json::Value::as_str) {
+        Some(t) if !t.trim().is_empty() && t.len() <= DRAFT_TEXT_MAX => t.to_owned(),
+        _ => {
+            return error_body(
+                StatusCode::BAD_REQUEST,
+                "bad_text",
+                "text: 1 byte to 64 KiB",
+            )
+        }
+    };
+    let choices = match draft_choices(map.get("choices")) {
+        Ok(c) => c,
+        Err(why) => return error_body(StatusCode::BAD_REQUEST, "bad_choices", why),
+    };
+    let rt = st.rt();
+    let Some(intake) = rt.agent.clone() else {
+        return error_body(
+            StatusCode::NOT_FOUND,
+            "agent_unavailable",
+            "this hub hands no task to an agent",
+        );
+    };
+    let Some(vault) = rt.vault.clone() else {
+        return engine_unavailable(&st);
+    };
+    let first: String = text
+        .trim()
+        .lines()
+        .next()
+        .unwrap_or("")
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .chars()
+        .take(80)
+        .collect();
+    let job = crate::agent::Job {
+        source: crate::agent::SOURCE.to_owned(),
+        task_id: "draft/new".to_owned(),
+        title: if first.is_empty() {
+            "New task".to_owned()
+        } else {
+            first
+        },
+        markdown: text,
+        vault: vault.to_string_lossy().replace('\\', "/"),
+        area: String::new(),
+        mode: "run".to_owned(),
+        kind: "draft-task".to_owned(),
+        private: true,
+        choices: Some(choices),
+    };
+    match intake.send(&job).await {
+        Ok(answer) => (StatusCode::CREATED, axum::Json(answer)).into_response(),
+        Err(refusal) => agent_refusal(&refusal),
+    }
+}
+
+/// The job id of a draft route: the 16 hex digits ai-desktop gives.
+#[allow(clippy::result_large_err)]
+fn draft_job_id(body: &Bytes) -> Result<String, Response> {
+    let map = vault_request(body, &["job"])?;
+    match map.get("job").and_then(serde_json::Value::as_str) {
+        Some(id)
+            if id.len() == 16 && id.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f')) =>
+        {
+            Ok(id.to_owned())
+        }
+        _ => Err(error_body(
+            StatusCode::BAD_REQUEST,
+            "bad_job",
+            "job: the 16 hex digits of a job of ai-desktop",
+        )),
+    }
+}
+
+/// `POST /api/tasks/draft_job` `{ "job" }`: where a draft stands. The page asks until `status` is no longer `running`;
+/// then `draft` (the checked fields, schema `tasks-draft/1`) or `draft_error` says what to fill in. Only these fields
+/// of the job reach the page (not the text it was given, not the model's whole answer).
+pub(super) async fn draft_job(State(st): State<Arc<Shared>>, body: Bytes) -> Response {
+    let id = match draft_job_id(&body) {
+        Ok(id) => id,
+        Err(r) => return r,
+    };
+    let Some(intake) = st.rt().agent.clone() else {
+        return error_body(
+            StatusCode::NOT_FOUND,
+            "agent_unavailable",
+            "this hub hands no task to an agent",
+        );
+    };
+    match intake.job(&id).await {
+        Ok(doc) => {
+            let mut out = serde_json::Map::new();
+            for key in ["status", "draft", "draft_error", "error", "note", "private"] {
+                if let Some(v) = doc.get(key).filter(|v| !v.is_null()) {
+                    out.insert(key.to_owned(), v.clone());
+                }
+            }
+            axum::Json(serde_json::Value::Object(out)).into_response()
+        }
+        Err(refusal) => agent_refusal(&refusal),
+    }
+}
+
+/// `POST /api/tasks/draft_confirm` `{ "job" }`: the person said yes on the page to sending the text to a model that is
+/// not local (`needs_confirmation`); the hub runs the job with the control secret.
+pub(super) async fn draft_confirm(State(st): State<Arc<Shared>>, body: Bytes) -> Response {
+    let id = match draft_job_id(&body) {
+        Ok(id) => id,
+        Err(r) => return r,
+    };
+    let Some(intake) = st.rt().agent.clone() else {
+        return error_body(
+            StatusCode::NOT_FOUND,
+            "agent_unavailable",
+            "this hub hands no task to an agent",
+        );
+    };
+    match intake.confirm(&id).await {
+        Ok(()) => axum::Json(json!({ "status": "running" })).into_response(),
+        Err(refusal) => agent_refusal(&refusal),
     }
 }
 

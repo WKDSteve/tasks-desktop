@@ -437,10 +437,13 @@ async fn the_login_entry_is_read_set_and_taken_away_and_only_with_a_session() {
     assert_eq!(post(&none, route, r#"{"on":true}"#, true).await.0, 404);
 }
 
-/// The job intake of ai-desktop as a double: it keeps every job and answers as it is told.
+/// The job intake of ai-desktop as a double: it keeps every job and answers as it is told; `job` answers with
+/// `doc`, `confirm` keeps the ids it was asked to run.
 struct FakeIntake {
     jobs: Mutex<Vec<Job>>,
     answer: Result<JobAnswer, Refusal>,
+    doc: Mutex<Value>,
+    confirmed: Mutex<Vec<String>>,
 }
 
 impl JobIntake for FakeIntake {
@@ -450,13 +453,168 @@ impl JobIntake for FakeIntake {
             self.answer.clone()
         })
     }
+
+    fn job<'a>(&'a self, _id: &'a str) -> appkit_hub::BoxFuture<'a, Result<Value, Refusal>> {
+        Box::pin(async move { Ok(self.doc.lock().unwrap().clone()) })
+    }
+
+    fn confirm<'a>(&'a self, id: &'a str) -> appkit_hub::BoxFuture<'a, Result<(), Refusal>> {
+        Box::pin(async move {
+            self.confirmed.lock().unwrap().push(id.to_owned());
+            Ok(())
+        })
+    }
 }
 
 fn intake(answer: Result<JobAnswer, Refusal>) -> Arc<FakeIntake> {
     Arc::new(FakeIntake {
         jobs: Mutex::new(Vec::new()),
         answer,
+        doc: Mutex::new(Value::Null),
+        confirmed: Mutex::new(Vec::new()),
     })
+}
+
+#[tokio::test]
+async fn a_draft_goes_as_private_with_the_choices_and_only_its_result_comes_back() {
+    let job = JobAnswer {
+        job_id: "0123456789abcdef".to_owned(),
+        status: "needs_confirmation".to_owned(),
+        private: true,
+        note: None,
+        port: 47123,
+    };
+    let fake = intake(Ok(job));
+    let r = rig_full(
+        "draft",
+        false,
+        None,
+        None,
+        None,
+        None,
+        None,
+        Some(Arc::clone(&fake) as Arc<dyn JobIntake>),
+    )
+    .await;
+    let body = r#"{"text":"Der Knopf\nsoll blau sein","choices":{"areas":["alpha.nvim"],"kinds":["task"],"tags":[]}}"#;
+    let (status, doc) = post(&r, "/api/tasks/draft", body, true).await;
+    assert_eq!(status, 201, "{doc}");
+    assert_eq!(doc["status"], "needs_confirmation", "{doc}");
+    {
+        let jobs = fake.jobs.lock().unwrap();
+        let sent = &jobs[0];
+        assert_eq!(
+            (
+                sent.kind.as_str(),
+                sent.mode.as_str(),
+                sent.task_id.as_str()
+            ),
+            ("draft-task", "run", "draft/new")
+        );
+        assert_eq!(sent.area, "", "the area is not chosen yet");
+        assert!(sent.private, "the strictest class");
+        assert_eq!(sent.title, "Der Knopf");
+        assert_eq!(sent.markdown, "Der Knopf\nsoll blau sein");
+        let choices = sent.choices.as_ref().unwrap();
+        assert_eq!(choices["areas"][0], "alpha.nvim");
+        assert!(choices.get("tags").is_none(), "an empty list is left out");
+    }
+    assert_eq!(post(&r, "/api/tasks/draft", body, false).await.0, 401);
+    for bad in [
+        r#"{"text":"","choices":{"areas":["a"],"kinds":["task"]}}"#,
+        r#"{"text":"x","choices":{"areas":[],"kinds":["task"]}}"#,
+        r#"{"text":"x","choices":{"areas":["a b"],"kinds":["task"]}}"#,
+        r#"{"text":"x","choices":{"areas":["a"],"kinds":["task"],"people":["x"]}}"#,
+        r#"{"text":"x"}"#,
+        r#"{"text":"x","choices":{"areas":["a"],"kinds":["task"]},"area":"a"}"#,
+    ] {
+        assert_eq!(
+            post(&r, "/api/tasks/draft", bad, true).await.0,
+            400,
+            "{bad}"
+        );
+    }
+    assert_eq!(fake.jobs.lock().unwrap().len(), 1, "nothing more was sent");
+
+    // The person said yes on the page: the hub runs the job.
+    let (status, doc) = post(
+        &r,
+        "/api/tasks/draft_confirm",
+        r#"{"job":"0123456789abcdef"}"#,
+        true,
+    )
+    .await;
+    assert_eq!(
+        (status, doc["status"].as_str()),
+        (200, Some("running")),
+        "{doc}"
+    );
+    assert_eq!(
+        fake.confirmed.lock().unwrap().as_slice(),
+        ["0123456789abcdef"]
+    );
+    assert_eq!(
+        post(
+            &r,
+            "/api/tasks/draft_confirm",
+            r#"{"job":"0123456789abcdef"}"#,
+            false
+        )
+        .await
+        .0,
+        401
+    );
+    for bad in [
+        r#"{"job":"../x"}"#,
+        r#"{"job":"0123456789ABCDEF"}"#,
+        r#"{}"#,
+    ] {
+        assert_eq!(
+            post(&r, "/api/tasks/draft_confirm", bad, true).await.0,
+            400,
+            "{bad}"
+        );
+        assert_eq!(
+            post(&r, "/api/tasks/draft_job", bad, true).await.0,
+            400,
+            "{bad}"
+        );
+    }
+
+    // Only the result of the job reaches the page, not the text or the model's answer.
+    *fake.doc.lock().unwrap() = serde_json::json!({
+        "id": "0123456789abcdef",
+        "status": "done",
+        "markdown": "Der Knopf soll blau sein",
+        "output": "the whole answer",
+        "draft": {"schema": "tasks-draft/1", "title": "Blau", "dropped": []},
+        "note": "draft: one answer, no tools"
+    });
+    let (status, doc) = post(
+        &r,
+        "/api/tasks/draft_job",
+        r#"{"job":"0123456789abcdef"}"#,
+        true,
+    )
+    .await;
+    assert_eq!(status, 200, "{doc}");
+    assert_eq!(doc["status"], "done");
+    assert_eq!(doc["draft"]["title"], "Blau");
+    assert!(
+        doc.get("markdown").is_none() && doc.get("output").is_none(),
+        "{doc}"
+    );
+    assert_eq!(
+        post(
+            &r,
+            "/api/tasks/draft_job",
+            r#"{"job":"0123456789abcdef"}"#,
+            false
+        )
+        .await
+        .0,
+        401
+    );
 }
 
 #[tokio::test]

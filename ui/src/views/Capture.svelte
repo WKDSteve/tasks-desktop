@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack } from 'svelte';
   import { closeOnBackdrop } from 'appkit-ui/backdrop';
   import { floating } from '../lib/floating';
   // Quick capture: a title and an area, nothing else is required. The
@@ -9,6 +10,7 @@
   import { hintOf, labelOf, translate, type Key } from '../lib/i18n';
   import PickField from './PickField.svelte';
   import { phaseOptions, planOptions, projectOptions } from '../lib/picker';
+  import type { TaskDraft } from '../lib/suggestFields';
 
   let { app }: { app: App } = $props();
   const t = (key: Key, params: Record<string, string | number> = {}) =>
@@ -48,6 +50,15 @@
   let attach = $state(false);
   let files = $state<File[]>([]);
   let busy = $state(false);
+  // "Suggest fields": a free text, asked of ai-desktop; the draft fills the fields above, only "Create" makes the task.
+  let draftOpen = $state(false);
+  let draftText = $state('');
+  let draftBusy = $state(false);
+  let draftNote = $state('');
+  // The answer to the question before the text leaves the machine; null: no question open.
+  let draftAnswer = $state<((yes: boolean) => void) | null>(null);
+  // Counts the openings of the form: a draft that comes back after the form was closed fills nothing.
+  let opened = 0;
 
   const scaffold = $derived(
     scaffoldRows(
@@ -117,10 +128,67 @@
       notes = '';
       attach = false;
       files = [];
+      // A question still open from the last time is answered no (untracked: the effect does not follow it).
+      untrack(() => draftAnswer?.(false));
+      draftOpen = false;
+      draftText = '';
+      draftBusy = false;
+      draftNote = '';
+      opened += 1;
       dialog.showModal();
     }
     if (!app.capturing && dialog.open) dialog.close();
   });
+
+  /** Ask ai-desktop for the fields of the text; the draft fills the form, nothing is created. */
+  async function suggest(): Promise<void> {
+    if (draftBusy) return;
+    const text = draftText.trim();
+    if (text === '') {
+      draftNote = t('draft.empty');
+      return;
+    }
+    const run = opened;
+    draftBusy = true;
+    draftNote = t('draft.asking');
+    const outcome = await app.suggestFields(
+      text,
+      () =>
+        new Promise<boolean>((resolve) => {
+          draftAnswer = (yes) => {
+            draftAnswer = null;
+            resolve(yes);
+          };
+        }),
+    );
+    if (run !== opened || !app.capturing) return;
+    draftBusy = false;
+    if (outcome.kind === 'declined') draftNote = t('draft.declined');
+    else if (outcome.kind === 'failed') draftNote = t('draft.failed', { why: outcome.why });
+    else fill(outcome.draft);
+  }
+
+  /** The fields of a draft into the form: only those it has; every field stays as editable as a typed one. */
+  function fill(draft: TaskDraft): void {
+    title = draft.title;
+    if (draft.area !== undefined && areas.some((a) => a.name === draft.area)) area = draft.area;
+    if (draft.kind !== undefined) kind = draft.kind;
+    if (draft.prio !== undefined) prio = String(draft.prio);
+    if (draft.effort !== undefined) effort = draft.effort;
+    if (draft.value !== undefined) value = String(draft.value);
+    if (draft.tags !== undefined && draft.tags.length > 0) tags = draft.tags.join(', ');
+    if (draft.category !== undefined && draft.category.length > 0) categories = [...draft.category];
+    if (draft.plan !== undefined) choosePlan(draft.plan);
+    // The summary is one line of the form (at most 300 characters).
+    if (draft.summary !== undefined) summary = draft.summary.replace(/\s*\n\s*/g, ' ').trim().slice(0, 300);
+    if (draft.acceptance !== undefined && draft.acceptance.length > 0) {
+      acceptance = draft.acceptance.map((line) => `- [ ] ${line}`).join('\n');
+    }
+    if (summary !== '' || tags !== '' || categories.length > 0 || plan !== '') more = true;
+    draftOpen = false;
+    draftNote =
+      draft.dropped.length > 0 ? t('draft.filled_dropped', { list: draft.dropped.join(', ') }) : t('draft.filled');
+  }
 
   async function submit(event: SubmitEvent): Promise<void> {
     event.preventDefault();
@@ -196,6 +264,33 @@
 <dialog bind:this={dialog} use:floating={{ kind: 'capture', moveLabel: t('float.move'), moveHint: t('hint.float.move') }} use:closeOnBackdrop={{ closeable: () => files.length === 0 && [title, context, acceptance, notes, summary, tags, other, refs, links].every((v) => v.trim() === '') }} aria-labelledby="capture-title" onclose={() => app.closeCapture()}>
   <form onsubmit={submit}>
     <h2 id="capture-title">{t('capture.title')}</h2>
+    {#if app.aiFeatures}
+      <div class="draft">
+        {#if !draftOpen}
+          <button type="button" data-hint={t('hint.form.draft_button')} onclick={() => (draftOpen = true)}
+            >{t('draft.button')}</button
+          >
+        {:else}
+          <label data-hint={t('hint.form.draft_text')}>
+            <span>{t('draft.text_label')}</span>
+            <textarea bind:value={draftText} rows="4" maxlength="20000" disabled={draftBusy}></textarea>
+          </label>
+          {#if draftAnswer}
+            <p class="draft-ask" role="alert">{t('draft.confirm')}</p>
+            <div class="draft-row">
+              <button type="button" onclick={() => draftAnswer?.(true)}>{t('draft.confirm_yes')}</button>
+              <button type="button" onclick={() => draftAnswer?.(false)}>{t('draft.confirm_no')}</button>
+            </div>
+          {:else}
+            <div class="draft-row">
+              <button type="button" onclick={suggest} disabled={draftBusy}>{t('draft.go')}</button>
+              <button type="button" onclick={() => (draftOpen = false)} disabled={draftBusy}>{t('draft.close')}</button>
+            </div>
+          {/if}
+        {/if}
+        {#if draftNote}<p class="draft-note" role="status">{draftNote}</p>{/if}
+      </div>
+    {/if}
     <label data-hint={t('hint.form.task.title')}>
       <span>{t('capture.name')}</span>
       <!-- svelte-ignore a11y_autofocus -->
@@ -450,6 +545,21 @@
   }
   .more {
     margin-bottom: 0.7rem;
+  }
+  .draft {
+    margin-bottom: 0.7rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--border);
+  }
+  .draft-row {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
+  .draft-ask,
+  .draft-note {
+    margin: 0.4rem 0;
+    font-size: 0.9rem;
   }
   .more summary {
     cursor: pointer;

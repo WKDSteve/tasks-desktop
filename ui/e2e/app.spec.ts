@@ -8266,7 +8266,7 @@ test('without ai-desktop the real hub offers no AI: the switch is greyed out wit
  * given (`AI_DESKTOP_CONFIG_DIR`, see `env` in hub.ts), a server that answers `/health` and `/jobs` and keeps what came.
  * This process stands in for its pid, so the record counts as running.
  */
-async function aiDesktopDouble(jobs: (body: Record<string, unknown>) => { status: number; body: unknown }) {
+async function aiDesktopDouble(jobs: (body: Record<string, unknown>, path: string) => { status: number; body: unknown }) {
   const dir = join(state().config, '..', 'ai-desktop');
   mkdirSync(dir, { recursive: true });
   const secret = 'ab'.repeat(32);
@@ -8278,7 +8278,7 @@ async function aiDesktopDouble(jobs: (body: Record<string, unknown>) => { status
     req.on('end', () => {
       const body = text === '' ? {} : (JSON.parse(text) as Record<string, unknown>);
       seen.push({ path: req.url ?? '', headers: req.headers, body });
-      const answer = req.url === '/health' ? { status: 200, body: { app: 'ai-desktop', version: '0.1.0', instance } } : jobs(body);
+      const answer = req.url === '/health' ? { status: 200, body: { app: 'ai-desktop', version: '0.1.0', instance } } : jobs(body, req.url ?? '');
       res.writeHead(answer.status, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify(answer.body));
     });
@@ -8356,6 +8356,72 @@ test('a task goes to ai-desktop: the hub sends its file with the secret, the pag
   }
   // The one refusal the test asked for (ai-desktop said 403, the hub answered 502) is the browser's only complaint.
   expect(consoleProblems.get(page)).toEqual(['error: Failed to load resource: the server responded with a status of 502 (Bad Gateway)']);
+});
+
+test('"Suggest fields" fills the new-task form from a text; asks before the text leaves the machine; creates nothing', async ({ page }) => {
+  let ran = false;
+  const ai = await aiDesktopDouble((_, path) => {
+    if (path === '/jobs') return { status: 201, body: { job_id: '0123456789abcdef', status: 'needs_confirmation', private: true } };
+    if (path === '/jobs/0123456789abcdef/run') {
+      ran = true;
+      return { status: 200, body: { id: '0123456789abcdef', status: 'running' } };
+    }
+    if (path === '/jobs/0123456789abcdef') {
+      return ran
+        ? {
+            status: 200,
+            body: {
+              id: '0123456789abcdef',
+              status: 'done',
+              output: 'the whole answer',
+              draft: {
+                schema: 'tasks-draft/1',
+                title: 'Blauer Knopf im Formular',
+                area: 'lib.nvim',
+                kind: 'bug',
+                prio: 2,
+                tags: [],
+                acceptance: ['Der Knopf ist blau'],
+                dropped: ['plan: nowhere'],
+              },
+            },
+          }
+        : { status: 200, body: { id: '0123456789abcdef', status: 'needs_confirmation' } };
+    }
+    return { status: 404, body: { error: { message: 'no such route' } } };
+  });
+  try {
+    await pair(page);
+    await showList(page);
+    await closeFloat(page);
+    const dialog = page.getByRole('dialog', { name: 'New task' });
+    await expect(async () => {
+      if (!(await dialog.isVisible())) await page.keyboard.press('c');
+      await expect(dialog).toBeVisible({ timeout: 1000 });
+    }).toPass({ timeout: 10000 });
+    await dialog.getByRole('button', { name: 'Suggest fields ...' }).click();
+    await dialog.getByLabel('Your text (a note, a piece of a mail, a thought)').fill('Der Knopf im Formular soll blau sein.');
+    await dialog.getByRole('button', { name: 'Suggest', exact: true }).click();
+    // The area is not chosen yet: the text is private, and the model of the double is not local.
+    await expect(dialog.getByText(/the text counts as private/)).toBeVisible({ timeout: 15_000 });
+    await dialog.getByRole('button', { name: 'Send', exact: true }).click();
+    await expect(dialog.getByLabel('Title')).toHaveValue('Blauer Knopf im Formular', { timeout: 15_000 });
+    await expect(dialog.getByText(/Left out \(not values of this vault\): plan: nowhere/)).toBeVisible();
+    await expect(dialog.getByLabel('Kind')).toHaveValue('bug');
+    await expect(dialog.getByLabel('Priority')).toHaveValue('2');
+    const jobs = ai.seen.filter((r) => r.path === '/jobs');
+    expect(jobs).toHaveLength(1);
+    expect(jobs[0]!.body).toMatchObject({ kind: 'draft-task', mode: 'run', area: '', private: true, markdown: 'Der Knopf im Formular soll blau sein.' });
+    expect((jobs[0]!.body['choices'] as { areas: string[] }).areas).toContain('lib.nvim');
+    const run = ai.seen.find((r) => r.path === '/jobs/0123456789abcdef/run');
+    expect(run?.headers['authorization']).toBe(`Bearer ${ai.secret}`);
+    expect(run?.body).toEqual({ confirm_private: true });
+    // Nothing was created: the form is still open; Cancel drops it.
+    await dialog.getByRole('button', { name: 'Cancel' }).click();
+    await expect(dialog).toHaveCount(0);
+  } finally {
+    await ai.close();
+  }
 });
 
 test('the switch "Show AI functions" off: no AI place in the task, kept over a reload', async ({ page }) => {

@@ -830,6 +830,15 @@ ai-desktop through the discovery of the family in appkit (`docs/FAMILY.md` there
 installer writes (`%LOCALAPPDATA%\appkit-family\installed\ai-desktop.json`), running is its `hub.json` with a live
 process. Only files are read, at the start of the page and whenever its window gets the focus.
 
+**Suggest fields.** The new-task form has *Suggest fields ...* (where the AI functions are offered): write a few lines
+(a note, a piece of a mail, a thought), *Suggest*, and ai-desktop proposes title, area, kind, prio, effort, value,
+tags, category, plan, summary and acceptance. They only fill the form; every field stays editable, and the task is made
+with *Create* as always. The hub sends the text with the values of the vault (areas, kinds, categories, the tags of the
+tasks, the plans) as a job of the kind `draft-task` (`docs/JOBS.md` of ai-desktop, "Drafts"); the area is not chosen
+yet, so the text counts as private: a model of ai-desktop on this machine answers at once, any other only after you
+said yes in the form (*Send*). A value that is not one of this vault (a tag nobody uses, a plan that is gone) is left
+out and named under the form.
+
 **Hand to an agent.** The button *Hand to an agent ...* in the detail of a task (also in its float, its context menu
 and the palette) opens a small choice: *Only fill in* (the default; the job stands ready in the dashboard of
 ai-desktop) or *Run at once*, kept for the next time, and for a finished task *Review against the acceptance*, for a
