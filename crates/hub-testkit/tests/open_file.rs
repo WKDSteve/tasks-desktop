@@ -439,12 +439,13 @@ async fn the_login_entry_is_read_set_and_taken_away_and_only_with_a_session() {
 }
 
 /// The job intake of ai-desktop as a double: it keeps every job and answers as it is told; `job` answers with
-/// `doc`, `confirm` keeps the ids it was asked to run.
+/// `doc`, `confirm` keeps the ids it was asked to run, `drop` the ids it was asked to put away.
 struct FakeIntake {
     jobs: Mutex<Vec<Job>>,
     answer: Result<JobAnswer, Refusal>,
     doc: Mutex<Value>,
     confirmed: Mutex<Vec<String>>,
+    dropped: Mutex<Vec<String>>,
 }
 
 impl JobIntake for FakeIntake {
@@ -465,6 +466,13 @@ impl JobIntake for FakeIntake {
             Ok(())
         })
     }
+
+    fn discard<'a>(&'a self, id: &'a str) -> appkit_hub::BoxFuture<'a, Result<(), Refusal>> {
+        Box::pin(async move {
+            self.dropped.lock().unwrap().push(id.to_owned());
+            Ok(())
+        })
+    }
 }
 
 fn intake(answer: Result<JobAnswer, Refusal>) -> Arc<FakeIntake> {
@@ -473,6 +481,7 @@ fn intake(answer: Result<JobAnswer, Refusal>) -> Arc<FakeIntake> {
         answer,
         doc: Mutex::new(Value::Null),
         confirmed: Mutex::new(Vec::new()),
+        dropped: Mutex::new(Vec::new()),
     })
 }
 
@@ -651,7 +660,8 @@ async fn a_draft_goes_as_private_with_the_choices_and_only_its_result_comes_back
         Some(Arc::clone(&fake) as Arc<dyn JobIntake>),
     )
     .await;
-    let body = r#"{"text":"Der Knopf\nsoll blau sein","choices":{"areas":["alpha.nvim"],"kinds":["task"],"tags":[]}}"#;
+    // The page sends the text and nothing else: the values of the vault are the engine's, asked by the hub (WEB-13).
+    let body = r#"{"text":"Der Knopf\nsoll blau sein"}"#;
     let (status, doc) = post(&r, "/api/tasks/draft", body, true).await;
     assert_eq!(status, 201, "{doc}");
     assert_eq!(doc["status"], "needs_confirmation", "{doc}");
@@ -671,17 +681,30 @@ async fn a_draft_goes_as_private_with_the_choices_and_only_its_result_comes_back
         assert_eq!(sent.title, "Der Knopf");
         assert_eq!(sent.markdown, "Der Knopf\nsoll blau sein");
         let choices = sent.choices.as_ref().unwrap();
-        assert_eq!(choices["areas"][0], "alpha.nvim");
-        assert!(choices.get("tags").is_none(), "an empty list is left out");
+        assert_eq!(
+            choices["areas"],
+            serde_json::json!(["alpha.nvim", "beta.nvim", "secret-area"]),
+            "the areas of the engine, sorted"
+        );
+        assert_eq!(
+            choices["kinds"],
+            serde_json::json!(["bug", "feature", "idea", "research", "task"]),
+            "the kinds of the engine's hello"
+        );
+        assert_eq!(choices["categories"], serde_json::json!(["bug", "docs"]));
+        assert!(
+            choices.get("tags").is_none() && choices.get("plans").is_none(),
+            "an empty list is left out: {choices}"
+        );
     }
     assert_eq!(post(&r, "/api/tasks/draft", body, false).await.0, 401);
     for bad in [
-        r#"{"text":"","choices":{"areas":["a"],"kinds":["task"]}}"#,
-        r#"{"text":"x","choices":{"areas":[],"kinds":["task"]}}"#,
-        r#"{"text":"x","choices":{"areas":["a b"],"kinds":["task"]}}"#,
-        r#"{"text":"x","choices":{"areas":["a"],"kinds":["task"],"people":["x"]}}"#,
-        r#"{"text":"x"}"#,
-        r#"{"text":"x","choices":{"areas":["a"],"kinds":["task"]},"area":"a"}"#,
+        r#"{"text":""}"#,
+        r#"{"text":"   "}"#,
+        r#"{}"#,
+        // A list of the page is not taken any more, not even a well-formed one.
+        r#"{"text":"x","choices":{"areas":["alpha.nvim"],"kinds":["task"]}}"#,
+        r#"{"text":"x","area":"a"}"#,
     ] {
         assert_eq!(
             post(&r, "/api/tasks/draft", bad, true).await.0,
@@ -719,11 +742,49 @@ async fn a_draft_goes_as_private_with_the_choices_and_only_its_result_comes_back
         .0,
         401
     );
+    // The person said no (or closed the form while it asked): the hub puts the waiting job away.
+    let (status, doc) = post(
+        &r,
+        "/api/tasks/draft_drop",
+        r#"{"job":"fedcba9876543210"}"#,
+        true,
+    )
+    .await;
+    assert_eq!(
+        (status, doc["status"].as_str()),
+        (200, Some("dropped")),
+        "{doc}"
+    );
+    assert_eq!(
+        fake.dropped.lock().unwrap().as_slice(),
+        ["fedcba9876543210"]
+    );
+    assert_eq!(
+        post(
+            &r,
+            "/api/tasks/draft_drop",
+            r#"{"job":"fedcba9876543210"}"#,
+            false
+        )
+        .await
+        .0,
+        401
+    );
+    assert_eq!(
+        fake.dropped.lock().unwrap().len(),
+        1,
+        "nothing is put away without a session"
+    );
     for bad in [
         r#"{"job":"../x"}"#,
         r#"{"job":"0123456789ABCDEF"}"#,
         r#"{}"#,
     ] {
+        assert_eq!(
+            post(&r, "/api/tasks/draft_drop", bad, true).await.0,
+            400,
+            "{bad}"
+        );
         assert_eq!(
             post(&r, "/api/tasks/draft_confirm", bad, true).await.0,
             400,

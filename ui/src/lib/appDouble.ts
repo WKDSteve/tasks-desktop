@@ -93,6 +93,18 @@ export class FakeHub {
   confirmDraft = async (job: string) => {
     this.confirmed.push(job);
   };
+  dropped: string[] = [];
+  dropDraft = async (job: string) => {
+    this.dropped.push(job);
+  };
+  /** "Suggest fields": the texts that were sent, and the status the job answers with (`running`: it never ends). */
+  drafts: string[] = [];
+  draftStatus = 'needs_confirmation';
+  sendDraft = async (text: string) => {
+    this.drafts.push(text);
+    return { job_id: '0123456789abcdef', status: this.draftStatus, private: true };
+  };
+  draftJob = async (_job: string) => ({ status: 'running' });
   token: string | null = null;
   onUnauthorized: () => void = () => {};
   doc: Snapshot = snapshot([task('pub/a', { etag: 'e1' })]);

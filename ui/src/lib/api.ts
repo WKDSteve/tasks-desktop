@@ -136,7 +136,7 @@ export interface AgentTab {
 
 export type { DraftChoices, DraftJob, DraftState } from './suggestFields';
 import type { SplitJob, SplitState } from './split';
-import type { DraftChoices, DraftJob, DraftState } from './suggestFields';
+import type { DraftJob, DraftState } from './suggestFields';
 import type { AnswerKind, AnswerState } from './agentAnswer';
 
 /** What a job asks of the agent (`kind` of ai-desktop's `POST /jobs`). */
@@ -433,11 +433,17 @@ export class Hub extends HubClient<Snapshot> {
   }
 
   /**
-   * "Suggest fields" of the new-task form: the hub sends the free text and the values of the vault to ai-desktop as a
-   * job of the kind `draft-task`, as private (the area is not chosen yet). The answer is the job.
+   * "Suggest fields" of the new-task form: the hub sends the free text and the values of the vault (asked of the
+   * engine by the hub) to ai-desktop as a job of the kind `draft-task`, as private (the area is not chosen yet). The
+   * answer is the job.
    */
-  sendDraft(text: string, choices: DraftChoices): Promise<DraftJob> {
-    return this.postJson<DraftJob>('/api/tasks/draft', { text, choices });
+  sendDraft(text: string): Promise<DraftJob> {
+    return this.postJson<DraftJob>('/api/tasks/draft', { text });
+  }
+
+  /** Put a draft away that waits for a yes nobody gives (a no on the page, a closed form). */
+  async dropDraft(job: string): Promise<void> {
+    await this.postJson<unknown>('/api/tasks/draft_drop', { job });
   }
 
   /**

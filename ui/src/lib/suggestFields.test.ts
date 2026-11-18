@@ -83,6 +83,9 @@ function hub(status: string, states: DraftState[]): DraftHub & { calls: string[]
     confirmDraft: async (job) => {
       calls.push(`confirm ${job}`);
     },
+    dropDraft: async (job) => {
+      calls.push(`drop ${job}`);
+    },
   };
 }
 
@@ -118,10 +121,16 @@ describe('runDraft', () => {
     expect(h.calls).toEqual(['send Notiz', 'job 0123456789abcdef', 'job 0123456789abcdef']);
   });
 
-  it('asks before a model that is not local; no means nothing runs', async () => {
+  it('asks before a model that is not local; no means nothing runs, and the waiting job is put away', async () => {
     const no = hub('needs_confirmation', []);
     expect(await runDraft(no, 'x', choices, { ...quick, confirm: async () => false })).toEqual({ kind: 'declined' });
-    expect(no.calls).toEqual(['send x']);
+    expect(no.calls).toEqual(['send x', 'drop 0123456789abcdef']);
+    // ai-desktop ended meanwhile: the no is still a no, not a failure of the form.
+    const gone = hub('needs_confirmation', []);
+    gone.dropDraft = async () => {
+      throw new Error('ai-desktop is not running');
+    };
+    expect(await runDraft(gone, 'x', choices, { ...quick, confirm: async () => false })).toEqual({ kind: 'declined' });
     const yes = hub('needs_confirmation', [{ status: 'done', draft: { title: 'T' } }]);
     const out = await runDraft(yes, 'x', choices, { ...quick, confirm: async () => true });
     expect(out.kind).toBe('draft');

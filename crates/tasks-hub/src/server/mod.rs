@@ -401,6 +401,11 @@ fn app_routes(core: &Arc<Shared>) -> Router<Arc<Shared>> {
             &r("draft_confirm"),
             post(draft_confirm).layer(DefaultBodyLimit::max(small)),
         )
+        // A draft nobody waits for (a no to its question, a closed form) is put away in ai-desktop.
+        .route(
+            &r("draft_drop"),
+            post(draft_drop).layer(DefaultBodyLimit::max(small)),
+        )
         // "Split into tasks" of a plan: a split-plan job of ai-desktop; its yes for a private area is the same route
         // as a draft's.
         .route(

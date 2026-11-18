@@ -137,7 +137,12 @@
       opened += 1;
       dialog.showModal();
     }
-    if (!app.capturing && dialog.open) dialog.close();
+    if (!app.capturing) {
+      // Closed while the form asked whether the text may leave this machine: that is a no, and the waiting job is put
+      // away (untracked, as above).
+      untrack(() => draftAnswer?.(false));
+      if (dialog.open) dialog.close();
+    }
   });
 
   /** Ask ai-desktop for the fields of the text; the draft fills the form, nothing is created. */

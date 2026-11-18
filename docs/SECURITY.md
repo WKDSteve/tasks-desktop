@@ -480,16 +480,21 @@ model's whole answer. A needed yes for a private area goes through `draft_confir
 routes: the page writes the sections with `ops` (`set_section`) only after the person's *Adopt*, and the follow-up task
 with `new` only after its own click. A paired phone does not reach the route.
 
-## Suggesting the fields of a new task (`POST /api/tasks/draft`, `draft_job`, `draft_confirm`)
+## Suggesting the fields of a new task (`POST /api/tasks/draft`, `draft_job`, `draft_confirm`, `draft_drop`)
 
-"Suggest fields" of the new-task form sends `{ "text", "choices" }` and nothing else: the free text (up to 64 KiB;
-ai-desktop refuses a control character but line breaks and tabs) and the values of the vault (`areas`, `kinds`, `tags`,
-`categories`, `plans`: names of `[A-Za-z0-9._/-]`, at most 1000 a list, areas and kinds not empty). The hub sends them
-as a job of the kind `draft-task` the way of `/api/tasks/agent` above (`hub.json`, `/health` with its instance, the
+"Suggest fields" of the new-task form sends `{ "text" }` and nothing else: the free text (up to 64 KiB; ai-desktop
+refuses a control character but line breaks and tabs). The values of the vault a draft may use (`areas`, `kinds`,
+`tags`, `categories`, `plans`) are not the page's to name: the hub asks the engine for them (its `areas`, the ranges of
+its `hello`, the tags and plans of the snapshot), keeps the names of `[A-Za-z0-9._/-]`, each once, at most 1000 a list,
+and refuses with `502` when no area or no kind is left; a request that carries a list of its own is a `400`. The hub
+sends text and values as a job of the kind `draft-task` the way of `/api/tasks/agent` above (`hub.json`, `/health` with its instance, the
 secret read anew), with an empty area and always `private: true`: the area is not chosen yet, so the strictest class
 holds, and ai-desktop runs it at once only on a local model. Otherwise the job waits (`needs_confirmation`); the form
 asks the person, and only a yes sends `POST /api/tasks/draft_confirm { "job" }`, on which the hub runs it with the
-secret (`POST /jobs/<id>/run` with `confirm_private`). `POST /api/tasks/draft_job { "job" }` reads where it stands
+secret (`POST /jobs/<id>/run` with `confirm_private`). A no, or closing the form while it asks, sends
+`POST /api/tasks/draft_drop { "job" }`: the hub puts the waiting job away with the secret (`DELETE /jobs/<id>`; a job
+ai-desktop does not know any more counts as put away), so that the free text does not stay in the dashboard of
+ai-desktop. Nothing was sent to a model either way. `POST /api/tasks/draft_job { "job" }` reads where it stands
 (`GET /jobs/<id>` of ai-desktop, no secret) and passes on only `status`, `draft`, `draft_error`, `error`, `note` and
 `private`: not the text it was given and not the model's whole answer. A job id is the 16 hex digits ai-desktop gives,
 nothing else. The draft only fills the form; the page checks it once more against its own lists, and nothing is

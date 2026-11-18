@@ -1646,42 +1646,89 @@ const DRAFT_TEXT_MAX: usize = 64 * 1024;
 /// The lists of `choices` of a draft, as ai-desktop takes them (`docs/JOBS.md` "Drafts" of ai-desktop).
 const DRAFT_LISTS: [&str; 5] = ["areas", "kinds", "tags", "categories", "plans"];
 
-/// The `choices` of a draft: an object of the lists above, each of names `[A-Za-z0-9._/-]` (1-200 bytes, at most
-/// 1000), `areas` and `kinds` not empty. An empty list is left out (ai-desktop takes a missing one as empty).
-fn draft_choices(value: Option<&serde_json::Value>) -> Result<serde_json::Value, &'static str> {
-    let Some(serde_json::Value::Object(map)) = value else {
-        return Err("choices must be an object of lists");
+/// The most names a list of `choices` holds (ai-desktop takes no more).
+const DRAFT_LIST_MAX: usize = 1000;
+
+/// Is `name` one ai-desktop takes in a list of `choices`: `[A-Za-z0-9._/-]`, 1-200 bytes, not `.` or `..`?
+fn draft_name(name: &str) -> bool {
+    !name.is_empty()
+        && name.len() <= 200
+        && name != "."
+        && name != ".."
+        && name
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b"._/-".contains(&b))
+}
+
+/// The `choices` of a draft from what the engine said: the areas (`areas`), the kinds and the categories (the ranges
+/// of `hello`), and the tags and the plans of the snapshot. Each list holds every name once, sorted, at most
+/// `DRAFT_LIST_MAX`; a name ai-desktop would refuse (`draft_name`) is left out, and so is an empty list (ai-desktop
+/// takes a missing one as empty). `Err` when no area or no kind is left: a draft needs both.
+fn draft_choices(
+    areas: &serde_json::Value,
+    enums: &serde_json::Value,
+    snapshot: &serde_json::Value,
+) -> Result<serde_json::Value, &'static str> {
+    let strings = |list: &serde_json::Value| -> Vec<String> {
+        list.as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|v| v.as_str().map(str::to_owned))
+            .collect()
     };
-    if map.keys().any(|k| !DRAFT_LISTS.contains(&k.as_str())) {
-        return Err("choices has a list ai-desktop does not take");
-    }
+    let tasks = || snapshot["tasks"].as_array().into_iter().flatten();
+    let mut lists: [(&str, Vec<String>); 5] = [
+        (
+            "areas",
+            areas["areas"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(|a| a["name"].as_str().map(str::to_owned))
+                .chain(tasks().filter_map(|t| t["area"].as_str().map(str::to_owned)))
+                .collect(),
+        ),
+        ("kinds", strings(&enums["kind"])),
+        ("tags", tasks().flat_map(|t| strings(&t["tags"])).collect()),
+        ("categories", strings(&enums["category"])),
+        (
+            "plans",
+            snapshot["plans"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(|p| p["id"].as_str().map(str::to_owned))
+                .collect(),
+        ),
+    ];
     let mut out = serde_json::Map::new();
-    for key in DRAFT_LISTS {
-        let Some(list) = map.get(key) else { continue };
-        let Some(items) = list.as_array().filter(|a| a.len() <= 1000) else {
-            return Err("every list of choices has at most 1000 names");
-        };
-        let good = items.iter().all(|v| {
-            v.as_str().is_some_and(|s| {
-                !s.is_empty()
-                    && s.len() <= 200
-                    && s != "."
-                    && s != ".."
-                    && s.bytes()
-                        .all(|b| b.is_ascii_alphanumeric() || b"._/-".contains(&b))
-            })
-        });
-        if !good {
-            return Err("a name of choices is not [A-Za-z0-9._/-]");
-        }
-        if !items.is_empty() {
-            out.insert(key.to_owned(), list.clone());
+    for (key, names) in &mut lists {
+        debug_assert!(DRAFT_LISTS.contains(key));
+        names.retain(|n| draft_name(n));
+        names.sort();
+        names.dedup();
+        names.truncate(DRAFT_LIST_MAX);
+        if !names.is_empty() {
+            out.insert((*key).to_owned(), json!(names));
         }
     }
     if !out.contains_key("areas") || !out.contains_key("kinds") {
-        return Err("choices must name the areas and the kinds");
+        return Err("the engine named no area or no kind a draft could use");
     }
     Ok(serde_json::Value::Object(out))
+}
+
+/// The `choices` of a draft, asked of the engine now (WEB-13: the page sends none, the hub trusts no list of a page).
+// The error is the answer to send, as with `ask`: a response is large, and rare.
+#[allow(clippy::result_large_err)]
+async fn vault_choices(st: &Shared) -> Result<serde_json::Value, Response> {
+    let parse = |text: &str| serde_json::from_str::<serde_json::Value>(text).unwrap_or_default();
+    let areas = parse(&ask_held(st, false, AREAS_KEY, Calls::Areas, None).await?);
+    let hello = parse(&ask(st, Calls::Hello, None).await?.text);
+    let cached = st.rt().store.current().await.map_err(engine_failure)?;
+    let snapshot = serde_json::from_slice::<serde_json::Value>(&cached.text).unwrap_or_default();
+    draft_choices(&areas, &hello["enums"], &snapshot)
+        .map_err(|why| error_body(StatusCode::BAD_GATEWAY, "engine_failed", why))
 }
 
 /// The answer to the page when the job did not reach ai-desktop.
@@ -1694,12 +1741,13 @@ fn agent_refusal(refusal: &crate::agent::Refusal) -> Response {
     error_body(status, refusal.code(), &refusal.message())
 }
 
-/// `POST /api/tasks/draft` `{ "text", "choices" }`: "Suggest fields" of the new-task form. The free text and the values
-/// of the vault go to ai-desktop as a job of the kind `draft-task`; its area is not chosen yet, so it goes as private
-/// (ai-desktop runs a local model at once and holds any other for a yes, `draft_confirm`). Nothing is created: the
-/// page reads the draft (`draft_job`) and fills its form. The answer is the job (`job_id`, `status`, `private`, `note`).
+/// `POST /api/tasks/draft` `{ "text" }`: "Suggest fields" of the new-task form. The free text and the values of the
+/// vault (`vault_choices`: asked of the engine here, the page names none) go to ai-desktop as a job of the kind
+/// `draft-task`; its area is not chosen yet, so it goes as private (ai-desktop runs a local model at once and holds
+/// any other for a yes, `draft_confirm`, or is put away after a no, `draft_drop`). Nothing is created: the page reads
+/// the draft (`draft_job`) and fills its form. The answer is the job (`job_id`, `status`, `private`, `note`).
 pub(super) async fn draft_send(State(st): State<Arc<Shared>>, body: Bytes) -> Response {
-    let map = match vault_request(&body, &["text", "choices"]) {
+    let map = match vault_request(&body, &["text"]) {
         Ok(m) => m,
         Err(r) => return r,
     };
@@ -1714,10 +1762,6 @@ pub(super) async fn draft_send(State(st): State<Arc<Shared>>, body: Bytes) -> Re
             )
         }
     };
-    let choices = match draft_choices(map.get("choices")) {
-        Ok(c) => c,
-        Err(why) => return error_body(StatusCode::BAD_REQUEST, "bad_choices", why),
-    };
     let rt = st.rt();
     let Some(intake) = rt.agent.clone() else {
         return error_body(
@@ -1728,6 +1772,10 @@ pub(super) async fn draft_send(State(st): State<Arc<Shared>>, body: Bytes) -> Re
     };
     let Some(vault) = rt.vault.clone() else {
         return engine_unavailable(&st);
+    };
+    let choices = match vault_choices(&st).await {
+        Ok(c) => c,
+        Err(r) => return r,
     };
     let first: String = text
         .trim()
@@ -1832,6 +1880,28 @@ pub(super) async fn draft_confirm(State(st): State<Arc<Shared>>, body: Bytes) ->
     };
     match intake.confirm(&id).await {
         Ok(()) => axum::Json(json!({ "status": "running" })).into_response(),
+        Err(refusal) => agent_refusal(&refusal),
+    }
+}
+
+/// `POST /api/tasks/draft_drop` `{ "job" }`: nobody waits for this job any more (the person said no to sending the
+/// text, or closed the form while it asked); the hub puts it away in ai-desktop with the control secret
+/// (`DELETE /jobs/<id>`), so that it does not stay in the dashboard with the free text. A job that is gone already
+/// counts as put away.
+pub(super) async fn draft_drop(State(st): State<Arc<Shared>>, body: Bytes) -> Response {
+    let id = match draft_job_id(&body) {
+        Ok(id) => id,
+        Err(r) => return r,
+    };
+    let Some(intake) = st.rt().agent.clone() else {
+        return error_body(
+            StatusCode::NOT_FOUND,
+            "agent_unavailable",
+            "this hub hands no task to an agent",
+        );
+    };
+    match intake.discard(&id).await {
+        Ok(()) => axum::Json(json!({ "status": "dropped" })).into_response(),
         Err(refusal) => agent_refusal(&refusal),
     }
 }
@@ -2310,5 +2380,45 @@ mod sort_words {
             engine, SORTS,
             "model.SORTS of the engine and SORTS of the hub differ"
         );
+    }
+
+    #[test]
+    fn the_choices_of_a_draft_are_the_engines_names_once_sorted_and_only_those_ai_desktop_takes() {
+        use super::{draft_choices, DRAFT_LIST_MAX};
+        use serde_json::json;
+        let areas = json!({ "areas": [{ "name": "beta" }, { "name": "alpha.nvim" }, { "name": "with space" }] });
+        let enums =
+            json!({ "kind": ["task", "bug", "task"], "category": ["docs"], "prio": [1, 2] });
+        let snapshot = json!({
+            "tasks": [
+                { "id": "gamma/a", "area": "gamma", "tags": ["ui", "ux", "ui"] },
+                { "id": "beta/b", "area": "beta", "tags": ["..", "a b", ""] },
+            ],
+            "plans": [{ "id": "beta/plan-1" }, { "id": 7 }],
+        });
+        assert_eq!(
+            draft_choices(&areas, &enums, &snapshot).unwrap(),
+            json!({
+                "areas": ["alpha.nvim", "beta", "gamma"],
+                "kinds": ["bug", "task"],
+                "tags": ["ui", "ux"],
+                "categories": ["docs"],
+                "plans": ["beta/plan-1"],
+            })
+        );
+        // No more than ai-desktop takes in a list.
+        let many: Vec<serde_json::Value> = (0..1500)
+            .map(|i| json!({ "name": format!("a{i:04}") }))
+            .collect();
+        let cut = draft_choices(&json!({ "areas": many }), &enums, &json!({})).unwrap();
+        assert_eq!(cut["areas"].as_array().unwrap().len(), DRAFT_LIST_MAX);
+        assert!(
+            cut.get("tags").is_none() && cut.get("plans").is_none(),
+            "{cut}"
+        );
+        // A draft needs an area and a kind: an engine that names none gets no job.
+        assert!(draft_choices(&json!({}), &enums, &json!({})).is_err());
+        assert!(draft_choices(&areas, &json!({}), &snapshot).is_err());
+        assert!(draft_choices(&areas, &json!(null), &json!(null)).is_err());
     }
 }

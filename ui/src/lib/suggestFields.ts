@@ -1,6 +1,6 @@
-// "Suggest fields" of the new-task form: a free text and the values of the vault go to ai-desktop as a job of the kind
-// `draft-task` (through the hub, `POST /api/tasks/draft`); its checked draft fills the form, and only "Create" makes the
-// task. ai-desktop checks the draft already (`draft::check`, schema `tasks-draft/1`); `checkDraft` holds it once more to
+// "Suggest fields" of the new-task form: a free text goes to the hub (`POST /api/tasks/draft`), which adds the values of
+// the vault it asks of the engine (WEB-13: the page sends no list) and hands both to ai-desktop as a job of the kind
+// `draft-task`; its checked draft fills the form, and only "Create" makes the task. ai-desktop checks the draft already (`draft::check`, schema `tasks-draft/1`); `checkDraft` holds it once more to
 // the lists of this page, which may have changed since, with the same rules (docs/JOBS.md "Drafts" of ai-desktop).
 
 /** The values the vault allows: what the form offers. */
@@ -47,11 +47,13 @@ export interface DraftState {
   note?: string;
 }
 
-/** The three routes of the hub a draft uses. */
+/** The routes of the hub a draft uses. */
 export interface DraftHub {
-  sendDraft(text: string, choices: DraftChoices): Promise<DraftJob>;
+  sendDraft(text: string): Promise<DraftJob>;
   draftJob(job: string): Promise<DraftState>;
   confirmDraft(job: string): Promise<void>;
+  /** Put a job away that nobody waits for (a no to its question): it would stay in the dashboard of ai-desktop. */
+  dropDraft(job: string): Promise<void>;
 }
 
 const NAME = /^[A-Za-z0-9._/-]{1,200}$/;
@@ -219,18 +221,28 @@ export interface DraftOptions {
 
 /**
  * Asks ai-desktop for a draft of `text` and waits for it: the job goes as private (the area is not chosen yet), a
- * model that is not local runs only after `confirm()`, then the job is watched until it has ended. The draft is
- * checked against `choices`; nothing is written anywhere.
+ * model that is not local runs only after `confirm()`, then the job is watched until it has ended. A no (also the
+ * one a closed form gives) puts the waiting job away in ai-desktop. The draft is checked against `choices`, the lists
+ * of this page (the hub sends its own, of the engine); nothing is written anywhere.
  */
 export async function runDraft(hub: DraftHub, text: string, choices: DraftChoices, options: DraftOptions): Promise<DraftOutcome> {
   const sleep = options.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
   const now = options.now ?? Date.now;
   const wanted = options.wanted ?? (() => true);
-  const job = await hub.sendDraft(text, choices);
+  const job = await hub.sendDraft(text);
   // Not started (two jobs of ai-desktop run already): it would wait in the dashboard, not come back here.
   if (job.status === 'prefilled') return { kind: 'failed', why: job.note ?? 'ai-desktop runs two jobs already; try again later' };
   if (job.status === 'needs_confirmation') {
-    if (!(await options.confirm())) return { kind: 'declined' };
+    if (!(await options.confirm())) {
+      // Nothing was sent to a model; the job (with the text, in the memory of ai-desktop) is put away. That it could
+      // not be (ai-desktop ended meanwhile) changes nothing for the form: it is tidying, not a refusal.
+      try {
+        await hub.dropDraft(job.job_id);
+      } catch {
+        // it stays in the dashboard, where it can be put away by hand
+      }
+      return { kind: 'declined' };
+    }
     await hub.confirmDraft(job.job_id);
   }
   const deadline = now() + (options.maxMs ?? 10 * 60 * 1000);

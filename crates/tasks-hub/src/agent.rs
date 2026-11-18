@@ -134,6 +134,12 @@ pub trait JobIntake: Send + Sync {
     fn confirm<'a>(&'a self, _id: &'a str) -> BoxFuture<'a, Result<(), Refusal>> {
         Box::pin(async { Err(Refusal::NotRunning) })
     }
+
+    /// Puts a job away that nobody waits for any more (the person said no to its question, or closed the form):
+    /// `DELETE /jobs/<id>` with the secret. A job that is gone already is put away.
+    fn discard<'a>(&'a self, _id: &'a str) -> BoxFuture<'a, Result<(), Refusal>> {
+        Box::pin(async { Err(Refusal::NotRunning) })
+    }
 }
 
 /// The running ai-desktop of this machine, found in the environment `env`.
@@ -185,6 +191,13 @@ impl JobIntake for AiDesktop {
         Box::pin(async move {
             let (dir, record) = self.found().await?;
             confirm_at(record.port, &record.instance, &dir, id).await
+        })
+    }
+
+    fn discard<'a>(&'a self, id: &'a str) -> BoxFuture<'a, Result<(), Refusal>> {
+        Box::pin(async move {
+            let (dir, record) = self.found().await?;
+            drop_at(record.port, &record.instance, &dir, id).await
         })
     }
 }
@@ -341,6 +354,37 @@ async fn confirm_at(
     .await
     .map_err(|e| Refusal::Failed(e.to_string()))?;
     if reply.status == 200 {
+        Ok(())
+    } else {
+        Err(refused(&reply))
+    }
+}
+
+/// `DELETE /jobs/<id>` with the secret of `dir`: ai-desktop answers `204` (a running job is cancelled first). A job
+/// it does not know any more (`404`) is put away as well: that is what was asked for.
+async fn drop_at(
+    port: u16,
+    instance: &str,
+    dir: &std::path::Path,
+    id: &str,
+) -> Result<(), Refusal> {
+    // The id goes into the request line (as in `job_of`): only letters and digits pass.
+    if id.is_empty() || !id.bytes().all(|b| b.is_ascii_alphanumeric()) {
+        return Err(Refusal::Failed("the job id is not plain".to_owned()));
+    }
+    same_instance(port, instance).await?;
+    let secret = secret_in(dir)?;
+    let auth = format!("Bearer {secret}");
+    let reply = crate::client::request(
+        port,
+        "DELETE",
+        &format!("/jobs/{id}"),
+        &[("Authorization", auth.as_str())],
+        "",
+    )
+    .await
+    .map_err(|e| Refusal::Failed(e.to_string()))?;
+    if matches!(reply.status, 200 | 204 | 404) {
         Ok(())
     } else {
         Err(refused(&reply))
@@ -741,6 +785,67 @@ mod tests {
             );
         }
         assert!(seen.lock().unwrap().is_empty(), "nothing was asked");
+    }
+
+    #[tokio::test]
+    async fn a_job_is_put_away_with_the_secret_and_a_job_that_is_gone_counts_as_put_away() {
+        let dir = Scratch::new("agent-drop");
+        let (port, seen) = double("inst6", (204, "")).await;
+        running_at(&dir, port, "inst6");
+        intake(&dir).discard("0123456789abcdef").await.unwrap();
+        {
+            let seen = seen.lock().unwrap();
+            assert_eq!(seen.len(), 2, "health, then the delete");
+            assert!(!seen[0].contains(SECRET), "no secret to /health");
+            let delete = &seen[1];
+            assert!(
+                delete.starts_with("DELETE /jobs/0123456789abcdef "),
+                "{delete}"
+            );
+            assert!(
+                delete.contains(&format!("Authorization: Bearer {SECRET}")),
+                "{delete}"
+            );
+            assert!(
+                !delete.to_ascii_lowercase().contains("\r\norigin:"),
+                "no Origin: {delete}"
+            );
+        }
+        // An id that is not plain is never put into a request line.
+        for bad in ["../health", "a b", ""] {
+            assert!(
+                matches!(intake(&dir).discard(bad).await, Err(Refusal::Failed(_))),
+                "{bad:?}"
+            );
+        }
+        assert_eq!(seen.lock().unwrap().len(), 2, "nothing more was asked");
+
+        // ai-desktop does not know the job any more: that is what was wanted.
+        let gone = Scratch::new("agent-drop-gone");
+        let (port, _) = double("inst7", (404, r#"{"error":{"message":"no such job"}}"#)).await;
+        running_at(&gone, port, "inst7");
+        intake(&gone).discard("0123456789abcdef").await.unwrap();
+
+        // Any other answer is a refusal, and another program on the port gets no secret.
+        let refused = Scratch::new("agent-drop-refused");
+        let (port, seen) = double("inst8", (403, r#"{"error":{"message":"jobs are off"}}"#)).await;
+        running_at(&refused, port, "inst8");
+        assert_eq!(
+            intake(&refused).discard("0123456789abcdef").await,
+            Err(Refusal::Refused {
+                status: 403,
+                message: "jobs are off".to_owned()
+            })
+        );
+        running_at(&refused, port, "other");
+        let before = seen.lock().unwrap().len();
+        assert_eq!(
+            intake(&refused).discard("0123456789abcdef").await,
+            Err(Refusal::NotAiDesktop)
+        );
+        let seen = seen.lock().unwrap();
+        assert_eq!(seen.len(), before + 1, "only the health was asked");
+        assert!(!seen[before].contains(SECRET));
     }
 
     #[tokio::test]
