@@ -89,6 +89,13 @@ test('the key h on a number of the overview opens its history; a custom period a
   await expect(section).toBeVisible();
   await expect(section.locator('[data-history-metric]')).toHaveValue('ready');
 
+  // the context menu of a number offers the same way (the click on the number itself opens its tasks, as before)
+  await page.goto('/#view=today');
+  await page.locator('.tile[data-count="blocked"]').click({ button: 'right' });
+  await page.getByRole('menuitem', { name: 'History of blocked' }).click();
+  await expect(section).toBeVisible();
+  await expect(section.locator('[data-history-metric]')).toHaveValue('blocked');
+
   await section.locator('[data-history-period]').selectOption('custom');
   const from = section.getByLabel('From', { exact: true });
   const to = section.getByLabel('To', { exact: true });

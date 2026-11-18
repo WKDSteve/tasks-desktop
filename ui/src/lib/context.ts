@@ -1,6 +1,7 @@
 // What the context menu offers, per kind of target (the kit's `ContextRegistry`): the entries come from the providers of
 // every target around the pointer, the innermost first. The page declares the targets (`use:contextTarget`); what an
 // entry does goes through the same methods of `App` as the buttons and keys do (the engine judges, WEB-13).
+import { metricOfTile } from './statsHistory';
 import { ContextRegistry, type ContextTarget } from 'appkit-ui/contextmenu';
 import type { MenuItem } from 'appkit-ui/menu';
 import type { App } from './app.svelte';
@@ -71,8 +72,20 @@ export function createContextRegistry(app: App): ContextRegistry {
 
   // The tasks behind a number of Today, as the panel of the number lists them: under the filter that is on.
   registry.provide('count', (target) => {
-    const { key } = target.data as { key: CountKey };
-    return copyEntries(() => tasksOf(key, app.shown));
+    const { key, title } = target.data as { key: CountKey; title: string };
+    // A number that has a history offers it first: the statistics with its figure, and the way back to where this is.
+    const metric = app.can('history') ? metricOfTile(key) : null;
+    const history: MenuItem[] = metric
+      ? [
+          {
+            kind: 'action',
+            label: t('today.tiles.history', { what: title }),
+            hint: t('hint.tile.history', { what: title }),
+            onselect: () => app.openHistory(metric, document.querySelector('main')?.scrollTop ?? 0),
+          },
+        ]
+      : [];
+    return [...history, ...copyEntries(() => tasksOf(key, app.shown))];
   });
 
   registry.provide('task', (target, env) => {
