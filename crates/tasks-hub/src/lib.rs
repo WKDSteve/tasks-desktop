@@ -6,6 +6,7 @@
 //! give way to a persistent host without touching the routes.
 
 pub mod about;
+pub mod agent;
 pub mod allvaults;
 pub mod app;
 pub mod background;

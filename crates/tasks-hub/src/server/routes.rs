@@ -1402,6 +1402,145 @@ pub(super) async fn ai_desktop_get(State(st): State<Arc<Shared>>) -> Response {
     axum::Json(presence).into_response()
 }
 
+/// `POST /api/tasks/agent` `{ "id", "mode", "kind" }`: hand a task to an agent of ai-desktop (`crate::agent`). The page
+/// names the task and what it asks for; the engine names the file, the hub checks that it lies in the vault, reads it
+/// and sends it with the secret of ai-desktop, which the page never sees. A private or unclassified area goes with
+/// `private`: ai-desktop then sends it to a local model only, or asks first. The answer is the job (`job_id`, `status`,
+/// `private`, `note`).
+pub(super) async fn agent_send(State(st): State<Arc<Shared>>, body: Bytes) -> Response {
+    let map = match vault_request(&body, &["id", "mode", "kind"]) {
+        Ok(m) => m,
+        Err(r) => return r,
+    };
+    let id = match vault_text(&map, "id", 200) {
+        Ok(id) if valid_task_id(&id) => id,
+        Ok(_) => {
+            return error_body(
+                StatusCode::BAD_REQUEST,
+                "bad_id",
+                "id must be <area>/<slug>",
+            )
+        }
+        Err(r) => return r,
+    };
+    let mode = match vault_text(&map, "mode", 16) {
+        Ok(m) if crate::agent::MODES.contains(&m.as_str()) => m,
+        Ok(_) => {
+            return error_body(
+                StatusCode::BAD_REQUEST,
+                "bad_mode",
+                "mode must be prefill or run",
+            )
+        }
+        Err(r) => return r,
+    };
+    let kind = match vault_text(&map, "kind", 32) {
+        Ok(k) if crate::agent::KINDS.contains(&k.as_str()) => k,
+        Ok(_) => {
+            return error_body(
+                StatusCode::BAD_REQUEST,
+                "bad_kind",
+                "kind is not one ai-desktop takes",
+            )
+        }
+        Err(r) => return r,
+    };
+    let rt = st.rt();
+    let Some(intake) = rt.agent.clone() else {
+        return error_body(
+            StatusCode::NOT_FOUND,
+            "agent_unavailable",
+            "this hub hands no task to an agent",
+        );
+    };
+    let Some(vault) = rt.vault.clone() else {
+        return engine_unavailable(&st);
+    };
+    let reply = match ask(&st, Calls::Task, Some(&json!({ "id": id }))).await {
+        Ok(r) => r,
+        Err(response) => return response,
+    };
+    let doc = serde_json::from_str::<serde_json::Value>(&reply.text).unwrap_or_default();
+    let entry = &doc["task"];
+    let Some(name) = entry["file"].as_str() else {
+        return error_body(
+            StatusCode::BAD_GATEWAY,
+            "engine_failed",
+            "the engine named no file for this task",
+        );
+    };
+    // The area of the task; the id begins with it.
+    let area = entry["area"]
+        .as_str()
+        .or_else(|| id.split('/').next())
+        .unwrap_or_default()
+        .to_owned();
+    let status = entry["status"].as_str().unwrap_or("open");
+    if !crate::agent::kind_fits(&kind, status) {
+        return error_body(
+            StatusCode::CONFLICT,
+            "kind_unfit",
+            "this kind is not for a task of this status",
+        );
+    }
+    let title = entry["title"]
+        .as_str()
+        .filter(|t| !t.trim().is_empty())
+        .unwrap_or(&id)
+        .to_owned();
+    let file = match crate::editor::file_in_vault(&vault, name) {
+        Ok(f) => f,
+        Err(why) => return error_body(StatusCode::BAD_REQUEST, "agent_refused", why),
+    };
+    let read = tokio::task::spawn_blocking(move || -> Result<String, &'static str> {
+        let size = std::fs::metadata(&file).map_err(|_| "unreadable")?.len();
+        if size > crate::agent::MAX_MARKDOWN {
+            return Err("too_large");
+        }
+        std::fs::read_to_string(&file).map_err(|_| "unreadable")
+    })
+    .await;
+    let markdown = match read {
+        Ok(Ok(text)) => text,
+        Ok(Err("too_large")) => {
+            return error_body(
+                StatusCode::PAYLOAD_TOO_LARGE,
+                "task_too_large",
+                "the task file is larger than 256 KiB, ai-desktop takes no more",
+            )
+        }
+        _ => {
+            return error_body(
+                StatusCode::BAD_GATEWAY,
+                "task_unreadable",
+                "the task file cannot be read as text",
+            )
+        }
+    };
+    let job = crate::agent::Job {
+        source: crate::agent::SOURCE.to_owned(),
+        task_id: id,
+        title,
+        markdown,
+        vault: vault.to_string_lossy().replace('\\', "/"),
+        area: area.clone(),
+        mode,
+        kind,
+        private: !rt.classes.allows(&area, crate::classes::Use::CloudRunner),
+    };
+    match intake.send(&job).await {
+        Ok(answer) => (StatusCode::CREATED, axum::Json(answer)).into_response(),
+        Err(refusal) => {
+            let status = if refusal == crate::agent::Refusal::NotRunning {
+                StatusCode::CONFLICT
+            } else {
+                StatusCode::BAD_GATEWAY
+            };
+            error_body(status, refusal.code(), &refusal.message())
+        }
+    }
+}
+
 /// The body of a switch, `{ "on": true | false }` and nothing else; `Err`: the answer to send.
 // The error is the answer to send, as with `ask`: a response is large, and rare.
 #[allow(clippy::result_large_err)]

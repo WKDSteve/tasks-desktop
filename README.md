@@ -821,14 +821,24 @@ characters for a name or a title, 256 KiB.
 
 ### AI functions (ai-desktop)
 
-AI does not push itself forward. The page offers its AI functions (handing a task to an agent of ai-desktop, which
-comes in a later step) only where the hub finds ai-desktop on this computer, and the switch *Options > Show AI
+AI does not push itself forward. The page offers its AI functions (handing a task to an agent of ai-desktop) only
+where the hub finds ai-desktop on this computer (installed, or running), and the switch *Options > Show AI
 functions* turns them all off: no button in a task, no menu entry, no command in the palette. The switch is kept in
 the browser (`tasks-desktop.ai`) and is on unless you turn it off. Where ai-desktop is not found there is nothing to
 switch: the entry is greyed out and says why. The web variant has no hub to ask and shows no such entry. The hub finds
 ai-desktop through the discovery of the family in appkit (`docs/FAMILY.md` there): installed is the manifest its
 installer writes (`%LOCALAPPDATA%\appkit-family\installed\ai-desktop.json`), running is its `hub.json` with a live
 process. Only files are read, at the start of the page and whenever its window gets the focus.
+
+**Hand to an agent.** The button *Hand to an agent ...* in the detail of a task (also in its float, its context menu
+and the palette) opens a small choice: *Only fill in* (the default; the job stands ready in the dashboard of
+ai-desktop) or *Run at once*, kept for the next time, and for a finished task *Review against the acceptance*, for a
+task that waits for a decision *Prepare the decision*. A line says whether the area is private or not classified:
+then ai-desktop sends it to a local model only, or asks first. The hub reads the task file and sends it with id, title,
+area and vault to the job intake of the running ai-desktop (`POST /jobs`, `docs/JOBS.md` of ai-desktop), after its
+`/health` answered with the instance of its `hub.json`; the control secret stays in the hub. The page says the job
+(*Handed to ai-desktop (job ...)*) or why it did not go (ai-desktop not running, refused, a file over 256 KiB). One
+task at a time: while several are marked the button is off and says why.
 
 <!-- connections:begin (written by the app-icons tool of the workshop; change integrations.json there, not this block) -->
 ## Connections

@@ -28,7 +28,7 @@ import {
 import { addOps, type AddTarget } from './picker';
 import { connectOp, edgeOp, parseGraphOrder, phaseOp, type DepEdge, type EdgeAction, type EdgeKind, type GraphOrder } from './depGraph';
 import { COLUMNS, columnsOf, isColumn, neighbourColumn, placeNear, stepInGroup, type Column, type Move } from './board';
-import { ApiError, type AiDesktop, type CheckAll, type SheetRunState, type Hub, type HubArea, type HubAreas, type SearchResult, type VaultList } from './api';
+import { ApiError, type AgentKind, type AiDesktop, type CheckAll, type SheetRunState, type Hub, type HubArea, type HubAreas, type SearchResult, type VaultList } from './api';
 import { cacheableClass, cacheableList, type CachedList, type ListStore } from './cache';
 import type {
   DonePreview,
@@ -679,6 +679,12 @@ export class App {
   aiDesktop = $state<AiDesktop | null>(null);
   /** The switch "Show AI functions" (`tasks-desktop.ai`): on unless turned off; it only counts where ai-desktop is found. */
   aiWanted = $state(true);
+  /** The task the dialog "Hand to an agent" is open for; null: closed. */
+  agentFor = $state<string | null>(null);
+  /** What a hand-over does by default: only fill in the job (`prefill`) or run it at once; kept (`tasks-desktop.agent-mode`). */
+  agentMode = $state<'prefill' | 'run'>('prefill');
+  /** A hand-over is under way: the dialog sends nothing twice. */
+  agentSending = $state(false);
   /** The plan wizard is open. */
   planning = $state(false);
   /** The task that is being finished, with what the engine says that does. */
@@ -781,6 +787,7 @@ export class App {
     this.groupAreas = safe(() => env.prefs.getItem('tasks-desktop.group-areas')) === 'on';
     this.barAreas = safe(() => env.prefs.getItem('tasks-desktop.bar-areas')) === 'on';
     this.aiWanted = safe(() => env.prefs.getItem('tasks-desktop.ai')) !== 'off';
+    this.agentMode = safe(() => env.prefs.getItem('tasks-desktop.agent-mode')) === 'run' ? 'run' : 'prefill';
     const stats = parseStatsPrefs(safe(() => env.prefs.getItem('tasks-desktop.stats')));
     this.statsDim = stats.dim;
     this.statsSort = stats.sort;
@@ -3352,13 +3359,78 @@ export class App {
    * ai-desktop is found and the person did not turn them off. AI does not push itself forward.
    */
   get aiFeatures(): boolean {
-    return this.aiWanted && this.aiDesktop?.installed === true;
+    return this.aiWanted && this.aiFound;
+  }
+
+  /** ai-desktop is on this machine: installed, or running (a build started from its checkout has no installer). */
+  get aiFound(): boolean {
+    return this.aiDesktop !== null && (this.aiDesktop.installed || this.aiDesktop.running);
   }
 
   /** The switch "Show AI functions" of the Options menu, kept in this browser. */
   setAiWanted(on: boolean): void {
     this.aiWanted = on;
     safe(() => this.env.prefs.setItem('tasks-desktop.ai', on ? 'on' : 'off'));
+  }
+
+  /**
+   * What a job may ask of the agent for a task of `status`: always the hand-over; a review only of a finished task, the
+   * preparation of a decision only of a task that waits for one (the hub checks it again).
+   */
+  agentKinds(status: string | undefined): AgentKind[] {
+    return [
+      'handoff',
+      ...(status === 'done' ? (['review-done'] as const) : []),
+      ...(status === 'decision' ? (['prepare-decision'] as const) : []),
+    ];
+  }
+
+  /** Why "Hand to an agent" cannot be used now, or null: one task at a time (several marked tasks go later, if at all). */
+  get agentBlocked(): Key | null {
+    return this.marks.length > 1 ? 'agent.one_only' : null;
+  }
+
+  /** Is the area public or internal (ai-desktop may send it to a model in the cloud), not private or unclassified? */
+  agentAreaShared(area: string): boolean {
+    return cacheableClass(this.hubAreas.find((a) => a.name === area)?.data_class);
+  }
+
+  /** Open the dialog "Hand to an agent" for `id`: only where the AI functions are offered, one task at a time. */
+  openAgent(id: string): void {
+    if (!this.aiFeatures) return;
+    const blocked = this.agentBlocked;
+    if (blocked) {
+      this.say('error', blocked);
+      return;
+    }
+    this.agentFor = id;
+  }
+
+  closeAgent(): void {
+    if (!this.agentSending) this.agentFor = null;
+  }
+
+  /**
+   * Hand the task of the dialog to ai-desktop: the hub reads the file and sends it. Says the job (or why it did not go)
+   * and keeps the mode as the next default.
+   */
+  async handToAgent(mode: 'prefill' | 'run', kind: AgentKind): Promise<void> {
+    const id = this.agentFor;
+    if (id === null || this.agentSending || !this.aiFeatures) return;
+    this.agentMode = mode;
+    safe(() => this.env.prefs.setItem('tasks-desktop.agent-mode', mode));
+    this.agentSending = true;
+    try {
+      const job = await this.env.hub.handToAgent(id, mode, kind);
+      this.agentFor = null;
+      const key = job.status === 'needs_confirmation' ? 'agent.sent_confirm' : mode === 'run' && job.status === 'running' ? 'agent.sent_run' : 'agent.sent';
+      this.say('ok', key, { job: job.job_id });
+    } catch (error) {
+      const why = error instanceof ApiError ? error.message : String(error);
+      this.say('error', 'agent.failed', { why });
+    } finally {
+      this.agentSending = false;
+    }
   }
 
   /** A read that fails (a hub that is restarting) keeps what was known: the switch does not come and go with it. */

@@ -10,6 +10,7 @@ use appkit_core::authn::{ManualClock, Secret, CODE_BYTES, TOKEN_BYTES};
 use hub_testkit::patient;
 use hub_testkit::scratch::Scratch;
 use serde_json::Value;
+use tasks_hub::agent::{Job, JobAnswer, JobIntake, Refusal};
 use tasks_hub::classes::AreaPolicy;
 use tasks_hub::client;
 use tasks_hub::config::Env;
@@ -39,7 +40,7 @@ async fn rig(name: &str, with_opener: bool) -> Rig {
 
 /// `pick`: the folder the folder dialog "returns" (`None`: the dialog is closed without a choice).
 async fn rig_with(name: &str, with_opener: bool, pick: Option<&str>) -> Rig {
-    rig_full(name, with_opener, pick, None, None, None, None).await
+    rig_full(name, with_opener, pick, None, None, None, None, None).await
 }
 
 /// A run of test sheets that answers at once, and says which task it was asked for.
@@ -90,6 +91,8 @@ impl LoginEntry for FakeLogin {
     }
 }
 
+// One helper for every test of this file: each of the seams is a parameter of its own.
+#[allow(clippy::too_many_arguments)]
 async fn rig_full(
     name: &str,
     with_opener: bool,
@@ -98,6 +101,7 @@ async fn rig_full(
     runs: Option<Arc<SheetRunJob>>,
     stay: Option<Arc<dyn KeepRunning>>,
     family: Option<Arc<dyn FamilyApps>>,
+    agent: Option<Arc<dyn JobIntake>>,
 ) -> Rig {
     let base = Scratch::new(&format!("open-{name}"));
     let vault = base.join("vault");
@@ -189,6 +193,7 @@ row two
             login: login_entry,
             keep_running: stay,
             family,
+            agent,
             first_start: None,
             all_vaults: None,
             sheet_run: runs,
@@ -377,6 +382,7 @@ async fn the_login_entry_is_read_set_and_taken_away_and_only_with_a_session() {
         None,
         None,
         None,
+        None,
     )
     .await;
     let route = "/api/tasks/autostart";
@@ -416,6 +422,7 @@ async fn the_login_entry_is_read_set_and_taken_away_and_only_with_a_session() {
         None,
         None,
         None,
+        None,
     )
     .await;
     let (status, doc) = post(&r2, route, r#"{"on":true}"#, true).await;
@@ -428,6 +435,199 @@ async fn the_login_entry_is_read_set_and_taken_away_and_only_with_a_session() {
     let none = rig("autostart-none", false).await;
     assert!(get(&none, route).await.1["on"].is_null());
     assert_eq!(post(&none, route, r#"{"on":true}"#, true).await.0, 404);
+}
+
+/// The job intake of ai-desktop as a double: it keeps every job and answers as it is told.
+struct FakeIntake {
+    jobs: Mutex<Vec<Job>>,
+    answer: Result<JobAnswer, Refusal>,
+}
+
+impl JobIntake for FakeIntake {
+    fn send<'a>(&'a self, job: &'a Job) -> appkit_hub::BoxFuture<'a, Result<JobAnswer, Refusal>> {
+        Box::pin(async move {
+            self.jobs.lock().unwrap().push(job.clone());
+            self.answer.clone()
+        })
+    }
+}
+
+fn intake(answer: Result<JobAnswer, Refusal>) -> Arc<FakeIntake> {
+    Arc::new(FakeIntake {
+        jobs: Mutex::new(Vec::new()),
+        answer,
+    })
+}
+
+#[tokio::test]
+async fn a_task_is_handed_to_the_agent_with_its_file_and_only_with_a_session() {
+    let route = "/api/tasks/agent";
+    let job = JobAnswer {
+        job_id: "3f9c0a1b2c3d4e5f".to_owned(),
+        status: "prefilled".to_owned(),
+        private: false,
+        note: None,
+    };
+    let fake = intake(Ok(job));
+    let r = rig_full(
+        "agent",
+        false,
+        None,
+        None,
+        None,
+        None,
+        None,
+        Some(Arc::clone(&fake) as Arc<dyn JobIntake>),
+    )
+    .await;
+    std::fs::write(
+        r.vault.join("alpha.nvim/ROADMAP/tasks/t1.md"),
+        "---\ntitle: t1\n---\n\n## Akzeptanz\n\n- [ ] it works\n",
+    )
+    .unwrap();
+    let body = r#"{"id":"alpha.nvim/t1","mode":"prefill","kind":"handoff"}"#;
+    let (status, doc) = post(&r, route, body, true).await;
+    assert_eq!(status, 201, "{doc}");
+    assert_eq!(doc["job_id"], "3f9c0a1b2c3d4e5f", "{doc}");
+    assert_eq!(doc["status"], "prefilled", "{doc}");
+    {
+        let jobs = fake.jobs.lock().unwrap();
+        assert_eq!(jobs.len(), 1);
+        let sent = &jobs[0];
+        assert_eq!(sent.source, "tasks-desktop");
+        assert_eq!(sent.task_id, "alpha.nvim/t1");
+        assert_eq!(sent.area, "alpha.nvim");
+        assert_eq!(
+            (sent.mode.as_str(), sent.kind.as_str()),
+            ("prefill", "handoff")
+        );
+        assert!(
+            sent.markdown.contains("- [ ] it works"),
+            "{}",
+            sent.markdown
+        );
+        assert!(
+            !sent.vault.contains('\\'),
+            "the vault with forward slashes: {}",
+            sent.vault
+        );
+        // No classes in this hub: the area is unclassified, so it goes as private.
+        assert!(sent.private);
+    }
+    // Refused before anything is sent: a credential is missing, a mode or kind ai-desktop does not take, a review of a
+    // task that is not finished.
+    assert_eq!(post(&r, route, body, false).await.0, 401);
+    for bad in [
+        r#"{"id":"alpha.nvim/t1","mode":"later","kind":"handoff"}"#,
+        r#"{"id":"alpha.nvim/t1","mode":"run","kind":"anything"}"#,
+        r#"{"id":"../t1","mode":"run","kind":"handoff"}"#,
+        r#"{"id":"alpha.nvim/t1","mode":"run"}"#,
+        r#"{"id":"alpha.nvim/t1","mode":"run","kind":"handoff","model":"x"}"#,
+    ] {
+        assert_eq!(post(&r, route, bad, true).await.0, 400, "{bad}");
+    }
+    let review = r#"{"id":"alpha.nvim/t1","mode":"run","kind":"review-done"}"#;
+    let (status, doc) = post(&r, route, review, true).await;
+    assert_eq!(
+        (status, doc["error"]["code"].as_str()),
+        (409, Some("kind_unfit")),
+        "{doc}"
+    );
+    assert_eq!(fake.jobs.lock().unwrap().len(), 1, "nothing more was sent");
+
+    // A finished task may be reviewed: the engine says its status.
+    std::fs::write(
+        r.vault.join(".fake-merge-task.json"),
+        r#"{"task":{"id":"alpha.nvim/t1","area":"alpha.nvim","title":"Done one","status":"done","file":"alpha.nvim/ROADMAP/tasks/t1.md"}}"#,
+    )
+    .unwrap();
+    let (status, doc) = post(&r, route, review, true).await;
+    assert_eq!(status, 201, "{doc}");
+    {
+        let jobs = fake.jobs.lock().unwrap();
+        assert_eq!(
+            (jobs[1].kind.as_str(), jobs[1].title.as_str()),
+            ("review-done", "Done one")
+        );
+    }
+    std::fs::remove_file(r.vault.join(".fake-merge-task.json")).unwrap();
+
+    // A task file over 256 KiB is not sent.
+    std::fs::write(
+        r.vault.join("alpha.nvim/ROADMAP/tasks/t1.md"),
+        "x".repeat(256 * 1024 + 1),
+    )
+    .unwrap();
+    let (status, doc) = post(&r, route, body, true).await;
+    assert_eq!(
+        (status, doc["error"]["code"].as_str()),
+        (413, Some("task_too_large")),
+        "{doc}"
+    );
+    assert_eq!(fake.jobs.lock().unwrap().len(), 2);
+}
+
+#[tokio::test]
+async fn a_refusal_of_ai_desktop_reaches_the_page_and_a_hub_without_an_intake_says_so() {
+    let route = "/api/tasks/agent";
+    let body = r#"{"id":"alpha.nvim/t1","mode":"run","kind":"handoff"}"#;
+    for (name, refusal, status, code) in [
+        (
+            "agent-gone",
+            Refusal::NotRunning,
+            409,
+            "ai_desktop_not_running",
+        ),
+        (
+            "agent-refused",
+            Refusal::Refused {
+                status: 429,
+                message: "more than 10 jobs in a minute".to_owned(),
+            },
+            502,
+            "ai_desktop_refused",
+        ),
+        (
+            "agent-other",
+            Refusal::NotAiDesktop,
+            502,
+            "ai_desktop_mismatch",
+        ),
+    ] {
+        let fake = intake(Err(refusal));
+        let r = rig_full(
+            name,
+            false,
+            None,
+            None,
+            None,
+            None,
+            None,
+            Some(fake as Arc<dyn JobIntake>),
+        )
+        .await;
+        let (got, doc) = post(&r, route, body, true).await;
+        assert_eq!(
+            (got, doc["error"]["code"].as_str()),
+            (status, Some(code)),
+            "{name}: {doc}"
+        );
+        let message = doc["error"]["message"].as_str().unwrap_or("");
+        assert!(!message.is_empty(), "{name}: {doc}");
+        if name == "agent-refused" {
+            assert!(
+                message.contains("429") && message.contains("10 jobs"),
+                "{message}"
+            );
+        }
+    }
+    let none = rig("agent-none", false).await;
+    let (status, doc) = post(&none, route, body, true).await;
+    assert_eq!(
+        (status, doc["error"]["code"].as_str()),
+        (404, Some("agent_unavailable")),
+        "{doc}"
+    );
 }
 
 /// ai-desktop as some discovery sees it: the test says what is found.
@@ -454,6 +654,7 @@ async fn ai_desktop_is_reported_as_the_family_finds_it_and_only_with_a_session()
         None,
         None,
         Some(Arc::new(FoundAi(found))),
+        None,
     )
     .await;
     let (status, doc) = get(&r, route).await;
@@ -484,7 +685,7 @@ async fn ai_desktop_is_reported_as_the_family_finds_it_and_only_with_a_session()
         ),
         ("ai-none", None),
     ] {
-        let r = rig_full(name, false, None, None, None, None, family).await;
+        let r = rig_full(name, false, None, None, None, None, family, None).await;
         let (status, doc) = get(&r, route).await;
         assert_eq!(status, 200, "{name}: {doc}");
         assert_eq!(
@@ -501,7 +702,17 @@ async fn the_order_to_stay_is_the_key_of_the_settings_and_only_with_a_session() 
     std::fs::write(settings.join("config.json"), r#"{"port":17615}"#).unwrap();
     let file = || std::fs::read_to_string(settings.join("config.json")).unwrap();
     let stay: Arc<dyn KeepRunning> = Arc::new(SettingsFile::new(settings.to_path_buf()));
-    let r = rig_full("keep-running", false, None, None, None, Some(stay), None).await;
+    let r = rig_full(
+        "keep-running",
+        false,
+        None,
+        None,
+        None,
+        Some(stay),
+        None,
+        None,
+    )
+    .await;
     let route = "/api/tasks/keep_running";
     assert_eq!(get(&r, route).await.1["on"], false);
     let (status, doc) = post(&r, route, r#"{"on":true}"#, true).await;
@@ -554,7 +765,7 @@ async fn the_order_to_stay_is_the_key_of_the_settings_and_only_with_a_session() 
 #[tokio::test]
 async fn the_test_sheets_of_a_task_run_as_one_job_and_only_with_a_session() {
     let job = Arc::new(SheetRunJob::new(Arc::new(FakeSheets)));
-    let r = rig_full("sheets", false, None, None, Some(job), None, None).await;
+    let r = rig_full("sheets", false, None, None, Some(job), None, None, None).await;
     let route = "/api/tasks/sheet_run";
     assert_eq!(get(&r, route).await.1["state"], "idle");
     let (status, doc) = post(&r, route, r#"{"id":"alpha.nvim/t1"}"#, true).await;

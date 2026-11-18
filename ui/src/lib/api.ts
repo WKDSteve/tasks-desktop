@@ -112,6 +112,18 @@ export interface AiDesktop {
   running: boolean;
 }
 
+/** A task handed to an agent: the job ai-desktop made of it (`POST /api/tasks/agent`). */
+export interface AgentJob {
+  job_id: string;
+  /** `prefilled`, `running` or `needs_confirmation` (a private area on a model that is not local). */
+  status: string;
+  private: boolean;
+  note?: string;
+}
+
+/** What a job asks of the agent (`kind` of ai-desktop's `POST /jobs`). */
+export type AgentKind = 'handoff' | 'review-done' | 'prepare-decision';
+
 export interface HubArea {
   name: string;
   data_class: 'public' | 'internal' | 'private' | 'unclassified';
@@ -382,6 +394,14 @@ export class Hub extends HubClient<Snapshot> {
     } catch {
       return null;
     }
+  }
+
+  /**
+   * Hand a task to an agent of ai-desktop: the hub reads the file and sends it with the secret of ai-desktop, which the
+   * page never sees. The answer is the job; a refusal (ai-desktop not running, refused) is an `ApiError` with its text.
+   */
+  handToAgent(id: string, mode: 'prefill' | 'run', kind: AgentKind): Promise<AgentJob> {
+    return this.postJson<AgentJob>('/api/tasks/agent', { id, mode, kind });
   }
 
   /** Give a hub in the background the order to stay, or take it back; what the settings say afterwards. */

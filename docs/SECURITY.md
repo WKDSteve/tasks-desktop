@@ -448,6 +448,21 @@ no port, no path, no secret of the other app. The hub asks no other hub for it; 
 the family in appkit reads (the manifest of the installer, the `hub.json` of a running ai-desktop) and starts nothing. A paired phone does not reach the route (it is not one
 of the device routes), and nothing can be changed through it.
 
+## Handing a task to an agent (`POST /api/tasks/agent`)
+
+A session of the PC sends `{ "id", "mode", "kind" }` and nothing else (`mode` `prefill` or `run`, `kind` one of the
+kinds of ai-desktop; a review only of a finished task, a decision only of a task that waits for one, `409` otherwise).
+The page names the task, never a file: the engine says which file it is, the hub checks that it lies in the vault and
+reads at most 256 KiB of it. The hub then talks to ai-desktop as `:Tasks agent` of tasks.nvim does (`docs/JOBS.md` of
+ai-desktop): the `hub.json` of a live ai-desktop gives the port, `GET /health` must answer as ai-desktop with the
+instance of that file (so the secret never goes to another program that took the port), and only then the
+`control.secret` beside it is read anew and sent as `Authorization: Bearer` with `POST /jobs`, without an `Origin`.
+The secret, the port and the path of ai-desktop never reach the page; the answer is the job id, its status and whether
+ai-desktop treats it as private, or a refusal in one line. An area that is private or not classified goes with
+`private: true`: ai-desktop then sends it to a local model only or asks the person in its dashboard. A paired phone
+does not reach the route (it is not one of the device routes); it counts against the limit of mutations like every
+`POST` of a session.
+
 ## Vaults (`/api/vaults`)
 
 The hub reads one vault at a time. `config.json` may hold more (`vaults`: a name and an absolute folder each, at most 16)

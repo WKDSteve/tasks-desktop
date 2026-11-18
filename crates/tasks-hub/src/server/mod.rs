@@ -128,6 +128,8 @@ pub struct Extras {
     pub keep_running: Option<Arc<dyn crate::keeprunning::KeepRunning>>,
     /// The other apps of the family (ai-desktop); none: the route says none is found.
     pub family: Option<Arc<dyn crate::family::FamilyApps>>,
+    /// Where a task is handed to an agent (ai-desktop's job intake); none: the route says this hub hands nothing over.
+    pub agent: Option<Arc<dyn crate::agent::JobIntake>>,
     /// The steps of the first start in the page; none: the page only says what is missing.
     pub first_start: Option<Arc<dyn crate::firststart::FirstStart>>,
     /// The folders `attach` takes the newest screenshot from (the settings' `attach_dirs`); none: only the clipboard.
@@ -169,6 +171,7 @@ pub async fn start_with(cfg: ServerConfig, extras: Extras) -> std::io::Result<Ru
         login,
         keep_running,
         family,
+        agent,
         first_start,
         attach_dirs,
         upload_dir,
@@ -200,6 +203,7 @@ pub async fn start_with(cfg: ServerConfig, extras: Extras) -> std::io::Result<Ru
         login,
         keep_running,
         family,
+        agent,
         first_start,
         usage: cfg.usage,
         streams: Arc::new(StreamCounter::default()),
@@ -371,6 +375,10 @@ fn app_routes(core: &Arc<Shared>) -> Router<Arc<Shared>> {
         )
         .route(&r("ai_desktop"), get(ai_desktop_get))
         .route(
+            &r("agent"),
+            post(agent_send).layer(DefaultBodyLimit::max(small)),
+        )
+        .route(
             &r("vault_pick"),
             post(vault_pick).layer(DefaultBodyLimit::max(small)),
         )
@@ -523,6 +531,7 @@ mod tests {
                 login: None,
                 keep_running: None,
                 family: None,
+                agent: None,
                 first_start: None,
                 usage: None,
                 streams: Arc::new(StreamCounter::default()),

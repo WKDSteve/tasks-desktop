@@ -96,6 +96,10 @@ export function createContextRegistry(app: App): ContextRegistry {
         },
       },
     ];
+    // Handing it to an agent: only where the AI functions are offered, and for one task.
+    if (app.aiFeatures && env.selection.length <= 1) {
+      items.push({ kind: 'action', label: t('ctx.agent'), hint: t('hint.ctx.agent'), onselect: () => app.openAgent(task.id) });
+    }
     // What the engine can write; one task or the whole selection (the same writes as the keys, each one asked of it).
     if (app.can('ops') && env.selection.length <= 1) {
       items.push({ kind: 'section', label: t('field.status') });

@@ -24,6 +24,7 @@ export function paletteActions(app: App): PaletteAction[] {
     const id = selected.id;
     add('task.finish', t('palette.finish'), () => app.startFinish(id), id);
     if (app.can('plan_for')) add('task.graph', t('graph.button'), () => app.openGraph(id), id);
+    if (app.aiFeatures && app.agentBlocked === null) add('task.agent', t('palette.agent'), () => app.openAgent(id), id);
     for (const status of app.ranges.statuses) {
       if (status === selected.status) continue;
       // A status of the board goes the way of its column (blocked asks for the blocker); another one is a field.

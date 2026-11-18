@@ -65,6 +65,19 @@ export class FakeHub {
   /** ai-desktop as the hub finds it; null: the hub cannot say (the web variant). */
   aiDesktopFound: { installed: boolean; running: boolean } | null = { installed: false, running: false };
   aiDesktop = async (): Promise<{ installed: boolean; running: boolean } | null> => this.aiDesktopFound;
+  /** The tasks handed to an agent, and what the hub answers (a refusal is thrown). */
+  agentCalls: { id: string; mode: string; kind: string }[] = [];
+  agentAnswer: { job_id: string; status: string; private: boolean; note?: string } = {
+    job_id: 'j1',
+    status: 'prefilled',
+    private: false,
+  };
+  agentRefusal: ApiError | null = null;
+  handToAgent = async (id: string, mode: string, kind: string) => {
+    this.agentCalls.push({ id, mode, kind });
+    if (this.agentRefusal) throw this.agentRefusal;
+    return this.agentAnswer;
+  };
   token: string | null = null;
   onUnauthorized: () => void = () => {};
   doc: Snapshot = snapshot([task('pub/a', { etag: 'e1' })]);

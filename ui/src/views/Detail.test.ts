@@ -53,6 +53,15 @@ describe('the place of the AI functions in the detail', () => {
     app.aiDesktop = { installed: false, running: false };
     expect(detail(app)).not.toContain('data-testid="ai-actions"');
   });
+
+  it('holds the button "Hand to an agent", like the buttons beside it, off with its reason while several tasks are marked', () => {
+    const app = page(false);
+    app.aiDesktop = { installed: false, running: true };
+    const out = detail(app);
+    expect(out).toMatch(/<button type="button" class="open-editor[^"]*" data-hint="Hands this task to ai-desktop[^"]*">Hand to an agent \.\.\.<\/button>/);
+    app.marks = ['pub/a', 'pub/b'];
+    expect(detail(app)).toMatch(/data-hint="Only one task at a time goes to an agent[^"]*" disabled="">Hand to an agent/);
+  });
 });
 
 describe('the fields of the detail', () => {

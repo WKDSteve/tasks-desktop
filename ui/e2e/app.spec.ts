@@ -1,5 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { createServer, type IncomingHttpHeaders } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import AxeBuilder from '@axe-core/playwright';
@@ -8257,6 +8259,89 @@ test('without ai-desktop the real hub offers no AI: the switch is greyed out wit
   await open(page, 'lib.nvim/alpha');
   await expect(page.locator('aside.detail [data-testid="ai-actions"]')).toHaveCount(0);
   expect(consoleProblems.get(page)).toEqual([]);
+});
+
+/**
+ * ai-desktop as a double for the hub of the run: its `hub.json` and `control.secret` in the config folder the hub is
+ * given (`AI_DESKTOP_CONFIG_DIR`, see `env` in hub.ts), a server that answers `/health` and `/jobs` and keeps what came.
+ * This process stands in for its pid, so the record counts as running.
+ */
+async function aiDesktopDouble(jobs: (body: Record<string, unknown>) => { status: number; body: unknown }) {
+  const dir = join(state().config, '..', 'ai-desktop');
+  mkdirSync(dir, { recursive: true });
+  const secret = 'ab'.repeat(32);
+  const instance = 'e2e-instance';
+  const seen: { path: string; headers: IncomingHttpHeaders; body: Record<string, unknown> }[] = [];
+  const server = createServer((req, res) => {
+    let text = '';
+    req.on('data', (chunk: Buffer) => (text += chunk.toString('utf8')));
+    req.on('end', () => {
+      const body = text === '' ? {} : (JSON.parse(text) as Record<string, unknown>);
+      seen.push({ path: req.url ?? '', headers: req.headers, body });
+      const answer = req.url === '/health' ? { status: 200, body: { app: 'ai-desktop', version: '0.1.0', instance } } : jobs(body);
+      res.writeHead(answer.status, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(answer.body));
+    });
+  });
+  await new Promise<void>((done) => server.listen(0, '127.0.0.1', done));
+  const port = (server.address() as AddressInfo).port;
+  writeFileSync(join(dir, 'hub.json'), JSON.stringify({ app: 'ai-desktop', port, pid: process.pid, version: '0.1.0', instance }));
+  writeFileSync(join(dir, 'control.secret'), `${secret}\n`);
+  return {
+    secret,
+    seen,
+    close: async () => {
+      rmSync(dir, { recursive: true, force: true });
+      await new Promise<void>((done) => server.close(() => done()));
+    },
+  };
+}
+
+test('a task goes to ai-desktop: the hub sends its file with the secret, the page says the job and keeps the mode', async ({ page }) => {
+  const ai = await aiDesktopDouble((body) =>
+    body['mode'] === 'run' ? { status: 201, body: { job_id: 'job-e2e-1', status: 'running', private: false } } : { status: 403, body: { error: { code: 'jobs_off', message: 'jobs are switched off' } } },
+  );
+  try {
+    await pair(page);
+    await showList(page);
+    await open(page, 'lib.nvim/alpha');
+    const button = page.locator('aside.detail').getByRole('button', { name: 'Hand to an agent ...' });
+    await button.click();
+    const dialog = page.getByRole('dialog', { name: 'Hand to an agent' });
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByRole('radio', { name: /Only fill in/ })).toBeChecked();
+    // An open task: only the hand-over, no choice of the kind.
+    await expect(dialog.getByRole('combobox')).toHaveCount(0);
+    await dialog.getByRole('radio', { name: 'Run at once' }).check();
+    await dialog.getByRole('button', { name: 'Hand over', exact: true }).click();
+    await expect(page.getByText('Handed to ai-desktop, the agent is working on it (job job-e2e-1).')).toBeVisible({ timeout: 15_000 });
+    await expect(dialog).toBeHidden();
+    const jobs = ai.seen.filter((r) => r.path === '/jobs');
+    expect(jobs).toHaveLength(1);
+    const job = jobs[0]!;
+    expect(job.headers['authorization']).toBe(`Bearer ${ai.secret}`);
+    expect(job.headers['origin']).toBeUndefined();
+    expect(job.body).toMatchObject({ source: 'tasks-desktop', task_id: 'lib.nvim/alpha', area: 'lib.nvim', mode: 'run', kind: 'handoff' });
+    expect(String(job.body['markdown'])).toContain('The body of alpha.');
+    // The health was asked first, without the secret.
+    expect(ai.seen[0]?.path).toBe('/health');
+    expect(ai.seen[0]?.headers['authorization']).toBeUndefined();
+
+    // The mode chosen last comes back; a refusal of ai-desktop is said in its words and the dialog stays.
+    await button.click();
+    await expect(dialog.getByRole('radio', { name: 'Run at once' })).toBeChecked();
+    await dialog.getByRole('radio', { name: /Only fill in/ }).check();
+    await dialog.getByRole('button', { name: 'Hand over', exact: true }).click();
+    await expect(page.getByText(/Not handed over: ai-desktop refused the task \(403\): jobs are switched off/)).toBeVisible({ timeout: 15_000 });
+    await expect(dialog).toBeVisible();
+    await dialog.getByRole('button', { name: 'Cancel' }).click();
+    await expect(dialog).toBeHidden();
+  } finally {
+    await ai.close();
+    await page.evaluate(() => localStorage.removeItem('tasks-desktop.agent-mode'));
+  }
+  // The one refusal the test asked for (ai-desktop said 403, the hub answered 502) is the browser's only complaint.
+  expect(consoleProblems.get(page)).toEqual(['error: Failed to load resource: the server responded with a status of 502 (Bad Gateway)']);
 });
 
 test('the switch "Show AI functions" off: no AI place in the task, kept over a reload', async ({ page }) => {

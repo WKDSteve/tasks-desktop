@@ -1197,9 +1197,17 @@
         <button type="button" class="open-editor" data-hint={t('hint.ui.detail.graph')} onclick={() => app.openGraph(task.id)}>{t('graph.button')}</button>
       {/if}
       {#if app.aiFeatures}
-        <!-- The place of the AI functions of a task (handing it to an agent of ai-desktop comes next): only where
-             ai-desktop is found and "Show AI functions" is on. Its buttons look like the ones beside them. -->
-        <span class="ai-actions" data-testid="ai-actions"></span>
+        <!-- The AI functions of a task: only where ai-desktop is found and "Show AI functions" is on, a button like the
+             ones beside it (WEB-29). Off with its reason while several tasks are marked. -->
+        <span class="ai-actions" data-testid="ai-actions">
+          <button
+            type="button"
+            class="open-editor"
+            data-hint={app.agentBlocked ? t(app.agentBlocked) : t('hint.ui.detail.agent')}
+            disabled={app.agentBlocked !== null}
+            onclick={() => app.openAgent(task.id)}>{t('agent.button')}</button
+          >
+        </span>
       {/if}
       {#if app.canAttach}
         <AttachBar {app} id={task.id} />

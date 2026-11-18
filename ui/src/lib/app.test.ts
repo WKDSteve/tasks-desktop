@@ -851,6 +851,73 @@ describe('App', () => {
     again.app.stop();
   });
 
+  it('counts a running ai-desktop without an installer as found', async () => {
+    const { app, hub } = make({ token: 't' });
+    hub.aiDesktopFound = { installed: false, running: true };
+    await app.start(null);
+    await app.loadEnums();
+    await vi.waitFor(() => expect(app.aiFeatures).toBe(true));
+    app.stop();
+  });
+
+  it('hands a task to an agent only where the AI functions are offered, one task at a time, and keeps the mode', async () => {
+    const prefs = new Map<string, string>();
+    const { app, hub } = make({ token: 't', prefs });
+    await app.start(null);
+    await app.loadEnums();
+    // Not found: nothing opens, nothing is sent.
+    app.openAgent('pub/a');
+    expect(app.agentFor).toBeNull();
+    hub.aiDesktopFound = { installed: true, running: true };
+    await app.focused();
+    await vi.waitFor(() => expect(app.aiFeatures).toBe(true));
+    // Several marked tasks: refused with the reason.
+    app.marks = ['pub/a', 'pub/b'];
+    expect(app.agentBlocked).toBe('agent.one_only');
+    app.openAgent('pub/a');
+    expect(app.agentFor).toBeNull();
+    expect(app.toast?.kind).toBe('error');
+    app.marks = [];
+    app.openAgent('pub/a');
+    expect(app.agentFor).toBe('pub/a');
+    expect(app.agentMode).toBe('prefill');
+    hub.agentAnswer = { job_id: 'j7', status: 'running', private: false };
+    await app.handToAgent('run', 'handoff');
+    expect(hub.agentCalls).toEqual([{ id: 'pub/a', mode: 'run', kind: 'handoff' }]);
+    expect(app.agentFor).toBeNull();
+    expect(app.toast).toMatchObject({ kind: 'ok' });
+    expect(app.toast?.text).toContain('j7');
+    expect(prefs.get('tasks-desktop.agent-mode')).toBe('run');
+    // A private area on a model that is not local waits for the person in ai-desktop: said so.
+    app.openAgent('pub/a');
+    hub.agentAnswer = { job_id: 'j8', status: 'needs_confirmation', private: true };
+    await app.handToAgent('run', 'handoff');
+    expect(app.toast?.text).toBe(translate(app.lang, 'agent.sent_confirm', { job: 'j8' }));
+    // A refusal keeps the dialog open and says why, in the words of the hub.
+    app.openAgent('pub/a');
+    hub.agentRefusal = new ApiError(409, 'ai_desktop_not_running', 'ai-desktop is not running');
+    await app.handToAgent('prefill', 'handoff');
+    expect(app.agentFor).toBe('pub/a');
+    expect(app.toast).toMatchObject({ kind: 'error' });
+    expect(app.toast?.text).toContain('ai-desktop is not running');
+    // Switched off: nothing is sent, even with the dialog open.
+    app.setAiWanted(false);
+    hub.agentRefusal = null;
+    await app.handToAgent('prefill', 'handoff');
+    expect(hub.agentCalls).toHaveLength(3);
+    app.stop();
+    // The next page starts with the mode chosen last.
+    expect(make({ token: 't', prefs }).app.agentMode).toBe('prefill');
+  });
+
+  it('offers the kinds of a job by the status of the task', () => {
+    const { app } = make();
+    expect(app.agentKinds('open')).toEqual(['handoff']);
+    expect(app.agentKinds('done')).toEqual(['handoff', 'review-done']);
+    expect(app.agentKinds('decision')).toEqual(['handoff', 'prepare-decision']);
+    expect(app.agentKinds(undefined)).toEqual(['handoff']);
+  });
+
   it('has no AI switch in the web variant: there is no ai-desktop to find, and the focus does not ask', async () => {
     const { app, hub } = make({ token: 't', mode: 'web' });
     hub.aiDesktopFound = null;

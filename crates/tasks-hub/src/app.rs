@@ -834,6 +834,8 @@ pub async fn serve(opts: ServeOptions) -> Result<(), String> {
         )),
         // ai-desktop as the discovery of appkit finds it (its manifest, its hub.json), read anew on each request.
         family: Some(Arc::new(crate::family::Discovered::new(env.clone()))),
+        // A task handed to an agent goes to the job intake of the running ai-desktop.
+        agent: Some(Arc::new(crate::agent::AiDesktop::new(env.clone()))),
         all_vaults: Some(Arc::clone(&all_vaults)),
         sheet_run: Some(Arc::clone(&sheet_run)),
         testing: Some(Arc::clone(&testing)),

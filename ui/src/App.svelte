@@ -648,7 +648,7 @@
           // in the web variant); where it is not found, a greyed-out entry says why there is nothing to switch.
           ...(app.aiDesktop === null
             ? []
-            : app.aiDesktop.installed
+            : app.aiFound
               ? [
                   {
                     kind: 'check' as const,
@@ -956,6 +956,7 @@
     />
     <ConflictCenter {app} />
     <Lazy {app} when={app.managingVaults} load={() => import('./views/VaultsDialog.svelte')} />
+    <Lazy {app} when={app.agentFor !== null} load={() => import('./views/AgentDialog.svelte')} />
   {/if}
   <!-- Outside the ready block: the Info dialog and its report are there when the engine is not (app.canAbout). -->
   <Lazy {app} when={app.about.state !== 'closed'} load={() => import('./views/AboutDialog.svelte')} />
