@@ -1,4 +1,5 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import type { Locator, Page } from '@playwright/test';
 import { expect, isMachineFault, test } from './fixtures';
 import { expectAccessible, violations, watchViolations } from './a11y';
@@ -9,7 +10,7 @@ import { STATE } from './global';
 
 test.use({ locale: 'en-US' });
 
-const state = (): { token: string } => JSON.parse(readFileSync(STATE, 'utf8')) as { token: string };
+const state = (): { token: string; vault: string } => JSON.parse(readFileSync(STATE, 'utf8')) as { token: string; vault: string };
 
 async function pair(page: Page, path = '/'): Promise<string[]> {
   const problems: string[] = [];
@@ -123,6 +124,21 @@ test('cut up by who: the stacks are the people, a number opens exactly those tas
 });
 
 test('cut up by a list field: a task counts in each of its values and the view says so; the fields fit a narrow window', async ({ page }) => {
+  // One task with two tags of its own (the fixture takes the file away again): it must count in both of them.
+  const [tagA, tagB] = ['e2e-stats-two-tags-a', 'e2e-stats-two-tags-b'];
+  const file = join(state().vault, 'lib.nvim', 'ROADMAP', 'tasks', 'e2e-stats-two-tags.md');
+  writeFileSync(
+    file,
+    `---
+title: Stats two tags
+status: open
+kind: task
+tags: [${tagA}, ${tagB}]
+---
+
+Counted in both of its tags.
+`,
+  );
   await page.setViewportSize({ width: 380, height: 800 });
   const problems = await pair(page, '/#view=stats');
   const table = page.getByRole('table', { name: 'The numbers per area' });
@@ -138,11 +154,29 @@ test('cut up by a list field: a task counts in each of its values and the view s
   // The total of the table stays the number of tasks, whatever the stacks add up to.
   const open = page.locator('button.figure[data-figure="open"] .n');
   await expect(table.locator('tfoot td').first()).toHaveText((await open.textContent()) ?? '');
+  // Both stacks of the task count it once, and the total counts it once: the stacks add up to more than the total.
+  for (const tag of [tagA, tagB]) await expect(table.locator('tfoot').getByRole('button', { name: new RegExp(`^All areas, ${tag}: 1 `) })).toBeVisible();
+  const total = Number(await table.locator('tfoot td').first().textContent());
+  const stacks = (await table.locator('tfoot td.num button.link').allTextContents()).map(Number).reduce((a, b) => a + b, 0);
+  expect(stacks).toBeGreaterThan(total);
   expect(await overflow()).toBeLessThanOrEqual(0);
   await expectAccessible(page, 'statistics cut up by tag, narrow');
   await page.evaluate(() => localStorage.removeItem('tasks-desktop.stats'));
   expect(await violations(page)).toEqual([]);
   expect(problems).toEqual([]);
+  // Take the task away and wait until the hub no longer lists it: the next test would otherwise get a snapshot with a
+  // task that is gone, and the page would ask the engine about it (400).
+  rmSync(file);
+  await expect
+    .poll(
+      async () => {
+        const response = await page.request.get('/api/tasks/snapshot', { headers: { authorization: `Bearer ${state().token}` } });
+        const doc = (await response.json()) as { tasks?: { id: string }[] };
+        return (doc.tasks ?? []).some((t) => t.id === 'lib.nvim/e2e-stats-two-tags');
+      },
+      { timeout: 15_000 },
+    )
+    .toBe(false);
 });
 
 test('the tiles of the vault in numbers: one is hidden with its x, the choice brings it and a field back, and it holds after a reload', async ({

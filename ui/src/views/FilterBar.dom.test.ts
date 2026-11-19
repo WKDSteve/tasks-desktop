@@ -2,7 +2,7 @@
 // The filter bar the list and the statistics share, in a DOM: it changes the one filter of the page, names what is on,
 // and gives the focus a place when a filter goes. And the fold the statistics put it in: folded it is one line and
 // the strip of the other views, and the state is remembered.
-import { flushSync, mount, tick, unmount } from 'svelte';
+import { createRawSnippet, flushSync, mount, tick, unmount } from 'svelte';
 import { afterEach, describe, expect, it } from 'vitest';
 import { make, snapshot } from '../lib/appDouble';
 import { task } from '../lib/fixtures';
@@ -19,11 +19,11 @@ async function settle(): Promise<void> {
   flushSync();
 }
 
-async function started(prefs?: Map<string, string>): Promise<Made> {
+async function started(prefs?: Map<string, string>, withRanks = false): Promise<Made> {
   const m = make({ token: 't', ...(prefs ? { prefs } : {}) });
   m.hub.doc = snapshot([
-    task('pub/a', { status: 'open', actor: 'me', tags: ['ui'], scope: ['docs'] }),
-    task('pub/b', { status: 'doing', actor: 'cdx' }),
+    task('pub/a', { status: 'open', actor: 'me', tags: ['ui'], scope: ['docs'], ...(withRanks ? { prio: 1, effort: 'S' } : {}) }),
+    task('pub/b', { status: 'doing', actor: 'cdx', ...(withRanks ? { prio: 3, effort: 'XS' } : {}) }),
     task('lib/c', { status: 'open' }),
   ]);
   await m.app.start(null);
@@ -146,5 +146,39 @@ describe('StatsFilter', () => {
     expect(m.app.statsFilterOpen).toBe(true);
     expect(page.querySelector('input[type="search"]')).not.toBeNull();
     expect(m.app.layoutChanged('stats')).toBe(false);
+  });
+});
+
+describe('FilterBar, the places of the snippets of the view', () => {
+  const mark = (name: string) =>
+    createRawSnippet(() => ({ render: () => `<i data-slot="${name}"></i>` }));
+
+  it('puts extras last in .filters and moreExtras in .more-body between the ranges and the dates; moreOn counts in the title of the fold', async () => {
+    const m = await started(undefined, true);
+    const page = show(FilterBar, m, { extras: mark('extras'), moreExtras: mark('more'), moreOn: 2 });
+    const filters = page.querySelector('.filters')!;
+    expect(filters.lastElementChild?.getAttribute('data-slot')).toBe('extras');
+    // The snippet of the fold is not in the strip, and the one of the strip is not in the fold.
+    expect(filters.querySelector('[data-slot="more"]')).toBeNull();
+    const body = page.querySelector('.more-body')!;
+    expect(body.querySelector('[data-slot="extras"]')).toBeNull();
+    const kids = [...body.children];
+    const slot = kids.findIndex((el) => el.getAttribute('data-slot') === 'more');
+    expect(slot).toBeGreaterThan(-1);
+    // After it comes the first date pick; no date pick is before it and no range pick after it. Before it stand the
+    // field choices and the ranges, whatever of them the vault has.
+    // The ranges are before it (the vault has prio and effort), the dates after it.
+    expect(kids[slot - 1]?.querySelector('[data-range]')).not.toBeNull();
+    expect(kids[slot + 1]?.querySelector('[data-date]')).not.toBeNull();
+    expect(kids.slice(0, slot).some((el) => el.querySelector('[data-date]'))).toBe(false);
+    expect(kids.slice(slot + 1).some((el) => el.querySelector('[data-range]'))).toBe(false);
+    expect(slot).toBeGreaterThan(0);
+    expect(page.querySelector('summary')?.textContent).toBe('More filters (2)');
+  });
+
+  it('shows no count in the title of the fold when nothing in it is on', async () => {
+    const m = await started();
+    const page = show(FilterBar, m, { moreExtras: mark('more') });
+    expect(page.querySelector('summary')?.textContent).not.toMatch(/\(\d+\)/);
   });
 });
