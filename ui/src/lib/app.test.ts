@@ -3126,6 +3126,26 @@ describe('writing', () => {
       ]);
     });
 
+    it('takes back a learning point by the inverse of node_set (state, reason and note) and a promote by unpromote', async () => {
+      const { app, hub } = await ready();
+      const result = (inverse: Record<string, unknown>) =>
+        ({
+          kind: 'tasks.result',
+          ok: true,
+          dry_run: false,
+          results: [{ n: 1, op: 'set', id: 'lib/lua', ok: true, outcome: 'changed', changed_ids: [], inverse }],
+        }) as unknown as Result;
+      hub.next_ops = result({ op: 'node_set', id: 'lib/lua', point: 'pil', state: 'seen', reason: 'nur Kap. 1', note: '', if_match: 'e2' });
+      await app.write([{ op: 'node_set', id: 'lib/lua', point: 'pil', state: 'learned', if_match: 'e1' }]);
+      expect(app.toast?.undo).toEqual([{ op: 'node_set', id: 'lib/lua', point: 'pil', state: 'seen', reason: 'nur Kap. 1', note: '', if_match: 'e2' }]);
+      await app.undo();
+      expect(hub.sent[1]?.ops).toEqual([{ op: 'node_set', id: 'lib/lua', point: 'pil', state: 'seen', reason: 'nur Kap. 1', note: '', if_match: 'e2' }]);
+
+      hub.next_ops = result({ op: 'unpromote', container: 'lib/lua', point: 'cc', id: 'lib/c-compiler', if_match: 'e3' });
+      await app.write([{ op: 'promote', container: 'lib/lua', point: 'cc', if_match: 'e2' }]);
+      expect(app.toast?.undo).toEqual([{ op: 'unpromote', container: 'lib/lua', point: 'cc', id: 'lib/c-compiler', if_match: 'e3' }]);
+    });
+
     it('sends plan_set and project_set on the version the snapshot shows, and says a conflict', async () => {
       const { app, hub } = await ready([], { capabilities: ['plan_set', 'project_set'] });
       app.snapshot = {

@@ -385,6 +385,7 @@
                 {#if editing?.index === node.index && editing.kind === 'reason' && editing.state}
                   <form
                     class="edit"
+                    data-hint={t('hint.form.paths.reason')}
                     onsubmit={(e) => {
                       e.preventDefault();
                       saveReason(node);
@@ -412,6 +413,7 @@
                 {:else if editing?.index === node.index && editing.kind === 'note'}
                   <form
                     class="edit"
+                    data-hint={t('hint.form.paths.note')}
                     onsubmit={(e) => {
                       e.preventDefault();
                       saveNote(node);
