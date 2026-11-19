@@ -123,6 +123,7 @@ test('every kind of write answers and writes as nvim does on the same commit', {
     ['plan_new', () => ops({ op: 'plan_new', area: 'lib.nvim', title: 'A compared plan' })],
     ['node_set learned', () => ops({ op: 'node_set', id: 'lib.nvim/lua-lernen', point: 'meta', state: 'learned' })],
     ['node_set seen with a reason', () => ops({ op: 'node_set', id: 'lib.nvim/lua-lernen', point: 'cc', state: 'seen', reason: 'nur überflogen' })],
+    ['node_set with a note', () => ops({ op: 'node_set', id: 'lib.nvim/lua-lernen', point: 'meta', note: 'erst __index\nund __newindex' })],
     ['node_set on a parent (refused)', () => ops({ op: 'node_set', id: 'lib.nvim/lua-lernen', point: 'syntax', state: 'learned' })],
     ['promote', () => ops({ op: 'promote', container: 'lib.nvim/lua-lernen', point: 'wiki' })],
     ['unpromote', () => ops({ op: 'unpromote', container: 'lib.nvim/lua-lernen', point: 'wiki' })],
