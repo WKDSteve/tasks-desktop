@@ -167,7 +167,12 @@ export function createContextRegistry(app: App): ContextRegistry {
 
   registry.provide('tag', (target) => {
     const tag = target.id ?? '';
-    return tag === '' ? [] : [{ kind: 'action', label: t('tags.show', { tag }), hint: t('hint.ui.tags.show'), onselect: () => app.showTag(tag) }];
+    if (tag === '') return [];
+    // Next to the list of the tag: the tasks with it as a view to try (columns, list, grouped by a field), as for an area.
+    return [
+      { kind: 'action', label: t('tags.show', { tag }), hint: t('hint.ui.tags.show'), onselect: () => app.showTag(tag) },
+      ...app.viewMenuEntries(tag, { tags: [tag] }),
+    ];
   });
 
   registry.provide('view', (target) => {

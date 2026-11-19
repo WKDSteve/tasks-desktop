@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ApiError, type HubArea, type HubAreas, type OpsRequest, type VaultList } from './api';
+import { buildContextMenu } from 'appkit-ui/contextmenu';
+import { createContextRegistry, tagTarget } from './context';
 import { App, EXCHANGE_RETRIES, LAYOUT_VIEWS, type Env } from './app.svelte';
 import type { CachedList } from './cache';
 import type { Groupings, Result, Snapshot, TaskEntry, View } from './contract';
@@ -6376,6 +6378,30 @@ describe('the saved views', () => {
       actions[4]!.onselect();
       expect(m.app.view).toBe('views');
       expect(m.app.viewsState.open).toMatchObject({ id: DRAFT_ID, title: 'pub', group_by: 'tags', select: { areas: ['pub'] } });
+      m.app.stop();
+    });
+
+    it('the context menu of a tag chip offers the tag as a view being tried, beside showing all with it', async () => {
+      const m = made();
+      await m.app.start(null);
+      await m.app.viewsState.loadGroupings();
+      const items = buildContextMenu(createContextRegistry(m.app), [tagTarget('ui')]) as { kind: string; label?: string; onselect?: () => void }[];
+      const t = (key: Parameters<typeof translate>[1], params = {}) => translate(m.app.lang, key, params);
+      const actions = items.filter((i) => i.kind === 'action').map((i) => i.label);
+      expect(actions.slice(0, 4)).toEqual([t('tags.show', { tag: 'ui' }), t('views.display.columns'), t('views.display.list'), t('views.display.matrix')]);
+      items.find((i) => i.label === t('views.display.columns'))?.onselect?.();
+      expect(m.app.view).toBe('views');
+      // Tried, not saved: the draft holds the tag as its selection and the tag as its name.
+      expect(m.app.viewsState.open).toMatchObject({ id: DRAFT_ID, title: 'ui', display: 'columns', select: { tags: ['ui'] } });
+      m.app.stop();
+    });
+
+    it('an engine without views offers nothing for a tag but showing its tasks', async () => {
+      const m = made([]);
+      await m.app.start(null);
+      await m.app.viewsState.loadGroupings();
+      const items = buildContextMenu(createContextRegistry(m.app), [tagTarget('ui')]);
+      expect(items).toHaveLength(1);
       m.app.stop();
     });
 
