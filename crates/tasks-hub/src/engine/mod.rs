@@ -208,6 +208,6 @@ mod table_tests {
             assert_eq!(Calls::parse(m.as_str()), Some(m));
             assert!(m.reply_kind().starts_with("tasks."), "{}", m.as_str());
         }
-        assert_eq!(Calls::ALL.len(), 24);
+        assert_eq!(Calls::ALL.len(), 25);
     }
 }
