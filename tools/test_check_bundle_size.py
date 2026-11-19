@@ -27,6 +27,34 @@ class BundleSize(unittest.TestCase):
         self.assertFalse(good)
         self.assertIn('801 kB', words)
 
+    def with_chunks(self, main_kb: int, shared_kb: int) -> pathlib.Path:
+        dist = self.page(main_kb)
+        assets = dist / 'assets'
+        (assets / 'index-abc.js').write_bytes(b'x' * (main_kb * 1000 - 40) + b'import"./shared-1.js";')
+        # The shared chunk imports a second one itself, and the main chunk starts a lazy one that does not count.
+        (assets / 'shared-1.js').write_bytes(b'x' * (shared_kb * 1000 - 40) + b'export{a}from"./deep-2.js";')
+        (assets / 'deep-2.js').write_bytes(b'x' * 10_000)
+        with (assets / 'index-abc.js').open('ab') as f:
+            f.write(b'const l=()=>import("./lazy.js");')
+        (assets / 'lazy.js').write_bytes(b'x' * 900_000)
+        return dist
+
+    def test_the_chunks_the_main_chunk_imports_count_with_it_down_the_chain(self) -> None:
+        good, words = check.check(self.with_chunks(100, 200), 500)
+        self.assertTrue(good)
+        self.assertIn('with 2 chunks', words)
+        self.assertIn('310 kB', words)
+        good, words = check.check(self.with_chunks(100, 200), 300)
+        self.assertFalse(good)
+        self.assertIn('shared-1.js 200 kB', words)
+
+    def test_a_chunk_that_moves_into_the_main_chunk_changes_nothing(self) -> None:
+        apart = check.check(self.with_chunks(100, 12), 800)[1]
+        # 100 kB main, 12 kB shared and the 10 kB it imports: the same start as one chunk of 122 kB.
+        merged = check.check(self.page(122), 800)[1]
+        self.assertIn('start 122 kB', apart)
+        self.assertIn('start 122 kB', merged)
+
     def test_a_page_without_a_script_is_an_error(self) -> None:
         dist = self.page(1)
         (dist / 'index.html').write_text('<p>')

@@ -1,18 +1,32 @@
 #!/usr/bin/env python3
-"""Fails when the main chunk of the built page is above its budget.
+"""Fails when what the page loads at its start is above its budget.
 
 The page is served from the binary, so its size is parse time at every start, not load time. Without a number it only
 grows: rarely used views and dialogs load on demand (`ui/src/views/Lazy.svelte`), and a static import of one of them
-brings it back into the main chunk, which is what this catches.
+brings it back into the start, which is what this catches.
 
-usage: check-bundle-size.py [--dist ui/dist] [--budget-kb 650]
+What counts is the main chunk and every chunk it imports statically, however many (`from"./x.js"`): those are all
+parsed before the page shows. The budget used to be on the main chunk alone, and that depended on the bundler: a chunk
+that the main chunk and a lazy view share (`plan`, 12 kB) is a file of its own or part of the main chunk as the
+heuristic of the bundler sees fit, and one harmless import moved 12 kB over the budget with nothing to show in the diff
+(2026-11-18, tasks-desktop@33664fa). Counting the whole start makes that move no change.
+
+The budget on 2026-11-19: the start is 1050 kB (main 640, i18n 361, the rest 49 in nine small shared chunks); the budget
+leaves 10 kB. When the room is used up, the candidates in the order of their size: the language tables of `i18n` (the
+other language on demand, 361 kB shared), then the views that are still static in `App.svelte`: `Detail` (67 kB source),
+`ViewsView` (35), `ListView` (29), `Today` (26), `Capture` (25), `BoardView` (21).
+
+usage: check-bundle-size.py [--dist ui/dist] [--budget-kb 1060]
 """
 import argparse
 import pathlib
 import re
 import sys
 
-BUDGET_KB = 650
+BUDGET_KB = 1060
+
+# `from"./x.js"` and `import"./x.js"` of a built chunk: a static import. A dynamic `import("./x.js")` has a bracket.
+STATIC_IMPORT = re.compile(r'(?:from|import)\s*"\./([^"]+\.js)"')
 
 
 def main_chunk(dist: pathlib.Path) -> pathlib.Path:
@@ -24,11 +38,28 @@ def main_chunk(dist: pathlib.Path) -> pathlib.Path:
     return dist / found.group(1)
 
 
+def startup_chunks(dist: pathlib.Path) -> dict[str, int]:
+    """The main chunk and every chunk it imports statically, down the chain, with their sizes in bytes."""
+    found: dict[str, int] = {}
+    pending = [main_chunk(dist)]
+    while pending:
+        chunk = pending.pop()
+        if chunk.name in found:
+            continue
+        found[chunk.name] = chunk.stat().st_size
+        pending.extend(chunk.parent / name for name in STATIC_IMPORT.findall(chunk.read_text(encoding='utf-8')))
+    return found
+
+
 def check(dist: pathlib.Path, budget_kb: int) -> tuple[bool, str]:
-    chunk = main_chunk(dist)
-    size = chunk.stat().st_size / 1000
-    words = f'{chunk.name}: {size:.0f} kB, budget {budget_kb} kB'
-    return size <= budget_kb, words
+    chunks = startup_chunks(dist)
+    main = main_chunk(dist)
+    total = sum(chunks.values()) / 1000
+    words = f'{main.name}: {chunks[main.name] / 1000:.0f} kB, with {len(chunks) - 1} chunks it imports at the start {total:.0f} kB, budget {budget_kb} kB'
+    if total > budget_kb:
+        biggest = sorted(chunks.items(), key=lambda item: -item[1])[:6]
+        words += '; the start is made of ' + ', '.join(f'{name} {size / 1000:.0f} kB' for name, size in biggest)
+    return total <= budget_kb, words
 
 
 def main() -> int:

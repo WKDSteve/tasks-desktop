@@ -20,7 +20,7 @@ cd ui && pnpm e2e:device                 # Handy-Seite am echten Android-Handy (
 python tools/check-control-chars.py
 python tools/check-process-starts.py    # no process is started by hand (appkit_core::child, appkit_hub::launch); tools/process-starts.allow
 python tools/check-color-literals.py --root ui/src --tokens ui/src/palette.css   # no colour outside tokens and palette (CI job hygiene)
-python tools/check-bundle-size.py   # after pnpm build: the main chunk stays within its budget
+python tools/check-bundle-size.py   # after pnpm build: the start (main chunk and the chunks it imports) stays within its budget
 python tools/check-lock-age.py --min-days 7   # after cargo update: no crate younger than 7 days (CI job rust)
 testing sheets run --all                # test sheets (TESTS/sheets, .testing.lua): the first start in the page against the example setup-hub, a folder of the run; Chrome
 ```
