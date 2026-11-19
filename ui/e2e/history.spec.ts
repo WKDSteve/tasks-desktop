@@ -141,6 +141,29 @@ test('the numbers of the statistics open their history too: the sum of the effor
   expect(problems).toEqual([]);
 });
 
+test('the button of the history covers no text of its number, on a phone and on a wide window', async ({ page }) => {
+  const problems = await pair(page, '/#view=stats');
+  await expect(page.locator('[data-tile="n:effort"] [data-history]')).toBeVisible();
+  for (const width of [360, 1280]) {
+    await page.setViewportSize({ width, height: 900 });
+    // Every text of every number that has the button, against the box of the button.
+    const covered = await page.locator('.figures .tile:has([data-history])').evaluateAll((tiles) =>
+      tiles.flatMap((tile) => {
+        const button = tile.querySelector('[data-history]')!.getBoundingClientRect();
+        return [...tile.querySelectorAll('.label, .n, .sub')].flatMap((text) => {
+          const range = document.createRange();
+          range.selectNodeContents(text);
+          const box = range.getBoundingClientRect();
+          const apart = box.right <= button.left || box.left >= button.right || box.bottom <= button.top || box.top >= button.bottom;
+          return apart ? [] : [`${tile.getAttribute('data-tile')}: "${text.textContent?.trim()}"`];
+        });
+      }),
+    );
+    expect(covered, `covered at ${width} px`).toEqual([]);
+  }
+  expect(problems).toEqual([]);
+});
+
 test('the history follows "Cut up by": the open tasks as bands per status, a value taken out by the legend, a field without a series says so', async ({
   page,
 }) => {
