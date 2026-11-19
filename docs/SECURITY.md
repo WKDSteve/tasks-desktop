@@ -808,6 +808,17 @@ picture to an `<img>` and runs nothing when opened. The small pictures are kept 
 folder, named by a hash of the source's path, size and time of change, at most 1000 (the oldest go first); nothing is
 written into a vault.
 
+## Learning paths (`GET /api/tasks/paths`, `path`)
+
+Two data routes, each behind a session (in the security matrix) and not released for a paired phone: the guard keeps
+them from a device (`MOB-02`), and each handler refuses one again with `403 not_for_devices`. The query is plain
+(`parse_query`): an area name for `paths`, an id `<area>/<slug>` for `path`; anything else is `400` before the engine
+is asked. Both pass the engine's documents on as they are, asked each time (not held: a path changed by `node_set`
+must not come back as it was). The writes are `node_set`, `promote` and `unpromote` of `ops`, refused to a phone
+(`device_op_level`). The page draws a label, a reason and a note as text, never as markup; it opens a link of a point
+only when it is `http://` or `https://`, in a new tab without a referrer (`rel="noopener noreferrer"`,
+`referrerpolicy="no-referrer"`).
+
 ## The ranges of the fields (`GET /api/tasks/enums`)
 
 A read without parameters (a query is `400`), a session needed. The hub asks the engine `hello` and passes on only its

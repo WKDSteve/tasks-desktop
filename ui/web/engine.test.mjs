@@ -244,9 +244,11 @@ test('the worker serves the embedded WASM and refuses a second init', async () =
 // must differ: the time of the answer and the runtime (`engine`: no Neovim in the browser).
 const READ_METHODS = [
   'hello', 'areas', 'snapshot', 'list', 'next', 'links', 'groupings', 'views', 'lists', 'order', 'finished', 'check',
-  'estimate', 'waits', 'plan_compare',
+  'estimate', 'waits', 'plan_compare', 'paths',
 ];
 const BY_ID = ['task', 'done_preview', 'plan_for'];
+/** The learning path of the fixture (`tasks.path` takes the id of a path, not of a task). */
+const PATH_CASE = ['path', JSON.stringify({ id: 'lib.nvim/lua-lernen' })];
 
 const mask = (text) =>
   text.trim().replace(/"generated_at":"[^"]*"/g, '"generated_at":"*"').replace(/"time":"\d\d:\d\d"/g, '"time":"*"').replace(/"engine":\{[^}]*\}/g, '"engine":{*}');
@@ -274,7 +276,7 @@ function nvimCaller(t, label, vault) {
 test('every read method answers a document of the engine, not an error', async () => {
   const e = await engine();
   const id = JSON.parse(e.call('list', null, { root: ROOT }).text).items[0].id;
-  const cases = [...READ_METHODS.map((m) => [m]), ...BY_ID.map((m) => [m, JSON.stringify({ id })])];
+  const cases = [...READ_METHODS.map((m) => [m]), ...BY_ID.map((m) => [m, JSON.stringify({ id })]), PATH_CASE];
   for (const [method, params] of cases) {
     const doc = JSON.parse(e.call(method, params ? `{"params":${params}}` : null, { root: ROOT }).text);
     assert.notEqual(doc.kind, 'tasks.error', `${method}: ${doc.message}`);
@@ -285,7 +287,7 @@ test('every read method answers as nvim does on the same commit', { skip: NEEDS_
   const nvim = nvimCaller(t, 'compare', () => fixture);
   const e = await engine();
   const id = JSON.parse(e.call('list', null, { root: ROOT }).text).items[0].id;
-  const cases = [...READ_METHODS.map((m) => [m]), ...BY_ID.map((m) => [m, JSON.stringify({ id })])];
+  const cases = [...READ_METHODS.map((m) => [m]), ...BY_ID.map((m) => [m, JSON.stringify({ id })]), PATH_CASE];
   for (const [method, params] of cases) {
     const web = e.call(method, params ? `{"params":${params}}` : null, { root: ROOT }).text;
     assert.equal(mask(web), mask(nvim(method, params)), `${method} differs`);

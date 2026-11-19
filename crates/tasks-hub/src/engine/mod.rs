@@ -67,7 +67,7 @@ pub fn cli_config_from_setup(setup: &Setup, env: Env) -> CliEngineConfig {
 
 /// The calls of the contract `tasks-export/1` and `tasks-ops/1`: the table of this app. The seam
 /// reads the flags of each entry; it knows no call by name.
-static SPECS: [MethodSpec; 25] = [
+static SPECS: [MethodSpec; 27] = [
     MethodSpec::bare("hello", "tasks.hello"),
     MethodSpec::bare("snapshot", "tasks.snapshot"),
     MethodSpec::read("list", "tasks.list"),
@@ -96,6 +96,10 @@ static SPECS: [MethodSpec; 25] = [
     MethodSpec::read("meetings", "tasks.meetings"),
     // One meeting with its body and the sections the engine reads (capability `meetings`).
     MethodSpec::read("meeting", "tasks.meeting"),
+    // The open learning paths with their progress (capability `paths`).
+    MethodSpec::read("paths", "tasks.paths"),
+    // One learning path with its body and its tree (capability `path`).
+    MethodSpec::read("path", "tasks.path"),
 ];
 
 /// The calls of the tasks engine, by name.
@@ -128,9 +132,11 @@ impl Calls {
     pub const Intent: Method = Method::new(&SPECS[22]);
     pub const Meetings: Method = Method::new(&SPECS[23]);
     pub const Meeting: Method = Method::new(&SPECS[24]);
+    pub const Paths: Method = Method::new(&SPECS[25]);
+    pub const Path: Method = Method::new(&SPECS[26]);
 
     /// Every call of the table.
-    pub const ALL: [Method; 25] = [
+    pub const ALL: [Method; 27] = [
         Self::Hello,
         Self::Snapshot,
         Self::List,
@@ -156,6 +162,8 @@ impl Calls {
         Self::Intent,
         Self::Meetings,
         Self::Meeting,
+        Self::Paths,
+        Self::Path,
     ];
 
     /// Parse the name of a route or a request. Nothing else is accepted.
@@ -208,6 +216,6 @@ mod table_tests {
             assert_eq!(Calls::parse(m.as_str()), Some(m));
             assert!(m.reply_kind().starts_with("tasks."), "{}", m.as_str());
         }
-        assert_eq!(Calls::ALL.len(), 25);
+        assert_eq!(Calls::ALL.len(), 27);
     }
 }

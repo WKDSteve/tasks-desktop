@@ -410,6 +410,21 @@ export function createWebHub(deps: HubDeps): WebHub {
         }
         return passOn('order', params);
       }
+      case 'paths': {
+        // The open learning paths with their progress (`tasks.paths`), asked each time as the hub does.
+        const q = parseQuery(query, ['area']);
+        if (typeof q === 'string') return errorBody(400, 'bad_query', q);
+        const area = q.get('area');
+        if (area !== undefined && !validAreaName(area)) return errorBody(400, 'bad_query', 'area is not a name');
+        return passOn('paths', area !== undefined ? { area } : {});
+      }
+      case 'path': {
+        // One learning path with its tree (`tasks.path`).
+        const q = parseQuery(query, ['id']);
+        if (typeof q === 'string') return errorBody(400, 'bad_query', q);
+        const id = idRequired(q);
+        return typeof id === 'string' ? passOn('path', { id }) : id;
+      }
       case 'plan_for': {
         const q = parseQuery(query, ['id', 'direction']);
         if (typeof q === 'string') return errorBody(400, 'bad_query', q);
@@ -733,6 +748,10 @@ export const OPS_ALLOWED = [
   'view_save',
   'view_delete',
   'attach',
+  // the learning paths: the state of a point, a point made a task and taken back
+  'node_set',
+  'promote',
+  'unpromote',
   'history_record',
 ];
 const OPS_FIELDS = ['schema', 'client_op_id', 'dry_run', 'ops'];

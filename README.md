@@ -375,6 +375,16 @@ Meetings are made and changed through `ops` (`meeting_new`, `meeting_set`, `meet
 (`ui/src/lib/meetingLink.ts`), in a new tab of the system's browser (`rel="noopener noreferrer"`), which hands Teams or
 Zoom on; other schemes (`msteams:`, `zoommtg:`) are shown, never opened.
 
+**Learning paths through the hub.** The engine's learning paths (`<area>/ROADMAP/paths/<slug>.md`) are routes of
+the hub (a session needed, not for a paired phone yet), asked fresh each time (the state the hub holds answers by is
+over the tasks, not the paths):
+
+- `GET /api/tasks/paths?area=`: the open learning paths with their progress (learned, seen, dropped, open), no tree.
+- `GET /api/tasks/path?id=<area>/<slug>`: one path with its body and its tree as a flat list in document order.
+
+A point is ticked, marked seen, dropped or blocked with `node_set`, made a task of its own with `promote` and taken
+back with `unpromote` (through `ops`).
+
 **The test sheets of a task, from the phone** (through this hub; the testing hub runs them). Once, on the PC:
 
 ```

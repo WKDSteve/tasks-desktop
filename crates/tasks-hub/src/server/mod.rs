@@ -63,6 +63,7 @@ mod events;
 mod history;
 mod mail;
 mod meetings;
+mod paths;
 mod push;
 mod repos;
 mod routes;
@@ -361,6 +362,9 @@ fn app_routes(core: &Arc<Shared>) -> Router<Arc<Shared>> {
         .route(&r("meeting"), get(self::meetings::meeting))
         .route(&r("meeting/ics"), get(self::meetings::meeting_ics))
         .route(&r("meeting/thumb"), get(self::meetings::meeting_thumb))
+        // The learning paths (concept "Lernplan" 11.3): the open paths, one path with its tree; the writes are `ops`.
+        .route(&r("paths"), get(self::paths::paths))
+        .route(&r("path"), get(self::paths::path))
         .route(
             &r("check"),
             post(check_start).layer(DefaultBodyLimit::max(small)),
