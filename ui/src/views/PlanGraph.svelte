@@ -469,6 +469,11 @@
     } else if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
       openMenu(edge);
+    } else if (e.key === 'Escape' && menu) {
+      // The menu takes the focus a frame after it opened: an Escape before that is still on the arrow.
+      e.preventDefault();
+      e.stopPropagation();
+      closeMenu();
     }
   }
 
