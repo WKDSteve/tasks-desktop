@@ -22,25 +22,9 @@ import {
 } from '@playwright/test';
 import { STATE } from './global';
 import { removeFile } from './hub';
+import { joinVault, registryOf, vaultTasks } from './vault-share';
 
-/** Where a task can land: open tasks of every area, and those a test finished. And the saved views: a test that stops
- *  before it deletes its view would leave it chosen for the next (app.spec "a task moved between the groups of a view"
- *  broke off on the runner, and the board test after it found the view). */
-const TASK_DIRS = [join('ROADMAP', 'tasks'), join('Backlog', 'TASKS'), join('ROADMAP', 'views')];
-
-/** The path of every task (a file, or the folder of a folder task) and every saved view in the vault right now. */
-export function vaultTasks(vault: string): Set<string> {
-  const found = new Set<string>();
-  for (const area of readdirSync(vault, { withFileTypes: true })) {
-    if (!area.isDirectory() || area.name.startsWith('.')) continue;
-    for (const dir of TASK_DIRS) {
-      const at = join(vault, area.name, dir);
-      if (!existsSync(at)) continue;
-      for (const entry of readdirSync(at)) found.add(join(at, entry));
-    }
-  }
-  return found;
-}
+export { vaultTasks };
 
 /**
  * A request the machine could not make, whatever the page asked: Windows was out of socket buffers, or the network
@@ -290,17 +274,17 @@ export const fixtures: Fixtures<E2eFixtures, object, PlaywrightTestArgs & Playwr
   },
   vaultClean: [
     // eslint-disable-next-line no-empty-pattern -- Playwright asks for a destructured first argument
-    async ({}, use) => {
+    async ({}, use, testInfo) => {
       const { vault } = JSON.parse(readFileSync(STATE, 'utf8')) as { vault: string };
-      const before = vaultTasks(vault);
-      const clean = (): void => {
-        for (const path of vaultTasks(vault)) {
-          if (!before.has(path)) removeFile(path);
-        }
-      };
-      await use(clean);
-      // Again: a write the closed page still had on its way may have landed after the first time.
-      clean();
+      // Alone, the test removes what is new in the vault; beside another worker it cannot tell its own files from that
+      // worker's, and the last test of the run removes them (vault-share.ts).
+      const share = joinVault(vault, registryOf(STATE), `${process.pid}-${testInfo.testId}-${testInfo.retry}`, removeFile);
+      try {
+        await use(share.clean);
+        // Again: a write the closed page still had on its way may have landed after the first time.
+      } finally {
+        share.leave();
+      }
     },
     { auto: true },
   ],
