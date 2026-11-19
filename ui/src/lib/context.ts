@@ -8,6 +8,7 @@ import type { App } from './app.svelte';
 import type { TaskEntry, ViewSelect } from './contract';
 import { tasksOf, type CountKey } from './counts';
 import type { ExportFormat } from './export';
+import { copyText } from './exportDom';
 import { translate, type Key } from './i18n';
 
 /** A target that stands for a selection of tasks (an area, a plan, a group of a view): "open as a view" for it. */
@@ -106,11 +107,12 @@ export function createContextRegistry(app: App): ContextRegistry {
       {
         kind: 'action',
         label: t('ctx.copy_id'),
+        // A page that is not served securely (the hub over http in a LAN) has no clipboard: `copyText` says so.
         onselect: () => {
-          void navigator.clipboard.writeText(task.id).then(
-            () => app.tell('ok', 'ctx.copied', { id: task.id }),
-            () => app.tell('error', 'about.copy_failed'),
-          );
+          void copyText(navigator.clipboard, task.id).then((copied) => {
+            if (copied) app.tell('ok', 'ctx.copied', { id: task.id });
+            else app.tell('error', 'about.copy_failed');
+          });
         },
       },
     ];
