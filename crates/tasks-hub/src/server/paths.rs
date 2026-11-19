@@ -95,10 +95,7 @@ mod tests {
             paths_request(Some("area=learning")),
             Ok(json!({ "area": "learning" }))
         );
-        assert_eq!(
-            paths_request(Some("area=..")),
-            Err("area is not a name")
-        );
+        assert_eq!(paths_request(Some("area=..")), Err("area is not a name"));
         assert!(paths_request(Some("id=a/b")).is_err());
     }
 
