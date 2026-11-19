@@ -780,6 +780,32 @@ with its password in the key store of the system, is a task of its own. Until th
 session, is not released for a paired phone (`MOB-02`, fail closed), and a refusal of the transport reaches the page as
 one line of at most 200 characters.
 
+## Meetings (`GET /api/tasks/meetings`, `meeting`, `meeting/ics`, `meeting/thumb`)
+
+Four data routes, each behind a session (they are in the security matrix, `crates/hub-testkit/src/subjects/tasks.rs`)
+and none released for a paired phone: the guard keeps them from a device (`MOB-02`), and each handler refuses one
+again with `403 not_for_devices` (what of a meeting may reach a phone is decided with the phone's view of meetings).
+The query is plain (`parse_query`): days `YYYY-MM-DD`, an area name, one status word, an id `<area>/<slug>`, a limit of
+1 to 100; anything else is `400` before the engine is asked. `meetings` and `meeting` pass the engine's documents on as
+they are; the writes are operations of `ops`, which refuses them to a phone (`device_op_level`).
+
+`meeting/ics` is a download (`Content-Disposition: attachment`, `text/calendar`, `nosniff`, a sandboxing CSP, not
+kept): nothing is mailed or sent. It follows the class of the meeting's area, read from the id, never from the page,
+fail closed: private and unclassified give `403 not_released`; `internal` gives no participant and its address to join
+only with `meetings.internal_links`; `public` gives the address and the participants with a plain address (one `@`, no
+character that ends a value or a line). Text values are escaped as RFC 5545 says (control characters dropped), so a
+title cannot add a property of its own. The sequence of each invitation is kept in `ics-sequence.json` in the settings
+folder (at most 5000, the least asked for go first).
+
+`meeting/thumb` reads only a file below the meeting's own folder: the path the engine names (`cover`, `image`, or a
+board under `assets/boards/`) must be relative with plain parts (no `..`, root, drive, colon or backslash), and the file
+must still lie inside that folder once every link is followed (`canonicalize`). A picture is at most 20 MB and is
+decoded by the `image` crate (PNG, JPEG, WebP only, told by its first bytes; at most 12000 px on an edge and 256 MiB of
+memory), then written anew as a PNG of at most 96 px: what reaches the page is the hub's own PNG, not the file. A
+board's drawing (SVG, at most 2 MB) is passed on as it is, with `nosniff` and `default-src 'none'; sandbox`, so it is a
+picture to an `<img>` and runs nothing when opened. The small pictures are kept in `cache/thumbs/` of the settings
+folder, named by a hash of the source's path, size and time of change; nothing is written into a vault.
+
 ## The ranges of the fields (`GET /api/tasks/enums`)
 
 A read without parameters (a query is `400`), a session needed. The hub asks the engine `hello` and passes on only its
@@ -888,6 +914,8 @@ The tree is small (about 70 crates, of which the file watcher and its
 platform backends are about twenty) and its policy is in the repository:
 
 * `Cargo.lock` is committed and every build uses `--locked`.
+* The one decoder of files from a vault is `image` (PNG, JPEG, WebP; the previews of meetings), with its limits on
+  size and memory set by the hub; `icalendar` is a dependency of the tests only (it reads the invitations back).
 * `deny.toml` allows a short list of licenses, crates.io and one git source
   (appkit), no wildcard versions; `cargo audit` and `cargo deny check` run
   in CI. Unmaintained crates are errors in the whole tree, the dependencies

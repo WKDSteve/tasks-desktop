@@ -487,7 +487,7 @@ pub(super) async fn search_route(
 /// the path below the task and its link, never the image. `project_new`, `plan_set` and `project_set` make a project file
 /// and change the frontmatter of an open plan or project file (the project level); the engine judges the relation.
 /// `plan_close` and `project_close` finish a plan or a project by hand; the engine refuses while something holds it open.
-pub(super) const OPS_ALLOWED: [&str; 22] = [
+pub(super) const OPS_ALLOWED: [&str; 28] = [
     "set",
     "new",
     "reorder",
@@ -509,6 +509,14 @@ pub(super) const OPS_ALLOWED: [&str; 22] = [
     "view_save",
     "view_delete",
     "attach",
+    // the meetings (capability `meeting_ops`); not for devices. `board_save` waits for a way to hand the board's file
+    // over (its `upload` is a file of the hub's folder, as with `upload`).
+    "meeting_new",
+    "meeting_set",
+    "meeting_close",
+    "meeting_capture",
+    "meeting_attend",
+    "meeting_followups",
     // no task changes: the engine writes down the figures of today in its series (`tasks.history`); not for devices
     "history_record",
 ];

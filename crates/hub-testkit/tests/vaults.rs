@@ -244,6 +244,7 @@ async fn rig(name: &str, with_admin: bool) -> Rig {
                 opener: None,
                 repos: None,
                 mail: None,
+                meetings: None,
                 repo_status: None,
                 tailnet: None,
                 push: None,

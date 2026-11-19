@@ -62,6 +62,7 @@ pub(crate) mod device_cut;
 mod events;
 mod history;
 mod mail;
+mod meetings;
 mod push;
 mod repos;
 mod routes;
@@ -152,6 +153,9 @@ pub struct Extras {
     pub repo_status: Option<Arc<crate::repos::status::Status>>,
     /// Where a mail with reminders leaves the hub (`crate::mail`); none: the route says this hub has no mail account.
     pub mail: Option<Arc<dyn crate::mail::Transport>>,
+    /// The previews and the sequences of the invitations of meetings (`crate::meetings`), beside the settings; none:
+    /// each preview is made anew and every invitation has the sequence 0.
+    pub meetings: Option<Arc<crate::meetings::MeetingFiles>>,
     /// The name of this machine in the tailnet (`pc.example.ts.net`), for a phone that comes through Tailscale Serve;
     /// none: only loopback. Needs the devices of `ServerConfig`.
     pub tailnet: Option<String>,
@@ -188,6 +192,7 @@ pub async fn start_with(cfg: ServerConfig, extras: Extras) -> std::io::Result<Ru
         repos,
         repo_status,
         mail,
+        meetings,
         tailnet,
         push,
     } = extras;
@@ -229,6 +234,7 @@ pub async fn start_with(cfg: ServerConfig, extras: Extras) -> std::io::Result<Ru
         repos,
         repo_status,
         mail,
+        meetings,
         push,
         attach_dirs: Arc::new(
             attach_dirs
@@ -350,6 +356,11 @@ fn app_routes(core: &Arc<Shared>) -> Router<Arc<Shared>> {
         .route(&r("plan_for"), get(plan_for))
         .route(&r("plan_compare"), get(plan_compare))
         .route(&r("check"), get(check_state))
+        // The meetings (concept 6): a window of days, one meeting, its invitation and its preview; the writes are `ops`.
+        .route(&r("meetings"), get(self::meetings::meetings))
+        .route(&r("meeting"), get(self::meetings::meeting))
+        .route(&r("meeting/ics"), get(self::meetings::meeting_ics))
+        .route(&r("meeting/thumb"), get(self::meetings::meeting_thumb))
         .route(
             &r("check"),
             post(check_start).layer(DefaultBodyLimit::max(small)),
@@ -619,6 +630,7 @@ mod tests {
                 upload_engine: None,
                 repos: None,
                 mail: None,
+                meetings: None,
                 repo_status: None,
             },
         ))

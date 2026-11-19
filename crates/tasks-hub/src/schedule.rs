@@ -111,7 +111,7 @@ fn time_of(text: &str) -> Option<Time> {
 }
 
 /// `YYYY-MM-DD` as a day.
-fn day_of(text: &str) -> Option<Date> {
+pub(crate) fn day_of(text: &str) -> Option<Date> {
     let b = text.as_bytes();
     let plain = b.len() == 10
         && b[4] == b'-'
@@ -137,7 +137,7 @@ fn wall_of(text: &str) -> Option<DateTime> {
 }
 
 /// The instant of a wall time in `zone`: after a gap for a time the clock skips, the first for one it shows twice.
-fn instant(wall: DateTime, zone: &TimeZone) -> Option<Timestamp> {
+pub(crate) fn instant(wall: DateTime, zone: &TimeZone) -> Option<Timestamp> {
     zone.to_ambiguous_timestamp(wall).compatible().ok()
 }
 
@@ -348,7 +348,7 @@ fn candidate(
 
 /// The zone of a meeting: its own, or the hub's; `None` for a name no database knows (then it tells nothing: a
 /// notice at a wrong time is worse than none).
-fn zone_of(meeting: &Meeting, hub: &TimeZone) -> Option<TimeZone> {
+pub(crate) fn zone_of(meeting: &Meeting, hub: &TimeZone) -> Option<TimeZone> {
     match &meeting.tz {
         None => Some(hub.clone()),
         Some(name) => TimeZone::get(name).ok(),
@@ -664,7 +664,7 @@ pub struct Content {
 }
 
 /// An address to join that may go into a mail: http or https, one line, not endless.
-fn plain_link(link: &str) -> Option<String> {
+pub(crate) fn plain_link(link: &str) -> Option<String> {
     let lower = link.to_ascii_lowercase();
     let ok = (lower.starts_with("https://") || lower.starts_with("http://"))
         && link.len() <= 2000

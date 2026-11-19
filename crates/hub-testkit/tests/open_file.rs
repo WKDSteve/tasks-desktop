@@ -200,6 +200,7 @@ row two
             testing: None,
             repos: None,
             mail: None,
+            meetings: None,
             repo_status: None,
             tailnet: None,
             push: None,

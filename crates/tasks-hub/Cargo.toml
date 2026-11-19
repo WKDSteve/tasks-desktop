@@ -36,6 +36,9 @@ notify = { version = "8.2", default-features = false }
 # The scheduler of meeting notices and reminders at a time of day (src/schedule.rs): wall times of a zone to instants,
 # with the time zone database bundled (Windows has no IANA database of its own; the same answers on every system).
 jiff = { version = "0.2", default-features = false, features = ["std", "tz-system", "tzdb-bundle-always"] }
+# The preview of a meeting (src/meetings.rs): its cover or the picture of a board, made 96 px small; PNG, JPEG and
+# WebP only, no other decoder in the hub.
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 # The `rev` of a phone's snapshot, a hash over what it is given (src/server/device_cut.rs): the version appkit-hub brings.
@@ -47,5 +50,7 @@ tokio = { version = "1", default-features = false, features = ["rt-multi-thread"
 # Folders of the tests come from its `Scratch` (removed on drop). It depends on this crate; Cargo allows that cycle for
 # dev-dependencies.
 hub-testkit = { path = "../hub-testkit" }
+# The invitation of a meeting (src/meetings.rs) is read back by an iCalendar parser of its own.
+icalendar = { version = "0.17", default-features = false, features = ["parser"] }
 # The subsystem in the header of the program (tests/window_program.rs).
 appkit-testkit.workspace = true

@@ -67,7 +67,7 @@ pub fn cli_config_from_setup(setup: &Setup, env: Env) -> CliEngineConfig {
 
 /// The calls of the contract `tasks-export/1` and `tasks-ops/1`: the table of this app. The seam
 /// reads the flags of each entry; it knows no call by name.
-static SPECS: [MethodSpec; 24] = [
+static SPECS: [MethodSpec; 25] = [
     MethodSpec::bare("hello", "tasks.hello"),
     MethodSpec::bare("snapshot", "tasks.snapshot"),
     MethodSpec::read("list", "tasks.list"),
@@ -94,6 +94,8 @@ static SPECS: [MethodSpec; 24] = [
     MethodSpec::read("intent", "tasks.intent"),
     // The meetings of a window of days, for the scheduler of the hub (capability `meetings`).
     MethodSpec::read("meetings", "tasks.meetings"),
+    // One meeting with its body and the sections the engine reads (capability `meetings`).
+    MethodSpec::read("meeting", "tasks.meeting"),
 ];
 
 /// The calls of the tasks engine, by name.
@@ -125,9 +127,10 @@ impl Calls {
     pub const History: Method = Method::new(&SPECS[21]);
     pub const Intent: Method = Method::new(&SPECS[22]);
     pub const Meetings: Method = Method::new(&SPECS[23]);
+    pub const Meeting: Method = Method::new(&SPECS[24]);
 
     /// Every call of the table.
-    pub const ALL: [Method; 24] = [
+    pub const ALL: [Method; 25] = [
         Self::Hello,
         Self::Snapshot,
         Self::List,
@@ -152,6 +155,7 @@ impl Calls {
         Self::History,
         Self::Intent,
         Self::Meetings,
+        Self::Meeting,
     ];
 
     /// Parse the name of a route or a request. Nothing else is accepted.

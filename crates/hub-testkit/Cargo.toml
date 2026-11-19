@@ -40,3 +40,6 @@ p256 = { version = "0.14", default-features = false, features = ["ecdh", "std"] 
 hkdf = "0.13"
 sha2 = "0.11"
 aes-gcm = { version = "0.11", default-features = false, features = ["aes", "alloc"] }
+# The cover of a meeting (tests/real_meetings.rs) and the zone its invitation is told in: the versions tasks-hub brings.
+image = { version = "0.25", default-features = false, features = ["png"] }
+jiff = { version = "0.2", default-features = false, features = ["std", "tzdb-bundle-always"] }

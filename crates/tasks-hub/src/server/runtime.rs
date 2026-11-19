@@ -35,6 +35,8 @@ pub(super) struct VaultRuntime {
     pub(super) repo_status: Option<Arc<crate::repos::status::Status>>,
     /// Where a mail with reminders leaves the hub; none: this hub has no mail account.
     pub(super) mail: Option<Arc<dyn crate::mail::Transport>>,
+    /// The previews and the sequences of the invitations of meetings; none: nothing is kept.
+    pub(super) meetings: Option<Arc<crate::meetings::MeetingFiles>>,
     pub(super) engine: Option<Arc<dyn Engine>>,
     pub(super) store: Arc<SnapshotStore>,
     pub(super) search: Option<Arc<SearchIndex>>,
@@ -99,6 +101,7 @@ pub(super) struct AppParts {
     pub(super) repos: Option<Arc<crate::repos::Store>>,
     pub(super) repo_status: Option<Arc<crate::repos::status::Status>>,
     pub(super) mail: Option<Arc<dyn crate::mail::Transport>>,
+    pub(super) meetings: Option<Arc<crate::meetings::MeetingFiles>>,
     /// Web Push to the paired phones; none: this hub sends none.
     pub(super) push: Option<HubPush>,
 }
@@ -225,6 +228,7 @@ pub(super) fn build_runtime(
         repos: app.repos.clone(),
         repo_status: app.repo_status.clone(),
         mail: app.mail.clone(),
+        meetings: app.meetings.clone(),
         engine,
         store,
         search,

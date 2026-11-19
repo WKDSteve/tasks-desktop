@@ -316,6 +316,10 @@ async fn a_phone_reaches_the_routes_of_the_phone_page_and_nothing_else() {
         ("POST", "/api/tasks/intent"),
         ("POST", "/api/tasks/estimate"),
         ("POST", "/api/tasks/open"),
+        ("GET", "/api/tasks/meetings"),
+        ("GET", "/api/tasks/meeting?id=alpha.nvim/m1"),
+        ("GET", "/api/tasks/meeting/ics?id=alpha.nvim/m1"),
+        ("GET", "/api/tasks/meeting/thumb?id=alpha.nvim/m1"),
         ("GET", "/api/tasks/hello-not-a-route"),
     ] {
         let (status, doc) = r.send(method, path, &phone, r#"{"name":"main"}"#).await;
@@ -359,6 +363,8 @@ async fn ops_takes_from_a_phone_only_what_the_phone_page_sends_at_its_level() {
         json!({ "op": "move_area", "id": "alpha.nvim/t1", "area": "beta" }),
         json!({ "op": "set_body", "id": "alpha.nvim/t1", "body": "x" }),
         json!({ "op": "view_delete", "name": "v" }),
+        json!({ "op": "meeting_new", "area": "alpha.nvim", "title": "m", "fields": { "date": "2026-11-24" } }),
+        json!({ "op": "meeting_close", "id": "alpha.nvim/m1" }),
     ];
     for level in ["change", "trigger"] {
         r.set_level(&device, level).await;

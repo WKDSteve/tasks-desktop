@@ -775,6 +775,12 @@ pub async fn serve(opts: ServeOptions) -> Result<(), String> {
     let attach_dirs = file.app.attach_dirs.clone();
     let send_at = file.app.send_at().to_owned();
     let scheduler = scheduler_of(&file, &env, dir.join("schedule.json"));
+    // The previews of meetings and the sequences of their invitations, beside the settings (never in a vault); the
+    // address to join of an `internal` meeting leaves the hub in an invitation under the same switch as in a mail.
+    let meeting_files = Arc::new(crate::meetings::MeetingFiles::in_dir(
+        &dir,
+        scheduler.internal_links,
+    ));
     let config_vaults = Arc::new(ConfigVaults::new(dir.clone(), env.clone(), file));
     let all_vaults = Arc::new(crate::allvaults::AllVaultsCheck::new(
         Arc::clone(&config_vaults) as Arc<dyn crate::allvaults::VaultEngines>,
@@ -863,6 +869,7 @@ pub async fn serve(opts: ServeOptions) -> Result<(), String> {
         // No mail account yet (the SMTP account of the settings is a task of its own): the route of the reminders
         // by e-mail shows the mail and says that it cannot be sent.
         mail: None,
+        meetings: Some(Arc::clone(&meeting_files)),
     };
     let running = match server::start_with(make_cfg(want), extras()).await {
         Ok(r) => r,

@@ -351,6 +351,30 @@ of the hub), `after_end` switches the question after the end, `internal_links` r
 `internal` areas for mails, `lang` (`en` or `de`) is the language of the mails. A value that is not one of these stops
 the start, said plainly.
 
+**Meetings through the hub.** The engine's meetings are routes of the hub (a session needed, not for a paired phone
+yet):
+
+- `GET /api/tasks/meetings?since=&until=&area=&status=&task=&limit=&offset=`: the meetings whose days touch the window
+  (days `YYYY-MM-DD`; without them the engine's default, 30 days back and 90 ahead), one page of at most 100.
+- `GET /api/tasks/meeting?id=<area>/<slug>`: one meeting with its body, agenda, participants, documents and follow-ups.
+- `GET /api/tasks/meeting/ics?id=<area>/<slug>`: the meeting as an iCalendar file to save (`<slug>.ics`, one event; a
+  download, nothing is sent). Its `UID` is `<vault folder>:<id>` and stays the same; its `SEQUENCE` grows by one with
+  each change of time, place or status since the last export (kept in `ics-sequence.json` in the settings folder), so
+  a calendar takes the new file as the new version of the same event. Times are in UTC, from `tz` or this PC's zone; an
+  all-day meeting is a day's event. What it holds follows the class of the area: a private or unclassified area gives
+  none (`403 not_released`); an `internal` one title, time, place and service, its address to join only with
+  `internal_links`; a `public` one also the address and the participants with an e-mail (the one with the role
+  *Organisator* as organizer, *optional* as an optional one).
+- `GET /api/tasks/meeting/thumb?id=<area>/<slug>`: the preview of a meeting for calendar and timeline: its `cover`
+  (or `image`, the old name) made at most 96 px on its longer edge as PNG, else the picture of a board
+  (`assets/boards/`), else a board's drawing as it is (SVG). Only a file below the meeting's own folder is read; the
+  small pictures are kept in `cache/thumbs/` of the settings folder, never in the vault. `404 no_image`: none.
+
+Meetings are made and changed through `ops` (`meeting_new`, `meeting_set`, `meeting_close`, `meeting_capture`,
+`meeting_attend`, `meeting_followups`). The page opens the address to join of a meeting only when it is `https://`
+(`ui/src/lib/meetingLink.ts`), in a new tab of the system's browser (`rel="noopener noreferrer"`), which hands Teams or
+Zoom on; other schemes (`msteams:`, `zoommtg:`) are shown, never opened.
+
 **The test sheets of a task, from the phone** (through this hub; the testing hub runs them). Once, on the PC:
 
 ```

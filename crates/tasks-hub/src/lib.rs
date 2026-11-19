@@ -21,6 +21,7 @@ pub mod firststart;
 pub mod keeprunning;
 pub mod loginentry;
 pub mod mail;
+pub mod meetings;
 pub mod newvault;
 pub mod notices;
 pub mod repos;
