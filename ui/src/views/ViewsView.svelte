@@ -14,7 +14,7 @@
   import { cellsOf, groupsOf, keepsGroup, neighbourCell, neighbourGroup, NONE, type Cell, type Grouping } from '../lib/groups';
   import { labelOf, translate, type Key } from '../lib/i18n';
   import { markHidden } from '../lib/text';
-  import { cleanTitle, emptySelect, formOf, selectOfFilter, selectParts, type ViewForm } from '../lib/views';
+  import { cleanTitle, emptySelect, formOf, isViewField, selectOfFilter, selectParts, type ViewForm } from '../lib/views';
   import { selectOfGroup } from '../lib/viewMenu';
   import { DRAFT_ID } from '../lib/state/views.svelte';
   import { createGrip, farEnough, placeAt, type PointerDragEvent } from '../lib/pointerDrag';
@@ -30,7 +30,7 @@
   const open = $derived(saved.open);
   const groupings = $derived(saved.groupingsShown);
   /** The fields a view can be grouped by, in the engine's order; the area the engine names as one of them. */
-  const fields = $derived<GroupField[]>(groupings?.fields.map((f) => f.field) ?? []);
+  const fields = $derived<GroupField[]>((groupings?.fields.map((f) => f.field) ?? []).filter(isViewField));
   const areas = $derived.by(() => {
     const named = groupings?.fields.find((f) => f.field === 'area')?.values;
     return named && named.length > 0 ? named : [...new Set(app.tasks.map((x) => x.area))].sort();

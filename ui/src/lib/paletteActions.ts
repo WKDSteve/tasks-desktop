@@ -5,7 +5,7 @@ import type { App } from './app.svelte';
 import { labelOf, translate, type Key } from './i18n';
 import { isColumn } from './board';
 import type { PaletteAction } from 'appkit-ui/palette';
-import { selectOfFilter } from './views';
+import { isViewField, selectOfFilter } from './views';
 import { tagCounts } from './tagging';
 
 
@@ -60,13 +60,14 @@ export function paletteActions(app: App): PaletteAction[] {
     for (const view of app.viewsState.list) add(`view.${view.id}`, t('palette.view', { name: view.title }), () => app.openView(view.id), view.id);
     // The list as it is filtered, grouped by a field the engine names (a view to look with: nothing is saved). Not
     // under `view.`: that is the key of a saved view, whose id names an area (see `App.chose`).
-    for (const field of app.viewsState.groupingsShown?.fields ?? []) {
-      const name = t(`views.field.${field.field}` as Key);
-      add(`group.${field.field}`, t('palette.group_by', { field: name }), () =>
+    for (const { field } of app.viewsState.groupingsShown?.fields ?? []) {
+      if (!isViewField(field)) continue;
+      const name = t(`views.field.${field}` as Key);
+      add(`group.${field}`, t('palette.group_by', { field: name }), () =>
         app.tryView({
           title: t('views.list_by', { field: name }),
           display: 'columns',
-          group_by: field.field,
+          group_by: field,
           collapsed: [],
           select: selectOfFilter(app.filter, { projects: app.viewsState.selectsProjects }).select,
         }),

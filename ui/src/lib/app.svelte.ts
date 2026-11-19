@@ -96,7 +96,7 @@ import { ConflictsState } from './state/conflicts.svelte';
 import { VaultsState } from './state/vaults.svelte';
 import { SetupState } from './state/setup.svelte';
 import { ViewsState } from './state/views.svelte';
-import { emptySelect, filterOfSelect, type ViewForm } from './views';
+import { emptySelect, filterOfSelect, isViewField, type ViewForm } from './views';
 import { viewMenuItems } from './viewMenu';
 import type { MenuItem } from 'appkit-ui/menu';
 import { cellDropOps, cellsOf, dropOps, groupsOf, NONE, type Cell, type Derived, type Drop, type Grouping } from './groups';
@@ -1209,7 +1209,7 @@ export class App {
    */
   viewMenuEntries(title: string, select: Partial<ViewSelect>): MenuItem[] {
     if (this.phase !== 'ready' || !this.can('views') || !this.can('groupings')) return [];
-    const fields = this.viewsState.groupingsShown?.fields.map((f) => f.field) ?? [];
+    const fields = (this.viewsState.groupingsShown?.fields.map((f) => f.field) ?? []).filter(isViewField);
     const t = (key: Key) => translate(this.lang, key);
     return viewMenuItems(
       title,
