@@ -146,6 +146,9 @@ pnpm web:build && PLAYWRIGHT_BROWSERS_PATH="$PWD/node_modules/.cache/ms-playwrig
 - Die Tests teilen einen Vault: Titel und Dateinamen müssen eindeutig sein (ein
   Suchbegriff darf keinen Task eines anderen Tests treffen).
 - `keyboard.press('F')` sendet kein Shift: Umschalt+f ist `press('Shift+f')`.
+- Ein `<input type="date">` ordnet seine Teile nach der Systemsprache, nicht nach `locale` des Kontexts (auf diesem
+  Rechner Tag.Monat.Jahr trotz `en-US`): Ziffern für ein Datum tippen, das in jeder Reihenfolge gleich ist (11.11.),
+  und der erste Tab nach dem Jahr bleibt im Feld. `fill()` drückt keine Taste (zählt wie eine Wahl im Kalender).
 - Eine Taste oder ein Drag, während ein Schreibvorgang unterwegs ist, wird nicht
   gesendet, sondern mit dem Fehler-Toast `write.busy` ("Still saving - try again in
   a moment.", role=alert) abgelehnt (`App.refusedWhileSaving`: Board `J`/`K`/`H`/`L`,
