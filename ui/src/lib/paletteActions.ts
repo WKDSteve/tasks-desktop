@@ -123,12 +123,31 @@ export function paletteActions(app: App): PaletteAction[] {
 }
 
 /**
+ * Whether a typed line could name a meeting: it has a digit (a day, a time, a length) or a word of a day (`morgen`,
+ * `Mo`, `tomorrow`). Only that decides whether the line is offered; what it means is the engine's to read. Words that
+ * name no time (a search for a task) are not offered, so the palette still says when nothing matches.
+ */
+export function looksLikeMeeting(line: string): boolean {
+  if (/\d/.test(line)) return true;
+  return line
+    .toLowerCase()
+    .split(/\s+/)
+    .some((word) => DAY_WORDS.has(word.replace(/[.,]$/, '')));
+}
+
+const DAY_WORDS: ReadonlySet<string> = new Set([
+  'heute', 'morgen', 'übermorgen', 'mo', 'di', 'mi', 'do', 'fr', 'sa', 'so', 'montag', 'dienstag', 'mittwoch',
+  'donnerstag', 'freitag', 'samstag', 'sonntag', 'today', 'tomorrow', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun',
+  'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday',
+]);
+
+/**
  * The quick capture of a meeting (concept 5.4): what is typed into the palette, offered as a line the engine reads into
- * the form of a new meeting. Only for a line that could name one (a few characters at least); nothing is saved.
+ * the form of a new meeting. Only for a line that could name one (`looksLikeMeeting`); nothing is saved.
  */
 export function quickMeetingAction(app: App, query: string): PaletteAction | null {
   const line = query.trim();
-  if (line.length < 3 || line.length > 1000 || !app.canMakeMeetings || !app.can('meeting_parse')) return null;
+  if (line.length < 3 || line.length > 1000 || !looksLikeMeeting(line) || !app.canMakeMeetings || !app.can('meeting_parse')) return null;
   const t = (key: Key, params: Record<string, string | number> = {}) => translate(app.lang, key, params);
   return { key: 'meeting.quick', label: t('palette.meeting_quick', { line }), hint: t('hint.palette.meeting_quick'), run: () => app.quickMeeting(line) };
 }
