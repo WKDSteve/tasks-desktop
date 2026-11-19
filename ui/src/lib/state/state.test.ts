@@ -302,6 +302,17 @@ describe('the views', () => {
     expect(state.groupings).toBeNull();
   });
 
+  it('offers a view only the fields view_save takes (groupings counts by outcome too, a view cannot group by it)', async () => {
+    const p = pending();
+    const state = new ViewsState(p.host);
+    p.setRev('rev:1');
+    const grouping = state.loadGroupings();
+    const fields = ['status', 'outcome', 'area'].map((field) => ({ field, values: [], kind: 'single' }));
+    p.groupings[0]!({ rev: 'rev:1', fields } as unknown as Groupings);
+    await grouping;
+    expect(state.groupingsShown?.fields.map((f) => f.field)).toEqual(['status', 'area']);
+  });
+
   it('forgets what was read and asks again afterwards', async () => {
     const p = pending();
     const state = new ViewsState(p.host);

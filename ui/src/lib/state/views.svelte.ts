@@ -5,7 +5,7 @@
 
 import { ApiError, type Op } from '../api';
 import type { Groupings, Result, View, Views } from '../contract';
-import { createOp, deleteOp, emptySelect, saveOp, toggledGroup, type ViewForm } from '../views';
+import { createOp, deleteOp, emptySelect, saveOp, toggledGroup, viewGroupings, type ViewForm, type ViewGroupings } from '../views';
 
 /** The id of the view being tried (opened from a context menu and not saved yet): no file has it. */
 export const DRAFT_ID = '';
@@ -31,7 +31,7 @@ export class ViewsState {
   /** The last read of the views failed (the page says so instead of "no views"). */
   failed = $state(false);
   /** The groupings as last read; shown only for the state of the list they were read of (`groupingsNow`). */
-  groupings = $state.raw<Groupings | null>(null);
+  groupings = $state.raw<ViewGroupings | null>(null);
   groupingsFailed = $state(false);
   /** The id of the view that is open (null: the first one). */
   openId = $state<string | null>(null);
@@ -64,7 +64,7 @@ export class ViewsState {
   }
 
   /** The groupings of the state of the list that is shown, or null (an older state is never drawn as the current one). */
-  get groupingsNow(): Groupings | null {
+  get groupingsNow(): ViewGroupings | null {
     const rev = this.host.rev();
     return this.groupings !== null && rev !== undefined && this.groupings.rev === rev ? this.groupings : null;
   }
@@ -73,7 +73,7 @@ export class ViewsState {
    * The groupings the tab draws with: those of the state shown, or - while the ones of a newer state are asked for -
    * the last ones of this vault, so the groups do not vanish (and take the focus with them) after every change.
    */
-  get groupingsShown(): Groupings | null {
+  get groupingsShown(): ViewGroupings | null {
     return this.groupingsNow ?? this.groupings;
   }
 
@@ -121,7 +121,7 @@ export class ViewsState {
       // it is what `groupingsShown` draws with until the newer one comes (the board asks only when it is opened, and its
       // bar would else stay without fields after a change of the vault during the question); `groupingsNow` stays null.
       if (this.host.rev() === doc.rev || this.groupings === null) {
-        this.groupings = doc;
+        this.groupings = viewGroupings(doc);
         this.groupingsFailed = false;
       }
     } catch {

@@ -4,7 +4,7 @@
 // person's changes into the operations the engine takes.
 
 import type { Op } from './api';
-import type { GroupField, View, ViewSelect } from './contract';
+import type { GroupField, Groupings, View, ViewSelect } from './contract';
 import { emptyFilter, type Filter } from './filter';
 
 /** What a `view_save` carries: the view without what its file adds (the id, the version, the dates). */
@@ -15,6 +15,41 @@ export interface ViewForm {
   group_by2?: GroupField;
   collapsed?: string[];
   select?: ViewSelect;
+}
+
+/**
+ * The fields a view may be grouped by (`GroupField` of the contract). `tasks.groupings` names more (`outcome`, capability
+ * `outcome`): a field to count by, which `view_save` refuses as `group_by`.
+ */
+const VIEW_FIELDS: Record<GroupField, true> = {
+  status: true,
+  prio: true,
+  actor: true,
+  kind: true,
+  effort: true,
+  value: true,
+  tags: true,
+  plan: true,
+  phase: true,
+  project: true,
+  area: true,
+  state: true,
+  cross: true,
+};
+
+/** Whether a view can be grouped by `field`. */
+export function isViewField(field: string): field is GroupField {
+  return Object.hasOwn(VIEW_FIELDS, field);
+}
+
+type GroupingField = Groupings['fields'][number];
+
+/** `tasks.groupings` with only the fields a view can be grouped by. */
+export type ViewGroupings = Omit<Groupings, 'fields'> & { fields: (GroupingField & { field: GroupField })[] };
+
+/** The groupings with only the fields a view can be grouped by, in the engine's order. */
+export function viewGroupings(groupings: Groupings): ViewGroupings {
+  return { ...groupings, fields: groupings.fields.filter((f): f is GroupingField & { field: GroupField } => isViewField(f.field)) };
 }
 
 /** How a view can be drawn, in the order the page offers them. */

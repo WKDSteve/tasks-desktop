@@ -28,6 +28,8 @@ export type TasksExport =
   | Intent
   | Meetings
   | MeetingDocument
+  | Paths
+  | PathDocument
   | DonePreview
   | Result
   | Error;
@@ -93,9 +95,13 @@ export type Hello = Head & {
      */
     meeting_status?: string[];
     /**
-     * The icons a meeting may name (`icon`). Additive; capability `meetings`.
+     * The icons a meeting may name (`icon`). Additive; capability `meetings`. The same list as `icon_word`.
      */
     meeting_icon?: string[];
+    /**
+     * The words an `icon` of kind `word` may be (a front end draws its own sign for each). Additive; capability `icon`.
+     */
+    icon_word?: string[];
     /**
      * The services the address of a meeting is told as (`online_service`); `link` for any other. Additive; capability `meetings`.
      */
@@ -244,6 +250,8 @@ export type Snapshot = Head & {
     etag?: string;
     valid: boolean;
     links?: PlanLinks;
+    icon?: Icon;
+    cover?: Cover;
     folder?: PlanFolder;
     assets?: PlanAssets;
     assets_truncated?: PlanAssetsTruncated;
@@ -265,6 +273,8 @@ export type Snapshot = Head & {
     etag?: string;
     valid: boolean;
     links?: PlanLinks;
+    icon?: Icon;
+    cover?: Cover;
     folder?: PlanFolder;
     assets?: PlanAssets;
     assets_truncated?: PlanAssetsTruncated;
@@ -315,6 +325,10 @@ export type Etag = string;
  */
 export type PlanLinks = string[];
 /**
+ * A large picture of the item (`cover:`; capability `icon`): an image (png, jpg, jpeg, webp, svg) below `assets/` of its folder. Absent when it has none.
+ */
+export type Cover = string;
+/**
  * The plan or project file is in its folder form (`<slug>/<slug>.md`, made by `attach` or `folderize`): the other files of that folder are its assets. Absent for a plain file.
  */
 export type PlanFolder = true;
@@ -326,6 +340,14 @@ export type PlanAssets = string[];
  * The folder holds more than the 100 `assets` listed.
  */
 export type PlanAssetsTruncated = true;
+/**
+ * How a finished task ended beside `status: done` (capability `outcome`): learned, seen (looked at, not done) or not-applicable. Absent: done as meant.
+ */
+export type Outcome = "learned" | "seen" | "not-applicable";
+/**
+ * The learning point a task was promoted from: `<container id>#<key>`, the container a learning path or a task with `## Lernpunkte` (capability `outcome`).
+ */
+export type Point = string;
 /**
  * The statuses of a task in `ROADMAP/tasks`. `done` is only seen on a task that was left there after it was finished (listed under `unlisted`).
  */
@@ -811,6 +833,7 @@ export type Groupings = Head & {
       | "kind"
       | "effort"
       | "value"
+      | "outcome"
       | "tags"
       | "plan"
       | "phase"
@@ -969,6 +992,38 @@ export type MeetingDocument = Head & {
   }[];
 };
 /**
+ * tasks.paths: the open learning paths of the vault or of an area, each with its progress; no tree (that is tasks.path). Capability `paths`.
+ */
+export type Paths = Head & {
+  kind: "tasks.paths";
+  rev: Rev;
+  digest: Digest;
+  items: PathEntry[];
+  incomplete: string[];
+};
+/**
+ * tasks.path: one learning path with its body and its tree as a flat list in document order. Capability `path`.
+ */
+export type PathDocument = Head & {
+  kind: "tasks.path";
+  rev: Rev;
+  digest: Digest;
+  path: PathEntry;
+  /**
+   * The file after the frontmatter, untrusted text.
+   */
+  body: string;
+  body_truncated: boolean;
+  nodes: PathNode[];
+  progress: PathProgress;
+  tree_problems: {
+    code: string;
+    line: number;
+    key?: string;
+    message: string;
+  }[];
+};
+/**
  * tasks.donepreview: what finishing a task would do, with nothing written, and the `confirm` token that `done` needs for exactly this version of the file.
  */
 export type DonePreview = Head & {
@@ -985,6 +1040,12 @@ export type DonePreview = Head & {
   to: string;
   resumed?: boolean;
   steps_ticked?: number;
+  outcome?: Outcome;
+  /**
+   * Why it ended so (required by the engine for `seen` and `not-applicable`). Capability `outcome`.
+   */
+  outcome_reason?: string;
+  point?: Point;
   readme?: {
     state: "missing" | "updated" | "unchanged";
     row?: string;
@@ -1098,6 +1159,13 @@ export interface AreaGroup {
   open: number;
   by_status: StatusCounts;
   desc?: string;
+}
+/**
+ * What an item stands for (`icon:`; capability `icon`): an emoji (one grapheme cluster), an image below `assets/` of the item's folder, or a word of `hello.enums.icon_word`. Absent when the item has none.
+ */
+export interface Icon {
+  kind: "emoji" | "asset" | "word";
+  value: string;
 }
 /**
  * One task. A broken task is still here (`valid: false`, `problems`); a field that is missing is unknown, never 0 (no `effort` means no `effort_days` and no `roi`).
@@ -1245,6 +1313,12 @@ export interface TaskEntry {
    * The task has more meetings than `meetings` names.
    */
   meetings_truncated?: true;
+  outcome?: Outcome;
+  /**
+   * Why it ended so (required by the engine for `seen` and `not-applicable`). Capability `outcome`.
+   */
+  outcome_reason?: string;
+  point?: Point;
   id: string;
   area: string;
   slug: string;
@@ -1349,6 +1423,8 @@ export interface TaskEntry {
    * Web addresses of the task (`http://` or `https://`), apart from `refs`. Only when the task lists any.
    */
   links?: string[];
+  icon?: Icon;
+  cover?: Cover;
   summary: string;
   folder: boolean;
   /**
@@ -1537,6 +1613,12 @@ export interface FinishedItem {
   phase?: string;
   done_in?: string;
   commits?: string[];
+  outcome?: Outcome;
+  /**
+   * Why it ended so (required by the engine for `seen` and `not-applicable`). Capability `outcome`.
+   */
+  outcome_reason?: string;
+  point?: Point;
   file: string;
 }
 /**
@@ -1768,8 +1850,12 @@ export interface MeetingEntry {
     | [string, string, string, string, string, string, string, string]
     | [string, string, string, string, string, string, string, string, string]
     | [string, string, string, string, string, string, string, string, string, string];
+  /**
+   * The old name of `cover`, kept for the readers of before: the same value.
+   */
   image?: string;
-  icon?: string;
+  cover?: Cover;
+  icon?: Icon;
   tags: string[];
   recording?: string;
   created?: Date;
@@ -1800,6 +1886,95 @@ export interface MeetingEntry {
   etag?: Etag;
   valid: boolean;
   problems: Problem[];
+}
+/**
+ * A learning path (`<area>/ROADMAP/paths/<slug>.md`): the head of its file, its progress over the leaves of its tree, its version.
+ */
+export interface PathEntry {
+  id: string;
+  area: string;
+  slug: string;
+  title: string;
+  status?: "planning" | "doing" | "parked" | "done";
+  areas: string[];
+  target?: string;
+  project?: string;
+  created?: Date;
+  updated?: Date;
+  summary: string;
+  /**
+   * The file has a `## Lernpunkte` section.
+   */
+  has_tree: boolean;
+  /**
+   * The learning points of the tree, parents included.
+   */
+  points: number;
+  progress: PathProgress;
+  links?: string[];
+  icon?: Icon;
+  cover?: Cover;
+  folder?: boolean;
+  assets?: PlanAssets;
+  assets_truncated?: PlanAssetsTruncated;
+  file: string;
+  etag?: Etag;
+  valid: boolean;
+  problems: string[];
+}
+/**
+ * Progress over leaves, counted apart: learned, seen, dropped, open (blocked ones counted as open and once more as blocked).
+ */
+export interface PathProgress {
+  learned: number;
+  seen: number;
+  dropped: number;
+  open: number;
+  blocked: number;
+  total: number;
+}
+/**
+ * One learning point of a tree. A parent has no mark of its own: its `derived` state comes from its leaves (learned, partial, open); `closed` when every leaf is.
+ */
+export interface PathNode {
+  /**
+   * Position in document order; `#<index>` names the point where it has no key.
+   */
+  index: number;
+  /**
+   * The line of the body it stands on.
+   */
+  line: number;
+  depth: number;
+  /**
+   * The `index` of its parent; absent for a root.
+   */
+  parent?: number;
+  children: number;
+  mark: string;
+  /**
+   * Absent for an unknown mark (a tree problem).
+   */
+  state?: "open" | "learned" | "seen" | "dropped" | "blocked";
+  derived: "open" | "learned" | "seen" | "dropped" | "blocked" | "partial";
+  closed: boolean;
+  /**
+   * As written (Markdown, untrusted).
+   */
+  label: string;
+  key?: string;
+  reason?: string;
+  /**
+   * The task the point was promoted to; it owns the point's state.
+   */
+  promoted?: string;
+  link?: string;
+  /**
+   * A file below `assets/` of the path; a client draws it as an image only.
+   */
+  image?: string;
+  note?: string;
+  progress: PathProgress;
 }
 /**
  * What happened to one operation of a request, in the order they were sent. A failed operation does not stop the others.
@@ -1837,7 +2012,13 @@ export interface ResultEntry {
     | "meeting_capture"
     | "meeting_attend"
     | "meeting_followups"
-    | "board_save";
+    | "board_save"
+    | "path_new"
+    | "path_set"
+    | "path_close"
+    | "node_set"
+    | "promote"
+    | "unpromote";
   id?: string;
   /**
    * `meeting_close`: the meeting has no `## Ergebnis` afterwards (allowed: a hint for the front end).
@@ -1883,8 +2064,35 @@ export interface ResultEntry {
     | "would_delete"
     | "closed"
     | "would_close"
+    | "removed"
+    | "would_remove"
     | "blocked"
     | "failed";
+  /**
+   * `node_set`: the learning point as it is now (capability `node_set`).
+   */
+  node?: {
+    line: number;
+    key?: string;
+    state: "open" | "learned" | "seen" | "dropped" | "blocked";
+  };
+  progress?: PathProgress1;
+  /**
+   * The learning point a task was promoted from: `<container id>#<key>`, the container a learning path or a task with `## Lernpunkte` (capability `outcome`).
+   */
+  promoted_from?: string;
+  /**
+   * `promote`: the lines of the point's subtree that moved into the task.
+   */
+  moved?: number;
+  /**
+   * `promote`, `unpromote`: the open tasks of points promoted below the moved one, whose `point` now names the new container.
+   */
+  repointed?: string[];
+  /**
+   * `unpromote`: the path or task the point is in.
+   */
+  container?: string;
   etag_before?: Etag;
   etag_after?: Etag;
   inverse?: Inverse;
@@ -1935,6 +2143,15 @@ export interface ResultEntry {
    * The projects this finish closed after the plan (capability `projects`).
    */
   projects_closed?: string[];
+  /**
+   * `done`: the learning point the task was promoted from, set to the state of the finish (capability `outcome`).
+   */
+  point?: {
+    container: string;
+    key: string;
+    state: "open" | "learned" | "seen" | "dropped" | "blocked";
+    changed: boolean;
+  };
   notes?: string[];
   move?: MovePlan;
   /**
@@ -1948,6 +2165,17 @@ export interface ResultEntry {
     kind: "blocked_by" | "after" | "refs" | "plan_target" | "meeting";
     id: string;
   }[];
+}
+/**
+ * Progress over leaves, counted apart: learned, seen, dropped, open (blocked ones counted as open and once more as blocked).
+ */
+export interface PathProgress1 {
+  learned: number;
+  seen: number;
+  dropped: number;
+  open: number;
+  blocked: number;
+  total: number;
 }
 /**
  * The operation that undoes a change: send it as a new operation (its `if_match` is the version the change left). A key the change added is `null` in the patch of a `set`.
@@ -1966,7 +2194,26 @@ export interface Inverse {
     | "plan_set"
     | "project_set"
     | "meeting_set"
-    | "meeting_attend";
+    | "meeting_attend"
+    | "path_set"
+    | "node_set"
+    | "unpromote";
+  /**
+   * `unpromote`: the path or task the learning point is in.
+   */
+  container?: string;
+  /**
+   * `node_set`, `unpromote`: the learning point, its key or `#<index>`.
+   */
+  point?: string;
+  /**
+   * `node_set`: the state the point had.
+   */
+  state?: "open" | "learned" | "seen" | "dropped" | "blocked";
+  /**
+   * `node_set`: the reason the point had.
+   */
+  reason?: string;
   /**
    * `tick_step` of a meeting: the section of the item (`agenda`, `followups`).
    */
