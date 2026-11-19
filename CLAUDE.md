@@ -64,7 +64,9 @@ pnpm web:build && PLAYWRIGHT_BROWSERS_PATH="$PWD/node_modules/.cache/ms-playwrig
   eingebunden als `"appkit-web": "github:WKDSteve/appkit#vX.Y.Z&path:web-kit"`. Tag heben: alle
   Stellen (`Cargo.toml`, `ui/package.json` und die `uses: WKDSteve/appkit/release-kit/...@<sha>` in
   `.github/workflows/rolling.yml` und `release.yml`, voller Commit des Tags), `cargo update -p appkit-hub`,
-  `cd ui && pnpm install`. Die Pin-Prüfung meldet einen Workflow auf einem anderen Commit.
+  `cd ui && pnpm install`. Die Pin-Prüfung meldet einen Workflow auf einem anderen Commit. Nach einem Pull, der das
+  Tag hebt, brechen `pnpm check/test/build` ab, bis `pnpm install` lief (`tools/check-installed-kit.mjs`): sonst
+  prüfen sie still gegen das Kit von vorher.
   Das alles in einem Befehl, für alle vier Apps: `python tools/bump-apps.py vX.Y.Z` in appkit (`--dry-run`
   zeigt es nur, `--commit` committet je App, pusht nie; der Tag muss auf origin liegen).
 - Install-Skripte der Releases kommen aus `release-kit` von appkit (gestempelt beim Hochladen), nicht aus

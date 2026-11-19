@@ -5,9 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite build --watch",
-    "build": "vite build",
-    "check": "svelte-check --tsconfig ./tsconfig.json && tsc -p tsconfig.kit.json && tsc -p tsconfig.e2e.json",
-    "test": "vitest run",
+    "build": "node ../tools/check-installed-kit.mjs && vite build",
+    "check": "node ../tools/check-installed-kit.mjs && svelte-check --tsconfig ./tsconfig.json && tsc -p tsconfig.kit.json && tsc -p tsconfig.e2e.json",
+    "test": "node ../tools/check-installed-kit.mjs && vitest run",
     "e2e": "playwright test",
     "e2e:device": "playwright test -c playwright.device.config.ts",
     "probe": "node probe/build.mjs",

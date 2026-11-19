@@ -18,3 +18,7 @@ trustPolicyExclude:
 auditConfig:
   ignoreGhsas:
     - GHSA-fc5q-39xc-vjpf
+# Every `pnpm <script>` first checks that package.json and the lockfile agree. That the installed kit is the one of the
+# lockfile (a pull raised a pin, nobody ran `pnpm install`) is not part of it: tools/check-installed-kit.mjs before
+# check, test and build.
+verifyDepsBeforeRun: error
