@@ -28,6 +28,8 @@ const MAX_SVG_BYTES: u64 = 2 * 1024 * 1024;
 /// The most pixels a picture may have on either edge, and the most memory decoding it may take.
 const MAX_EDGE: u32 = 12_000;
 const MAX_DECODE_BYTES: u64 = 256 * 1024 * 1024;
+/// The most previews kept in the cache (a few KB each).
+const MAX_THUMBS: usize = 1000;
 /// The most invitations whose sequence is kept; beyond, the ones not asked for longest are forgotten.
 const MAX_SEQUENCES: usize = 5000;
 
@@ -574,11 +576,34 @@ pub fn thumb_png(source: &Path, cache: Option<&Path>) -> Result<Vec<u8>, ThumbEr
             std::fs::write(&tmp, &png)?;
             std::fs::rename(&tmp, path)
         };
-        if let Err(e) = keep() {
-            eprintln!("note: a preview was not kept: {e}");
+        match keep() {
+            Ok(()) => prune(dir, MAX_THUMBS, path),
+            Err(e) => eprintln!("note: a preview was not kept: {e}"),
         }
     }
     Ok(png)
+}
+
+/// Keep at most `max` previews in `dir`: the ones changed longest ago go first, never `newest` (the one just made).
+/// Each changed picture leaves its old preview behind, so without this the cache would only grow.
+fn prune(dir: &Path, max: usize, newest: &Path) {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
+    let mut kept: Vec<(std::time::SystemTime, PathBuf)> = entries
+        .filter_map(Result::ok)
+        .map(|e| e.path())
+        .filter(|p| p.extension().is_some_and(|x| x == "png") && p != newest)
+        .filter_map(|p| Some((std::fs::metadata(&p).ok()?.modified().ok()?, p)))
+        .collect();
+    // `max` counts the newest one as well.
+    let Some(over) = (kept.len() + 1).checked_sub(max).filter(|n| *n > 0) else {
+        return;
+    };
+    kept.sort();
+    for (_, path) in kept.into_iter().take(over) {
+        let _ = std::fs::remove_file(path);
+    }
 }
 
 /// `bytes` (PNG, JPEG or WebP, told by their first bytes, not by a name) made small and written as PNG.
@@ -945,6 +970,39 @@ mod tests {
         std::fs::write(&source, png(40, 20)).unwrap();
         let again = thumb_png(&path, Some(&cache)).unwrap();
         assert_eq!(size_of(&again), (40, 20), "a changed file is a new preview");
+    }
+
+    #[test]
+    fn the_cache_keeps_at_most_its_bound_and_drops_the_oldest_first() {
+        let dir = hub_testkit::scratch::Scratch::new("thumb-bound");
+        let cache = dir.join("cache");
+        std::fs::create_dir_all(&cache).unwrap();
+        let long_ago =
+            std::time::SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(1_000_000);
+        for i in 0..MAX_THUMBS {
+            let path = cache.join(format!("old{i:04}.png"));
+            std::fs::write(&path, b"x").unwrap();
+            let file = std::fs::File::options().write(true).open(&path).unwrap();
+            file.set_modified(long_ago + std::time::Duration::from_secs(i as u64))
+                .unwrap();
+        }
+        let source = dir.join("p.png");
+        std::fs::write(&source, png(200, 100)).unwrap();
+        thumb_png(&source, Some(&cache)).unwrap();
+        let names: Vec<String> = std::fs::read_dir(&cache)
+            .unwrap()
+            .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(names.len(), MAX_THUMBS);
+        assert!(
+            !names.contains(&"old0000.png".to_owned()),
+            "the oldest went"
+        );
+        assert!(names.contains(&"old0001.png".to_owned()));
+        assert!(
+            names.iter().any(|n| !n.starts_with("old")),
+            "the new one is kept"
+        );
     }
 
     #[test]

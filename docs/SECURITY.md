@@ -805,7 +805,8 @@ decoded by the `image` crate (PNG, JPEG, WebP only, told by its first bytes; at 
 memory), then written anew as a PNG of at most 96 px: what reaches the page is the hub's own PNG, not the file. A
 board's drawing (SVG, at most 2 MB) is passed on as it is, with `nosniff` and `default-src 'none'; sandbox`, so it is a
 picture to an `<img>` and runs nothing when opened. The small pictures are kept in `cache/thumbs/` of the settings
-folder, named by a hash of the source's path, size and time of change; nothing is written into a vault.
+folder, named by a hash of the source's path, size and time of change, at most 1000 (the oldest go first); nothing is
+written into a vault.
 
 ## The ranges of the fields (`GET /api/tasks/enums`)
 
