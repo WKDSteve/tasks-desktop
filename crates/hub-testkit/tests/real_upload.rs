@@ -232,6 +232,13 @@ async fn a_second_upload_of_the_same_name_is_exists_and_the_task_keeps_one_asset
         "{added:?}"
     );
     assert_eq!(std::fs::read_to_string(&added[0]).unwrap(), "video");
+    // A recording (a meeting's, a dictation) has its own folder.
+    let audio = upload("/api/tasks/upload?id=lib.nvim/alpha&kind=audio", "audio").await;
+    assert_eq!(audio["results"][0]["ok"], true, "{audio}");
+    assert_eq!(
+        audio["results"][0]["asset"], "assets/audio/note.txt",
+        "{audio}"
+    );
     // A word that is no kind is refused before anything is taken: the page names no folder.
     for bad in ["videos", "..%2Fx", ""] {
         let reply = patient::request(
@@ -251,7 +258,7 @@ async fn a_second_upload_of_the_same_name_is_exists_and_the_task_keeps_one_asset
         assert_eq!(reply.status, 400, "{bad:?}: {}", reply.body);
         assert!(reply.body.contains("bad_query"), "{}", reply.body);
     }
-    assert_eq!(assets(&vault).len(), 3, "{:?}", assets(&vault));
+    assert_eq!(assets(&vault).len(), 4, "{:?}", assets(&vault));
     server.shutdown().await;
 }
 

@@ -67,7 +67,7 @@ pub fn cli_config_from_setup(setup: &Setup, env: Env) -> CliEngineConfig {
 
 /// The calls of the contract `tasks-export/1` and `tasks-ops/1`: the table of this app. The seam
 /// reads the flags of each entry; it knows no call by name.
-static SPECS: [MethodSpec; 27] = [
+static SPECS: [MethodSpec; 28] = [
     MethodSpec::bare("hello", "tasks.hello"),
     MethodSpec::bare("snapshot", "tasks.snapshot"),
     MethodSpec::read("list", "tasks.list"),
@@ -100,6 +100,8 @@ static SPECS: [MethodSpec; 27] = [
     MethodSpec::read("paths", "tasks.paths"),
     // One learning path with its body and its tree (capability `path`).
     MethodSpec::read("path", "tasks.path"),
+    // A line of the quick capture read into a proposal of a meeting, nothing written (capability `meeting_parse`).
+    MethodSpec::read("meeting_parse", "tasks.meetingparse"),
 ];
 
 /// The calls of the tasks engine, by name.
@@ -134,9 +136,10 @@ impl Calls {
     pub const Meeting: Method = Method::new(&SPECS[24]);
     pub const Paths: Method = Method::new(&SPECS[25]);
     pub const Path: Method = Method::new(&SPECS[26]);
+    pub const MeetingParse: Method = Method::new(&SPECS[27]);
 
     /// Every call of the table.
-    pub const ALL: [Method; 27] = [
+    pub const ALL: [Method; 28] = [
         Self::Hello,
         Self::Snapshot,
         Self::List,
@@ -164,6 +167,7 @@ impl Calls {
         Self::Meeting,
         Self::Paths,
         Self::Path,
+        Self::MeetingParse,
     ];
 
     /// Parse the name of a route or a request. Nothing else is accepted.
@@ -216,6 +220,6 @@ mod table_tests {
             assert_eq!(Calls::parse(m.as_str()), Some(m));
             assert!(m.reply_kind().starts_with("tasks."), "{}", m.as_str());
         }
-        assert_eq!(Calls::ALL.len(), 27);
+        assert_eq!(Calls::ALL.len(), 28);
     }
 }

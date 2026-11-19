@@ -150,6 +150,22 @@ impl Hub {
         (head, reply[end + 4..].to_vec())
     }
 
+    async fn post(&self, path: &str, content_type: &str, body: &str) -> patient::Reply {
+        patient::request(
+            self.port,
+            "POST",
+            path,
+            &[
+                ("Authorization", &self.session),
+                ("Origin", &self.origin),
+                ("Content-Type", content_type),
+            ],
+            body,
+        )
+        .await
+        .unwrap()
+    }
+
     async fn ops(&self, ops: Value) -> Value {
         let reply = patient::request(
             self.port,
@@ -257,6 +273,8 @@ async fn a_meeting_is_made_read_exported_and_previewed_through_the_hub() {
         },
         Extras {
             meetings: Some(Arc::new(files)),
+            // The files of the page's form go the way of a task's: through the upload.
+            upload_dir: Some(settings.join("uploads")),
             ..Extras::default()
         },
     )
@@ -326,6 +344,46 @@ async fn a_meeting_is_made_read_exported_and_previewed_through_the_hub() {
     assert_eq!(doc["participants"].as_array().unwrap().len(), 2, "{doc}");
     let r = hub.get("/api/tasks/meetings?since=yesterday").await;
     assert_eq!(r.status, 400, "{}", r.body);
+
+    // The quick capture: the engine reads the line into a proposal, writes nothing.
+    let before = std::fs::read_dir(vault.join("lib.nvim").join("MEETINGS"))
+        .unwrap()
+        .count();
+    let r = hub
+        .post(
+            "/api/tasks/meeting_parse",
+            "application/json",
+            r#"{"text":"24.11. 9:30 90m Workshop @Raum_3.14 https://meet.google.com/abc #lib.nvim/alpha !-15m"}"#,
+        )
+        .await;
+    assert_eq!(r.status, 200, "{}", r.body);
+    let doc: Value = serde_json::from_str(&r.body).unwrap();
+    assert_eq!(doc["kind"], "tasks.meetingparse", "{doc}");
+    assert_eq!(doc["title"], "Workshop", "{doc}");
+    assert_eq!(doc["fields"]["time"], "09:30", "{doc}");
+    assert_eq!(doc["fields"]["duration"], "90m", "{doc}");
+    assert_eq!(doc["fields"]["location"], "Raum 3.14", "{doc}");
+    assert_eq!(doc["fields"]["tasks"], json!(["lib.nvim/alpha"]), "{doc}");
+    assert_eq!(doc["online_service"], "meet", "{doc}");
+    assert_eq!(
+        std::fs::read_dir(vault.join("lib.nvim").join("MEETINGS"))
+            .unwrap()
+            .count(),
+        before,
+        "a proposal writes no file"
+    );
+    for bad in [
+        r#"{"text":""}"#,
+        r#"{"text":"a
+b"}"#,
+        r#"{"line":"x"}"#,
+        &format!(r#"{{"text":"{}"}}"#, "x".repeat(1001)),
+    ] {
+        let r = hub
+            .post("/api/tasks/meeting_parse", "application/json", bad)
+            .await;
+        assert_eq!(r.status, 400, "{bad}: {}", r.body);
+    }
 
     // The invitation: a download, with the people of a public area and its address to join.
     let r = hub.get(&format!("/api/tasks/meeting/ics?id={id}")).await;
@@ -421,5 +479,69 @@ async fn a_meeting_is_made_read_exported_and_previewed_through_the_hub() {
     assert_eq!(r.status, 404, "{}", r.body);
     let r = hub.get("/api/tasks/meeting/thumb?id=../x").await;
     assert_eq!(r.status, 400, "{}", r.body);
+
+    // What the form of the page does once a meeting is made: its participants into `## Teilnehmer`, a picture and a
+    // recording through the upload of a task (the meeting takes the folder form), the picture as its cover.
+    let made = hub
+        .ops(json!([{
+            "op": "meeting_new", "area": "lib.nvim", "title": "Made by the form", "lang": "de",
+            "fields": { "date": "2026-11-25", "time": "10:00", "duration": "30m", "tasks": ["lib.nvim/alpha"] },
+        }]))
+        .await;
+    let formed = made["results"][0]["id"].as_str().unwrap().to_owned();
+    hub.ops(json!([{
+        "op": "set_section", "id": formed, "heading": "## Teilnehmer",
+        "text": "- [ ] Rick <rick@example.org> (Organisator)",
+    }]))
+    .await;
+    let upload = |kind: &'static str, name: &'static str| {
+        let path = format!("/api/tasks/upload?id={formed}&kind={kind}");
+        let hub = &hub;
+        async move {
+            let reply = patient::request(
+                hub.port,
+                "POST",
+                &path,
+                &[
+                    ("Authorization", &hub.session),
+                    ("Origin", &hub.origin),
+                    ("Content-Type", "application/octet-stream"),
+                    ("X-Upload-Name", name),
+                ],
+                "bytes",
+            )
+            .await
+            .unwrap();
+            assert_eq!(reply.status, 200, "{}", reply.body);
+            let doc: Value = serde_json::from_str(&reply.body).unwrap();
+            assert_eq!(doc["results"][0]["ok"], true, "{doc}");
+            doc["results"][0]["asset"].as_str().unwrap().to_owned()
+        }
+    };
+    let picture = upload("image", "photo.png").await;
+    assert_eq!(picture, "assets/images/photo.png");
+    let recording = upload("audio", "note.m4a").await;
+    assert_eq!(recording, "assets/audio/note.m4a");
+    hub.ops(json!([{ "op": "meeting_set", "id": formed, "patch": { "cover": picture } }]))
+        .await;
+    let r = hub.get(&format!("/api/tasks/meeting?id={formed}")).await;
+    assert_eq!(r.status, 200, "{}", r.body);
+    let doc: Value = serde_json::from_str(&r.body).unwrap();
+    assert_eq!(doc["meeting"]["cover"], picture, "{doc}");
+    assert_eq!(doc["meeting"]["folder"], true, "{doc}");
+    let assets = doc["meeting"]["assets"].as_array().unwrap();
+    assert!(assets.contains(&json!(picture)), "{doc}");
+    assert!(assets.contains(&json!(recording)), "{doc}");
+    assert_eq!(doc["participants"][0]["name"], "Rick", "{doc}");
+    assert_eq!(doc["participants"][0]["email"], "rick@example.org", "{doc}");
+    // and the task names it
+    let r = hub.get("/api/tasks/task?id=lib.nvim/alpha").await;
+    let task: Value = serde_json::from_str(&r.body).unwrap();
+    assert!(
+        task["task"]["meetings"]
+            .as_array()
+            .is_some_and(|m| m.contains(&json!(formed))),
+        "{task}"
+    );
     drop(server);
 }

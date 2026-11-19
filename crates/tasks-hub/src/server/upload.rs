@@ -224,8 +224,9 @@ async fn receive(dir: PathBuf, size: Option<u64>, body: Body) -> Result<(Incomin
     Ok((incoming, written))
 }
 
-/// The kinds of an asset the engine has a folder for (`attach` with `kind`).
-const KINDS: [&str; 3] = ["video", "image", "screenshot"];
+/// The kinds of an asset the engine has a folder for (`attach` with `kind`): `audio` since tasks.nvim@53c694e (a
+/// recording of a meeting, `assets/audio/`). `board` is not one: a board is saved with `board_save`, never uploaded.
+const KINDS: [&str; 4] = ["video", "image", "screenshot", "audio"];
 
 /// The kind the page asked for: none, one of [`KINDS`], or `Err` for another word.
 fn asked_kind(value: Option<&str>) -> Result<Option<&'static str>, ()> {
@@ -280,7 +281,7 @@ pub(super) async fn upload(
         return error_body(
             StatusCode::BAD_REQUEST,
             "bad_query",
-            "kind is video, image or screenshot",
+            "kind is video, image, screenshot or audio",
         );
     };
     let Some(id) = params.get("id").filter(|id| valid_task_id(id)).cloned() else {
@@ -420,10 +421,12 @@ mod tests {
     #[test]
     fn a_kind_is_one_of_the_engines_or_refused() {
         assert_eq!(asked_kind(None), Ok(None));
-        for kind in ["video", "image", "screenshot"] {
+        for kind in ["video", "image", "screenshot", "audio"] {
             assert_eq!(asked_kind(Some(kind)), Ok(Some(kind)));
         }
-        for other in ["", "videos", "Video", "../x", "assets", "file"] {
+        for other in [
+            "", "videos", "Video", "../x", "assets", "file", "board", "audios",
+        ] {
             assert_eq!(asked_kind(Some(other)), Err(()), "{other:?}");
         }
     }

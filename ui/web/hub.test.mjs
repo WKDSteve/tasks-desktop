@@ -620,3 +620,37 @@ test('intent: the text is measured before it is parsed, is one JSON object, and 
   assert.match((await error(refused)).message, /rules\.new/);
 });
 
+
+test('meetings, meeting and meeting_parse: judged as the Rust hub judges them, then passed on unchanged', async () => {
+  const h = hub({ meetings: '{"kind":"tasks.meetings"}', meeting: '{"kind":"tasks.meeting"}', meeting_parse: '{"kind":"tasks.meetingparse"}' });
+  for (const [path, code] of [
+    ['meetings?since=yesterday', 'bad_query'],
+    ['meetings?since=2026-13-40', 'bad_query'],
+    ['meetings?status=held', 'bad_query'],
+    ['meetings?task=nope', 'bad_query'],
+    ['meetings?limit=101', 'bad_query'],
+    ['meetings?limit=0', 'bad_query'],
+    ['meetings?offset=100001', 'bad_query'],
+    ['meetings?area=.x', 'bad_query'],
+    ['meetings?x=1', 'bad_query'],
+    ['meeting', 'bad_id'],
+    ['meeting?id=nope', 'bad_id'],
+  ]) {
+    const r = await h.get(path);
+    assert.equal(r.status, 400, path);
+    assert.equal((await error(r)).code, code, path);
+  }
+  for (const body of [{ text: '' }, { text: '  ' }, { text: 'a\nb' }, { text: 'x'.repeat(1001) }, { text: 'ä'.repeat(501) }, { text: 7 }, { line: 'x' }, { text: 'x', more: 1 }, 'no json']) {
+    assert.equal((await h.post('meeting_parse', body)).status, 400, JSON.stringify(body));
+  }
+  assert.deepEqual(h.calls, [], 'no question reached the engine');
+
+  assert.equal((await h.get('meetings?since=2026-11-01&until=2026-11-30&area=lib.nvim&status=planned&task=lib.nvim/a&limit=5&offset=10')).status, 200);
+  assert.equal(await (await h.get('meeting?id=lib.nvim/m1')).text(), '{"kind":"tasks.meeting"}');
+  assert.equal((await h.post('meeting_parse', { text: 'Mo 14:00 Sync' })).status, 200);
+  assert.deepEqual(h.calls, [
+    ['meetings', { params: { since: '2026-11-01', until: '2026-11-30', area: 'lib.nvim', status: ['planned'], task: 'lib.nvim/a', limit: 5, offset: 10 } }],
+    ['meeting', { params: { id: 'lib.nvim/m1' } }],
+    ['meeting_parse', { params: { text: 'Mo 14:00 Sync' } }],
+  ]);
+});

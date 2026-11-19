@@ -366,6 +366,10 @@ fn app_routes(core: &Arc<Shared>) -> Router<Arc<Shared>> {
         .route(&r("paths"), get(self::paths::paths))
         .route(&r("path"), get(self::paths::path))
         .route(
+            &r("meeting_parse"),
+            post(self::meetings::meeting_parse).layer(DefaultBodyLimit::max(small)),
+        )
+        .route(
             &r("check"),
             post(check_start).layer(DefaultBodyLimit::max(small)),
         )

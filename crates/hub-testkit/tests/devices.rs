@@ -322,6 +322,7 @@ async fn a_phone_reaches_the_routes_of_the_phone_page_and_nothing_else() {
         ("GET", "/api/tasks/meeting/thumb?id=alpha.nvim/m1"),
         ("GET", "/api/tasks/paths"),
         ("GET", "/api/tasks/path?id=alpha.nvim/p1"),
+        ("POST", "/api/tasks/meeting_parse"),
         ("GET", "/api/tasks/hello-not-a-route"),
     ] {
         let (status, doc) = r.send(method, path, &phone, r#"{"name":"main"}"#).await;

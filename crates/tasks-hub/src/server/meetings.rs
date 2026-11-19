@@ -5,6 +5,7 @@
 //! may reach a phone (the address to join, the participants) is decided with the phone's view of the meetings; until
 //! then the answer is `403 not_for_devices` (fail closed). The writes go through `ops` (`meeting_new`, `meeting_set`,
 //! `meeting_close`, `meeting_capture`, `meeting_attend`, `meeting_followups`), which refuses them to a phone as well.
+//! `meeting_parse` reads a line of the quick capture into a proposal; it writes nothing.
 
 use super::*;
 use crate::meetings::{self, IcsRefusal, Invitation, MeetingFiles, ThumbError, ThumbSource};
@@ -178,6 +179,45 @@ pub(super) async fn meeting(
     };
     match meeting_document(&st, &id).await {
         Ok(text) => json_response(StatusCode::OK, text, None),
+        Err(response) => response,
+    }
+}
+
+/// The longest line the quick capture reads (the engine's `meeting_parse` takes no more).
+pub(super) const PARSE_MAX_BYTES: usize = 1000;
+
+/// `POST /api/tasks/meeting_parse` with `{ "text": "<one line>" }`: the line of the quick capture read by the engine
+/// into a proposal of a meeting (`tasks.meetingparse`). Nothing is written; the page shows the proposal in its form.
+/// The text goes in the body, not in the address, so it is in no log of a request line.
+pub(super) async fn meeting_parse(
+    State(st): State<Arc<Shared>>,
+    caller: Option<axum::Extension<Caller>>,
+    body: Bytes,
+) -> Response {
+    if is_device(caller.as_deref()) {
+        return not_for_devices();
+    }
+    let map = match vault_request(&body, &["text"]) {
+        Ok(m) => m,
+        Err(r) => return r,
+    };
+    let Some(text) = map.get("text").and_then(serde_json::Value::as_str) else {
+        return error_body(
+            StatusCode::BAD_REQUEST,
+            "bad_text",
+            "text: the line of the quick capture",
+        );
+    };
+    if text.trim().is_empty() || text.len() > PARSE_MAX_BYTES || text.chars().any(char::is_control)
+    {
+        return error_body(
+            StatusCode::BAD_REQUEST,
+            "bad_text",
+            "text is one line of at most 1000 bytes",
+        );
+    }
+    match ask(&st, Calls::MeetingParse, Some(&json!({ "text": text }))).await {
+        Ok(reply) => json_response(StatusCode::OK, reply.text, None),
         Err(response) => response,
     }
 }

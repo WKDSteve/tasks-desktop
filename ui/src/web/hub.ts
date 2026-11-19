@@ -96,6 +96,51 @@ export function validTaskId(id: unknown): id is string {
   return validAreaName(area) && plain.test(area) && slug !== '' && slug.length <= 128 && !slug.startsWith('.') && plain.test(slug);
 }
 
+/** The longest line of the quick capture (the engine's `meeting_parse` and the hub take no more). */
+export const MEETING_LINE_MAX_BYTES = 1000;
+
+/** Is `text` a line the quick capture reads: not blank, at most 1000 bytes, no control character? */
+export function meetingLine(text: string): boolean {
+  return text.trim() !== '' && new TextEncoder().encode(text).length <= MEETING_LINE_MAX_BYTES && !/\p{Cc}/u.test(text);
+}
+
+/** The question of `meetings` from its query, as the hub asks it (`meetings_request`), or why it is refused. */
+export function meetingsParams(q: Map<string, string>): Record<string, unknown> | string {
+  const params: Record<string, unknown> = {};
+  for (const key of ['since', 'until'] as const) {
+    const day = q.get(key);
+    if (day === undefined) continue;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || Number.isNaN(Date.parse(`${day}T00:00:00Z`))) return 'since and until are days, YYYY-MM-DD';
+    params[key] = day;
+  }
+  const area = q.get('area');
+  if (area !== undefined) {
+    if (!validAreaName(area)) return 'area is not a name';
+    params['area'] = area;
+  }
+  const status = q.get('status');
+  if (status !== undefined) {
+    if (!['planned', 'done', 'cancelled'].includes(status)) return 'status is planned, done or cancelled';
+    params['status'] = [status];
+  }
+  const task = q.get('task');
+  if (task !== undefined) {
+    if (!validTaskId(task)) return 'task must be <area>/<slug>';
+    params['task'] = task;
+  }
+  const limit = q.get('limit');
+  if (limit !== undefined) {
+    if (!/^[0-9]{1,3}$/.test(limit) || Number(limit) < 1 || Number(limit) > 100) return 'limit is 1 to 100';
+    params['limit'] = Number(limit);
+  }
+  const offset = q.get('offset');
+  if (offset !== undefined) {
+    if (!/^[0-9]{1,6}$/.test(offset) || Number(offset) > 100000) return 'offset is a number from 0';
+    params['offset'] = Number(offset);
+  }
+  return params;
+}
+
 /** A query of plain pairs, or the reason it is not (`parse_query` of appkit-hub). */
 export function parseQuery(query: string, allowed: readonly string[]): Map<string, string> | string {
   const out = new Map<string, string>();
@@ -267,6 +312,19 @@ export function createWebHub(deps: HubDeps): WebHub {
         if (typeof q === 'string') return errorBody(400, 'bad_query', q);
         const id = idRequired(q);
         return typeof id === 'string' ? passOn('task', { id }) : id;
+      }
+      case 'meetings': {
+        // The meetings of a window of days (`GET /api/tasks/meetings`), judged as the hub judges the query.
+        const q = parseQuery(query, ['since', 'until', 'area', 'status', 'task', 'limit', 'offset']);
+        if (typeof q === 'string') return errorBody(400, 'bad_query', q);
+        const params = meetingsParams(q);
+        return typeof params === 'string' ? errorBody(400, 'bad_query', params) : passOn('meetings', params);
+      }
+      case 'meeting': {
+        const q = parseQuery(query, ['id']);
+        if (typeof q === 'string') return errorBody(400, 'bad_query', q);
+        const id = idRequired(q);
+        return typeof id === 'string' ? passOn('meeting', { id }) : id;
       }
       case 'next': {
         const q = parseQuery(query, ['n', 'actor', 'area']);
@@ -586,6 +644,21 @@ export function createWebHub(deps: HubDeps): WebHub {
         }
         if (typeof intent !== 'object' || intent === null || Array.isArray(intent)) return errorBody(400, 'bad_intent', 'the intent is not one JSON object');
         return passOn('intent', { intent });
+      }
+      case 'meeting_parse': {
+        // The quick capture of a meeting, as the hub's route: one line, read by the engine into a proposal.
+        let text: unknown;
+        try {
+          const parsed: unknown = JSON.parse(body);
+          const map = typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : null;
+          if (map === null || Object.keys(map).some((k) => k !== 'text')) throw new Error('not the request');
+          text = map['text'];
+        } catch {
+          return errorBody(400, 'bad_request', 'the body is { "text" }');
+        }
+        if (typeof text !== 'string') return errorBody(400, 'bad_text', 'text: the line of the quick capture');
+        if (!meetingLine(text)) return errorBody(400, 'bad_text', 'text is one line of at most 1000 bytes');
+        return passOn('meeting_parse', { text });
       }
       case 'estimate': {
         const request = checkEstimateRequest(body);
