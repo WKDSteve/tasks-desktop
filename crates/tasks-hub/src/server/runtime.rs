@@ -78,6 +78,8 @@ impl Runtime for VaultRuntime {
 /// What does not change when another vault is chosen but belongs to the state of one vault.
 #[derive(Clone)]
 pub(super) struct AppParts {
+    /// `HH:MM`: the hour of the reminders, which is also the hour the figures of the day are written down from.
+    pub(super) send_at: String,
     pub(super) classes: Arc<AreaPolicy>,
     pub(super) opener: Option<Arc<dyn FileOpener>>,
     pub(super) login: Option<Arc<dyn crate::loginentry::LoginEntry>>,
@@ -170,6 +172,18 @@ pub(super) fn build_runtime(
             Arc::clone(&store),
             Arc::clone(&app.classes),
             folder.display().to_string(),
+        ));
+    }
+    // The series of the figures (`_Telemetry/history`), where the vault keeps one, and the engine can write it.
+    if let (Some(folder), Some(engine)) = (&folder, &engine)
+        && status.capabilities.iter().any(|c| c == "history")
+    {
+        jobs.push(self::history::spawn_history(
+            Arc::clone(engine),
+            store.subscribe_quiet(),
+            folder.clone(),
+            app.send_at.clone(),
+            self::history::HistoryTiming::default(),
         ));
     }
     VaultRuntime {

@@ -60,6 +60,7 @@ mod answer;
 mod check;
 pub(crate) mod device_cut;
 mod events;
+mod history;
 mod mail;
 mod push;
 mod repos;
@@ -202,7 +203,13 @@ pub async fn start_with(cfg: ServerConfig, extras: Extras) -> std::io::Result<Ru
         Some(w) => (Some(w.vault), w.refresh),
         None => (None, RefreshOptions::default()),
     };
+    // The hour the reminders go out from is the hour the hub writes down the figures of the day from.
+    let send_at = push.as_ref().map_or_else(
+        || crate::notices::DEFAULT_SEND_AT.to_owned(),
+        |p| p.notices.send_at().to_owned(),
+    );
     let parts = AppParts {
+        send_at,
         classes: cfg.policy,
         opener,
         sheet_run,
@@ -591,6 +598,7 @@ mod tests {
             None,
             RefreshOptions::default(),
             &AppParts {
+                send_at: crate::notices::DEFAULT_SEND_AT.to_owned(),
                 classes: Arc::new(AreaPolicy::default()),
                 opener: None,
                 sheet_run: None,

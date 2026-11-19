@@ -110,6 +110,12 @@ impl Notices {
         }
     }
 
+    /// The time of day the reminders of a day go out from.
+    #[must_use]
+    pub fn send_at(&self) -> &str {
+        &self.send_at
+    }
+
     /// Send the reminders of a day from `at` (`HH:MM`, see `valid_time`) on; another text keeps the default.
     #[must_use]
     pub fn with_send_at(mut self, at: &str) -> Self {
