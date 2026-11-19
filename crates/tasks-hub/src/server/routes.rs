@@ -1920,6 +1920,16 @@ async fn own_job(
     waiting: bool,
 ) -> Result<serde_json::Value, Response> {
     let doc = intake.job(id).await.map_err(|r| agent_refusal(&r))?;
+    check_own(doc, kinds, waiting)
+}
+
+/// The checks of `own_job` on the job `doc` that ai-desktop gave.
+#[allow(clippy::result_large_err)]
+fn check_own(
+    doc: serde_json::Value,
+    kinds: &[&str],
+    waiting: bool,
+) -> Result<serde_json::Value, Response> {
     let own = doc["source"].as_str() == Some(crate::agent::SOURCE)
         && doc["kind"].as_str().is_some_and(|k| kinds.contains(&k));
     if !own {
@@ -2008,9 +2018,18 @@ pub(super) async fn draft_drop(State(st): State<Arc<Shared>>, body: Bytes) -> Re
             "this hub hands no task to an agent",
         );
     };
-    // Also the no of a split (`split_drop` is this route).
-    if let Err(r) = own_job(&intake, &id, &["draft-task", "split-plan"], true).await {
-        return r;
+    // Also the no of a split (`split_drop` is this route). A job that ai-desktop no longer knows (it restarted) is
+    // put away already: 404 on the read counts as dropped, as the delete does.
+    match intake.job(&id).await {
+        Ok(doc) => {
+            if let Err(r) = check_own(doc, &["draft-task", "split-plan"], true) {
+                return r;
+            }
+        }
+        Err(crate::agent::Refusal::Refused { status: 404, .. }) => {
+            return axum::Json(json!({ "status": "dropped" })).into_response();
+        }
+        Err(refusal) => return agent_refusal(&refusal),
     }
     match intake.discard(&id).await {
         Ok(()) => axum::Json(json!({ "status": "dropped" })).into_response(),

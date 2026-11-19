@@ -447,6 +447,8 @@ struct FakeIntake {
     doc: Mutex<Value>,
     confirmed: Mutex<Vec<String>>,
     dropped: Mutex<Vec<String>>,
+    /// When set, `job` refuses with it (a job that ai-desktop no longer knows).
+    job_refusal: Mutex<Option<Refusal>>,
 }
 
 impl JobIntake for FakeIntake {
@@ -458,7 +460,12 @@ impl JobIntake for FakeIntake {
     }
 
     fn job<'a>(&'a self, _id: &'a str) -> appkit_hub::BoxFuture<'a, Result<Value, Refusal>> {
-        Box::pin(async move { Ok(self.doc.lock().unwrap().clone()) })
+        Box::pin(async move {
+            match self.job_refusal.lock().unwrap().clone() {
+                Some(refusal) => Err(refusal),
+                None => Ok(self.doc.lock().unwrap().clone()),
+            }
+        })
     }
 
     fn confirm<'a>(&'a self, id: &'a str) -> appkit_hub::BoxFuture<'a, Result<(), Refusal>> {
@@ -483,6 +490,7 @@ fn intake(answer: Result<JobAnswer, Refusal>) -> Arc<FakeIntake> {
         doc: Mutex::new(Value::Null),
         confirmed: Mutex::new(Vec::new()),
         dropped: Mutex::new(Vec::new()),
+        job_refusal: Mutex::new(None),
     })
 }
 
@@ -724,6 +732,47 @@ async fn a_plan_goes_to_be_split_with_its_tasks_and_only_the_block_comes_back() 
         fake.dropped.lock().unwrap().len(),
         1,
         "nothing is put away without a session or with a bad id"
+    );
+}
+
+#[tokio::test]
+async fn a_draft_that_ai_desktop_no_longer_knows_counts_as_put_away() {
+    let fake = intake(Err(Refusal::NotRunning));
+    let r = rig_full(
+        "draft-gone",
+        false,
+        None,
+        None,
+        None,
+        None,
+        None,
+        Some(Arc::clone(&fake) as Arc<dyn JobIntake>),
+    )
+    .await;
+    let body = r#"{"job":"0123456789abcdef"}"#;
+    // ai-desktop restarted: the read of the job is 404, but the person's no still means "put away".
+    *fake.job_refusal.lock().unwrap() = Some(Refusal::Refused {
+        status: 404,
+        message: "no such job".to_owned(),
+    });
+    for route in ["/api/tasks/draft_drop", "/api/tasks/split_drop"] {
+        let (status, doc) = post(&r, route, body, true).await;
+        assert_eq!(
+            (status, doc["status"].as_str()),
+            (200, Some("dropped")),
+            "{route} {doc}"
+        );
+    }
+    // Any other refusal of the read is still an error.
+    *fake.job_refusal.lock().unwrap() = Some(Refusal::Refused {
+        status: 500,
+        message: "boom".to_owned(),
+    });
+    let (status, doc) = post(&r, "/api/tasks/draft_drop", body, true).await;
+    assert_eq!(
+        (status, doc["error"]["code"].as_str()),
+        (502, Some("ai_desktop_refused")),
+        "{doc}"
     );
 }
 
