@@ -597,7 +597,13 @@ impl Scheduler {
             default: Rules::default(),
             internal_links: false,
             lang: Lang::En,
-            zone: TimeZone::system(),
+            // An unknown zone of the system is said: jiff then plans in UTC, and the notices come at other times.
+            zone: TimeZone::try_system().unwrap_or_else(|e| {
+                eprintln!(
+                    "note: the time zone of this PC is unknown ({e}); notices are planned in UTC"
+                );
+                TimeZone::UTC
+            }),
             clock: Box::new(Timestamp::now),
         }
     }
@@ -778,14 +784,24 @@ pub fn mails(
         return Vec::new();
     };
     let de = lang == Lang::De;
-    let clock = c.when.get(11..16).unwrap_or_default();
-    let subject = match due.kind {
-        MEETING_END if de => format!("Meeting vorbei: {}", c.title),
-        MEETING_END => format!("Meeting over: {}", c.title),
-        MEETING if de => format!("Meeting um {clock}: {}", c.title),
-        MEETING => format!("Meeting at {clock}: {}", c.title),
-        _ if de => format!("Erinnerung um {clock}: {}", c.title),
-        _ => format!("Reminder at {clock}: {}", c.title),
+    // `when` starts with the day and, for a meeting with a time, the time of day; an all-day one has none.
+    let day = c.when.get(..10).unwrap_or_default();
+    let clock = c.when.get(11..16).filter(|t| crate::notices::valid_time(t));
+    let subject = match (due.kind, clock) {
+        (MEETING_END, _) if de => format!("Meeting vorbei: {}", c.title),
+        (MEETING_END, _) => format!("Meeting over: {}", c.title),
+        (MEETING, None) if de => format!("Meeting am {day}: {}", c.title),
+        (MEETING, None) => format!("Meeting on {day}: {}", c.title),
+        (MEETING, Some(clock)) if de => format!("Meeting um {clock}: {}", c.title),
+        (MEETING, Some(clock)) => format!("Meeting at {clock}: {}", c.title),
+        (_, clock) => {
+            let clock = clock.unwrap_or_default();
+            if de {
+                format!("Erinnerung um {clock}: {}", c.title)
+            } else {
+                format!("Reminder at {clock}: {}", c.title)
+            }
+        }
     };
     let mut text = format!("{}\n{}\n", c.title, c.when);
     if let Some(place) = &c.location {
@@ -1358,6 +1374,27 @@ mod tests {
             !text.contains("msteams") && text.contains("Service: Online\n"),
             "{text}"
         );
+    }
+
+    #[test]
+    fn the_mail_of_an_all_day_meeting_names_its_day_not_a_time() {
+        let i = inputs(&[meeting(
+            "a/d",
+            "2026-11-24",
+            "2026-11-24",
+            json!({ "all_day": true, "notify_to": ["me@example.org"],
+                    "notify": [{ "spec": "-1d@18:00", "days_before": 1, "at": "18:00" }] }),
+        )]);
+        let due = plan(&i, at("2026-11-23T18:00"), &vienna(), &Rules::default());
+        let en = &mail_of(&i, &due[0], Shown::Public, false, Lang::En)[0];
+        assert_eq!(en.subject, "Meeting on 2026-11-24: Title of a/d");
+        assert!(
+            en.text.starts_with("Title of a/d\n2026-11-24 (all day)\n"),
+            "{}",
+            en.text
+        );
+        let de = &mail_of(&i, &due[0], Shown::Public, false, Lang::De)[0];
+        assert_eq!(de.subject, "Meeting am 2026-11-24: Title of a/d");
     }
 
     #[test]
