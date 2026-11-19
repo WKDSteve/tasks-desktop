@@ -62,7 +62,10 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-describe('CalendarView, the keys', () => {
+// Nothing here waits for real time: alone a case takes 10-30 ms (the first one 200 ms for the import). On 2026-11-18 one
+// took 14.6 s in a full run while the runner and four sessions were building, so the default 5 s limit measured the
+// load of the machine, not the calendar. The limit is raised for the whole file; a hang still ends in 30 s.
+describe('CalendarView, the keys', { timeout: 30_000 }, () => {
   it('gives Tab to one day only, today at first, and the arrows move it', async () => {
     const { root, today } = await show();
     const tabbable = () => [...root.querySelectorAll<HTMLElement>('td[data-day]')].filter((td) => td.tabIndex === 0).map((td) => td.dataset.day);
