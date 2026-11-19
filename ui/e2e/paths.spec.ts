@@ -140,3 +140,61 @@ test('a learning path: fold by keyboard, tick by finger, seen with a reason, a n
     }
   }
 });
+
+test('ticking down a list by keyboard: the mark keeps the focus, no tick runs into a conflict, a closed field gives the focus back', async ({
+  page,
+}) => {
+  const slug = 'paths-e2e-p02';
+  const dir = join(state().vault, 'lib.nvim', 'ROADMAP', 'paths');
+  mkdirSync(dir, { recursive: true });
+  const file = join(dir, `${slug}.md`);
+  const title = 'Path e2e p02';
+  writeFileSync(file, PATH(slug, title));
+  try {
+    const problems = await pair(page, '/#view=paths');
+    await page.locator(`button[data-path="lib.nvim/${slug}"]`).click();
+    const tree = page.getByRole('list', { name: `Learning points of ${title}` });
+    await expect(tree).toBeVisible();
+    const point = (key: string) => tree.locator(`li[data-point="${key}"]`);
+    const mark = (key: string) => point(key).locator('button.mark');
+
+    // Enter on a mark ticks it; the mark is never switched off while the write runs, so the focus stays on it.
+    await mark('meta').focus();
+    let answer = nextAnswer(page);
+    await page.keyboard.press('Enter');
+    await answer;
+    // The next point at once, while the path may still be read again: refused and said, or sent on the new version;
+    // never sent on the version from before the first tick.
+    await mark('co').focus();
+    await page.keyboard.press('Enter');
+    await expect(point('meta')).toHaveAttribute('data-state', 'learned', { timeout: WRITE_BUDGET });
+    await expect(mark('meta')).not.toHaveAttribute('aria-disabled', 'true', { timeout: WRITE_BUDGET });
+    await expect(mark('co')).not.toHaveAttribute('aria-disabled', 'true', { timeout: WRITE_BUDGET });
+    if ((await point('co').getAttribute('data-state')) !== 'learned') {
+      answer = nextAnswer(page);
+      await page.keyboard.press('Enter');
+      await answer;
+    }
+    await expect(point('co')).toHaveAttribute('data-state', 'learned', { timeout: WRITE_BUDGET });
+    await expect(mark('co')).toBeFocused();
+    await expect(page.locator('p.conflict')).toHaveCount(0);
+    const text = readFileSync(file, 'utf8');
+    expect(text).toContain('- [x] Metatables e2e {#meta}');
+    expect(text).toContain('- [x] Coroutines e2e {#co}');
+
+    // A note field closed by Escape gives the focus back to the menu of its point, not to the page.
+    const menu = point('meta').locator('[data-choice="point"] summary');
+    await menu.focus();
+    await page.keyboard.press('Enter');
+    await point('meta').locator('[data-choice-id="note"]').click();
+    await expect(point('meta').getByLabel('Note of Metatables e2e')).toBeFocused();
+    await page.keyboard.press('Escape');
+    await expect(point('meta').locator('textarea')).toHaveCount(0);
+    await expect(menu).toBeFocused();
+    await expectAccessible(page, 'a learning path after ticking');
+    expect(problems).toEqual([]);
+    expect(await violations(page)).toEqual([]);
+  } finally {
+    rmSync(file, { force: true });
+  }
+});

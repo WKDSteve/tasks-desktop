@@ -5,12 +5,14 @@ import {
   cleanNote,
   cleanReason,
   clickedState,
+  indicesOf,
   isMarkable,
   labelText,
   needsReason,
   noteOp,
   openableLink,
   parentIndices,
+  pointIds,
   pointRef,
   progressParts,
   promoteOp,
@@ -41,6 +43,20 @@ describe('paths: the tree', () => {
     expect(pointRef({ key: 'syntax', index: 2 })).toBe('syntax');
     expect(pointRef({ index: 7 })).toBe('#7');
     expect(pointRef({ key: '', index: 7 })).toBe('#7');
+  });
+  it('names each point so that a point added above does not rename the others (key, else label and its count)', () => {
+    const before = [
+      { index: 1, key: 'lua', label: 'Lua' },
+      { index: 2, label: 'Read' },
+      { index: 3, label: 'Read' },
+    ];
+    const after = [{ index: 1, label: 'New' }, ...before.map((n) => ({ ...n, index: n.index + 1 }))];
+    const a = pointIds(before);
+    const b = pointIds(after);
+    expect([...a.values()]).toEqual(['key:lua', 'label:0:Read', 'label:1:Read']);
+    expect([2, 3, 4].map((i) => b.get(i))).toEqual([...a.values()]);
+    // Held by name, the folded parent is found again at its new index; a name no point has any more is dropped.
+    expect([...indicesOf(b, new Set(['key:lua', 'label:0:Gone']))]).toEqual([2]);
   });
   it('only a leaf that is not promoted and has a known state has a mark to click', () => {
     expect(isMarkable({ children: 0, state: 'open' })).toBe(true);

@@ -66,6 +66,35 @@ export function parentIndices(nodes: readonly Pick<PathNode, 'index' | 'children
   return nodes.filter((n) => n.children > 0).map((n) => n.index);
 }
 
+/**
+ * A name of each point (by `index`) that stays the same when the path is read again after a change elsewhere in the
+ * file: its key, or, without one, its label with the number of earlier keyless points of the same label. An index or a
+ * line moves when a point is added above; this does not. What the view holds across a read (folded points, the field
+ * being written) is held by this name.
+ */
+export function pointIds(nodes: readonly Pick<PathNode, 'index' | 'key' | 'label'>[]): Map<number, string> {
+  const ids = new Map<number, string>();
+  const seen = new Map<string, number>();
+  for (const node of nodes) {
+    if (node.key !== undefined && node.key !== '') {
+      ids.set(node.index, `key:${node.key}`);
+      continue;
+    }
+    const label = node.label.trim();
+    const n = seen.get(label) ?? 0;
+    seen.set(label, n + 1);
+    ids.set(node.index, `label:${n}:${label}`);
+  }
+  return ids;
+}
+
+/** The indices of the points named in `ids` (see `pointIds`); a name no point has any more is left out. */
+export function indicesOf(byIndex: ReadonlyMap<number, string>, ids: ReadonlySet<string>): Set<number> {
+  const out = new Set<number>();
+  for (const [index, id] of byIndex) if (ids.has(id)) out.add(index);
+  return out;
+}
+
 const LINK_LABEL = /^\[([^\]]+)\]\(([^)\s]+)\)$/;
 const IMAGE_LABEL = /^!\[([^\]]*)\]\(([^)\s]+)\)$/;
 

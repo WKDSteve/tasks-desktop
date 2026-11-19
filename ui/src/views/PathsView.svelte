@@ -10,11 +10,14 @@
   import { translate, type Key } from '../lib/i18n';
   import type { PathDocument, PathEntry, PathNode, PathProgress, Result } from '../lib/contract';
   import Info from 'appkit-ui/Info.svelte';
+  import { hostOf } from 'appkit-ui/markdown';
   import ChoiceMenu, { type Choice } from './ChoiceMenu.svelte';
+  import { markHidden } from '../lib/text';
   import {
     clickedState,
     cleanNote,
     cleanReason,
+    indicesOf,
     isMarkable,
     labelText,
     MENU_STATES,
@@ -22,6 +25,7 @@
     noteOp,
     openableLink,
     parentIndices,
+    pointIds,
     progressParts,
     promoteOp,
     REASON_MAX,
@@ -44,17 +48,30 @@
   let reading = $state(false);
   // Said under the tree when the engine refused a change because the file moved on (it was read again then).
   let conflict = $state(false);
-  // The indices of the folded points of the open path; a new path starts unfolded.
-  let folded = $state<ReadonlySet<number>>(new Set());
-  // The point whose reason or note is being written (by its index), with what is typed.
-  let editing = $state<{ index: number; kind: 'reason' | 'note'; state?: PointState; missing: boolean } | null>(null);
+  // The folded points of the open path, by their name (`pointIds`: a point added above does not move the fold to
+  // another point); a new path starts unfolded.
+  let folded = $state<ReadonlySet<string>>(new Set());
+  // The point whose reason or note is being written (by its name, so that a read after a change elsewhere keeps the
+  // field and what is typed), with what is typed.
+  let editing = $state<{ id: string; kind: 'reason' | 'note'; state?: PointState; missing: boolean } | null>(null);
   // What is typed into the open field (apart from `editing`, so that closing the field never leaves a binding on nothing).
   let draft = $state('');
+  let root: HTMLElement | undefined = $state();
 
   const usable = $derived(app.can('paths') && app.can('path'));
   const writesNotes = $derived(app.can('node_note'));
   const chosen = $derived(app.pathChoice);
-  const shown = $derived(doc && doc.path.id === chosen ? visiblePoints(doc.nodes, folded) : []);
+  const ids = $derived(doc ? pointIds(doc.nodes) : new Map<number, string>());
+  const foldedIndices = $derived(indicesOf(ids, folded));
+  const shown = $derived(doc && doc.path.id === chosen ? visiblePoints(doc.nodes, foldedIndices) : []);
+  // A change is sent only on the tree as it is now: not while a write is on its way, and not while the path is read
+  // again (after a write the tree on screen still has the version and the states from before it; sent on that, the
+  // next tick would be refused as a conflict, or set a state the point already has).
+  const busy = $derived(app.saving || reading);
+  const idOf = (node: PathNode): string => ids.get(node.index) ?? `#${node.index}`;
+  const editingOf = (node: PathNode, kind: 'reason' | 'note'): boolean => editing?.kind === kind && editing.id === idOf(node);
+  /** The text of a label as shown: the link's text, with the characters that hide or reorder text made visible. */
+  const shownLabel = (node: PathNode): string => markHidden(labelText(node));
 
   // Each question has a number: an answer that comes after another was asked is dropped.
   let askedList = 0;
@@ -79,9 +96,13 @@
     try {
       const answer = await app.path(id);
       if (mine !== askedPath) return;
-      if (doc?.path.id !== answer.path.id) folded = new Set();
+      if (doc?.path.id !== answer.path.id) {
+        folded = new Set();
+        editing = null;
+      }
       doc = answer;
       docProblem = false;
+      keepEditing(answer);
     } catch {
       if (mine !== askedPath) return;
       doc = null;
@@ -103,11 +124,41 @@
     void app.snapshot?.rev;
     const id = chosen;
     if (!usable || id === '') return;
-    untrack(() => {
-      editing = null;
-      void readPath(id);
-    });
+    untrack(() => void readPath(id));
   });
+
+  /**
+   * The open field after the path was read again: it stays with what is typed while its point is there and can still
+   * take it; a point that went (or was promoted, or no longer has a mark of its own) closes it, and that is said.
+   */
+  function keepEditing(read: PathDocument): void {
+    if (!editing) return;
+    const id = editing.id;
+    const names = pointIds(read.nodes);
+    const node = read.nodes.find((n) => names.get(n.index) === id);
+    const fits = node !== undefined && (editing.kind === 'reason' ? isMarkable(node) : node.promoted === undefined);
+    if (fits) return;
+    editing = null;
+    app.tell('error', 'paths.conflict');
+  }
+
+  /** Whether a change must wait (a write on its way, or the path being read again): then it is said, not sent. */
+  function refused(): boolean {
+    if (!busy) return false;
+    app.tell('error', 'write.busy');
+    return true;
+  }
+
+  /** The focus goes back to the point's menu (or its mark) when its field closes: never to the page. */
+  async function focusPoint(node: PathNode): Promise<void> {
+    await tick();
+    const item = root?.querySelector<HTMLElement>(`li[data-index="${node.index}"]`);
+    (item?.querySelector<HTMLElement>('[data-choice="point"] summary') ?? item?.querySelector<HTMLElement>('button.mark'))?.focus();
+  }
+  function closeField(node: PathNode): void {
+    editing = null;
+    void focusPoint(node);
+  }
 
   function choose(id: string): void {
     if (id === app.pathChoice) return;
@@ -139,16 +190,17 @@
     void send(stateOp(doc.path.id, doc.path.etag, node, state, reason));
   }
   function clickMark(node: PathNode): void {
-    if (!node.state || app.saving) return;
+    // The mark is never `disabled` (a disabled button drops the focus to the page): a click while busy is refused here.
+    if (!node.state || refused()) return;
     setState(node, clickedState(node.state));
   }
   function pick(node: PathNode, state: PointState): void {
     if (!needsReason(state)) {
-      setState(node, state);
+      if (!refused()) setState(node, state);
       return;
     }
     draft = '';
-    editing = { index: node.index, kind: 'reason', state, missing: false };
+    editing = { id: idOf(node), kind: 'reason', state, missing: false };
     void focusField(`reason-${node.index}`);
   }
   /** The field that just opened takes the focus (the menu gave it back to its own button before it ran the choice). */
@@ -163,24 +215,30 @@
       editing = { ...editing, missing: true };
       return;
     }
+    // Refused while busy: the field stays open with what is typed.
+    if (refused()) return;
     const state = editing.state;
-    editing = null;
+    closeField(node);
     setState(node, state, reason);
   }
   function editNote(node: PathNode): void {
     draft = node.note ?? '';
-    editing = { index: node.index, kind: 'note', missing: false };
+    editing = { id: idOf(node), kind: 'note', missing: false };
     void focusField(`note-${node.index}`);
   }
   function saveNote(node: PathNode): void {
     if (!doc || !editing || editing.kind !== 'note') return;
     const note = cleanNote(draft);
-    editing = null;
-    if (note === (node.note ?? '')) return;
+    if (note === (node.note ?? '')) {
+      closeField(node);
+      return;
+    }
+    if (refused()) return;
+    closeField(node);
     void send(noteOp(doc.path.id, doc.path.etag, node, note));
   }
   async function promote(node: PathNode): Promise<void> {
-    if (!doc) return;
+    if (!doc || refused()) return;
     const result = await send(promoteOp(doc.path.id, doc.path.etag, node));
     const made = result?.results[0];
     // The task is in the list now (the write read it again): open it.
@@ -204,7 +262,7 @@
         ...(reason ? { reason } : {}),
         onselect: () => editNote(node),
       });
-      out.push({ id: 'promote', label: t('paths.promote_of', { label: labelText(node) }), onselect: () => void promote(node) });
+      out.push({ id: 'promote', label: t('paths.promote_of', { label: shownLabel(node) }), onselect: () => void promote(node) });
     }
     return out;
   }
@@ -220,15 +278,16 @@
   function promotedTask(id: string) {
     return app.tasks.find((task) => task.id === id);
   }
-  function toggleFold(index: number): void {
+  function toggleFold(node: PathNode): void {
+    const id = idOf(node);
     const next = new Set(folded);
-    if (next.has(index)) next.delete(index);
-    else next.add(index);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
     folded = next;
   }
 </script>
 
-<section class="paths" aria-label={t('nav.paths')}>
+<section class="paths" aria-label={t('nav.paths')} bind:this={root}>
   <header class="intro">
     <div class="head">
       <h2>{t('paths.title')}</h2>
@@ -258,8 +317,8 @@
                 data-path={entry.id}
                 onclick={() => choose(entry.id)}
               >
-                <span class="name">{#if entry.icon?.kind === 'emoji'}<span aria-hidden="true">{entry.icon.value} </span>{/if}{entry.title}</span>
-                <span class="sub">{entry.area} · {progressText(entry.progress)}</span>
+                <span class="name">{#if entry.icon?.kind === 'emoji'}<span aria-hidden="true">{entry.icon.value} </span>{/if}{markHidden(entry.title)}</span>
+                <span class="sub">{markHidden(entry.area)} · {progressText(entry.progress)}</span>
               </button>
             </li>
           {/each}
@@ -273,9 +332,10 @@
           <p class="none" role="status">{chosen === '' ? t('paths.choose') : t('paths.reading')}</p>
         {:else}
           {@const progress = doc.progress}
-          <h3>{doc.path.title}</h3>
-          {#if doc.path.summary}<p class="summary">{doc.path.summary}</p>{/if}
-          <div class="progress" role="img" aria-label={t('paths.progress_of', { title: doc.path.title }) + ': ' + progressText(progress)} data-progress>
+          {@const title = markHidden(doc.path.title)}
+          <h3>{title}</h3>
+          {#if doc.path.summary}<p class="summary">{markHidden(doc.path.summary)}</p>{/if}
+          <div class="progress" role="img" aria-label={t('paths.progress_of', { title }) + ': ' + progressText(progress)} data-progress>
             {#each progressParts(progress) as part (part.kind)}
               <span class="part {part.kind}" style:flex-grow={part.n} data-part={part.kind}></span>
             {/each}
@@ -289,20 +349,25 @@
           {/if}
 
           <div class="tools">
-            <button type="button" onclick={() => (folded = new Set(parentIndices(doc!.nodes)))}>{t('paths.fold_all')}</button>
-            <button type="button" onclick={() => (folded = new Set())} disabled={folded.size === 0}>{t('paths.unfold_all')}</button>
-            {#if reading || app.saving}<span class="busy" role="status">{app.saving ? t('paths.saving') : t('paths.reading')}</span>{/if}
+            <button type="button" onclick={() => (folded = new Set(parentIndices(doc!.nodes).map((i) => ids.get(i) ?? `#${i}`)))}
+              >{t('paths.fold_all')}</button
+            >
+            <button type="button" onclick={() => (folded = new Set())} disabled={foldedIndices.size === 0}>{t('paths.unfold_all')}</button>
+            {#if busy}<span class="busy" role="status">{app.saving ? t('paths.saving') : t('paths.reading')}</span>{/if}
           </div>
 
-          <ul class="tree" aria-label={t('paths.tree', { title: doc.path.title })}>
+          <ul class="tree" aria-label={t('paths.tree', { title })}>
             {#each shown as node (node.index)}
-              {@const label = labelText(node)}
+              {@const label = shownLabel(node)}
               {@const link = openableLink(node.link)}
+              {@const host = link ? hostOf(link) : null}
               {@const parent = node.children > 0}
+              {@const isFolded = foldedIndices.has(node.index)}
               <li
                 class="point"
                 style:--depth={node.depth}
                 data-point={node.key ?? `#${node.index}`}
+                data-index={node.index}
                 data-state={node.derived}
               >
                 <div class="row">
@@ -310,9 +375,9 @@
                     <button
                       type="button"
                       class="fold"
-                      aria-expanded={!folded.has(node.index)}
-                      aria-label={t(folded.has(node.index) ? 'paths.unfold' : 'paths.fold', { label })}
-                      onclick={() => toggleFold(node.index)}><span aria-hidden="true">{folded.has(node.index) ? '▸' : '▾'}</span></button
+                      aria-expanded={!isFolded}
+                      aria-label={t(isFolded ? 'paths.unfold' : 'paths.fold', { label })}
+                      onclick={() => toggleFold(node)}><span aria-hidden="true">{isFolded ? '▸' : '▾'}</span></button
                     >
                   {:else}
                     <span class="fold-space" aria-hidden="true"></span>
@@ -327,7 +392,7 @@
                         state: stateWord(node.derived),
                         next: t(clickedState(node.state) === 'learned' ? 'paths.next.learned' : 'paths.next.open'),
                       })}
-                      disabled={app.saving}
+                      aria-disabled={busy ? 'true' : undefined}
                       onclick={() => clickMark(node)}><span aria-hidden="true">{MARKS[node.derived]}</span></button
                     >
                   {:else}
@@ -339,7 +404,8 @@
 
                   <span class="label">
                     {#if link}
-                      <a href={link} target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer" aria-label={t('paths.link_of', { label })}>{label}</a>
+                      <a href={link} target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer" aria-label={t('paths.link_of', { label })}>{label}</a
+                      >{#if host}<span class="host">{` (${markHidden(host)})`}</span>{/if}
                     {:else}
                       {label}
                     {/if}
@@ -366,7 +432,7 @@
                       label={t('paths.more', { label })}
                       short={t('paths.menu')}
                       choices={choicesOf(node)}
-                      disabled={app.saving}
+                      disabled={busy}
                       name="point"
                       onblocked={(choice) => {
                         if (choice.reason) app.tell('error', 'paths.note.read_only');
@@ -376,13 +442,13 @@
                 </div>
 
                 {#if node.reason}
-                  <p class="reason">{t(node.state === 'blocked' ? 'paths.key' : 'paths.reason', { reason: node.reason })}</p>
+                  <p class="reason">{t(node.state === 'blocked' ? 'paths.key' : 'paths.reason', { reason: markHidden(node.reason) })}</p>
                 {/if}
-                {#if node.note && !(editing?.index === node.index && editing.kind === 'note')}
-                  <p class="note" aria-label={t('paths.note_of', { label })}>{node.note}</p>
+                {#if node.note && !editingOf(node, 'note')}
+                  <p class="note" aria-label={t('paths.note_of', { label })}>{markHidden(node.note)}</p>
                 {/if}
 
-                {#if editing?.index === node.index && editing.kind === 'reason' && editing.state}
+                {#if editing && editingOf(node, 'reason') && editing.state}
                   <form
                     class="edit"
                     data-hint={t('hint.form.paths.reason')}
@@ -401,16 +467,16 @@
                       aria-invalid={editing.missing ? 'true' : undefined}
                       aria-describedby={editing.missing ? `reason-missing-${node.index}` : undefined}
                       onkeydown={(e) => {
-                        if (e.key === 'Escape') editing = null;
+                        if (e.key === 'Escape') closeField(node);
                       }}
                     />
                     {#if editing.missing}<span id="reason-missing-{node.index}" class="missing" role="alert">{t('paths.reason.required')}</span>{/if}
                     <span class="buttons">
                       <button type="submit" class="primary">{t('paths.reason.save')}</button>
-                      <button type="button" onclick={() => (editing = null)}>{t('paths.reason.cancel')}</button>
+                      <button type="button" onclick={() => closeField(node)}>{t('paths.reason.cancel')}</button>
                     </span>
                   </form>
-                {:else if editing?.index === node.index && editing.kind === 'note'}
+                {:else if editingOf(node, 'note')}
                   <form
                     class="edit"
                     data-hint={t('hint.form.paths.note')}
@@ -425,12 +491,12 @@
                       rows="3"
                       bind:value={draft}
                       onkeydown={(e) => {
-                        if (e.key === 'Escape') editing = null;
+                        if (e.key === 'Escape') closeField(node);
                       }}
                     ></textarea>
                     <span class="buttons">
                       <button type="submit" class="primary">{t('paths.note.save')}</button>
-                      <button type="button" onclick={() => (editing = null)}>{t('paths.note.cancel')}</button>
+                      <button type="button" onclick={() => closeField(node)}>{t('paths.note.cancel')}</button>
                     </span>
                   </form>
                 {/if}
@@ -467,7 +533,8 @@
   .count,
   .sub,
   .status,
-  .busy {
+  .busy,
+  .host {
     color: var(--muted);
   }
   button:not(.link):not(.pick) {
@@ -479,7 +546,8 @@
     min-height: 2rem;
     cursor: pointer;
   }
-  button:disabled {
+  button:disabled,
+  button[aria-disabled='true'] {
     cursor: default;
     opacity: 0.6;
   }

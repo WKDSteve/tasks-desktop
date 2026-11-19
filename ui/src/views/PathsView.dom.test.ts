@@ -64,6 +64,16 @@ function doc(etag = 'e1', nodes?: PathNode[]): PathDocument {
   } as unknown as PathDocument;
 }
 
+/** The path after another program added a parent with one point above everything: every index moves by two. */
+function shifted(): PathDocument {
+  const moved = doc().nodes.map((n) => ({ ...n, index: n.index + 2, line: n.line + 2, ...(n.parent !== undefined ? { parent: n.parent + 2 } : {}) }));
+  return doc('e2', [
+    node(1, { key: 'intro2', children: 1, state: undefined, mark: '', derived: 'open' }),
+    node(2, { key: 'under', parent: 1, depth: 1 }),
+    ...moved,
+  ]);
+}
+
 let mounted: ReturnType<typeof mount> | undefined;
 let made: Made | undefined;
 
@@ -215,6 +225,144 @@ describe('PathsView', () => {
     await vi.waitFor(() => expect(sentOps(m)).toEqual([{ op: 'promote', container: 'lib/lua', point: 'meta', if_match: 'e1' }]));
     await vi.waitFor(() => expect(m.app.selectedId).toBe('lib/c-compiler'));
     expect(m.app.view).toBe('list');
+  });
+
+  it('a tick while the path is read again after a write is refused and said, not sent on the old version', async () => {
+    const { m, page } = await show();
+    let release!: () => void;
+    m.hub.pathGates.push(new Promise<void>((resolve) => (release = resolve)));
+    m.hub.pathDocs.set('lib/lua', doc('e2'));
+    point(page, 'meta').querySelector<HTMLButtonElement>('button.mark')!.click();
+    await vi.waitFor(() => expect(sentOps(m)).toHaveLength(1));
+    // The write is answered, the path is still being read: the tree on screen is the one from before the write.
+    await vi.waitFor(() => expect(m.app.saving).toBe(false));
+    await settle();
+    const mark = point(page, 'manual').querySelector<HTMLButtonElement>('button.mark')!;
+    expect(mark.getAttribute('aria-disabled')).toBe('true');
+    mark.click();
+    await settle();
+    expect(sentOps(m)).toHaveLength(1);
+    expect(m.app.toast).toMatchObject({ kind: 'error', text: 'Speichert noch - gleich noch einmal versuchen.' });
+    release();
+    await vi.waitFor(() => expect(point(page, 'manual').querySelector('button.mark')?.getAttribute('aria-disabled')).toBeNull());
+    point(page, 'manual').querySelector<HTMLButtonElement>('button.mark')!.click();
+    await vi.waitFor(() => expect(sentOps(m).at(-1)).toMatchObject({ op: 'node_set', point: 'manual', state: 'open', if_match: 'e2' }));
+  });
+
+  it('the mark is never disabled while a write is on its way, so it keeps the focus', async () => {
+    const { m, page } = await show();
+    let release!: () => void;
+    m.hub.holdOps = new Promise<void>((resolve) => (release = resolve));
+    const mark = point(page, 'meta').querySelector<HTMLButtonElement>('button.mark')!;
+    mark.focus();
+    mark.click();
+    await vi.waitFor(() => expect(m.app.saving).toBe(true));
+    await settle();
+    expect(mark.disabled).toBe(false);
+    expect(mark.getAttribute('aria-disabled')).toBe('true');
+    expect(document.activeElement).toBe(mark);
+    release();
+    m.hub.holdOps = null;
+    await vi.waitFor(() => expect(m.app.saving).toBe(false));
+  });
+
+  it('a note being written stays open with what is typed when the path is read again after a change elsewhere', async () => {
+    const { m, page } = await show();
+    const menu = point(page, 'manual').querySelector<HTMLElement>('[data-choice="point"]')!;
+    menu.querySelector<HTMLElement>('summary')!.click();
+    await settle();
+    [...menu.querySelectorAll<HTMLButtonElement>('button')].find((b) => b.textContent?.includes('Notiz bearbeiten'))!.click();
+    await settle();
+    const area = point(page, 'manual').querySelector<HTMLTextAreaElement>('textarea')!;
+    area.value = 'halb getippt';
+    area.dispatchEvent(new Event('input', { bubbles: true }));
+    // Another program adds a point above: every index moves by one.
+    m.hub.pathDocs.set('lib/lua', shifted());
+    const before = m.hub.pathCalls.length;
+    m.app.writes += 1;
+    await vi.waitFor(() => expect(m.hub.pathCalls.length).toBeGreaterThan(before));
+    await vi.waitFor(() => expect(page.querySelector('[data-point="intro2"]')).not.toBeNull());
+    expect(point(page, 'manual').querySelector<HTMLTextAreaElement>('textarea')?.value).toBe('halb getippt');
+    // The point is gone after the next change: the field closes and that is said.
+    m.hub.pathDocs.set('lib/lua', doc('e3', doc().nodes.filter((n) => n.key !== 'manual').map((n) => (n.key === 'lua' ? { ...n, children: 2 } : n))));
+    m.app.writes += 1;
+    await vi.waitFor(() => expect(page.querySelector('[data-point="manual"]')).toBeNull());
+    expect(page.querySelector('textarea')).toBeNull();
+    expect(m.app.toast).toMatchObject({ kind: 'error' });
+    expect(m.app.toast?.text).toContain('Der Pfad hat sich inzwischen geändert');
+  });
+
+  it('closing the field (Escape, cancel, save) gives the focus back to the menu of its point', async () => {
+    const { m, page } = await show();
+    const openNote = async (): Promise<HTMLTextAreaElement> => {
+      const menu = point(page, 'manual').querySelector<HTMLElement>('[data-choice="point"]')!;
+      menu.querySelector<HTMLElement>('summary')!.click();
+      await settle();
+      [...menu.querySelectorAll<HTMLButtonElement>('button')].find((b) => b.textContent?.includes('Notiz bearbeiten'))!.click();
+      await settle();
+      return point(page, 'manual').querySelector<HTMLTextAreaElement>('textarea')!;
+    };
+    const summary = () => point(page, 'manual').querySelector<HTMLElement>('[data-choice="point"] summary');
+    let area = await openNote();
+    area.focus();
+    area.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    await settle();
+    expect(page.querySelector('textarea')).toBeNull();
+    expect(document.activeElement).toBe(summary());
+    area = await openNote();
+    [...point(page, 'manual').querySelectorAll<HTMLButtonElement>('form button')].find((b) => b.type === 'button')!.click();
+    await settle();
+    expect(document.activeElement).toBe(summary());
+    area = await openNote();
+    area.value = 'neu';
+    area.dispatchEvent(new Event('input', { bubbles: true }));
+    point(page, 'manual').querySelector<HTMLFormElement>('form.edit')!.requestSubmit();
+    await settle();
+    expect(document.activeElement).toBe(summary());
+    await vi.waitFor(() => expect(sentOps(m)).toHaveLength(1));
+  });
+
+  it('text of the vault shows the characters that hide or reorder text, and a link names its host', async () => {
+    const m = make({ token: 't' });
+    made = m;
+    const rlo = String.fromCodePoint(0x202e);
+    m.hub.capabilities = null;
+    m.hub.doc = snapshot([], 'rev:1');
+    m.hub.pathsDoc = { kind: 'tasks.paths', rev: 'p1', digest: 'd', items: [{ ...ENTRY, title: `Lua${rlo}txt` }], incomplete: [] };
+    const nodes = doc().nodes.map((n) =>
+      n.key === 'meta' ? { ...n, label: `meta${rlo}fdp.exe`, reason: `weil${rlo}x`, state: 'seen' as const, derived: 'seen' as const } : n.key === 'manual' ? { ...n, note: `Notiz${rlo}` } : n,
+    );
+    m.hub.pathDocs.set('lib/lua', { ...doc('e1', nodes), path: { ...ENTRY, title: `Lua${rlo}txt`, summary: `kurz${rlo}` } });
+    await m.app.start(null);
+    const page = document.createElement('div');
+    document.body.append(page);
+    mounted = mount(PathsView, { target: page, props: { app: m.app } });
+    await settle();
+    await vi.waitFor(() => expect(page.querySelector('[data-point="meta"]')).not.toBeNull());
+    const shown = page.textContent ?? '';
+    expect(shown).not.toContain(rlo);
+    expect(shown).toContain('meta⟦U+202E⟧fdp.exe');
+    expect(shown).toContain('Lua⟦U+202E⟧txt');
+    expect(shown).toContain('kurz⟦U+202E⟧');
+    expect(shown).toContain('weil⟦U+202E⟧x');
+    expect(shown).toContain('Notiz⟦U+202E⟧');
+    const labels = [...page.querySelectorAll('[aria-label]')].map((e) => e.getAttribute('aria-label') ?? '');
+    expect(labels.some((l) => l.includes(rlo))).toBe(false);
+    expect(point(page, 'manual').querySelector('.host')?.textContent).toBe(' (www.lua.org)');
+  });
+
+  it('a folded point stays folded when a point is added above it, and no other point is folded instead', async () => {
+    const { m, page } = await show();
+    point(page, 'lua').querySelector<HTMLButtonElement>('button.fold')!.click();
+    await settle();
+    expect(page.querySelector('[data-point="manual"]')).toBeNull();
+    m.hub.pathDocs.set('lib/lua', shifted());
+    m.app.writes += 1;
+    await vi.waitFor(() => expect(page.querySelector('[data-point="intro2"]')).not.toBeNull());
+    expect(point(page, 'lua').querySelector('button.fold')?.getAttribute('aria-expanded')).toBe('false');
+    expect(page.querySelector('[data-point="manual"]')).toBeNull();
+    expect(point(page, 'intro2').querySelector('button.fold')?.getAttribute('aria-expanded')).toBe('true');
+    expect(page.querySelector('[data-point="under"]')).not.toBeNull();
   });
 
   it('a path that cannot be read says so and offers to try again', async () => {
