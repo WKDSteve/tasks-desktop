@@ -35,7 +35,9 @@
   let { app }: { app: App } = $props();
   const t = (key: Key, params: Record<string, string | number> = {}) => translate(app.lang, key, params);
 
-  type Doc = { state: 'loading' } | { state: 'ok'; doc: TaskDocument } | { state: 'failed'; etag?: string };
+  // A task read again (its file changed, as after every tick) keeps the document it showed in `shown`: the card draws it
+  // with its boxes held still until the new one is there, instead of folding up into "Reading the task ..." each time.
+  type Doc = { state: 'loading'; shown?: TaskDocument } | { state: 'ok'; doc: TaskDocument } | { state: 'failed'; etag?: string };
   type Snap = { state: 'loading' } | { state: 'ok'; rows: string[] } | { state: 'failed'; code: string };
 
   const groups = $derived(abnahmeOf(app.shown));
@@ -57,7 +59,9 @@
   });
 
   async function read(id: string, etag: string | undefined): Promise<void> {
-    docs = { ...docs, [id]: { state: 'loading' } };
+    const had = docs[id];
+    const shown = had?.state === 'ok' ? had.doc : had?.state === 'loading' ? had.shown : undefined;
+    docs = { ...docs, [id]: { state: 'loading', shown } };
     try {
       const doc = await app.readTask(id);
       docs = { ...docs, [id]: { state: 'ok', doc } };
@@ -113,6 +117,24 @@
     return written;
   }
 
+  /**
+   * A click on a box. The card stays drawn while the task is read again, so a box whose tick was not written keeps the
+   * click's mark unless it is set back here: to what the task, as read now, says of that point.
+   */
+  async function tickBox(box: HTMLInputElement, task: TaskEntry, doc: TaskDocument, item: Item): Promise<void> {
+    if (await tick(task.id, doc, item, box.checked)) return;
+    const drawn = docOf(docs[task.id]);
+    const now = drawn ? pointsOf(task, drawn.doc).find((p) => p.line === item.line) : undefined;
+    box.checked = now?.checked ?? item.checked;
+  }
+
+  /** The document a card draws: the one read, or while it is read again the one it showed before (held still). */
+  function docOf(entry: Doc | undefined): { doc: TaskDocument; stale: boolean } | null {
+    if (entry?.state === 'ok') return { doc: entry.doc, stale: false };
+    if (entry?.state === 'loading' && entry.shown) return { doc: entry.shown, stale: true };
+    return null;
+  }
+
   /** The points of a task to tick, in the order drawn: its waiting sheets' criteria, or its acceptance boxes. */
   function pointsOf(task: TaskEntry, doc: TaskDocument): Item[] {
     if (task.sheets) return waiting(parseSheets(doc.body)).flatMap((s) => [...s.items.filter((i) => i.kind === 'judge'), ...s.items.filter((i) => i.kind === 'manual')]);
@@ -125,9 +147,10 @@
     const out: Stop[] = [];
     for (const task of tasks) {
       out.push({ key: task.id, id: task.id });
-      const entry = docs[task.id];
-      if (entry?.state !== 'ok') continue;
-      for (const item of pointsOf(task, entry.doc)) out.push({ key: `${task.id}#${item.line}`, id: task.id, item });
+      // A task read again keeps its points here too: the cursor on one of them stays where it is.
+      const drawn = docOf(docs[task.id]);
+      if (!drawn) continue;
+      for (const item of pointsOf(task, drawn.doc)) out.push({ key: `${task.id}#${item.line}`, id: task.id, item });
     }
     return out;
   });
@@ -185,16 +208,16 @@
   const headings: Record<Group, Key> = { inbox: 'abnahme.group.inbox', manual: 'abnahme.group.manual', hand: 'abnahme.group.hand' };
 </script>
 
-{#snippet point(task: TaskEntry, doc: TaskDocument, item: Item)}
+{#snippet point(task: TaskEntry, doc: TaskDocument, item: Item, stale: boolean)}
   {@const key = `${task.id}#${item.line}`}
   {@const here = cursor === key}
   <label class:cursor={here} data-cursor={here ? 'true' : undefined} data-hint={t('hint.form.abnahme.tick')}>
     <input
       type="checkbox"
       checked={item.checked}
-      disabled={doc.body_truncated || app.saving}
+      disabled={doc.body_truncated || app.saving || stale}
       onfocus={() => (cursor = key)}
-      onchange={(event) => void tick(task.id, doc, item, event.currentTarget.checked)}
+      onchange={(event) => void tickBox(event.currentTarget, task, doc, item)}
     />
     <span>{item.text}</span>
   </label>
@@ -224,6 +247,7 @@
         <h3 id={`abnahme-group-${group}`}>{t(headings[group])} <span class="n" data-count={members.length}>({members.length})</span></h3>
         {#each members as task (task.id)}
           {@const entry = docs[task.id]}
+          {@const drawn = docOf(entry)}
           {@const trouble = troubleOf(task)}
           {@const head = cursor === task.id}
           <article class="task" data-task={task.id} data-group={groupOf(task)}>
@@ -260,16 +284,16 @@
                 {/if}
               </div>
             {/if}
-            {#if !entry || entry.state === 'loading'}
-              <p class="note" role="status">{t('abnahme.loading')}</p>
-            {:else if entry.state === 'failed'}
+            {#if entry?.state === 'failed'}
               <p class="note" role="alert">{t('abnahme.failed')}</p>
+            {:else if !drawn}
+              <p class="note" role="status">{t('abnahme.loading')}</p>
             {:else if task.sheets}
-              {@const sheets = parseSheets(entry.doc.body)}
+              {@const sheets = parseSheets(drawn.doc.body)}
               {@const open = waiting(sheets)}
               {@const done = progress(sheets)}
               <p class="count" role="status">{t('abnahme.progress', { ticked: done.ticked, total: done.total })}</p>
-              {#if entry.doc.body_truncated}<p class="note" role="alert">{t('abnahme.truncated')}</p>{/if}
+              {#if drawn.doc.body_truncated}<p class="note" role="alert">{t('abnahme.truncated')}</p>{/if}
               {#if changed === task.id}<p class="note" role="alert">{t('abnahme.changed')}</p>{/if}
               {#each open as sheet (sheet.id ?? sheet.title)}
                 <div class="sheet">
@@ -299,7 +323,7 @@
                       <fieldset class="points">
                         <legend>{t(kind === 'judge' ? 'abnahme.judge' : 'abnahme.manual')}</legend>
                         {#each items as item (item.line)}
-                          {@render point(task, entry.doc, item)}
+                          {@render point(task, drawn.doc, item, drawn.stale)}
                         {/each}
                       </fieldset>
                     {/if}
@@ -313,16 +337,16 @@
                 </div>
               {/if}
             {:else}
-              {@const items = parseAcceptance(entry.doc.body)}
+              {@const items = parseAcceptance(drawn.doc.body)}
               {@const done = tickedOf(items)}
               <p class="count" role="status">{t('abnahme.progress', { ticked: done.ticked, total: done.total })}</p>
-              {#if entry.doc.body_truncated}<p class="note" role="alert">{t('abnahme.truncated')}</p>{/if}
+              {#if drawn.doc.body_truncated}<p class="note" role="alert">{t('abnahme.truncated')}</p>{/if}
               {#if changed === task.id}<p class="note" role="alert">{t('abnahme.changed')}</p>{/if}
               {#if items.length > 0}
                 <fieldset class="points">
                   <legend>{t('abnahme.acceptance')}</legend>
                   {#each items as item (item.line)}
-                    {@render point(task, entry.doc, item)}
+                    {@render point(task, drawn.doc, item, drawn.stale)}
                   {/each}
                 </fieldset>
               {:else}
