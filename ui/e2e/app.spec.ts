@@ -2675,6 +2675,45 @@ test('a routine: the detail sets its interval and rhythm, finishing it names the
   }
 });
 
+test('a date typed into the detail digit by digit is written once, when the field is left', async ({ page }) => {
+  await prepare(page);
+  await pair(page);
+  await showList(page);
+  const title = `Typed date e2e ${Date.now()}`;
+  await capture(page, title, { keep: true });
+  const dir = join(state().vault, 'lib.nvim', 'ROADMAP', 'tasks');
+  const file = readdirSync(dir).find((name) => readFileSync(join(dir, name), 'utf8').includes(`title: ${title}`));
+  expect(file, 'the task file was written').toBeDefined();
+  const writes: string[] = [];
+  page.on('request', (r) => {
+    if (r.method() === 'POST' && new URL(r.url()).pathname === '/api/tasks/ops') writes.push(r.postData() ?? '');
+  });
+  const due = taskFloat(page).locator('aside.detail input[data-field="due"]');
+  // Chrome orders the parts of the field by the language of the system, not of the page: the 11th of November is the
+  // same in either order of day and month. On the way to 2027 it holds 0002, 0020 and 0202, each a valid date and a
+  // `change`.
+  await due.focus();
+  await page.keyboard.type('11112027', { delay: 30 });
+  await expect(due).toHaveValue('2027-11-11');
+  // Give a write that should not be there the time to go out.
+  await page.waitForTimeout(500);
+  expect(writes, 'nothing is written while the date is typed').toEqual([]);
+  // Tab first walks the parts of the field (where it lands after the year differs between the orders of the parts),
+  // then leaves it: that is the one write.
+  await write(page, () =>
+    expect(async () => {
+      await page.keyboard.press('Tab');
+      await expect(due).not.toBeFocused({ timeout: 300 });
+    }).toPass({ timeout: 5000 }),
+  );
+  expect(writes).toHaveLength(1);
+  expect(writes[0]).toContain('"due":"2027-11-11"');
+  await expect.poll(() => readFileSync(join(dir, file!), 'utf8')).toMatch(/^due: 2027-11-11$/m);
+  await expect(due).toHaveValue('2027-11-11');
+  expect(consoleProblems.get(page)).toEqual([]);
+  await closeFloat(page);
+});
+
 test('a routine: its detail lists the finished rounds, and discarding it asks first that it ends the routine', async ({ page }) => {
   await prepare(page);
   await pair(page);

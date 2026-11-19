@@ -226,6 +226,30 @@
   // of the inbox, j and k under the float, c) would then act on what is typed next. The field the person is in is
   // followed as the focus moves (`data-field`), not taken when the write starts: one clicked or tabbed into meanwhile
   // is the one that gets the focus back. A field left for another control or for the page is not followed any more.
+  /**
+   * A date field writes when it is left, or on Enter: while a date is typed the browser passes through dates nobody
+   * meant (the year 2027 is 0002, 0020, 0202 on its way, each one a valid date and a `change`). A `change` without a
+   * key pressed since the field got the focus is the browser's calendar (or its clear button): that one writes at once.
+   */
+  const typedDates = new Set<string>();
+  async function setDate(field: HTMLInputElement, id: string, key: 'due' | 'start'): Promise<void> {
+    typedDates.delete(key);
+    const before = app.tasks.find((x) => x.id === id);
+    if (!before) return;
+    const value = field.value;
+    if (value === (shownTask(before, app.draftOf(id))[key] ?? '')) return;
+    // A date the engine refused does not stay in the field: the fields are drawn anew after every write ({#key} below).
+    await app.editField(id, key, value === '' ? null : value);
+  }
+  function onDateKey(event: KeyboardEvent, id: string, key: 'due' | 'start'): void {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      if (!event.repeat) void setDate(event.currentTarget as HTMLInputElement, id, key);
+      return;
+    }
+    if (event.key !== 'Tab' && event.key !== 'Shift' && event.key !== 'Escape') typedDates.add(key);
+  }
+
   let root = $state<HTMLElement | undefined>();
   let followed: string | null = null;
   const fieldOf = (target: EventTarget | null): string | null =>
@@ -599,10 +623,12 @@
               value={shown[key] ?? ''}
               data-field={key}
               disabled={app.locked}
+              onfocus={() => typedDates.delete(key)}
+              onkeydown={(e) => onDateKey(e, shown.id, key)}
               onchange={(e) => {
-                const value = e.currentTarget.value;
-                if (value !== (shown[key] ?? '')) void app.editField(shown.id, key, value === '' ? null : value);
+                if (!typedDates.has(key)) void setDate(e.currentTarget, shown.id, key);
               }}
+              onblur={(e) => void setDate(e.currentTarget, shown.id, key)}
             />
           </label>
         {/each}
