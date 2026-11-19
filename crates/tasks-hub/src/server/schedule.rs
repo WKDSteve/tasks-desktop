@@ -66,7 +66,7 @@ pub(super) fn spawn_schedule(
         loop {
             if job.wanted() {
                 if read_at.is_none_or(|at| at.elapsed() >= REFRESH_EVERY) {
-                    if let Some(fresh) = read(&job, engine.as_ref(), &store).await {
+                    if let Some(fresh) = read(&job, engine.as_ref(), &store, &inputs).await {
                         inputs = fresh;
                     }
                     read_at = Some(tokio::time::Instant::now());
@@ -93,8 +93,14 @@ pub(super) fn spawn_schedule(
 }
 
 /// The reminders of the snapshot and the planned meetings of the window; `None` when the snapshot cannot be read (the
-/// last ones are kept). Meetings the engine does not answer are none.
-async fn read(job: &ScheduleJob, engine: &dyn Engine, store: &SnapshotStore) -> Option<Inputs> {
+/// last ones are kept). When the engine does not answer the meetings (or not all their pages), the `last` ones are
+/// kept: a moment without an engine drops no notice.
+async fn read(
+    job: &ScheduleJob,
+    engine: &dyn Engine,
+    store: &SnapshotStore,
+    last: &Inputs,
+) -> Option<Inputs> {
     let cached = store.current().await.ok()?;
     let reminders = tokio::task::spawn_blocking(move || {
         serde_json::from_slice::<serde_json::Value>(&cached.text)
@@ -104,8 +110,23 @@ async fn read(job: &ScheduleJob, engine: &dyn Engine, store: &SnapshotStore) -> 
     .await
     .ok()
     .flatten()?;
+    let meetings = if job.meetings {
+        read_meetings(job, engine)
+            .await
+            .unwrap_or_else(|| last.meetings.clone())
+    } else {
+        Vec::new()
+    };
+    Some(Inputs {
+        meetings,
+        reminders,
+    })
+}
+
+/// Every page of the planned meetings of the window, or `None` when one of them is not answered.
+async fn read_meetings(job: &ScheduleJob, engine: &dyn Engine) -> Option<Vec<plan::Meeting>> {
     let mut meetings = Vec::new();
-    if job.meetings {
+    {
         let (since, until) = plan::window(job.scheduler.now(), &job.scheduler.zone);
         let mut offset = 0u64;
         for _ in 0..MAX_PAGES {
@@ -113,16 +134,12 @@ async fn read(job: &ScheduleJob, engine: &dyn Engine, store: &SnapshotStore) -> 
                 "since": since.to_string(), "until": until.to_string(), "status": ["planned"],
                 "limit": crate::engine::LIST_PAGE, "offset": offset,
             });
-            let Ok(reply) = engine.call(Calls::Meetings, Some(&params)).await else {
-                break;
-            };
-            let Ok(doc) = serde_json::from_str::<serde_json::Value>(&reply.text) else {
-                break;
-            };
+            let reply = engine.call(Calls::Meetings, Some(&params)).await.ok()?;
+            let doc = serde_json::from_str::<serde_json::Value>(&reply.text).ok()?;
             if doc["kind"] != "tasks.meetings" {
-                break;
+                return None;
             }
-            let items = doc["items"].as_array().map_or(&[][..], Vec::as_slice);
+            let items = doc["items"].as_array()?;
             meetings.extend(items.iter().filter_map(plan::meeting_of));
             match doc["next_offset"].as_u64() {
                 Some(next) if next > offset => offset = next,
@@ -130,10 +147,7 @@ async fn read(job: &ScheduleJob, engine: &dyn Engine, store: &SnapshotStore) -> 
             }
         }
     }
-    Some(Inputs {
-        meetings,
-        reminders,
-    })
+    Some(meetings)
 }
 
 /// Has `due` a way out: a phone that listens for its kind, or a mail to an address of its item.
@@ -256,6 +270,8 @@ mod tests {
     struct Vault {
         tasks: Mutex<serde_json::Value>,
         meetings: Mutex<serde_json::Value>,
+        /// The engine answers no meetings (it is gone for a moment).
+        down: std::sync::atomic::AtomicBool,
     }
 
     impl Engine for Vault {
@@ -265,6 +281,10 @@ mod tests {
             params: Option<&'a serde_json::Value>,
         ) -> crate::engine::CallFuture<'a> {
             Box::pin(async move {
+                if method == Calls::Meetings && self.down.load(std::sync::atomic::Ordering::SeqCst)
+                {
+                    return Err(EngineError::Timeout);
+                }
                 let text = if method == Calls::Meetings {
                     assert_eq!(params.unwrap()["status"], json!(["planned"]));
                     json!({ "kind": "tasks.meetings", "items": self.meetings.lock().unwrap().clone() })
@@ -372,6 +392,7 @@ mod tests {
         let engine = Arc::new(Vault {
             tasks: Mutex::new(tasks),
             meetings: Mutex::new(meetings),
+            down: std::sync::atomic::AtomicBool::new(false),
         });
         let store = SnapshotStore::new(
             Some(engine.clone() as Arc<dyn Engine>),
@@ -498,6 +519,26 @@ mod tests {
         r.set("2026-11-24T17:30");
         pass(120).await;
         assert_eq!(r.told().len(), 3);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn a_moment_without_an_engine_drops_no_meeting() {
+        let r = rig(
+            "schedule-job-down",
+            "2026-11-24T13:00",
+            json!([]),
+            json!([meeting("pub/m", "2026-11-24T14:00", "2026-11-24T15:00")]),
+        )
+        .await;
+        pass(1).await;
+        // The meetings are read again (5 minutes), while the engine answers none.
+        r.engine
+            .down
+            .store(true, std::sync::atomic::Ordering::SeqCst);
+        pass(301).await;
+        r.set("2026-11-24T13:45");
+        pass(61).await;
+        assert_eq!(r.told(), [E_MEETING], "the meetings read before are kept");
     }
 
     #[tokio::test(start_paused = true)]
