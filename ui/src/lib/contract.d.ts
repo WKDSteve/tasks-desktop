@@ -1692,7 +1692,7 @@ export interface ViewSelect {
   query?: string;
 }
 /**
- * A task that names a ref: the ref, the task (id, area, status) and where it is, `open` (ROADMAP) or `done` (Backlog). Never a path.
+ * A task that names a ref: the ref, the task (id, area, status) and where it is, `open` (ROADMAP) or `done` (Backlog). Never a path. A meeting (`kind` `meeting`, capability `meeting_ops`) matches a task id it names in `tasks:` or behind a follow-up; it is `open` while planned.
  */
 export interface FindMatch {
   ref: string;
@@ -1700,6 +1700,7 @@ export interface FindMatch {
   area: string;
   status: string;
   location: "open" | "done";
+  kind?: "task" | "meeting";
 }
 /**
  * One meeting (`<area>/MEETINGS/<slug>.md`). A broken meeting is still here (`valid: false`, `problems`); a field that is missing is unknown. Nothing changes with the day: whether a meeting is past is for the reader to say from `starts_at` and `ends_at` (local wall time, or the time of `tz`).
@@ -1829,8 +1830,41 @@ export interface ResultEntry {
     | "attach"
     | "claim"
     | "release"
-    | "history_record";
+    | "history_record"
+    | "meeting_new"
+    | "meeting_set"
+    | "meeting_close"
+    | "meeting_capture"
+    | "meeting_attend"
+    | "meeting_followups"
+    | "board_save";
   id?: string;
+  /**
+   * `meeting_close`: the meeting has no `## Ergebnis` afterwards (allowed: a hint for the front end).
+   */
+  without_result?: boolean;
+  /**
+   * `meeting_followups`: one entry per follow-up line it worked on: the task made of it (`id`) or why not (`error`).
+   */
+  items?: {
+    n: number;
+    ok: boolean;
+    id?: string;
+    error?: string;
+    note?: string;
+  }[];
+  /**
+   * `board_save`: the preview of the board below its folder (`assets/boards/<name>.svg`).
+   */
+  preview?: string;
+  /**
+   * The version of a file: `sha256:` and 16 hex digits of the hash of its bytes.
+   */
+  etag?: string;
+  /**
+   * `board_save`: true when the board was new, false when it replaced one.
+   */
+  created?: boolean;
   ok: boolean;
   /**
    * `would_*` is what a dry run says; `blocked` is a move that cannot be made.
@@ -1911,7 +1945,7 @@ export interface ResultEntry {
    * `move_area`: the places that named the old id and now name the new one.
    */
   rewritten?: {
-    kind: "blocked_by" | "after" | "refs" | "plan_target";
+    kind: "blocked_by" | "after" | "refs" | "plan_target" | "meeting";
     id: string;
   }[];
 }
@@ -1930,7 +1964,21 @@ export interface Inverse {
     | "view_save"
     | "view_delete"
     | "plan_set"
-    | "project_set";
+    | "project_set"
+    | "meeting_set"
+    | "meeting_attend";
+  /**
+   * `tick_step` of a meeting: the section of the item (`agenda`, `followups`).
+   */
+  section?: "agenda" | "followups";
+  /**
+   * `meeting_attend`: the participant, by name.
+   */
+  name?: string;
+  /**
+   * `meeting_attend`: whether the participant is to be ticked present.
+   */
+  present?: boolean;
   id: string;
   /**
    * `tick_step`: the number of the step.
@@ -2020,7 +2068,7 @@ export interface MovePlan {
    * Places that name the old id and would dangle.
    */
   references: {
-    kind: "blocked_by" | "after" | "plan_target" | "refs" | "document";
+    kind: "blocked_by" | "after" | "plan_target" | "refs" | "document" | "meeting";
     id?: string;
     path?: string;
   }[];
