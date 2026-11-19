@@ -50,7 +50,8 @@ tokio = { version = "1", default-features = false, features = ["rt-multi-thread"
 # Folders of the tests come from its `Scratch` (removed on drop). It depends on this crate; Cargo allows that cycle for
 # dev-dependencies.
 hub-testkit = { path = "../hub-testkit" }
-# The invitation of a meeting (src/meetings.rs) is read back by an iCalendar parser of its own.
-icalendar = { version = "0.17", default-features = false, features = ["parser"] }
+# The invitation of a meeting (src/meetings.rs) is read back by an iCalendar parser of its own: `ical` (its one
+# dependency is thiserror; icalendar and calcard bring chrono, which is unmaintained, RUSTSEC-2026-0543).
+ical = { version = "0.11", default-features = false, features = ["ical"] }
 # The subsystem in the header of the program (tests/window_program.rs).
 appkit-testkit.workspace = true

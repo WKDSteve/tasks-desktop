@@ -686,42 +686,64 @@ mod tests {
         }
     }
 
-    fn parsed(ics: &str) -> icalendar::Calendar {
-        ics.parse::<icalendar::Calendar>()
-            .unwrap_or_else(|e| panic!("not iCalendar: {e}\n{ics}"))
+    /// The one calendar of `ics`, read by the `ical` parser (it unfolds the lines and splits the parameters).
+    fn parsed(ics: &str) -> ical::parser::ical::component::IcalCalendar {
+        let mut calendars = ical::IcalParser::new(std::io::BufReader::new(ics.as_bytes()));
+        let cal = calendars
+            .next()
+            .expect("a calendar")
+            .unwrap_or_else(|e| panic!("not iCalendar: {e}\n{ics}"));
+        assert!(calendars.next().is_none(), "one calendar:\n{ics}");
+        let version = cal.properties.iter().find(|p| p.name == "VERSION");
+        assert_eq!(version.and_then(|p| p.value.as_deref()), Some("2.0"));
+        cal
     }
 
-    fn event(cal: &icalendar::Calendar) -> &icalendar::Event {
-        let events: Vec<_> = cal
-            .components
-            .iter()
-            .filter_map(icalendar::CalendarComponent::as_event)
-            .collect();
-        assert_eq!(events.len(), 1, "{cal:?}");
-        events[0]
+    fn event(
+        cal: &ical::parser::ical::component::IcalCalendar,
+    ) -> &ical::parser::ical::component::IcalEvent {
+        assert_eq!(cal.events.len(), 1, "{cal:?}");
+        &cal.events[0]
     }
 
-    fn prop<'a>(ev: &'a icalendar::Event, name: &str) -> Option<&'a str> {
-        use icalendar::Component as _;
-        ev.property_value(name)
+    /// The value of the one property `name` (a property that is there twice is an error here).
+    fn prop<'a>(ev: &'a ical::parser::ical::component::IcalEvent, name: &str) -> Option<&'a str> {
+        let found = all(ev, name);
+        assert!(found.len() <= 1, "{name} twice: {ev:?}");
+        found.first().and_then(|p| p.value.as_deref())
     }
 
-    fn all<'a>(ev: &'a icalendar::Event, name: &str) -> Vec<&'a icalendar::Property> {
-        use icalendar::Component as _;
-        ev.multi_properties()
-            .get(name)
-            .map(|v| v.iter().collect())
-            .unwrap_or_default()
+    fn all<'a>(
+        ev: &'a ical::parser::ical::component::IcalEvent,
+        name: &str,
+    ) -> Vec<&'a ical::property::Property> {
+        ev.properties.iter().filter(|p| p.name == name).collect()
     }
 
-    fn summary_of(ev: &icalendar::Event) -> String {
-        use icalendar::Component as _;
-        ev.get_summary().expect("SUMMARY").to_owned()
+    /// A `TEXT` value as a calendar shows it (RFC 5545 3.3.11).
+    fn unescaped(value: &str) -> String {
+        let mut out = String::new();
+        let mut chars = value.chars();
+        while let Some(c) = chars.next() {
+            if c != '\\' {
+                out.push(c);
+                continue;
+            }
+            match chars.next() {
+                Some('n' | 'N') => out.push('\n'),
+                Some(other) => out.push(other),
+                None => panic!("a lone backslash at the end of {value:?}"),
+            }
+        }
+        out
     }
 
-    fn description_of(ev: &icalendar::Event) -> String {
-        use icalendar::Component as _;
-        ev.get_description().expect("DESCRIPTION").to_owned()
+    fn summary_of(ev: &ical::parser::ical::component::IcalEvent) -> String {
+        unescaped(prop(ev, "SUMMARY").expect("SUMMARY"))
+    }
+
+    fn description_of(ev: &ical::parser::ical::component::IcalEvent) -> String {
+        unescaped(prop(ev, "DESCRIPTION").expect("DESCRIPTION"))
     }
 
     #[test]
@@ -763,7 +785,10 @@ mod tests {
         );
         let attendees = all(ev, "ATTENDEE");
         assert_eq!(attendees.len(), 1, "{ics}");
-        assert_eq!(attendees[0].value(), "mailto:morty@example.org");
+        assert_eq!(
+            attendees[0].value.as_deref(),
+            Some("mailto:morty@example.org")
+        );
         assert!(ics.contains("ROLE=OPT-PARTICIPANT"), "{ics}");
         assert!(
             !ics.contains("bad;x"),

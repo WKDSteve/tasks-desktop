@@ -917,7 +917,7 @@ platform backends are about twenty) and its policy is in the repository:
 
 * `Cargo.lock` is committed and every build uses `--locked`.
 * The one decoder of files from a vault is `image` (PNG, JPEG, WebP; the previews of meetings), with its limits on
-  size and memory set by the hub; `icalendar` is a dependency of the tests only (it reads the invitations back).
+  size and memory set by the hub; `ical` is a dependency of the tests only (it reads the invitations back).
 * `deny.toml` allows a short list of licenses, crates.io and one git source
   (appkit), no wildcard versions; `cargo audit` and `cargo deny check` run
   in CI. Unmaintained crates are errors in the whole tree, the dependencies
