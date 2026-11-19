@@ -104,13 +104,25 @@ export function meetingLine(text: string): boolean {
   return text.trim() !== '' && new TextEncoder().encode(text).length <= MEETING_LINE_MAX_BYTES && !/\p{Cc}/u.test(text);
 }
 
+/**
+ * Is `text` a day of the calendar, `YYYY-MM-DD` (`schedule::day_of` of the hub)? `Date.parse` is no judge: it takes
+ * `2026-02-30` and rolls it over to March.
+ */
+export function isDay(text: string): boolean {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(text);
+  if (!m) return false;
+  const [y, mo, d] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  const at = new Date(Date.UTC(y, mo - 1, d));
+  return at.getUTCFullYear() === y && at.getUTCMonth() === mo - 1 && at.getUTCDate() === d;
+}
+
 /** The question of `meetings` from its query, as the hub asks it (`meetings_request`), or why it is refused. */
 export function meetingsParams(q: Map<string, string>): Record<string, unknown> | string {
   const params: Record<string, unknown> = {};
   for (const key of ['since', 'until'] as const) {
     const day = q.get(key);
     if (day === undefined) continue;
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || Number.isNaN(Date.parse(`${day}T00:00:00Z`))) return 'since and until are days, YYYY-MM-DD';
+    if (!isDay(day)) return 'since and until are days, YYYY-MM-DD';
     params[key] = day;
   }
   const area = q.get('area');

@@ -626,6 +626,9 @@ test('meetings, meeting and meeting_parse: judged as the Rust hub judges them, t
   for (const [path, code] of [
     ['meetings?since=yesterday', 'bad_query'],
     ['meetings?since=2026-13-40', 'bad_query'],
+    // a day the calendar does not have: the hub refuses it, it does not roll over to March
+    ['meetings?since=2026-02-30', 'bad_query'],
+    ['meetings?until=2026-04-31', 'bad_query'],
     ['meetings?status=held', 'bad_query'],
     ['meetings?task=nope', 'bad_query'],
     ['meetings?limit=101', 'bad_query'],
