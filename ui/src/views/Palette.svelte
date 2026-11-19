@@ -2,11 +2,11 @@
   // The command palette (Ctrl+K) of the page: the box, the list and the keys are the kit's; this file gives it the
   // actions of the page, the tasks, the words, and what a choice does (it is remembered and comes first next time).
   import KitPalette from 'appkit-ui/Palette.svelte';
-  import { paletteItems, type PaletteItem } from 'appkit-ui/palette';
+  import { ACTION_PREFIX, PALETTE_LIMIT, paletteItems, type PaletteItem } from 'appkit-ui/palette';
   import type { App } from '../lib/app.svelte';
   import { floating } from '../lib/floating';
   import { translate, type Key } from '../lib/i18n';
-  import { paletteActions } from '../lib/paletteActions';
+  import { paletteActions, quickMeetingAction } from '../lib/paletteActions';
 
   let { app }: { app: App } = $props();
   const t = (key: Key, params: Record<string, string | number> = {}) =>
@@ -14,10 +14,15 @@
 
   // The actions are worked out while the palette is open (the selection may change under it).
   function items(query: string): PaletteItem[] {
-    return paletteItems(query, paletteActions(app), app.tasks, app.frecency, Date.now(), {
+    const found = paletteItems(query, paletteActions(app), app.tasks, app.frecency, Date.now(), {
       entryPrefix: 'task:',
       recent: 5,
     });
+    // The typed line as a meeting, last: the engine reads it into the form (nothing is saved before "Create").
+    const quick = quickMeetingAction(app, query);
+    if (!quick) return found;
+    const item: PaletteItem = { kind: 'action', key: `${ACTION_PREFIX}${quick.key}`, label: quick.label, hint: quick.hint ?? '', action: quick, score: 0 };
+    return [...found.slice(0, PALETTE_LIMIT - 1), item];
   }
 
   async function choose(item: PaletteItem): Promise<void> {

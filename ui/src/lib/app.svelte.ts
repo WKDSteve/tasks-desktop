@@ -36,6 +36,8 @@ import type {
   Finished,
   History,
   Links,
+  MeetingDocument,
+  Meetings,
   MovePlan,
   Next,
   PathDocument,
@@ -150,6 +152,17 @@ import {
 } from './lists';
 import { LEARNING, learningIds, withoutLearning } from './learning';
 import { localToday } from './remind';
+import {
+  MEETINGS_EVER,
+  emptyMeetingForm,
+  formOfProposal,
+  meetingNewOp,
+  participantsHeading,
+  participantsText,
+  wallTime,
+  type MeetingForm,
+  type MeetingPreview,
+} from './meetings';
 import type { RemindersMail } from './reminders';
 import { DEFAULT_ROW_ACTIONS, parseRowActions, serializeRowActions, type RowActionPrefs } from './rowActions';
 import type { RepoStatus } from './repoStatus';
@@ -1617,6 +1630,153 @@ export class App {
   closePlanWizard(): void {
     this.planningThen = null;
     this.planning = false;
+  }
+
+  // ── meetings (concept 7.1, 7.2) ──────────────────────────────────────────────────────────────────────────────────
+
+  /** The form of a new meeting while it is open: what it starts from (the fields, or the proposal of a quick line). */
+  meetingDraft = $state<MeetingForm | null>(null);
+  /** The words of the quick line the engine could not read (`problems`), shown in the form; and whether it took today. */
+  meetingNotes = $state<{ problems: string[]; assumedDay: boolean }>({ problems: [], assumedDay: false });
+  /** The meeting whose page is open. */
+  meetingOpen = $state<string | null>(null);
+
+  /** The engine can read and make meetings: the form, the page and the section of the task are offered. */
+  get canMeetings(): boolean {
+    return this.can('meetings') && this.can('meeting');
+  }
+  get canMakeMeetings(): boolean {
+    return this.canMeetings && this.can('meeting_ops') && !this.readOnly;
+  }
+
+  /** Now, in milliseconds, by the clock of the page (a test stands it still). */
+  nowMs(): number {
+    return this.env.now();
+  }
+
+  /** The wall time of now, `YYYY-MM-DDTHH:MM`, of this machine. */
+  private wallNow(): string {
+    return wallTime(this.env.now());
+  }
+
+  /** The area a meeting for `tasks` goes to: the first task's, else the one area chosen, else the first one. */
+  private meetingArea(tasks: readonly string[], area?: string): string {
+    return area ?? (tasks[0] ? areaOfId(tasks[0]) : undefined) ?? this.writeArea ?? [...this.allAreaNames][0] ?? '';
+  }
+
+  /** Open the form of a new meeting, for the tasks named (the task of a detail is filled in). */
+  openMeetingForm(opts: { tasks?: string[]; area?: string } = {}): void {
+    if (this.refusedReadOnly()) return;
+    if (this.phase !== 'ready' || !this.canMakeMeetings) return;
+    const tasks = opts.tasks ?? [];
+    this.meetingNotes = { problems: [], assumedDay: false };
+    this.meetingDraft = emptyMeetingForm(this.meetingArea(tasks, opts.area), this.wallNow(), tasks);
+  }
+
+  /**
+   * The quick capture (concept 5.4): the engine reads the line into a proposal, and the form opens with it. Nothing is
+   * written until the person makes the meeting there.
+   */
+  async quickMeeting(line: string): Promise<void> {
+    if (this.refusedReadOnly()) return;
+    if (this.phase !== 'ready' || !this.canMakeMeetings || !this.can('meeting_parse')) return;
+    try {
+      const proposal = await this.env.hub.meetingParse(line);
+      const tasks = (proposal.fields.tasks ?? []).filter((id) => typeof id === 'string');
+      const base = emptyMeetingForm(this.meetingArea(tasks), this.wallNow());
+      this.meetingNotes = { problems: [...proposal.problems], assumedDay: proposal.assumed.includes('date') };
+      this.meetingDraft = formOfProposal(base, proposal);
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 400) this.say('error', 'meeting.quick.refused', { message: error.message });
+      else this.say('error', 'write.failed', { code: error instanceof ApiError ? error.code : 'offline' });
+    }
+  }
+
+  closeMeetingForm(): void {
+    this.meetingDraft = null;
+  }
+
+  /**
+   * What the meeting of the form would be called, or why the engine would refuse it: a dry run of `meeting_new`
+   * (nothing is written). The rules of a meeting stay the engine's.
+   */
+  async previewMeeting(form: MeetingForm, signal?: AbortSignal): Promise<MeetingPreview> {
+    if (form.title.trim() === '' || form.area === '' || this.readOnly) return { kind: 'unknown' };
+    try {
+      const result = await this.env.hub.ops({ client_op_id: this.opId(), dry_run: true, ops: [meetingNewOp(form, this.lang)] }, signal);
+      const entry = result.results[0];
+      if (entry?.ok && typeof entry.id === 'string') return { kind: 'ok', id: entry.id };
+      return { kind: 'refused', message: entry?.error?.message ?? '' };
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 400) return { kind: 'refused', message: error.message };
+      return { kind: 'unknown' };
+    }
+  }
+
+  /** The service of a meeting address in the engine's words (`online_service` of `meeting_parse`), or null. */
+  async meetingService(online: string, signal?: AbortSignal): Promise<string | null> {
+    if (!this.can('meeting_parse') || online.trim() === '' || /\s/.test(online.trim())) return null;
+    try {
+      const proposal = await this.env.hub.meetingParse(online.trim(), signal);
+      return proposal.fields.online !== undefined ? (proposal.online_service ?? null) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Make the meeting of the form, then write its participants into `## Teilnehmer` and attach what the form gathered
+   * (the first image as its cover, when asked); its page opens. The id is the one the engine gave (another than the dry run's when the name was taken meanwhile).
+   */
+  async createMeeting(
+    form: MeetingForm,
+    files: readonly File[] = [],
+    screenshot = false,
+    coverFirst = false,
+  ): Promise<string | undefined> {
+    const result = await this.write([meetingNewOp(form, this.lang)], { undoable: false });
+    const first = result?.results[0];
+    const id = first?.ok && first.outcome === 'created' && typeof first.id === 'string' ? first.id : undefined;
+    if (!id) return undefined;
+    this.meetingDraft = null;
+    const people = participantsText(form.participants);
+    if (people !== '') {
+      await this.write([{ op: 'set_section', id, heading: `## ${participantsHeading(this.lang)}`, text: people }], { undoable: false });
+    }
+    // the first image first, when it is to be the cover: its path is the one the engine gave it
+    const image = coverFirst ? files.find((f) => kindOfFile(f) === 'image') : undefined;
+    if (image) {
+      const asset = await this.attachFileAsset(id, image, 'image');
+      if (asset) await this.write([{ op: 'meeting_set', id, patch: { cover: asset } }], { undoable: false });
+    }
+    const rest = files.filter((f) => f !== image);
+    if (rest.length > 0 || screenshot) await this.attachAll(id, rest, screenshot);
+    this.openMeeting(id);
+    return id;
+  }
+
+  /** Show the page of meeting `id`. */
+  openMeeting(id: string): void {
+    if (!this.canMeetings) return;
+    this.meetingOpen = id;
+  }
+
+  closeMeeting(): void {
+    this.meetingOpen = null;
+  }
+
+  /**
+   * The meetings of task `id`, whenever they are (the engine's order: the earliest first). The task names at most 20
+   * (`meetings`), so one page holds them all; a window of the engine's default (30 days back, 90 ahead) or of a year
+   * would leave out a meeting the task counts.
+   */
+  meetingsOfTask(id: string, signal?: AbortSignal): Promise<Meetings> {
+    return this.env.hub.meetings({ task: id, since: MEETINGS_EVER.since, until: MEETINGS_EVER.until, limit: 100 }, signal);
+  }
+
+  /** One meeting with its body and its sections. */
+  readMeeting(id: string, signal?: AbortSignal): Promise<MeetingDocument> {
+    return this.env.hub.meeting(id, signal);
   }
 
   /**
@@ -3342,14 +3502,19 @@ export class App {
    * it the file lies in `assets/` itself. True when it was attached.
    */
   async attachFile(id: string, file: File, kind?: AssetKind): Promise<boolean> {
-    if (this.refusedReadOnly() || this.uploading !== null) return false;
+    return (await this.attachFileAsset(id, file, kind)) !== null;
+  }
+
+  /** `attachFile`, answering the path of the asset below the folder (`assets/images/x.png`), or null when it failed. */
+  async attachFileAsset(id: string, file: File, kind?: AssetKind): Promise<string | null> {
+    if (this.refusedReadOnly() || this.uploading !== null) return null;
     this.uploading = id;
     try {
       const result = await this.env.hub.upload(id, file, kind);
       const entry = result.results[0];
       if (!entry?.ok) {
         this.say('error', 'write.failed', { code: entry?.error?.code ?? 'failed' });
-        return false;
+        return null;
       }
       this.attached = entry.link ? { id: entry.id ?? id, link: entry.link } : null;
       this.say(
@@ -3357,11 +3522,11 @@ export class App {
         result.large_for_git ? 'attach.file_done_large' : 'attach.file_done',
         { asset: entry.asset ?? '' },
       );
-      return true;
+      return typeof entry.asset === 'string' ? entry.asset : '';
     } catch (error) {
       if (error instanceof ApiError && error.code === 'disk_full') this.say('error', 'attach.disk_full');
       else this.say('error', 'write.failed', { code: error instanceof ApiError ? error.code : 'offline' });
-      return false;
+      return null;
     } finally {
       this.uploading = null;
     }

@@ -19,6 +19,7 @@ export function paletteActions(app: App): PaletteAction[] {
   add('capture', t('menu.capture'), () => app.openCapture());
   add('intent', t('menu.intent'), () => app.openIntent(), t('hint.item.menu.intent'));
   if (app.can('plan_new')) add('plan.new', t('plan.new.button'), () => app.openPlanWizard());
+  if (app.canMakeMeetings) add('meeting.new', t('palette.meeting_new'), () => app.openMeetingForm({ tasks: app.selectedId === null ? [] : [app.selectedId] }));
 
   // The task that is selected: what the keys of the board and the form do, by name.
   const selected = app.selectedId === null ? undefined : app.tasks.find((x) => x.id === app.selectedId);
@@ -119,4 +120,15 @@ export function paletteActions(app: App): PaletteAction[] {
   // and a vault has many tags.
   for (const { tag, count } of tagCounts(app.tasks)) add(`tag.${tag}`, t('palette.tag', { tag }), () => app.showTag(tag), t('tags.count', { n: count }));
   return out;
+}
+
+/**
+ * The quick capture of a meeting (concept 5.4): what is typed into the palette, offered as a line the engine reads into
+ * the form of a new meeting. Only for a line that could name one (a few characters at least); nothing is saved.
+ */
+export function quickMeetingAction(app: App, query: string): PaletteAction | null {
+  const line = query.trim();
+  if (line.length < 3 || line.length > 1000 || !app.canMakeMeetings || !app.can('meeting_parse')) return null;
+  const t = (key: Key, params: Record<string, string | number> = {}) => translate(app.lang, key, params);
+  return { key: 'meeting.quick', label: t('palette.meeting_quick', { line }), hint: t('hint.palette.meeting_quick'), run: () => app.quickMeeting(line) };
 }

@@ -17,6 +17,7 @@
   import { copyText } from '../lib/exportDom';
   import { kindOfFile } from '../lib/capture';
   import AttachBar from './AttachBar.svelte';
+  import Lazy from './Lazy.svelte';
   import PickField from './PickField.svelte';
   import { phaseOptions, planOptions, projectOptions } from '../lib/picker';
   import {
@@ -1223,6 +1224,9 @@
         </div>
       {/if}
     {/if}
+
+    <!-- The meetings of the task: loaded once an engine that has meetings is there (most vaults have none yet). -->
+    {#if app.canMeetings}<Lazy {app} load={() => import('./TaskMeetings.svelte')} extra={{ task }} />{/if}
 
     {#if app.findingsFor(task.id).length > 0}
       <h3>{t('check.section')}</h3>

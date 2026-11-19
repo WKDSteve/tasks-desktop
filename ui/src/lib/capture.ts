@@ -6,7 +6,7 @@
 export type Capture = 'video' | 'photo' | 'screenshot';
 
 /** The folder of the task an attached file goes to (the engine's `attach` with `kind`); none: `assets/` itself. */
-export type AssetKind = 'video' | 'image' | 'screenshot';
+export type AssetKind = 'video' | 'image' | 'screenshot' | 'audio';
 
 /** What the page has to take with; `window` in a browser, a double in a test. */
 export interface MediaEnv {
@@ -84,11 +84,13 @@ export function captureName(kind: Capture, ext: string, at: Date): string {
 export function kindOfFile(file: { type: string }): AssetKind | undefined {
   if (file.type.startsWith('video/')) return 'video';
   if (file.type.startsWith('image/')) return 'image';
+  // a recording or a dictation (a meeting's, a task's): `assets/audio/`
+  if (file.type.startsWith('audio/')) return 'audio';
   return undefined;
 }
 
 /** The folder a taken file goes to: a photo is an image. */
-export function kindOf(kind: Capture): AssetKind {
+export function kindOf(kind: Capture): Exclude<AssetKind, 'audio'> {
   return kind === 'photo' ? 'image' : kind;
 }
 

@@ -65,9 +65,10 @@ describe('kindOf', () => {
 });
 
 describe('kindOfFile', () => {
-  it('files a video and an image by what the browser says they are, and nothing else', () => {
+  it('files a video, an image and a recording by what the browser says they are, and nothing else', () => {
     expect(kindOfFile({ type: 'video/mp4' })).toBe('video');
     expect(kindOfFile({ type: 'image/png' })).toBe('image');
+    expect(kindOfFile({ type: 'audio/mp4' })).toBe('audio');
     expect(kindOfFile({ type: 'application/pdf' })).toBeUndefined();
     expect(kindOfFile({ type: '' })).toBeUndefined();
   });

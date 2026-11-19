@@ -405,6 +405,17 @@
             disabled: app.phase !== 'ready' || !app.can('plan_new'),
             onselect: () => app.openPlanWizard(),
           },
+          ...(app.canMeetings
+            ? [
+                {
+                  kind: 'action' as const,
+                  label: t('menu.meeting'),
+                  hint: t('hint.item.menu.meeting'),
+                  disabled: app.phase !== 'ready' || !app.canMakeMeetings,
+                  onselect: () => app.openMeetingForm(),
+                },
+              ]
+            : []),
           { kind: 'section', label: t('menu.sec.export') },
           { kind: 'info', label: t('menu.export_where') },
           ...exportItems(ready),
@@ -993,6 +1004,8 @@
   {#if app.phase === 'ready'}
     <Capture {app} />
     <Lazy {app} when={app.planning} load={() => import('./views/PlanWizard.svelte')} onfailed={() => app.closePlanWizard()} />
+    <Lazy {app} when={app.meetingDraft !== null} load={() => import('./views/MeetingForm.svelte')} onfailed={() => app.closeMeetingForm()} />
+    <Lazy {app} when={app.meetingOpen !== null} load={() => import('./views/MeetingPage.svelte')} onfailed={() => app.closeMeeting()} />
     <DoneDialog {app} />
     <PrioDialog {app} />
     <Lazy {app} when={app.matrix !== null} load={() => import('./views/Matrix.svelte')} onfailed={() => app.closeMatrix()} />

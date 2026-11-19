@@ -5,7 +5,7 @@ import type { IntentAnswer } from './intent';
 import { ApiError, type Hub, type HubArea, type OpsRequest, type SetupInfo, type SetupStep, type VaultList } from './api';
 import { App, type Env } from './app.svelte';
 import type { CachedList, ListStore } from './cache';
-import type { DonePreview, Groupings, Result, Snapshot, TaskDocument, TaskEntry, View, Views } from './contract';
+import type { DonePreview, Groupings, MeetingDocument, MeetingEntry, MeetingParse, Meetings, Result, Snapshot, TaskDocument, TaskEntry, View, Views } from './contract';
 import { task } from './fixtures';
 import type { PrintSheet } from './export';
 import type { RemindersMail } from './reminders';
@@ -437,6 +437,56 @@ export class FakeHub {
     if (signal) this.taskSignals.push(signal);
     return { task: this.doc.tasks.find((t) => t.id === id), body: 'body', steps: [] } as never;
   }
+  /** The meetings the hub knows (`meetings`, `meeting`), what was asked of them, and the proposals of the quick line. */
+  meetingItems: MeetingEntry[] = [];
+  meetingBodies = new Map<string, Partial<MeetingDocument>>();
+  meetingQueries: Record<string, unknown>[] = [];
+  meetingReads: string[] = [];
+  meetingParses: string[] = [];
+  /** The proposal `meetingParse` answers (a refusal: the error it throws). */
+  parseAnswer: Partial<MeetingParse> | ApiError | null = null;
+  async meetings(query: { task?: string; area?: string; since?: string; until?: string }): Promise<Meetings> {
+    this.meetingQueries.push({ ...query });
+    // as the engine: the meetings whose days touch the window (default: 30 days back, 90 ahead of 2026-11-19 here)
+    const since = query.since ?? '2026-10-20';
+    const until = query.until ?? '2027-02-17';
+    const items = this.meetingItems.filter(
+      (m) =>
+        (query.task === undefined || m.tasks.includes(query.task)) &&
+        (m.starts_at ?? '').slice(0, 10) <= until &&
+        (m.ends_at ?? m.starts_at ?? '').slice(0, 10) >= since,
+    );
+    return { kind: 'tasks.meetings', items, total: items.length, offset: 0, limit: 100, undated: 0, incomplete: [] } as unknown as Meetings;
+  }
+  async meeting(id: string): Promise<MeetingDocument> {
+    this.meetingReads.push(id);
+    const meeting = this.meetingItems.find((m) => m.id === id);
+    if (!meeting) throw new ApiError(404, 'not_found', 'no such meeting');
+    return {
+      kind: 'tasks.meeting',
+      meeting,
+      body: '',
+      body_truncated: false,
+      agenda: [],
+      participants: [],
+      documents: [],
+      followups: [],
+      ...this.meetingBodies.get(id),
+    } as unknown as MeetingDocument;
+  }
+  async meetingParse(text: string): Promise<MeetingParse> {
+    this.meetingParses.push(text);
+    if (this.parseAnswer instanceof ApiError) throw this.parseAnswer;
+    return {
+      kind: 'tasks.meetingparse',
+      title: text,
+      fields: { date: '2026-01-01' },
+      all_day: true,
+      assumed: ['date'],
+      problems: [],
+      ...this.parseAnswer,
+    } as MeetingParse;
+  }
   searches: string[] = [];
   searchStatus: 'ready' | 'building' = 'ready';
   async search(query: string) {
@@ -548,7 +598,9 @@ export class FakeHub {
         n: i + 1,
         op: op.op,
         id:
-          op.op === 'new'
+          op.op === 'meeting_new'
+            ? `${op.area}/made-meeting`
+            : op.op === 'new'
             ? 'pub/created'
             : op.op === 'plan_new' || op.op === 'project_new'
               ? `${op.area}/made-${op.op === 'plan_new' ? 'plan' : 'project'}`
@@ -559,7 +611,7 @@ export class FakeHub {
                   : undefined,
         ok: true,
         outcome:
-          op.op === 'new' || op.op === 'plan_new' || op.op === 'project_new' || (op.op === 'view_save' && op.id === undefined)
+          op.op === 'new' || op.op === 'plan_new' || op.op === 'project_new' || op.op === 'meeting_new' || (op.op === 'view_save' && op.id === undefined)
             ? request.dry_run
               ? 'would_create'
               : 'created'

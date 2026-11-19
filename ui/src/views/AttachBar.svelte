@@ -1,7 +1,7 @@
 <script lang="ts">
   // The buttons of a task's detail that attach something to it: a file from this computer, a video (a file, or
   // recorded with the camera), an image (a file, a photo with the camera, a picture of the screen, or the image on
-  // the clipboard of the hub's machine). Whatever is taken here goes the way of every file from the page: through the
+  // the clipboard of the hub's machine), a recording (a file: `assets/audio/`). Whatever is taken here goes the way of every file from the page: through the
   // hub's upload to the engine, which puts it into the folder of its kind (`assets/videos/`, `assets/images/`,
   // `assets/screenshots/`). An entry the page may not start (no camera for it, a browser that cannot) says why.
   import { onDestroy, tick, untrack } from 'svelte';
@@ -35,6 +35,7 @@
   let filePicker: HTMLInputElement | undefined = $state();
   let videoPicker: HTMLInputElement | undefined = $state();
   let imagePicker: HTMLInputElement | undefined = $state();
+  let audioPicker: HTMLInputElement | undefined = $state();
   const busy = $derived(app.locked || app.uploading !== null);
 
   function picked(input: HTMLInputElement, kind?: AssetKind): void {
@@ -264,6 +265,14 @@
     disabled={busy || taking !== null}
     onblocked={toldWhy}
   />
+  <button
+    type="button"
+    class="attach"
+    data-attach="audio"
+    data-hint={t('hint.ui.detail.attach_audio')}
+    disabled={busy || taking !== null}
+    onclick={() => audioPicker?.click()}>{t('attach.audio')}</button
+  >
   <input
     type="file"
     class="picker"
@@ -292,6 +301,16 @@
     aria-hidden="true"
     bind:this={imagePicker}
     onchange={(e) => picked(e.currentTarget, 'image')}
+  />
+  <input
+    type="file"
+    class="picker"
+    accept="audio/*"
+    data-audio-picker
+    tabindex="-1"
+    aria-hidden="true"
+    bind:this={audioPicker}
+    onchange={(e) => picked(e.currentTarget, 'audio')}
   />
 </span>
 {#if taking === null}

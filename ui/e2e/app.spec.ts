@@ -11075,3 +11075,77 @@ for (const scheme of ['light', 'dark'] as const) {
     expect(consoleProblems.get(page)).toEqual([]);
   });
 }
+
+test('a meeting: made from the detail of a task, opened on its page, and seen in the task; the palette reads a quick line into the form', async ({
+  page,
+}) => {
+  const meetings = join(state().vault, 'lib.nvim', 'MEETINGS');
+  const before = new Set(existsSync(meetings) ? readdirSync(meetings) : []);
+  try {
+    await watchViolations(page);
+    await pair(page);
+    await showList(page);
+    await open(page, 'lib.nvim/alpha');
+    const detail = page.locator('aside.detail');
+    await expect(detail.getByRole('heading', { name: 'Meetings', level: 3 })).toBeVisible();
+
+    // The form opens with the task filled in; the engine names the meeting before anything is written.
+    await detail.getByRole('button', { name: 'New meeting', exact: true }).click();
+    const form = page.getByRole('dialog', { name: 'New meeting' });
+    await expect(form).toBeVisible();
+    await form.getByLabel('Title', { exact: true }).fill('E2E meeting m001');
+    // a day to come, whatever the clock of the run says: the page opens on the preparation
+    await form.getByLabel('Date', { exact: true }).fill('2030-11-11');
+    await expect(form.getByRole('status').filter({ hasText: 'Will be made as' })).toHaveText(/Will be made as lib\.nvim\/e2e-meeting-m001/);
+    expect(existsSync(meetings) ? readdirSync(meetings).filter((f) => !before.has(f)) : []).toEqual([]);
+    await form.getByLabel('Place', { exact: true }).fill('Raum 3');
+    await form.getByLabel('Address to join').fill('https://teams.microsoft.com/l/meetup-join/e2e');
+    await expect(form.getByText('Teams', { exact: false }).first()).toBeVisible();
+    await form.getByRole('button', { name: 'Add a participant' }).click();
+    await form.getByPlaceholder('Name').fill('Rick');
+    await expectAccessible(page, 'the form of a new meeting');
+    await form.getByRole('button', { name: 'Create', exact: true }).click();
+    await expect(form).toHaveCount(0);
+
+    // Its page opens, on the tab of its time (it is to come: the preparation).
+    const meetingPage = page.getByRole('dialog', { name: /E2E meeting m001/ });
+    await expect(meetingPage).toBeVisible();
+    await expect(meetingPage.getByRole('tab', { name: 'Preparation' })).toHaveAttribute('aria-selected', 'true');
+    await expect(meetingPage.getByText('Rick')).toBeVisible();
+    await expect(meetingPage.getByRole('link', { name: /Join/ })).toHaveAttribute('href', 'https://teams.microsoft.com/l/meetup-join/e2e');
+    await meetingPage.getByRole('tab', { name: 'Preparation' }).focus();
+    await page.keyboard.press('ArrowRight');
+    await expect(meetingPage.getByRole('tab', { name: 'In the meeting' })).toHaveAttribute('aria-selected', 'true');
+    await expectAccessible(page, 'the page of a meeting');
+    const made = readdirSync(meetings).filter((f) => !before.has(f));
+    expect(made).toHaveLength(1);
+    await meetingPage.getByRole('button', { name: 'Close', exact: true }).last().click();
+    await expect(meetingPage).toHaveCount(0);
+
+    // The task names it now, among the coming ones; a click opens its page again.
+    await expect(detail.getByRole('button', { name: 'E2E meeting m001' })).toBeVisible();
+    await detail.getByRole('button', { name: 'E2E meeting m001' }).click();
+    await expect(meetingPage).toBeVisible();
+    await meetingPage.getByRole('button', { name: 'Close', exact: true }).last().click();
+    await closeFloat(page);
+
+    // The quick line: the engine reads it into the form, nothing is saved before "Create".
+    await page.keyboard.press('Control+k');
+    const palette = page.getByRole('dialog', { name: 'Command palette' });
+    await expect(palette).toBeVisible();
+    await page.keyboard.type('24.11. 9:30 90m Palette e2e m002 @Raum_4');
+    await palette.getByRole('option', { name: /Meeting from the line/ }).click();
+    await expect(form).toBeVisible();
+    await expect(form.getByLabel('Title', { exact: true })).toHaveValue('Palette e2e m002');
+    await expect(form.getByLabel('Place', { exact: true })).toHaveValue('Raum 4');
+    await expect(form.getByLabel('Begins')).toHaveValue('09:30');
+    await form.getByRole('button', { name: 'Cancel' }).click();
+    await expect(form).toHaveCount(0);
+    expect(readdirSync(meetings).filter((f) => !before.has(f))).toEqual(made);
+
+    expect(await violations(page)).toEqual([]);
+    expect(consoleProblems.get(page)).toEqual([]);
+  } finally {
+    if (existsSync(meetings)) for (const f of readdirSync(meetings)) if (!before.has(f)) removeFile(join(meetings, f));
+  }
+});

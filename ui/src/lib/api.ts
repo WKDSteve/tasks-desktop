@@ -9,6 +9,9 @@ import type {
   Groupings,
   History,
   Links,
+  MeetingDocument,
+  MeetingParse,
+  Meetings,
   NamedLists,
   Next,
   Order,
@@ -41,7 +44,8 @@ export type Op =
   | { op: 'reorder'; id: string; after?: string; before?: string; group?: string; if_match?: string }
   | { op: 'done'; id: string; confirm: string; remind?: string }
   | { op: 'reopen'; id: string; status?: string; if_match?: string }
-  | { op: 'tick_step'; id: string; n: number; done?: boolean; if_match?: string }
+  /** A step of a task, or an item of a meeting's agenda (`section` `followups`: of its follow-ups). */
+  | { op: 'tick_step'; id: string; n: number; done?: boolean; section?: 'agenda' | 'followups'; if_match?: string }
   /** Tick option `option` of a question (by its key), or take the answer back with `clear`. */
   | { op: 'answer'; id: string; question: string; option?: number; clear?: boolean; if_match?: string }
   | { op: 'append_note'; id: string; text: string; if_match?: string }
@@ -106,7 +110,15 @@ export type Op =
     }
   /** A learning point of a path (or of a task's `## Lernpunkte`) made a task of its own, and taken back. */
   | { op: 'promote'; container: string; point: string; if_match?: string }
-  | { op: 'unpromote'; container: string; point: string; id?: string; if_match?: string };
+  | { op: 'unpromote'; container: string; point: string; id?: string; if_match?: string }
+  /** A meeting file `<area>/MEETINGS/<slug>.md` (capability `meeting_ops`); `fields` are its frontmatter keys. */
+  | { op: 'meeting_new'; area: string; title: string; fields?: Record<string, unknown>; body?: string; slug?: string; lang?: 'de' | 'en' }
+  /** The frontmatter of a meeting (`null` removes a key); `status` between `planned` and `cancelled`, `done` back. */
+  | { op: 'meeting_set'; id: string; patch: Record<string, unknown>; if_match?: string }
+  /** Mark a meeting done, with or without a result (`## Ergebnis`). */
+  | { op: 'meeting_close'; id: string; result?: string; if_match?: string }
+  /** Tick (or untick) a participant of `## Teilnehmer`: present. */
+  | { op: 'meeting_attend'; id: string; n?: number; name?: string; present?: boolean; if_match?: string };
 
 /** The vaults the hub can read, and the one it reads. A folder is shown by its last part only. */
 export interface VaultList {
@@ -628,10 +640,32 @@ export class Hub extends HubClient<Snapshot> {
     return this.json<SearchResult>(path, signal ? { signal } : undefined);
   }
 
+  /** The meetings whose days touch a window, or the meetings of one task (`tasks.meetings`, one page). */
+  meetings(
+    query: { since?: string; until?: string; area?: string; task?: string; limit?: number; offset?: number },
+    signal?: AbortSignal,
+  ): Promise<Meetings> {
+    const parts = Object.entries(query)
+      .filter(([, v]) => v !== undefined && v !== '')
+      .map(([k, v]) => `${k}=${encodeURIComponent(String(v)).replace(/%2F/gi, '/')}`);
+    return this.json<Meetings>(`/api/tasks/meetings${parts.length > 0 ? `?${parts.join('&')}` : ''}`, signal ? { signal } : undefined);
+  }
+
+  /** One meeting with its body and the sections the engine reads (`tasks.meeting`). */
+  meeting(id: string, signal?: AbortSignal): Promise<MeetingDocument> {
+    const path = `/api/tasks/meeting?id=${encodeURIComponent(id).replace(/%2F/gi, '/')}`;
+    return this.json<MeetingDocument>(path, signal ? { signal } : undefined);
+  }
+
+  /** A line of the quick capture read by the engine into a proposal of a meeting; nothing is written. */
+  meetingParse(text: string, signal?: AbortSignal): Promise<MeetingParse> {
+    return this.postJson<MeetingParse>('/api/tasks/meeting_parse', { text }, signal);
+  }
+
   /** Changes, through the one door of the engine. The answer says per operation what happened. */
   /** A file from this page becomes an asset of the task: the body is the file, the hub streams it to its disk. */
-  async upload(id: string, file: File, kind?: 'video' | 'image' | 'screenshot'): Promise<Result & { large_for_git?: boolean }> {
-    // `kind` names the folder of the asset below `assets/` of the task; the hub takes these three words only.
+  async upload(id: string, file: File, kind?: 'video' | 'image' | 'screenshot' | 'audio'): Promise<Result & { large_for_git?: boolean }> {
+    // `kind` names the folder of the asset below `assets/` of the task; the hub takes these four words only.
     const path = `/api/tasks/upload?id=${encodeURIComponent(id).replace(/%2F/gi, '/')}${kind ? `&kind=${kind}` : ''}`;
     const response = await this.request(path, {
       method: 'POST',
