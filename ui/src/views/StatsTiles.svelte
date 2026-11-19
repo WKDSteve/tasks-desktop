@@ -12,6 +12,9 @@
   import { cutOf, figureFilter, filterFor, STAT_DIMS, statsOf, type Figure, type StatDim, type StatFigures } from '../lib/stats';
   import { dimOf, dimTile, numberTile, shownTiles, withShown, withTile, type NumberTile, type TileId } from '../lib/statsTiles';
   import { bucketClass, bucketLabel, bucketName, dimHint } from '../lib/statsWords';
+  import { contextTarget } from 'appkit-ui/contextmenu';
+  import { figureTarget } from '../lib/context';
+  import { metricOfFigure } from '../lib/statsHistory';
 
   let {
     app,
@@ -99,9 +102,40 @@
     const next = left[Math.min(Math.max(at, 0), left.length - 1)] ?? root?.querySelector<HTMLButtonElement>('.pick button');
     next?.focus({ preventScroll: true });
   }
+
+  // A number whose figure the series keeps offers its history, as the numbers of Today do: the button with the line,
+  // the key h on the number and its context menu (`figureTarget`). Which numbers: `FIGURE_METRIC`.
+  const historyOf = (name: NumberTile) => (app.can('history') ? metricOfFigure(name) : null);
+  function openHistory(name: NumberTile): void {
+    const metric = historyOf(name);
+    if (metric) app.openHistory(metric, document.querySelector('main')?.scrollTop ?? 0);
+  }
+  function onFigureKey(event: KeyboardEvent, name: NumberTile): void {
+    if (event.key !== 'h' || event.ctrlKey || event.metaKey || event.altKey || !historyOf(name)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    openHistory(name);
+  }
 </script>
 
 <svelte:window onpointerdown={(e) => leftPick(e.target)} />
+
+{#snippet trend(name: NumberTile)}
+  {#if historyOf(name)}
+    <button
+      type="button"
+      class="trend"
+      data-history={name}
+      aria-label={t('today.tiles.history', { what: numberLabel(name) })}
+      data-hint={t('hint.tile.history', { what: numberLabel(name) })}
+      onclick={() => openHistory(name)}
+    >
+      <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"
+        ><path d="M1.5 12.5 6 8l3 3 5.5-6.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" /></svg
+      >
+    </button>
+  {/if}
+{/snippet}
 
 {#snippet cross(id: TileId)}
   <button
@@ -144,7 +178,7 @@
   <ul class="figures">
     {#each counted as f (f.figure)}
       {#if isShown(f.id)}
-        <li class="tile" data-tile={f.id}>
+        <li class="tile" data-tile={f.id} use:contextTarget={figureTarget(f.figure, f.label)}>
           {#if figureFilter(app.filter, f.figure, figures)}
             <button
               type="button"
@@ -152,6 +186,7 @@
               data-figure={f.figure}
               data-hint={t('hint.stats.tile.number')}
               aria-label={t('stats.open_figure', { label: f.label, n: f.n })}
+              onkeydown={(e) => onFigureKey(e, f.figure)}
               onclick={() => {
                 const filter = figureFilter(app.filter, f.figure, figures);
                 if (filter) app.openStatsInList(filter);
@@ -167,28 +202,31 @@
               <span class="n">{f.n}</span>
             </div>
           {/if}
+          {@render trend(f.figure)}
           {@render cross(f.id)}
         </li>
       {/if}
     {/each}
     {#if finished && isShown('n:finished')}
-      <li class="tile" data-tile="n:finished">
+      <li class="tile" data-tile="n:finished" use:contextTarget={figureTarget('finished', t('stats.finished30'))}>
         <button
           type="button"
           class="figure"
           data-figure="finished"
           data-hint={t('hint.stats.tile.finished')}
           aria-label={t('stats.open_finished', { n: finished.total })}
+          onkeydown={(e) => onFigureKey(e, 'finished')}
           onclick={onfinished}
         >
           <span class="label">{t('stats.finished30')}</span>
           <span class="n">{finished.total}</span>
         </button>
+        {@render trend('finished')}
         {@render cross('n:finished')}
       </li>
     {/if}
     {#if effort && isShown('n:effort')}
-      <li class="tile" data-tile="n:effort">
+      <li class="tile" data-tile="n:effort" use:contextTarget={figureTarget('effort', t('stats.effort'))}>
         <div class="figure" class:waiting={effort.waiting} aria-busy={effort.waiting ? 'true' : undefined} data-figure="effort" data-hint={t('hint.stats.effort')}>
           <span class="label">{t('stats.effort')}</span>
           <span class="n">{t('stats.days_n', { n: days(effort.days) })}</span>
@@ -199,6 +237,7 @@
             <span class="sub">{t('stats.without', { n: effort.without })}</span>
           {/if}
         </div>
+        {@render trend('effort')}
         {@render cross('n:effort')}
       </li>
     {/if}
@@ -427,5 +466,26 @@
   .hide:focus-visible {
     color: var(--text);
     background: var(--surface);
+  }
+  /* The history of a number: in the corner below the x, always there (like on the numbers of Today). */
+  .trend {
+    position: absolute;
+    bottom: 0.3rem;
+    right: 0.3rem;
+    display: grid;
+    place-items: center;
+    width: 1.5rem;
+    height: 1.5rem;
+    padding: 0;
+    border: 1px solid transparent;
+    border-radius: var(--radius);
+    background: none;
+    color: var(--muted);
+    cursor: pointer;
+  }
+  .trend:hover,
+  .trend:focus-visible {
+    color: var(--accent);
+    border-color: var(--accent);
   }
 </style>

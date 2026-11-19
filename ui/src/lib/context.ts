@@ -1,7 +1,7 @@
 // What the context menu offers, per kind of target (the kit's `ContextRegistry`): the entries come from the providers of
 // every target around the pointer, the innermost first. The page declares the targets (`use:contextTarget`); what an
 // entry does goes through the same methods of `App` as the buttons and keys do (the engine judges, WEB-13).
-import { metricOfTile } from './statsHistory';
+import { metricOfFigure, metricOfTile } from './statsHistory';
 import { ContextRegistry, type ContextTarget } from 'appkit-ui/contextmenu';
 import type { MenuItem } from 'appkit-ui/menu';
 import type { App } from './app.svelte';
@@ -22,6 +22,11 @@ export function selectionTarget(title: string, select: Partial<ViewSelect>): Con
  */
 export function countTarget(key: CountKey, title: string): ContextTarget {
   return { kind: 'count', id: key, data: { key, title } };
+}
+
+/** A number of the statistics ("The vault in numbers"): its history, where the series has its figure. */
+export function figureTarget(name: string, title: string): ContextTarget {
+  return { kind: 'figure', id: name, data: { name, title } };
 }
 
 /** A task (a row, a card): its entries and the view of its area. */
@@ -87,6 +92,22 @@ export function createContextRegistry(app: App): ContextRegistry {
         ]
       : [];
     return [...history, ...copyEntries(() => tasksOf(key, app.shown))];
+  });
+
+  // A number of the statistics: the history of its figure, in the same view (the card of the history is scrolled to).
+  registry.provide('figure', (target) => {
+    const { name, title } = target.data as { name: string; title: string };
+    const metric = app.can('history') ? metricOfFigure(name) : null;
+    return metric
+      ? [
+          {
+            kind: 'action',
+            label: t('today.tiles.history', { what: title }),
+            hint: t('hint.tile.history', { what: title }),
+            onselect: () => app.openHistory(metric, document.querySelector('main')?.scrollTop ?? 0),
+          },
+        ]
+      : [];
   });
 
   registry.provide('task', (target, env) => {

@@ -4055,7 +4055,9 @@ export class App {
   openHistory(metric: HistoryMetric, scroll = 0): void {
     if (!this.can('history')) return;
     this.setStatsHistory({ ...this.statsHistory, metric });
-    this.historyFrom = { view: this.view, scroll };
+    // From a number of the statistics itself the history is a card further down: no way back to name, the one there
+    // was (from Today) stays.
+    if (this.view !== 'stats') this.historyFrom = { view: this.view, scroll };
     this.historyShown += 1;
     this.setView('stats');
   }

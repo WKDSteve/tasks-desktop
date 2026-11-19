@@ -254,3 +254,53 @@ describe('StatsView, the bars as SVG', () => {
     expect(svg?.text).not.toContain('secret');
   });
 });
+
+describe('StatsView, the numbers that have a history', () => {
+  async function shown(history: boolean) {
+    const m = make({ token: 't' });
+    made = m;
+    if (history) m.hub.capabilities = [...(m.hub.capabilities ?? []), 'history'];
+    m.hub.doc = snapshot([task('pub/alpha', { status: 'open' }), task('pub/beta', { status: 'doing' })]);
+    await m.app.start(null);
+    m.app.setLang('en');
+    m.app.setView('stats');
+    // jsdom has no layout: the history is brought into view by this, which the test watches.
+    const scrolled = vi.fn();
+    Element.prototype.scrollIntoView = scrolled;
+    const target = document.createElement('div');
+    document.body.append(target);
+    mounted = mount(StatsView, { target, props: { app: m.app } });
+    flushSync();
+    await settle();
+    await vi.waitFor(() => expect(target.querySelector('[data-figure="effort"]')).not.toBeNull());
+    return { m, target, scrolled };
+  }
+  const offered = (target: HTMLElement): string[] =>
+    [...target.querySelectorAll<HTMLElement>('.figures [data-history]')].map((el) => el.dataset['history'] ?? '');
+
+  it('offer it by the button in their corner, for the figures the series keeps: the effort opens the effort in days', async () => {
+    const { m, target, scrolled } = await shown(true);
+    expect(offered(target)).toEqual(expect.arrayContaining(['open', 'ready', 'doing', 'blocked', 'effort']));
+    expect(offered(target)).not.toContain('noEffort');
+    target.querySelector<HTMLButtonElement>('.figures [data-history="effort"]')?.click();
+    await settle();
+    expect(m.app.statsHistory.metric).toBe('effortDays');
+    expect(m.app.view).toBe('stats');
+    // Opened inside the statistics: there is no way back to another view to name.
+    expect(m.app.historyFrom).toBeNull();
+    // The card of the history further down comes into view.
+    await vi.waitFor(() => expect(scrolled).toHaveBeenCalled());
+  });
+
+  it('open it with the key h on the number', async () => {
+    const { m, target } = await shown(true);
+    const doing = target.querySelector<HTMLButtonElement>('button[data-figure="doing"]')!;
+    expect(doing.dispatchEvent(new KeyboardEvent('keydown', { key: 'h', bubbles: true, cancelable: true }))).toBe(false);
+    expect(m.app.statsHistory.metric).toBe('doing');
+  });
+
+  it('offer none where the engine keeps no series', async () => {
+    const { target } = await shown(false);
+    expect(offered(target)).toEqual([]);
+  });
+});

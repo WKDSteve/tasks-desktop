@@ -113,6 +113,34 @@ test('the key h on a number of the overview opens its history; a custom period a
   expect(problems).toEqual([]);
 });
 
+test('the numbers of the statistics open their history too: the sum of the effort by its button, a count by h and by its menu', async ({
+  page,
+}) => {
+  const problems = await pair(page, '/#view=stats');
+  const section = page.getByRole('region', { name: 'History' });
+  const effort = page.locator('[data-tile="n:effort"]');
+  await expect(effort).toBeVisible();
+  const trend = effort.locator('[data-history="effort"]');
+  await expect(trend).toHaveAccessibleName('History of Effort');
+  // A number the series does not keep offers none.
+  await expect(page.locator('[data-tile="n:noEffort"] [data-history]')).toHaveCount(0);
+  await expectAccessible(page, 'the numbers of the statistics with their history buttons');
+  await trend.click();
+  await expect(section.locator('[data-history-metric]')).toHaveValue('effortDays');
+  await expect(section).toBeInViewport();
+  // Opened inside the statistics: no way back to another view.
+  await expect(section.locator('.back')).toHaveCount(0);
+
+  await page.locator('button[data-figure="doing"]').focus();
+  await page.keyboard.press('h');
+  await expect(section.locator('[data-history-metric]')).toHaveValue('doing');
+
+  await page.locator('[data-tile="n:open"]').click({ button: 'right' });
+  await page.getByRole('menuitem', { name: 'History of Open' }).click();
+  await expect(section.locator('[data-history-metric]')).toHaveValue('open');
+  expect(problems).toEqual([]);
+});
+
 test('the history follows "Cut up by": the open tasks as bands per status, a value taken out by the legend, a field without a series says so', async ({
   page,
 }) => {

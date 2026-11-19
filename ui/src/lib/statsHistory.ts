@@ -70,6 +70,23 @@ export const TILE_METRIC: Partial<Record<CountKey, HistoryMetric>> = {
 export const metricOfTile = (key: string): HistoryMetric | null =>
   (TILE_METRIC as Record<string, HistoryMetric | undefined>)[key] ?? null;
 
+/**
+ * The same for the numbers of the statistics ("The vault in numbers", `NumberTile` of `statsTiles.ts`): the sum of the
+ * effort is the series' effort in days, the tasks finished in 30 days the finished per day. Quick wins and the tasks
+ * without an effort are not in the series: they offer none.
+ */
+export const FIGURE_METRIC: Partial<Record<string, HistoryMetric>> = {
+  open: 'open',
+  ready: 'ready',
+  doing: 'doing',
+  blocked: 'blocked',
+  finished: 'done',
+  effort: 'effortDays',
+};
+
+/** The figure of a number of the statistics, or null when it has no history. */
+export const metricOfFigure = (name: string): HistoryMetric | null => FIGURE_METRIC[name] ?? null;
+
 export const HISTORY_PERIODS = ['7d', '30d', '90d', 'year', 'custom'] as const;
 export type HistoryPeriod = (typeof HISTORY_PERIODS)[number];
 

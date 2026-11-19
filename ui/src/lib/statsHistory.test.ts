@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { make } from './appDouble';
 import type { History, HistoryPoint } from './contract';
 import { COUNT_KEYS } from './counts';
+import { NUMBER_TILES } from './statsTiles';
 import {
   AREAS_MAX,
   askFor,
@@ -10,8 +11,10 @@ import {
   DAILY_MAX,
   defaultHistoryPrefs,
   emptyReason,
+  FIGURE_METRIC,
   HISTORY_METRICS,
   isDefaultHistory,
+  metricOfFigure,
   metricOfTile,
   metricValue,
   parseHistoryPrefs,
@@ -67,6 +70,29 @@ describe('the figure of a tile', () => {
 
   it('is null for a number without a history: it offers none and a click goes nowhere', () => {
     expect(metricOfTile('no-such-tile')).toBeNull();
+  });
+});
+
+describe('the figure of a number of the statistics', () => {
+  it('names the sum of the effort, the finished and the counts of now, from the same series as Today', () => {
+    expect(metricOfFigure('effort')).toBe('effortDays');
+    expect(metricOfFigure('finished')).toBe('done');
+    expect(metricOfFigure('open')).toBe('open');
+    expect(metricOfFigure('ready')).toBe('ready');
+    expect(metricOfFigure('doing')).toBe('doing');
+    expect(metricOfFigure('blocked')).toBe('blocked');
+  });
+
+  it('names only figures there are, and only numbers the statistics have', () => {
+    for (const [name, metric] of Object.entries(FIGURE_METRIC)) {
+      expect(NUMBER_TILES as readonly string[]).toContain(name);
+      expect(HISTORY_METRICS as readonly string[]).toContain(metric);
+    }
+  });
+
+  it('is null for the numbers the series does not keep (quick wins, tasks without an effort)', () => {
+    expect(metricOfFigure('quickWins')).toBeNull();
+    expect(metricOfFigure('noEffort')).toBeNull();
   });
 });
 
