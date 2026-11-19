@@ -798,8 +798,9 @@ title cannot add a property of its own. The sequence of each invitation is kept 
 folder (at most 5000, the least asked for go first).
 
 `meeting/thumb` reads only a file below the meeting's own folder: the path the engine names (`cover`, `image`, or a
-board under `assets/boards/`) must be relative with plain parts (no `..`, root, drive, colon or backslash), and the file
-must still lie inside that folder once every link is followed (`canonicalize`). A picture is at most 20 MB and is
+board under `assets/boards/`) must be relative with plain parts (no `..`, root, drive, colon or backslash), and once
+every link is followed (`canonicalize`) the file must still lie inside that folder and the folder inside the vault (a
+meeting's folder that is a link out of the vault reads nothing there). A picture is at most 20 MB and is
 decoded by the `image` crate (PNG, JPEG, WebP only, told by its first bytes; at most 12000 px on an edge and 256 MiB of
 memory), then written anew as a PNG of at most 96 px: what reaches the page is the hub's own PNG, not the file. A
 board's drawing (SVG, at most 2 MB) is passed on as it is, with `nosniff` and `default-src 'none'; sandbox`, so it is a

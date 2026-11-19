@@ -489,7 +489,7 @@ pub fn thumb_source(vault: &Path, entry: &Value) -> Option<ThumbSource> {
     if !plain_relative(rel) {
         return None;
     }
-    let path = inside(&folder, &folder.join(rel))?;
+    let path = inside(vault, &folder, &folder.join(rel))?;
     let size = std::fs::metadata(&path).ok()?.len();
     match kind {
         Kind::Raster if size <= MAX_RASTER_BYTES => Some(ThumbSource::Raster(path)),
@@ -525,11 +525,13 @@ fn plain_relative(path: &str) -> bool {
         })
 }
 
-/// `path` when it is a file below `folder` once every link is followed; `None` otherwise.
-fn inside(folder: &Path, path: &Path) -> Option<PathBuf> {
+/// `path` when it is a file below `folder`, and `folder` one below `vault`, once every link is followed; `None`
+/// otherwise. A meeting's folder that is a link out of the vault is no way to the files there.
+fn inside(vault: &Path, folder: &Path, path: &Path) -> Option<PathBuf> {
+    let vault = std::fs::canonicalize(vault).ok()?;
     let folder = std::fs::canonicalize(folder).ok()?;
     let path = std::fs::canonicalize(path).ok()?;
-    (path.starts_with(&folder) && path.is_file()).then_some(path)
+    (folder.starts_with(&vault) && path.starts_with(&folder) && path.is_file()).then_some(path)
 }
 
 /// Why no preview was made.
@@ -1010,19 +1012,61 @@ mod tests {
         assert_eq!(thumb_source(&vault, &not_folder), None);
     }
 
-    #[cfg(unix)]
+    /// A link at `at` to `target` (a folder when `dir`); `false` where this system lets no one make one (Windows
+    /// without developer mode).
+    fn link(target: &Path, at: &Path, dir: bool) -> bool {
+        #[cfg(unix)]
+        let made = {
+            let _ = dir;
+            std::os::unix::fs::symlink(target, at)
+        };
+        #[cfg(windows)]
+        let made = if dir {
+            std::os::windows::fs::symlink_dir(target, at)
+        } else {
+            std::os::windows::fs::symlink_file(target, at)
+        };
+        made.is_ok()
+    }
+
     #[test]
     fn a_link_out_of_the_folder_is_not_followed() {
         let dir = hub_testkit::scratch::Scratch::new("thumb-link");
         let (vault, mut e) = meeting_folder(&dir);
         std::fs::write(dir.join("outside.png"), png(10, 10)).unwrap();
-        std::os::unix::fs::symlink(
-            dir.join("outside.png"),
-            vault.join("work/MEETINGS/m/assets/images/l.png"),
-        )
-        .unwrap();
+        if !link(
+            &dir.join("outside.png"),
+            &vault.join("work/MEETINGS/m/assets/images/l.png"),
+            false,
+        ) {
+            println!("n/a  this system makes no symbolic links");
+            return;
+        }
         e["cover"] = json!("assets/images/l.png");
         assert_eq!(thumb_source(&vault, &e), None);
+    }
+
+    #[test]
+    fn a_meeting_folder_that_is_a_link_out_of_the_vault_is_not_read() {
+        let dir = hub_testkit::scratch::Scratch::new("thumb-folder-link");
+        let (vault, mut e) = meeting_folder(&dir);
+        // The folder of the meeting lies outside the vault; the vault has only a link to it.
+        let outside = dir.join("elsewhere");
+        std::fs::create_dir_all(outside.join("assets/images")).unwrap();
+        std::fs::write(outside.join("assets/images/c.png"), png(10, 10)).unwrap();
+        std::fs::write(outside.join("l.md"), "---\ntitle: l\n---\n").unwrap();
+        if !link(&outside, &vault.join("work/MEETINGS/l"), true) {
+            println!("n/a  this system makes no symbolic links");
+            return;
+        }
+        e["file"] = json!("work/MEETINGS/l/l.md");
+        e["cover"] = json!("assets/images/c.png");
+        assert_eq!(thumb_source(&vault, &e), None);
+        // The same picture in a folder of the vault is read.
+        let inside = vault.join("work/MEETINGS/m/assets/images/c.png");
+        std::fs::write(&inside, png(10, 10)).unwrap();
+        e["file"] = json!("work/MEETINGS/m/m.md");
+        assert!(thumb_source(&vault, &e).is_some());
     }
 
     #[test]
