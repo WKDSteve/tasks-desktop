@@ -1,6 +1,7 @@
 //! The settings of the hub: the keys every app has come from `appkit-hub`, the two keys of the tasks
 //! engine are [`TasksSettings`].
 
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
@@ -29,6 +30,85 @@ pub struct TasksSettings {
     /// The Web Push reminders of a day for the paired phones.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reminders: Option<RemindersSettings>,
+    /// The notices of meetings and of reminders at a time of day (`crate::schedule`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub meetings: Option<MeetingsSettings>,
+}
+
+/// `meetings` of `config.json`: how the scheduler of the hub tells meetings and reminders at a time of day.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct MeetingsSettings {
+    /// The notices of a meeting with a time that names none of its own (`-15m`, `-2h`, `-1d@18:00`, at most 5); unset:
+    /// `["-15m"]`, `[]`: none. An all-day meeting gets none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub notify: Option<Vec<String>>,
+    /// The same per vault, by the name of the vault (`main` for the main one): before `notify`.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub notify_by_vault: BTreeMap<String, Vec<String>>,
+    /// Ask after the end of a planned meeting whether to enter the result or finish it; unset: yes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub after_end: Option<bool>,
+    /// The address to join of a meeting of an `internal` area may go into a mail; unset: no (only `public` ones).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub internal_links: Option<bool>,
+    /// `en` (unset) or `de`: the language of the mails of the scheduler.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lang: Option<String>,
+}
+
+impl MeetingsSettings {
+    /// The rules of a vault of that name.
+    #[must_use]
+    pub fn rules_for(&self, vault: &str) -> crate::schedule::Rules {
+        let base = crate::schedule::Rules::default();
+        let specs = self.notify_by_vault.get(vault).or(self.notify.as_ref());
+        crate::schedule::Rules {
+            notify: specs
+                .and_then(|s| crate::schedule::parse_notify_list(s))
+                .unwrap_or(base.notify),
+            after_end: self.after_end.unwrap_or(base.after_end),
+        }
+    }
+
+    /// The language of the mails.
+    #[must_use]
+    pub fn lang(&self) -> crate::mail::Lang {
+        if self.lang.as_deref() == Some("de") {
+            crate::mail::Lang::De
+        } else {
+            crate::mail::Lang::En
+        }
+    }
+
+    fn validate(&self) -> Result<(), String> {
+        if let Some(specs) = &self.notify
+            && crate::schedule::parse_notify_list(specs).is_none()
+        {
+            return Err(format!(
+                "meetings.notify: {specs:.60?} is not a list of at most 5 of -15m, -2h, -1d@18:00"
+            ));
+        }
+        for (name, specs) in &self.notify_by_vault {
+            if name != MAIN_VAULT && valid_vault_name(name).is_err() {
+                return Err(format!(
+                    "meetings.notify_by_vault: {name:.40?} is no name of a vault"
+                ));
+            }
+            if crate::schedule::parse_notify_list(specs).is_none() {
+                return Err(format!(
+                    "meetings.notify_by_vault.{name}: {specs:.60?} is not a list of at most 5 of -15m, -2h, -1d@18:00"
+                ));
+            }
+        }
+        if let Some(lang) = &self.lang
+            && lang != "en"
+            && lang != "de"
+        {
+            return Err(format!("meetings.lang: {lang:.10?} is en or de"));
+        }
+        Ok(())
+    }
 }
 
 /// `reminders` of `config.json`.
@@ -79,6 +159,9 @@ impl AppSettings for TasksSettings {
             return Err(format!(
                 "reminders.send_at: {at:.20?} is not a time of day HH:MM (00:00 to 23:59)"
             ));
+        }
+        if let Some(meetings) = &self.meetings {
+            meetings.validate()?;
         }
         Ok(())
     }
@@ -317,5 +400,39 @@ mod tests {
     fn a_settings_file_with_a_bad_area_is_refused_on_load() {
         let dir = temp_config("bad-area", br#"{"extra_areas":["../outside"]}"#);
         assert!(matches!(load_file(&dir), Err(ConfigError::Invalid(..))));
+    }
+
+    #[test]
+    fn the_notices_of_meetings_are_set_per_vault_and_checked_on_load() {
+        use crate::schedule::{Notify, Rules};
+        let dir = temp_config(
+            "meetings",
+            br#"{"meetings":{"notify":["-10m","-1d@18:00"],"notify_by_vault":{"main":[],"work":["-2h"]},"after_end":false,"lang":"de"}}"#,
+        );
+        let m = load_file(&dir).unwrap().app.meetings.unwrap();
+        assert_eq!(
+            m.rules_for("work").notify,
+            [Notify::Before { minutes: 120 }]
+        );
+        assert!(m.rules_for("main").notify.is_empty(), "[] is none");
+        assert_eq!(m.rules_for("other").notify.len(), 2);
+        assert!(!m.rules_for("other").after_end);
+        assert_eq!(m.lang(), crate::mail::Lang::De);
+        assert_eq!(MeetingsSettings::default().rules_for("x"), Rules::default());
+        for bad in [
+            &br#"{"meetings":{"notify":["15m"]}}"#[..],
+            br#"{"meetings":{"notify":["-1m","-2m","-3m","-4m","-5m","-6m"]}}"#,
+            br#"{"meetings":{"notify_by_vault":{"../x":["-5m"]}}}"#,
+            br#"{"meetings":{"notify_by_vault":{"work":["soon"]}}}"#,
+            br#"{"meetings":{"lang":"fr"}}"#,
+            br#"{"meetings":{"notfy":[]}}"#,
+        ] {
+            let dir = temp_config("meetings-bad", bad);
+            assert!(
+                matches!(load_file(&dir), Err(ConfigError::Invalid(..))),
+                "{}",
+                String::from_utf8_lossy(bad)
+            );
+        }
     }
 }

@@ -183,6 +183,7 @@ impl Rig {
                     notices: Arc::new(Notices::open(Some(
                         dir.join("settings").join("notices.json"),
                     ))),
+                    scheduler: None,
                 }),
                 ..Extras::default()
             },

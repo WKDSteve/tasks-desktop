@@ -774,6 +774,7 @@ pub async fn serve(opts: ServeOptions) -> Result<(), String> {
         .and_then(|nvim| crate::bundle::editor_nvim(nvim, &env));
     let attach_dirs = file.app.attach_dirs.clone();
     let send_at = file.app.send_at().to_owned();
+    let scheduler = scheduler_of(&file, &env, dir.join("schedule.json"));
     let config_vaults = Arc::new(ConfigVaults::new(dir.clone(), env.clone(), file));
     let all_vaults = Arc::new(crate::allvaults::AllVaultsCheck::new(
         Arc::clone(&config_vaults) as Arc<dyn crate::allvaults::VaultEngines>,
@@ -833,6 +834,7 @@ pub async fn serve(opts: ServeOptions) -> Result<(), String> {
         notices: Arc::new(
             crate::notices::Notices::open(Some(dir.join("notices.json"))).with_send_at(&send_at),
         ),
+        scheduler: Some(Arc::new(scheduler)),
     };
     let extras = || Extras {
         tailnet: tailnet.clone(),
@@ -1428,6 +1430,34 @@ pub async fn areas(command: AreasCommand) -> Result<String, String> {
             }
         }
     }
+}
+
+/// The scheduler of the hub (`crate::schedule`) with the settings of `meetings`: the rules of each vault of the
+/// settings by its canonical folder (a vault added later plans with the default until the next start), what was sent
+/// kept in `memory` (`schedule.json` beside the settings, never in a vault).
+fn scheduler_of(
+    file: &config::FileConfig,
+    env: &Env,
+    memory: PathBuf,
+) -> crate::schedule::Scheduler {
+    let mut scheduler = crate::schedule::Scheduler::new(Some(memory));
+    let Some(meetings) = &file.app.meetings else {
+        return scheduler;
+    };
+    scheduler.default = meetings.rules_for("");
+    scheduler.internal_links = meetings.internal_links.unwrap_or(false);
+    scheduler.lang = meetings.lang();
+    let main = file.vault.clone().or_else(|| env.path("TASKS_VAULT"));
+    let named = main
+        .map(|path| (config::MAIN_VAULT.to_owned(), path))
+        .into_iter()
+        .chain(file.vaults.iter().map(|v| (v.name.clone(), v.path.clone())));
+    for (name, path) in named {
+        let key = std::fs::canonicalize(&path)
+            .map_or_else(|_| path.display().to_string(), |p| p.display().to_string());
+        scheduler.by_vault.insert(key, meetings.rules_for(&name));
+    }
+    scheduler
 }
 
 #[cfg(test)]

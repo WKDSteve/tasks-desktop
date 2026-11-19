@@ -19,7 +19,8 @@
 //! went out: once a day, from `send_at` on (compared with the engine's time of day, `hello.time`: the person's), when a
 //! task of a released area has a `remind:` day that has come (that day or earlier, an open task or a finished one of
 //! `reminders`), until its day is moved or taken away. A day whose reminders are all of private areas tells nothing,
-//! not even that there are some.
+//! not even that there are some. A reminder of today with a time of day (`remind_at`) is no reason on its day: the
+//! scheduler (`crate::schedule`) tells it alone at that time; from the next day on it counts like any other.
 //!
 //! A notice that reached no phone (`unsent`: refused or unanswered by every push service) is taken back, so the next
 //! look tells it again.
@@ -166,11 +167,15 @@ impl Notices {
             {
                 // An open task carries its reminder; a finished one is in `reminders`.
                 let finished = doc["reminders"].as_array().map_or(&[][..], Vec::as_slice);
+                // A reminder of today at a time of day is told at that time, alone (`crate::schedule`); on a later
+                // day it is one of the reminders that have come.
                 let due = tasks.iter().chain(finished).any(|task| {
-                    task["remind"]
-                        .as_str()
-                        .is_some_and(|day| day.len() == 10 && day <= today)
-                        && released(&notice(REMIND, task).area)
+                    task["remind"].as_str().is_some_and(|day| {
+                        day.len() == 10
+                            && (day < today
+                                || (day == today
+                                    && !task["remind_at"].as_str().is_some_and(valid_time)))
+                    }) && released(&notice(REMIND, task).area)
                 });
                 if due {
                     state.reminded_on = Some(today.to_owned());
@@ -438,6 +443,27 @@ mod tests {
         // A text that is no time keeps the default.
         let odd = Notices::open(None).with_send_at("8:00");
         assert_eq!(odd.send_at, DEFAULT_SEND_AT);
+    }
+
+    #[test]
+    fn a_reminder_at_a_time_of_day_is_no_reason_on_its_own_day() {
+        let n = Notices::open(None);
+        let mut doc = snap(&[("a/x", "open", Some("2026-11-12"))]);
+        doc["tasks"][0]["remind_at"] = json!("14:00");
+        let today = Some(("2026-11-12", "09:00"));
+        assert!(
+            n.observe("v", &doc, today, &all).is_empty(),
+            "told alone at 14:00"
+        );
+        // A text that is no time is no time: the day counts.
+        doc["tasks"][0]["remind_at"] = json!("2pm");
+        assert_eq!(kinds(&n.observe("w", &doc, today, &all)), [remind()]);
+        // From the next day on it has come like any other.
+        doc["tasks"][0]["remind_at"] = json!("14:00");
+        assert_eq!(
+            kinds(&n.observe("v", &doc, Some(("2026-11-13", "09:00")), &all)),
+            [remind()]
+        );
     }
 
     #[test]

@@ -315,6 +315,42 @@ decision while no phone is subscribed is not told later. If `notices.json` canno
 console and still sends; only after a restart might such a notice come twice. While a phone is subscribed, the hub
 looks at the vault every 5 minutes even when no page is open.
 
+**Notices at a time (meetings, reminders at a time of day).** One scheduler sends what is due at a time of its own,
+each notice once, by Web Push to a phone that subscribed to its kind and, when the hub has a mail account, by mail to
+the addresses the item names:
+
+- `meeting` before a planned meeting (`<area>/MEETINGS/<slug>.md`) begins, at each entry of its `notify`
+  (`-15m`, `-2h`, `-1d@18:00`, `-0d@08:00`); a meeting without `notify` gets the default of its vault, `-15m` for a
+  meeting with a time, none for an all-day one. A notice the hub missed (the PC was off) is sent late as long as the
+  meeting has not begun, else dropped; of several missed ones only the latest goes.
+- `meeting_end` once after the end of a meeting that still stands `planned`: "enter the result or finish it?"
+  (within 12 hours of the end; none for an all-day meeting).
+- `remind` with the id of the task at the time of a task's `remind_at` on its `remind` day (sent late until the end
+  of that day). Such a reminder is not a reason for the day's one notice on its own day; from the next day on it is.
+
+A `cancelled` or `done` meeting tells nothing; a moved meeting is told at its new time. Times without `tz` are this
+PC's; with `tz` (an IANA zone) they are converted, a time the clock skips or shows twice at a change of summer time is
+the one after the gap or the first one. A push carries only the kind and the id; a mail says the title, the time (and
+the time as written in another zone), the place, the service, the id to open it by and, after the end, the question.
+Fail closed by the class of the area: nothing at all for a private or unclassified area; the address to join only for
+a `public` area, for an `internal` one only when the settings release it; participants never. What was sent is kept in
+`schedule.json` in the settings folder (per vault, never in the vault). The settings, in `config.json`:
+
+```json
+"meetings": {
+  "notify": ["-15m"],
+  "notify_by_vault": { "main": ["-10m", "-1d@18:00"] },
+  "after_end": true,
+  "internal_links": false,
+  "lang": "de"
+}
+```
+
+`notify` is the default of every vault (`[]`: none), `notify_by_vault` that of a vault by its name (read at the start
+of the hub), `after_end` switches the question after the end, `internal_links` releases the address to join of
+`internal` areas for mails, `lang` (`en` or `de`) is the language of the mails. A value that is not one of these stops
+the start, said plainly.
+
 **The test sheets of a task, from the phone** (through this hub; the testing hub runs them). Once, on the PC:
 
 ```

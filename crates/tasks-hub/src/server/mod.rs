@@ -66,6 +66,7 @@ mod push;
 mod repos;
 mod routes;
 mod runtime;
+mod schedule;
 mod settings;
 mod setup;
 mod testing;

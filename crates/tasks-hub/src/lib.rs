@@ -24,6 +24,7 @@ pub mod mail;
 pub mod newvault;
 pub mod notices;
 pub mod repos;
+pub mod schedule;
 pub mod search;
 pub mod server;
 pub mod setup;

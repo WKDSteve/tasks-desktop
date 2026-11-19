@@ -138,7 +138,7 @@ struct Item {
 }
 
 /// A title as one line of a mail: no control character (a line break would start a line of its own), not endless.
-fn one_line(title: &str) -> String {
+pub(crate) fn one_line(title: &str) -> String {
     let clean: String = title
         .chars()
         .map(|c| if c.is_control() { ' ' } else { c })

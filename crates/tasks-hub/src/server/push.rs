@@ -15,6 +15,8 @@ use crate::notices::{Notices, DECISION, REMIND};
 pub struct HubPush {
     pub push: Arc<Push>,
     pub notices: Arc<Notices>,
+    /// The notices at a time (meetings, reminders at a time of day: `crate::schedule`); none: this hub plans none.
+    pub scheduler: Option<Arc<crate::schedule::Scheduler>>,
 }
 
 /// How often the job looks without a change of the vault: a reminder's day comes without one.

@@ -174,6 +174,23 @@ pub(super) fn build_runtime(
             folder.display().to_string(),
         ));
     }
+    // The notices at a time of this vault (meetings, reminders at a time of day): only with an engine to read it.
+    if let (Some(push), Some(folder), Some(engine)) = (&app.push, &folder, &engine)
+        && let Some(scheduler) = &push.scheduler
+    {
+        jobs.push(self::schedule::spawn_schedule(
+            self::schedule::ScheduleJob {
+                scheduler: Arc::clone(scheduler),
+                push: Some(Arc::clone(&push.push)),
+                mail: app.mail.clone(),
+                classes: Arc::clone(&app.classes),
+                meetings: status.capabilities.iter().any(|c| c == "meetings"),
+            },
+            Arc::clone(engine),
+            Arc::clone(&store),
+            folder.display().to_string(),
+        ));
+    }
     // The series of the figures (`_Telemetry/history`), where the vault keeps one, and the engine can write it.
     if let (Some(folder), Some(engine)) = (&folder, &engine)
         && status.capabilities.iter().any(|c| c == "history")

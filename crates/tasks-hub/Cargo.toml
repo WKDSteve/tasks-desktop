@@ -33,6 +33,9 @@ axum = { version = "0.8", default-features = false, features = ["http1", "tokio"
 futures-core = "0.3"
 # The stable line of notify; 9.0 is a release candidate (concept 7.1, 13.14).
 notify = { version = "8.2", default-features = false }
+# The scheduler of meeting notices and reminders at a time of day (src/schedule.rs): wall times of a zone to instants,
+# with the time zone database bundled (Windows has no IANA database of its own; the same answers on every system).
+jiff = { version = "0.2", default-features = false, features = ["std", "tz-system", "tzdb-bundle-always"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 # The `rev` of a phone's snapshot, a hash over what it is given (src/server/device_cut.rs): the version appkit-hub brings.
