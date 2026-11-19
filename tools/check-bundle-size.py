@@ -16,14 +16,19 @@ leaves 10 kB. When the room is used up, the candidates in the order of their siz
 other language on demand, 361 kB shared), then the views that are still static in `App.svelte`: `Detail` (67 kB source),
 `ViewsView` (35), `ListView` (29), `Today` (26), `Capture` (25), `BoardView` (21).
 
-usage: check-bundle-size.py [--dist ui/dist] [--budget-kb 1060]
+Raised on 2026-11-19 to 1085 kB with the making of meetings (tasks-desktop/meetings-anlegen): the start is 1074 kB
+(main 658, i18n 373). The form, the page and the section of a task load on demand; what grew is the words of the
+meetings in both languages (12 kB of i18n) and the meetings of `App` (the form opened at once from the menu, the
+palette and a task). The language on demand is the next step (tasks-desktop/i18n-zweite-sprache-bei-bedarf-laden).
+
+usage: check-bundle-size.py [--dist ui/dist] [--budget-kb 1085]
 """
 import argparse
 import pathlib
 import re
 import sys
 
-BUDGET_KB = 1060
+BUDGET_KB = 1085
 
 # `from"./x.js"` and `import"./x.js"` of a built chunk: a static import. A dynamic `import("./x.js")` has a bracket.
 STATIC_IMPORT = re.compile(r'(?:from|import)\s*"\./([^"]+\.js)"')
