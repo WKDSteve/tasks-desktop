@@ -410,6 +410,24 @@ export class FakeHub {
     this.waitsCalls += 1;
     return this.waitsDoc as never;
   }
+  /** The learning paths (`tasks.paths`) and each path by id (`tasks.path`); a path not in here is `not_found`. */
+  pathsDoc: unknown = { kind: 'tasks.paths', rev: 'p1', digest: 'd', items: [], incomplete: [] };
+  pathDocs = new Map<string, unknown>();
+  pathCalls: string[] = [];
+  /** Each answer of `path` waits for the next of these gates first (none: it answers at once). */
+  pathGates: Promise<void>[] = [];
+  async paths() {
+    this.pathCalls.push('paths');
+    return this.pathsDoc as never;
+  }
+  async path(id: string) {
+    this.pathCalls.push(`path ${id}`);
+    const gate = this.pathGates.shift();
+    if (gate) await gate;
+    const doc = this.pathDocs.get(id);
+    if (doc === undefined) throw new ApiError(404, 'not_found', `no path ${id}`);
+    return doc as never;
+  }
   async next() {
     this.nextCalls += 1;
     return { alternatives: [], cdx: [], incomplete: [] };
@@ -536,7 +554,9 @@ export class FakeHub {
               ? `${op.area}/made-${op.op === 'plan_new' ? 'plan' : 'project'}`
               : op.op === 'view_save'
                 ? (op.id ?? `${op.area}/made-view`)
-                : op.id,
+                : 'id' in op
+                  ? op.id
+                  : undefined,
         ok: true,
         outcome:
           op.op === 'new' || op.op === 'plan_new' || op.op === 'project_new' || (op.op === 'view_save' && op.id === undefined)

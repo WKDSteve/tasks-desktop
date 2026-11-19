@@ -21,6 +21,7 @@
     disabled = false,
     onblocked,
     name = undefined,
+    short = undefined,
   }: {
     label: string;
     hint?: string | undefined;
@@ -30,6 +31,8 @@
     onblocked: (choice: Choice) => void;
     /** A name for tests and styles (`data-choice`). */
     name?: string | undefined;
+    /** Shown on the button instead of `label`, which stays its name for a screen reader (a row of a list: `More`). */
+    short?: string | undefined;
   } = $props();
 
   let open = $state(false);
@@ -108,8 +111,9 @@
       if (disabled) e.preventDefault();
     }}
     onkeydown={closeOnEscape}
+    aria-label={short !== undefined ? label : undefined}
   >
-    {label} <span class="caret" aria-hidden="true">▾</span>
+    {short ?? label} <span class="caret" aria-hidden="true">▾</span>
   </summary>
   <div
     class="popup"

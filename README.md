@@ -385,6 +385,15 @@ over the tasks, not the paths):
 A point is ticked, marked seen, dropped or blocked with `node_set`, made a task of its own with `promote` and taken
 back with `unpromote` (through `ops`).
 
+The view **View › Learning paths** (also in the web variant, `#view=paths`) shows them: the paths with their progress
+on the left, the chosen one as a tree on the right, with a bar counted apart (learned, seen, not applicable, open).
+A click (or a tap) on the mark of a point ticks it as learned or sets it open again; its menu **More** sets it seen,
+not applicable or blocked, each with a reason it asks for first (the key it waits for, for blocked), writes its note
+(an engine with `node_note`) and promotes it: the task is made and opened. A parent has no mark of its own, and a
+promoted point shows its task with the task's status, or how it ended once it is finished. A link of a point opens in
+a new tab without a referrer. The view only shows what the engine counted and sends what was chosen, on the version
+it read; when the file changed meanwhile it says so and reads the path again.
+
 **The test sheets of a task, from the phone** (through this hub; the testing hub runs them). Once, on the PC:
 
 ```

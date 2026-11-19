@@ -1,0 +1,701 @@
+<script lang="ts">
+  // The learning paths (concept "Lernplan" 11.3): the open paths of the vault with their progress, and one path as a
+  // tree of learning points. A click on the mark of a point ticks it as learned (or sets it open again); seen, does not
+  // apply and blocked are chosen from the point's menu and ask for a reason first. A point has a note, a link that opens
+  // in a new tab without a referrer, and can be promoted to a task of its own, which then owns its state. Every figure
+  // and every rule is the engine's (`tasks.paths`, `tasks.path`, `node_set`, `promote`; WEB-13): the page shows the
+  // list the engine wrote and sends what the person chose, nothing else (lib/paths.ts).
+  import { tick, untrack } from 'svelte';
+  import type { App } from '../lib/app.svelte';
+  import { translate, type Key } from '../lib/i18n';
+  import type { PathDocument, PathEntry, PathNode, PathProgress, Result } from '../lib/contract';
+  import Info from 'appkit-ui/Info.svelte';
+  import ChoiceMenu, { type Choice } from './ChoiceMenu.svelte';
+  import {
+    clickedState,
+    cleanNote,
+    cleanReason,
+    isMarkable,
+    labelText,
+    MENU_STATES,
+    needsReason,
+    noteOp,
+    openableLink,
+    parentIndices,
+    progressParts,
+    promoteOp,
+    REASON_MAX,
+    stateOp,
+    visiblePoints,
+    type PointState,
+  } from '../lib/paths';
+
+  let { app }: { app: App } = $props();
+  const t = (key: Key, params: Record<string, string | number> = {}) => translate(app.lang, key, params);
+
+  const MARKS: Record<PathNode['derived'], string> = { open: ' ', learned: '✓', seen: '~', dropped: '–', blocked: '!', partial: '◐' };
+
+  // The list of the paths: read when the view opens and after every write (a write may promote, finish or tick).
+  let list = $state<PathEntry[] | null>(null);
+  let listProblem = $state(false);
+  // The open path: its document as the engine wrote it, read again after every write.
+  let doc = $state<PathDocument | null>(null);
+  let docProblem = $state(false);
+  let reading = $state(false);
+  // Said under the tree when the engine refused a change because the file moved on (it was read again then).
+  let conflict = $state(false);
+  // The indices of the folded points of the open path; a new path starts unfolded.
+  let folded = $state<ReadonlySet<number>>(new Set());
+  // The point whose reason or note is being written (by its index), with what is typed.
+  let editing = $state<{ index: number; kind: 'reason' | 'note'; state?: PointState; missing: boolean } | null>(null);
+  // What is typed into the open field (apart from `editing`, so that closing the field never leaves a binding on nothing).
+  let draft = $state('');
+
+  const usable = $derived(app.can('paths') && app.can('path'));
+  const writesNotes = $derived(app.can('node_note'));
+  const chosen = $derived(app.pathChoice);
+  const shown = $derived(doc && doc.path.id === chosen ? visiblePoints(doc.nodes, folded) : []);
+
+  // Each question has a number: an answer that comes after another was asked is dropped.
+  let askedList = 0;
+  let askedPath = 0;
+  async function readList(): Promise<void> {
+    const mine = ++askedList;
+    try {
+      const answer = await app.paths();
+      if (mine !== askedList) return;
+      list = answer.items;
+      listProblem = false;
+      // Nothing chosen yet (or the chosen one is gone): the first path, so the view never stands empty beside a list.
+      if (answer.items.length > 0 && !answer.items.some((p) => p.id === app.pathChoice)) app.pathChoice = answer.items[0]!.id;
+    } catch {
+      if (mine !== askedList) return;
+      listProblem = true;
+    }
+  }
+  async function readPath(id: string): Promise<void> {
+    const mine = ++askedPath;
+    reading = true;
+    try {
+      const answer = await app.path(id);
+      if (mine !== askedPath) return;
+      if (doc?.path.id !== answer.path.id) folded = new Set();
+      doc = answer;
+      docProblem = false;
+    } catch {
+      if (mine !== askedPath) return;
+      doc = null;
+      docProblem = true;
+    } finally {
+      if (mine === askedPath) reading = false;
+    }
+  }
+
+  // Read when the view opens, after every write (app.writes) and when the hub tells of a change (the snapshot's rev).
+  $effect(() => {
+    void app.writes;
+    void app.snapshot?.rev;
+    if (!usable) return;
+    untrack(() => void readList());
+  });
+  $effect(() => {
+    void app.writes;
+    void app.snapshot?.rev;
+    const id = chosen;
+    if (!usable || id === '') return;
+    untrack(() => {
+      editing = null;
+      void readPath(id);
+    });
+  });
+
+  function choose(id: string): void {
+    if (id === app.pathChoice) return;
+    conflict = false;
+    editing = null;
+    app.pathChoice = id;
+  }
+
+  /**
+   * Send one operation; a refusal because the file moved on is said here. The path is read again either way: every
+   * write counts `app.writes` up, which the effect above reads.
+   */
+  async function send(op: Parameters<App['write']>[0][number]): Promise<Result | null> {
+    conflict = false;
+    return app.write([op], {
+      onAnswer: (answer) => {
+        const failed = answer.results.find((r) => !r.ok);
+        if (failed?.error?.code === 'conflict') {
+          conflict = true;
+          return true;
+        }
+        return false;
+      },
+    });
+  }
+
+  function setState(node: PathNode, state: PointState, reason?: string): void {
+    if (!doc) return;
+    void send(stateOp(doc.path.id, doc.path.etag, node, state, reason));
+  }
+  function clickMark(node: PathNode): void {
+    if (!node.state || app.saving) return;
+    setState(node, clickedState(node.state));
+  }
+  function pick(node: PathNode, state: PointState): void {
+    if (!needsReason(state)) {
+      setState(node, state);
+      return;
+    }
+    draft = '';
+    editing = { index: node.index, kind: 'reason', state, missing: false };
+    void focusField(`reason-${node.index}`);
+  }
+  /** The field that just opened takes the focus (the menu gave it back to its own button before it ran the choice). */
+  async function focusField(id: string): Promise<void> {
+    await tick();
+    document.getElementById(id)?.focus();
+  }
+  function saveReason(node: PathNode): void {
+    if (!editing || editing.kind !== 'reason' || !editing.state) return;
+    const reason = cleanReason(draft);
+    if (reason === null) {
+      editing = { ...editing, missing: true };
+      return;
+    }
+    const state = editing.state;
+    editing = null;
+    setState(node, state, reason);
+  }
+  function editNote(node: PathNode): void {
+    draft = node.note ?? '';
+    editing = { index: node.index, kind: 'note', missing: false };
+    void focusField(`note-${node.index}`);
+  }
+  function saveNote(node: PathNode): void {
+    if (!doc || !editing || editing.kind !== 'note') return;
+    const note = cleanNote(draft);
+    editing = null;
+    if (note === (node.note ?? '')) return;
+    void send(noteOp(doc.path.id, doc.path.etag, node, note));
+  }
+  async function promote(node: PathNode): Promise<void> {
+    if (!doc) return;
+    const result = await send(promoteOp(doc.path.id, doc.path.etag, node));
+    const made = result?.results[0];
+    // The task is in the list now (the write read it again): open it.
+    if (made?.ok && typeof made.id === 'string') app.reveal(made.id);
+  }
+
+  function choicesOf(node: PathNode): Choice[] {
+    const out: Choice[] = [];
+    if (isMarkable(node)) {
+      if (node.state !== 'open') out.push({ id: 'open', label: t('paths.menu.open'), onselect: () => pick(node, 'open') });
+      for (const state of MENU_STATES) {
+        if (state === node.state && !needsReason(state)) continue;
+        out.push({ id: state, label: t(`paths.menu.${state}` as Key), onselect: () => pick(node, state) });
+      }
+    }
+    if (node.promoted === undefined) {
+      const reason = writesNotes ? undefined : t('paths.note.read_only');
+      out.push({
+        id: 'note',
+        label: t(node.note ? 'paths.note.edit' : 'paths.note.add'),
+        ...(reason ? { reason } : {}),
+        onselect: () => editNote(node),
+      });
+      out.push({ id: 'promote', label: t('paths.promote_of', { label: labelText(node) }), onselect: () => void promote(node) });
+    }
+    return out;
+  }
+
+  function stateWord(state: PathNode['derived']): string {
+    return t(`paths.state.${state}` as Key);
+  }
+  function progressText(progress: PathProgress): string {
+    const text = t('paths.progress', { learned: progress.learned, seen: progress.seen, dropped: progress.dropped, open: progress.open });
+    return progress.blocked > 0 ? `${text} (${t('paths.blocked', { n: progress.blocked })})` : text;
+  }
+  /** The task a promoted point names, as the list of open tasks has it (absent: finished, or not in this vault). */
+  function promotedTask(id: string) {
+    return app.tasks.find((task) => task.id === id);
+  }
+  function toggleFold(index: number): void {
+    const next = new Set(folded);
+    if (next.has(index)) next.delete(index);
+    else next.add(index);
+    folded = next;
+  }
+</script>
+
+<section class="paths" aria-label={t('nav.paths')}>
+  <header class="intro">
+    <div class="head">
+      <h2>{t('paths.title')}</h2>
+      <Info hint={t('paths.intro')} label={t('hint.about', { what: t('nav.paths') })} />
+    </div>
+  </header>
+
+  {#if !usable}
+    <p class="none">{t('paths.no_engine')}</p>
+  {:else if listProblem && list === null}
+    <p class="none" role="alert">{t('paths.failed')} <button type="button" onclick={() => void readList()}>{t('paths.retry')}</button></p>
+  {:else if list === null}
+    <p class="none" role="status">{t('paths.loading')}</p>
+  {:else if list.length === 0}
+    <p class="none">{t('paths.none')}</p>
+  {:else}
+    <div class="split">
+      <nav class="list" aria-label={t('paths.list')}>
+        <ul>
+          {#each list as entry (entry.id)}
+            <li>
+              <button
+                type="button"
+                class="pick"
+                class:chosen={entry.id === chosen}
+                aria-current={entry.id === chosen ? 'true' : undefined}
+                data-path={entry.id}
+                onclick={() => choose(entry.id)}
+              >
+                <span class="name">{#if entry.icon?.kind === 'emoji'}<span aria-hidden="true">{entry.icon.value} </span>{/if}{entry.title}</span>
+                <span class="sub">{entry.area} · {progressText(entry.progress)}</span>
+              </button>
+            </li>
+          {/each}
+        </ul>
+      </nav>
+
+      <div class="path">
+        {#if docProblem && !doc}
+          <p class="none" role="alert">{t('paths.path_failed')} <button type="button" onclick={() => void readPath(chosen)}>{t('paths.retry')}</button></p>
+        {:else if !doc || doc.path.id !== chosen}
+          <p class="none" role="status">{chosen === '' ? t('paths.choose') : t('paths.reading')}</p>
+        {:else}
+          {@const progress = doc.progress}
+          <h3>{doc.path.title}</h3>
+          {#if doc.path.summary}<p class="summary">{doc.path.summary}</p>{/if}
+          <div class="progress" role="img" aria-label={t('paths.progress_of', { title: doc.path.title }) + ': ' + progressText(progress)} data-progress>
+            {#each progressParts(progress) as part (part.kind)}
+              <span class="part {part.kind}" style:flex-grow={part.n} data-part={part.kind}></span>
+            {/each}
+          </div>
+          <p class="figures" aria-hidden="true">{progressText(progress)}</p>
+          {#if doc.tree_problems.length > 0}
+            <p class="problems" role="note">{t('paths.problems', { n: doc.tree_problems.length })}</p>
+          {/if}
+          {#if conflict}
+            <p class="conflict" role="alert">{t('paths.conflict')}</p>
+          {/if}
+
+          <div class="tools">
+            <button type="button" onclick={() => (folded = new Set(parentIndices(doc!.nodes)))}>{t('paths.fold_all')}</button>
+            <button type="button" onclick={() => (folded = new Set())} disabled={folded.size === 0}>{t('paths.unfold_all')}</button>
+            {#if reading || app.saving}<span class="busy" role="status">{app.saving ? t('paths.saving') : t('paths.reading')}</span>{/if}
+          </div>
+
+          <ul class="tree" aria-label={t('paths.tree', { title: doc.path.title })}>
+            {#each shown as node (node.index)}
+              {@const label = labelText(node)}
+              {@const link = openableLink(node.link)}
+              {@const parent = node.children > 0}
+              <li
+                class="point"
+                style:--depth={node.depth}
+                data-point={node.key ?? `#${node.index}`}
+                data-state={node.derived}
+              >
+                <div class="row">
+                  {#if parent}
+                    <button
+                      type="button"
+                      class="fold"
+                      aria-expanded={!folded.has(node.index)}
+                      aria-label={t(folded.has(node.index) ? 'paths.unfold' : 'paths.fold', { label })}
+                      onclick={() => toggleFold(node.index)}><span aria-hidden="true">{folded.has(node.index) ? '▸' : '▾'}</span></button
+                    >
+                  {:else}
+                    <span class="fold-space" aria-hidden="true"></span>
+                  {/if}
+
+                  {#if isMarkable(node) && node.state}
+                    <button
+                      type="button"
+                      class="mark {node.derived}"
+                      aria-label={t('paths.mark', {
+                        label,
+                        state: stateWord(node.derived),
+                        next: t(clickedState(node.state) === 'learned' ? 'paths.next.learned' : 'paths.next.open'),
+                      })}
+                      disabled={app.saving}
+                      onclick={() => clickMark(node)}><span aria-hidden="true">{MARKS[node.derived]}</span></button
+                    >
+                  {:else}
+                    <!-- A parent has no mark of its own, a promoted point is the task's: the state is shown, not set. -->
+                    <span class="mark shown {node.derived}" class:parent title={stateWord(node.derived)}>
+                      <span aria-hidden="true">{MARKS[node.derived]}</span><span class="sr-only">{stateWord(node.derived)}</span>
+                    </span>
+                  {/if}
+
+                  <span class="label">
+                    {#if link}
+                      <a href={link} target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer" aria-label={t('paths.link_of', { label })}>{label}</a>
+                    {:else}
+                      {label}
+                    {/if}
+                    {#if parent}<span class="count">{progressText(node.progress)}</span>{/if}
+                  </span>
+
+                  {#if node.promoted}
+                    {@const task = promotedTask(node.promoted)}
+                    <span class="promoted">
+                      {#if task}
+                        <button type="button" class="link" aria-label={t('paths.promoted.open', { id: node.promoted })} onclick={() => app.reveal(node.promoted!)}
+                          >{t('paths.promoted', { id: node.promoted })}</button
+                        >
+                        <span class="status">{t(`status.${task.status}` as Key)}</span>
+                      {:else}
+                        <span>{t('paths.promoted', { id: node.promoted })}</span>
+                        <span class="status">{node.closed ? `${t('paths.promoted.finished')} · ${stateWord(node.derived)}` : stateWord(node.derived)}</span>
+                      {/if}
+                    </span>
+                  {/if}
+
+                  {#if choicesOf(node).length > 0}
+                    <ChoiceMenu
+                      label={t('paths.more', { label })}
+                      short={t('paths.menu')}
+                      choices={choicesOf(node)}
+                      disabled={app.saving}
+                      name="point"
+                      onblocked={(choice) => {
+                        if (choice.reason) app.tell('error', 'paths.note.read_only');
+                      }}
+                    />
+                  {/if}
+                </div>
+
+                {#if node.reason}
+                  <p class="reason">{t(node.state === 'blocked' ? 'paths.key' : 'paths.reason', { reason: node.reason })}</p>
+                {/if}
+                {#if node.note && !(editing?.index === node.index && editing.kind === 'note')}
+                  <p class="note" aria-label={t('paths.note_of', { label })}>{node.note}</p>
+                {/if}
+
+                {#if editing?.index === node.index && editing.kind === 'reason' && editing.state}
+                  <form
+                    class="edit"
+                    onsubmit={(e) => {
+                      e.preventDefault();
+                      saveReason(node);
+                    }}
+                  >
+                    <label for="reason-{node.index}">{t(`paths.reason.${editing.state}` as Key)}</label>
+                    <input
+                      id="reason-{node.index}"
+                      type="text"
+                      aria-required="true"
+                      maxlength={REASON_MAX}
+                      bind:value={draft}
+                      aria-invalid={editing.missing ? 'true' : undefined}
+                      aria-describedby={editing.missing ? `reason-missing-${node.index}` : undefined}
+                      onkeydown={(e) => {
+                        if (e.key === 'Escape') editing = null;
+                      }}
+                    />
+                    {#if editing.missing}<span id="reason-missing-{node.index}" class="missing" role="alert">{t('paths.reason.required')}</span>{/if}
+                    <span class="buttons">
+                      <button type="submit" class="primary">{t('paths.reason.save')}</button>
+                      <button type="button" onclick={() => (editing = null)}>{t('paths.reason.cancel')}</button>
+                    </span>
+                  </form>
+                {:else if editing?.index === node.index && editing.kind === 'note'}
+                  <form
+                    class="edit"
+                    onsubmit={(e) => {
+                      e.preventDefault();
+                      saveNote(node);
+                    }}
+                  >
+                    <label for="note-{node.index}">{t('paths.note_of', { label })}</label>
+                    <textarea
+                      id="note-{node.index}"
+                      rows="3"
+                      bind:value={draft}
+                      onkeydown={(e) => {
+                        if (e.key === 'Escape') editing = null;
+                      }}
+                    ></textarea>
+                    <span class="buttons">
+                      <button type="submit" class="primary">{t('paths.note.save')}</button>
+                      <button type="button" onclick={() => (editing = null)}>{t('paths.note.cancel')}</button>
+                    </span>
+                  </form>
+                {/if}
+              </li>
+            {/each}
+          </ul>
+        {/if}
+      </div>
+    </div>
+  {/if}
+</section>
+
+<style>
+  .paths {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    min-width: 0;
+  }
+  .intro .head,
+  .tools {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+  h2,
+  h3 {
+    margin: 0;
+  }
+  .none,
+  .summary,
+  .figures,
+  .count,
+  .sub,
+  .status,
+  .busy {
+    color: var(--muted);
+  }
+  button:not(.link):not(.pick) {
+    background: var(--surface);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 0.25rem 0.6rem;
+    min-height: 2rem;
+    cursor: pointer;
+  }
+  button:disabled {
+    cursor: default;
+    opacity: 0.6;
+  }
+  button.primary {
+    background: var(--accent);
+    color: var(--accent-text);
+    border-color: var(--accent);
+  }
+  .link {
+    background: none;
+    border: 0;
+    padding: 0;
+    color: var(--accent);
+    font: inherit;
+    cursor: pointer;
+    text-decoration: underline;
+  }
+  .split {
+    display: grid;
+    grid-template-columns: minmax(12rem, 18rem) minmax(0, 1fr);
+    gap: 1rem;
+    align-items: start;
+  }
+  @media (max-width: 720px) {
+    .split {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+  ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+  .list li + li {
+    margin-top: 0.3rem;
+  }
+  .pick {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.15rem;
+    width: 100%;
+    text-align: left;
+    background: var(--surface);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 0.45rem 0.6rem;
+    font: inherit;
+    cursor: pointer;
+  }
+  .pick.chosen {
+    border-color: var(--accent);
+    box-shadow: inset 3px 0 0 var(--accent);
+  }
+  .pick .name {
+    font-weight: 600;
+  }
+  .pick .sub {
+    font-size: 0.85em;
+  }
+  .path {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    min-width: 0;
+  }
+  .progress {
+    display: flex;
+    height: 0.7rem;
+    border-radius: var(--radius-pill);
+    overflow: hidden;
+    background: var(--surface);
+    border: 1px solid var(--border);
+  }
+  .part {
+    flex-basis: 0;
+  }
+  .part.learned {
+    background: var(--ok);
+  }
+  .part.seen {
+    background: var(--accent);
+  }
+  .part.dropped {
+    background: var(--muted);
+  }
+  .part.open {
+    background: var(--surface);
+  }
+  .figures,
+  .problems,
+  .conflict,
+  .summary {
+    margin: 0;
+  }
+  .conflict {
+    color: var(--bad);
+  }
+  .problems {
+    color: var(--warn);
+  }
+  .point {
+    padding-left: calc(var(--depth) * 1.4rem);
+    border-bottom: 1px solid var(--border);
+    padding-block: 0.2rem;
+  }
+  .row {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    min-height: 2.2rem;
+  }
+  .fold,
+  .fold-space,
+  .mark {
+    flex: none;
+    width: 2rem;
+    height: 2rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    font-weight: 700;
+  }
+  button.fold {
+    border-color: transparent;
+    background: none;
+  }
+  .mark.shown {
+    border: 1px dashed var(--border);
+    border-radius: var(--radius);
+  }
+  .mark.learned {
+    color: var(--ok);
+  }
+  .mark.blocked {
+    color: var(--bad);
+  }
+  .mark.seen,
+  .mark.partial {
+    color: var(--accent);
+  }
+  .mark.dropped {
+    color: var(--muted);
+  }
+  .label {
+    flex: 1 1 12rem;
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  .point[data-state='dropped'] .label {
+    text-decoration: line-through;
+  }
+  .label a {
+    color: var(--accent);
+  }
+  .count {
+    margin-left: 0.4rem;
+    font-size: 0.85em;
+  }
+  .promoted {
+    display: inline-flex;
+    gap: 0.4rem;
+    align-items: baseline;
+  }
+  .reason,
+  .note {
+    margin: 0 0 0.2rem calc(4.4rem + 0.8rem);
+  }
+  .reason {
+    color: var(--muted);
+    font-size: 0.9em;
+  }
+  .note {
+    white-space: pre-wrap;
+    border-left: 3px solid var(--border);
+    padding-left: 0.5rem;
+  }
+  .edit {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    margin: 0.2rem 0 0.4rem calc(4.4rem + 0.8rem);
+    max-width: 40rem;
+  }
+  .edit input,
+  .edit textarea {
+    font: inherit;
+    color: var(--text);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 0.3rem 0.4rem;
+  }
+  .missing {
+    color: var(--bad);
+  }
+  .buttons {
+    display: flex;
+    gap: 0.4rem;
+  }
+  @media (pointer: coarse) {
+    .fold,
+    .fold-space,
+    .mark,
+    button:not(.link):not(.pick) {
+      min-width: 2.75rem;
+      min-height: 2.75rem;
+    }
+  }
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+</style>

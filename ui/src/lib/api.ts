@@ -12,6 +12,8 @@ import type {
   NamedLists,
   Next,
   Order,
+  PathDocument,
+  Paths,
   PlanCompare,
   PlanFor,
   Result,
@@ -88,7 +90,23 @@ export type Op =
   /** The frontmatter of an open plan or project file; `null` removes a key (capabilities `plan_set`, `project_set`). */
   | { op: 'plan_set' | 'project_set'; id: string; patch: Record<string, unknown>; if_match?: string }
   /** Finish a plan or a project by hand (capabilities `plan_close`, `project_close`); refused while something holds it open. */
-  | { op: 'plan_close' | 'project_close'; id: string };
+  | { op: 'plan_close' | 'project_close'; id: string }
+  /**
+   * One learning point of a path (`point`: its key or `#<index>`): its state with the reason, or its note (capability
+   * `node_note`), on the version read. The engine judges both.
+   */
+  | {
+      op: 'node_set';
+      id: string;
+      point: string;
+      state?: 'open' | 'learned' | 'seen' | 'dropped' | 'blocked';
+      reason?: string;
+      note?: string;
+      if_match?: string;
+    }
+  /** A learning point of a path (or of a task's `## Lernpunkte`) made a task of its own, and taken back. */
+  | { op: 'promote'; container: string; point: string; if_match?: string }
+  | { op: 'unpromote'; container: string; point: string; id?: string; if_match?: string };
 
 /** The vaults the hub can read, and the one it reads. A folder is shown by its last part only. */
 export interface VaultList {
@@ -711,6 +729,17 @@ export class Hub extends HubClient<Snapshot> {
   /** The open plans side by side (capability `plan_compare`): every figure is the engine's. */
   planCompare(signal?: AbortSignal): Promise<PlanCompare> {
     return this.json<PlanCompare>('/api/tasks/plan_compare', signal ? { signal } : undefined);
+  }
+
+  /** The open learning paths with their progress, no tree (capability `paths`). */
+  paths(signal?: AbortSignal): Promise<Paths> {
+    return this.json<Paths>('/api/tasks/paths', signal ? { signal } : undefined);
+  }
+
+  /** One learning path with its tree, a flat list in document order (capability `path`). */
+  path(id: string, signal?: AbortSignal): Promise<PathDocument> {
+    const path = `/api/tasks/path?id=${encodeURIComponent(id).replace(/%2F/gi, '/')}`;
+    return this.json<PathDocument>(path, signal ? { signal } : undefined);
   }
 
   /** Where the areas hang together: the links between the open tasks of different areas. */

@@ -552,6 +552,19 @@
                 },
               ]
             : []),
+          // The learning paths (capability `paths`): an older engine knows none, so there is nothing to offer.
+          ...(app.can('paths') && app.can('path')
+            ? [
+                {
+                  kind: 'radio' as const,
+                  label: t('nav.paths'),
+                  hint: t('hint.item.nav.paths'),
+                  checked: app.view === 'paths',
+                  onselect: () => app.setView('paths'),
+                  ...apart('paths'),
+                },
+              ]
+            : []),
           // The export belongs to the view that is shown: it takes what that view draws.
           { kind: 'section', label: t('menu.sec.export') },
           ...exportItems(ready),
@@ -916,7 +929,9 @@
                           ? t('nav.repos')
                           : app.view === 'repostatus'
                             ? t('nav.repostatus')
-                            : t('nav.list')}
+                            : app.view === 'paths'
+                              ? t('nav.paths')
+                              : t('nav.list')}
         </h1>
         {#if alone}
           <!-- A window of one task (detached from a float): its detail, alone, as wide as the window allows. -->
@@ -950,6 +965,8 @@
           <Lazy {app} load={() => import('./views/ReposView.svelte')} />
         {:else if app.view === 'repostatus'}
           <Lazy {app} load={() => import('./views/RepoStatusView.svelte')} />
+        {:else if app.view === 'paths'}
+          <Lazy {app} load={() => import('./views/PathsView.svelte')} />
         {:else}
           <ListView {app} bind:searchBox />
         {/if}

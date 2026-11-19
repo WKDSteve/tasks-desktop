@@ -26,6 +26,7 @@ export const START_VIEWS: readonly View[] = [
   'views',
   'repos',
   'repostatus',
+  'paths',
 ];
 
 export interface Defaults {

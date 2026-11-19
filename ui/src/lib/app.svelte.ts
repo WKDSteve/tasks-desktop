@@ -38,6 +38,8 @@ import type {
   Links,
   MovePlan,
   Next,
+  PathDocument,
+  Paths,
   PlanCompare,
   Result,
   Snapshot,
@@ -50,6 +52,12 @@ import type {
 import { expandAreas, isAreaGroup, NO_AREA, type AreaGroupInfo } from './areaGroups';
 import type { Op } from './api';
 import { adoptOps, followUpOp, runAnswer, type Answer, type AnswerKind } from './agentAnswer';
+
+/** The note an inverse of `node_set` carries (capability `node_note`), as a part of the operation; none: `{}`. */
+function noteOf(inv: object): { note?: string } {
+  const note = (inv as { note?: unknown }).note;
+  return typeof note === 'string' ? { note } : {};
+}
 
 /** What the dialog "Answer of the agent" shows. */
 export interface AnswerView {
@@ -160,7 +168,7 @@ const NOTE_MAX = 1000;
 
 export type Phase = 'starting' | 'needs_pairing' | 'offline' | 'unavailable' | 'ready';
 export type Connection = 'live' | 'reconnecting' | 'offline';
-export type View = 'today' | 'list' | 'board' | 'plan' | 'inbox' | 'abnahme' | 'cross' | 'calendar' | 'timeline' | 'reminders' | 'stats' | 'done' | 'views' | 'repos' | 'repostatus';
+export type View = 'today' | 'list' | 'board' | 'plan' | 'inbox' | 'abnahme' | 'cross' | 'calendar' | 'timeline' | 'reminders' | 'stats' | 'done' | 'views' | 'repos' | 'repostatus' | 'paths';
 export type Theme = 'auto' | 'light' | 'dark';
 /** The blocks of the Today view that a person may hide. */
 export { ORDERED_TILES, TILES, type OrderedTile, type Tile } from './tiles-list';
@@ -807,6 +815,8 @@ export class App {
   selectedId = $state<string | null>(null);
   /** The plan the plan view is narrowed to ('': every task); kept when the view is left. */
   planChoice = $state('');
+  /** The learning path open in the view of the learning paths ('': none chosen yet); kept when the view is left. */
+  pathChoice = $state('');
   /**
    * The project the plan view shows as its page (`ProjectPage`) while no plan is chosen; empty for none. Choosing a plan
    * in the plan view's choice leaves it, the trail over a plan of a project comes back to it.
@@ -1422,6 +1432,16 @@ export class App {
     return this.env.hub.planCompare(signal);
   }
 
+  /** The open learning paths with their progress (`tasks.paths`): every figure is the engine's. */
+  paths(signal?: AbortSignal): Promise<Paths> {
+    return this.env.hub.paths(signal);
+  }
+
+  /** One learning path with its tree (`tasks.path`): the states, the progress and the derived state are the engine's. */
+  path(id: string, signal?: AbortSignal): Promise<PathDocument> {
+    return this.env.hub.path(id, signal);
+  }
+
   finished(
     query: { area?: string; plan?: string; since?: string; until?: string; limit?: number; offset?: number },
     signal?: AbortSignal,
@@ -1907,6 +1927,27 @@ export class App {
           view: inv.view as ViewForm,
           ...(inv.if_match ? { if_match: inv.if_match } : {}),
         });
+        continue;
+      }
+      // A learning point: the state and reason it had (or its note), on the version the change left.
+      if (inv.op === 'node_set') {
+        if (typeof inv.point !== 'string') return undefined;
+        inverses.push({
+          op: 'node_set',
+          id: inv.id,
+          point: inv.point,
+          ...(inv.state !== undefined ? { state: inv.state } : {}),
+          ...(typeof inv.reason === 'string' ? { reason: inv.reason } : {}),
+          // The note is no field of `Inverse` before the engine writes notes (capability `node_note`).
+          ...noteOf(inv),
+          ...(inv.if_match ? { if_match: inv.if_match } : {}),
+        });
+        continue;
+      }
+      // A point made a task: taken back while the task holds no work of its own (the engine judges that).
+      if (inv.op === 'unpromote') {
+        if (typeof inv.container !== 'string' || typeof inv.point !== 'string') return undefined;
+        inverses.push({ op: 'unpromote', container: inv.container, point: inv.point, id: inv.id, ...(inv.if_match ? { if_match: inv.if_match } : {}) });
         continue;
       }
       // A plan or project file changed: its old values back, on the version the change left.
