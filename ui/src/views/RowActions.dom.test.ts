@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { make, snapshot } from '../lib/appDouble';
 import type { Result, Snapshot } from '../lib/contract';
 import { task } from '../lib/fixtures';
-import { translate } from '../lib/i18n';
+import { labelOf, translate } from '../lib/i18n';
 import RowActions from './RowActions.svelte';
 
 type Made = ReturnType<typeof make>;
@@ -30,18 +30,28 @@ async function settle(): Promise<void> {
   flushSync();
 }
 
-async function row(): Promise<{ m: Made; select: (name: string) => HTMLSelectElement }> {
+async function row(meant = true): Promise<{ m: Made; host: HTMLElement; select: (name: string) => HTMLSelectElement }> {
   const m = make({ token: 't' });
   made = m;
   m.hub.capabilities = ['ops', 'move_area'];
   m.hub.doc = snapshot([task('pub/a', { status: 'open', prio: 2, etag: 'ea' })]) as Snapshot;
   await m.app.start(null);
   m.app.setRowActions({ shown: ['status', 'prio', 'copy'], always: true });
-  const target = document.createElement('div');
-  document.body.append(target);
-  mounted = mount(RowActions, { target, props: { app: m.app, task: m.app.tasks[0]! } });
+  // The element of a row of the list: the bar is meant while the pointer is on it or the focus is in it.
+  const host = document.createElement('div');
+  host.className = 'row-host';
+  document.body.append(host);
+  mounted = mount(RowActions, { target: host, props: { app: m.app, task: m.app.tasks[0]! } });
   flushSync();
-  return { m, select: (name) => target.querySelector<HTMLSelectElement>(`select[data-row-action="${name}"]`)! };
+  if (meant) {
+    host.dispatchEvent(new Event('pointerenter'));
+    await settle();
+  }
+  return {
+    m,
+    host,
+    select: (name) => host.querySelector<HTMLSelectElement>(`select[data-row-action="${name}"]`)!,
+  };
 }
 
 function pick(el: HTMLSelectElement, value: string): void {
@@ -90,5 +100,45 @@ describe('the choices of a row', () => {
     document.querySelector<HTMLButtonElement>('button[data-row-action="copy"]')?.click();
     await settle();
     expect(m.app.toast).toMatchObject({ kind: 'error', text: translate(m.app.lang, 'about.copy_failed') });
+  });
+
+  it('draw a select only while the row is meant: a stand-in before, while the pointer is on it or the focus is in it, and a stand-in after', async () => {
+    const { m, host, select } = await row(false);
+    const ghost = (name: string) => host.querySelector(`.ghost[data-row-action="${name}"]`);
+    expect(host.querySelectorAll('select')).toHaveLength(0);
+    expect(ghost('status')?.textContent).toBe(labelOf(m.app.lang, 'status', 'open'));
+    expect(ghost('prio')?.textContent).toBe('P2');
+
+    host.dispatchEvent(new Event('pointerenter'));
+    await settle();
+    expect(host.querySelectorAll('select')).toHaveLength(2);
+    expect(ghost('status')).toBeNull();
+    // Its choice has the width of the stand-in it replaced: nothing in the row moves.
+    expect(select('status').style.width).toMatch(/^min\(7\.5rem, \d+ch \+ 2\.4rem\)$/);
+
+    host.dispatchEvent(new Event('pointerleave'));
+    await settle();
+    expect(host.querySelectorAll('select')).toHaveLength(0);
+
+    // The focus does it too: the row's own button takes the focus, and the choices are there for the next Tab.
+    host.dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
+    await settle();
+    expect(host.querySelectorAll('select')).toHaveLength(2);
+    host.dispatchEvent(new FocusEvent('focusout', { bubbles: true, relatedTarget: null }));
+    await settle();
+    expect(host.querySelectorAll('select')).toHaveLength(0);
+  });
+
+  it('keep the select while its write is on its way, also when the pointer has left the row', async () => {
+    const { m, host, select } = await row();
+    let release: () => void = () => undefined;
+    m.hub.holdOps = new Promise<void>((resolve) => (release = resolve));
+    pick(select('status'), 'doing');
+    host.dispatchEvent(new Event('pointerleave'));
+    await settle();
+    expect(host.querySelectorAll('select')).toHaveLength(2);
+    release();
+    await settle();
+    expect(host.querySelectorAll('select')).toHaveLength(0);
   });
 });

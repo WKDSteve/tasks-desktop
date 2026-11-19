@@ -23,6 +23,47 @@
 
   const prios = $derived(task.prio === undefined || app.ranges.prios.includes(task.prio) ? app.ranges.prios : [task.prio, ...app.ranges.prios]);
 
+  // The two choices are a `select` with all its options: drawn only in the row that is meant (under the pointer, with the
+  // focus, selected, or while its write is on its way), as a placeholder of the same width in every other. With 600 rows
+  // that is 1200 `select` and 5000 `option` less (measured: 18567 elements and 260 ms of the list against 9325 and 145 ms
+  // without the two actions). The placeholder is not focusable: the row's own button takes the focus first, and with it
+  // the choice is there for the next Tab.
+  let bar: HTMLElement | undefined = $state();
+  let hovered = $state(false);
+  let focused = $state(false);
+  let writing = $state(false);
+  const meant = $derived(selected || hovered || focused || writing);
+  $effect(() => {
+    const host = bar?.closest('.row-host');
+    if (!host) return;
+    hovered = host.matches(':hover');
+    focused = host.matches(':focus-within');
+    // Not at once: the browser fires `focusout` while Svelte takes an element out of the page (in the middle of an update),
+    // and state may not be written there (state_unsafe_mutation).
+    const later = (write: () => void) => queueMicrotask(write);
+    const enter = () => later(() => (hovered = true));
+    const leave = () => later(() => (hovered = false));
+    const focusIn = () => later(() => (focused = true));
+    const focusOut = (e: Event) => {
+      const to = (e as FocusEvent).relatedTarget as Node | null;
+      later(() => (focused = host.contains(to)));
+    };
+    host.addEventListener('pointerenter', enter);
+    host.addEventListener('pointerleave', leave);
+    host.addEventListener('focusin', focusIn);
+    host.addEventListener('focusout', focusOut);
+    return () => {
+      host.removeEventListener('pointerenter', enter);
+      host.removeEventListener('pointerleave', leave);
+      host.removeEventListener('focusin', focusIn);
+      host.removeEventListener('focusout', focusOut);
+    };
+  });
+  /** As wide as the widest of the choices (the real `select` has the same width, so nothing moves when it replaces the placeholder). */
+  const widthOf = (labels: readonly string[]): string => `min(7.5rem, ${Math.max(1, ...labels.map((l) => l.length))}ch + 2.4rem)`;
+  const statusWidth = $derived(widthOf(statuses.map((choice) => labelOf(app.lang, 'status', choice))));
+  const prioWidth = $derived(widthOf([...prios.map((prio) => `P${prio}`), ...(task.prio === undefined ? [t('rowact.no_prio')] : [])]));
+
   // A page that is not served securely has no clipboard: the helper says so instead of throwing.
   async function copyId(): Promise<void> {
     if (await copyText(navigator.clipboard, task.id)) app.tell('ok', 'ctx.copied', { id: task.id });
@@ -36,7 +77,13 @@
    * else took it.
    */
   async function choose(el: HTMLSelectElement, key: 'status' | 'prio', value: string | number, shows: () => string): Promise<void> {
-    await app.setField(task.id, key, value);
+    // The select stays while its write is on its way, also when the pointer leaves the row.
+    writing = true;
+    try {
+      await app.setField(task.id, key, value);
+    } finally {
+      writing = false;
+    }
     await tick();
     if (!el.isConnected) return;
     el.value = shows();
@@ -45,7 +92,7 @@
 </script>
 
 {#if offered.length > 0}
-  <span class="row-actions" class:shown={barShown(app.rowActions, selected)} class:always={app.rowActions.always} role="group" aria-label={t('rowact.group', { id: task.id })}>
+  <span bind:this={bar} class="row-actions" class:shown={barShown(app.rowActions, selected)} class:always={app.rowActions.always} role="group" aria-label={t('rowact.group', { id: task.id })}>
     {#each offered as action (action)}
       {#if action === 'move'}
         <button
@@ -57,32 +104,42 @@
           onclick={() => app.chooseDropMove(task.id)}>⇄</button
         >
       {:else if action === 'status'}
-        <label data-hint={t('hint.form.rowact.status')}>
-          <span class="sr-only">{t('rowact.status', { id: task.id })}</span>
-          <select
-            data-row-action="status"
-            value={status}
-            disabled={app.locked}
-            onchange={(e) => void choose(e.currentTarget, 'status', e.currentTarget.value, () => task.status ?? '')}
-          >
-            {#each statuses as choice (choice)}<option value={choice}>{labelOf(app.lang, 'status', choice)}</option>{/each}
-          </select>
-        </label>
+        {#if meant}
+          <label data-hint={t('hint.form.rowact.status')}>
+            <span class="sr-only">{t('rowact.status', { id: task.id })}</span>
+            <select
+              data-row-action="status"
+              style:width={statusWidth}
+              value={status}
+              disabled={app.locked}
+              onchange={(e) => void choose(e.currentTarget, 'status', e.currentTarget.value, () => task.status ?? '')}
+            >
+              {#each statuses as choice (choice)}<option value={choice}>{labelOf(app.lang, 'status', choice)}</option>{/each}
+            </select>
+          </label>
+        {:else}
+          <span class="ghost" class:locked={app.locked} data-row-action="status" aria-hidden="true" style:width={statusWidth}>{labelOf(app.lang, 'status', status)}</span>
+        {/if}
       {:else if action === 'prio'}
-        <label data-hint={t('hint.form.rowact.prio')}>
-          <span class="sr-only">{t('rowact.prio', { id: task.id })}</span>
-          <select
-            data-row-action="prio"
-            value={task.prio === undefined ? '' : String(task.prio)}
-            disabled={app.locked}
-            onchange={(e) => {
-              if (e.currentTarget.value !== '') void choose(e.currentTarget, 'prio', Number(e.currentTarget.value), () => (task.prio === undefined ? '' : String(task.prio)));
-            }}
-          >
-            {#if task.prio === undefined}<option value="">{t('rowact.no_prio')}</option>{/if}
-            {#each prios as prio (prio)}<option value={String(prio)}>P{prio}</option>{/each}
-          </select>
-        </label>
+        {#if meant}
+          <label data-hint={t('hint.form.rowact.prio')}>
+            <span class="sr-only">{t('rowact.prio', { id: task.id })}</span>
+            <select
+              data-row-action="prio"
+              style:width={prioWidth}
+              value={task.prio === undefined ? '' : String(task.prio)}
+              disabled={app.locked}
+              onchange={(e) => {
+                if (e.currentTarget.value !== '') void choose(e.currentTarget, 'prio', Number(e.currentTarget.value), () => (task.prio === undefined ? '' : String(task.prio)));
+              }}
+            >
+              {#if task.prio === undefined}<option value="">{t('rowact.no_prio')}</option>{/if}
+              {#each prios as prio (prio)}<option value={String(prio)}>P{prio}</option>{/each}
+            </select>
+          </label>
+        {:else}
+          <span class="ghost" class:locked={app.locked} data-row-action="prio" aria-hidden="true" style:width={prioWidth}>{task.prio === undefined ? t('rowact.no_prio') : `P${task.prio}`}</span>
+        {/if}
       {:else if action === 'finish'}
         <button
           type="button"
@@ -167,6 +224,26 @@
   select {
     background: var(--surface);
     max-width: 7.5rem;
+  }
+  /* The stand-in of a choice in a row that is not meant: looks like the select it is replaced by, and is not reached. */
+  .ghost {
+    display: inline-block;
+    box-sizing: border-box;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text);
+    font-size: 0.8rem;
+    line-height: 1.3;
+    min-width: 1.6rem;
+    max-width: 7.5rem;
+    overflow: hidden;
+    padding: 0 0.35rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .ghost.locked {
+    opacity: 0.55;
   }
   button:hover:not(:disabled),
   select:hover:not(:disabled) {

@@ -513,8 +513,11 @@ export class FakeHub {
   /** What the writes after `next_ops` answer, one each. */
   ops_queue: (Result | ApiError)[] = [];
   previews = new Map<string, Partial<DonePreview>>();
+  /** Holds the answer of every write back until it is settled (a write that is on its way). */
+  holdOps: Promise<void> | null = null;
   async ops(request: OpsRequest): Promise<Result> {
     this.sent.push(request);
+    if (this.holdOps) await this.holdOps;
     const answer = this.next_ops ?? this.ops_queue.shift() ?? null;
     this.next_ops = null;
     if (answer instanceof ApiError) throw answer;

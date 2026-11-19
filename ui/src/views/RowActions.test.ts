@@ -45,7 +45,7 @@ describe('the actions at the end of a row', () => {
   });
 
   it('offers every chosen action in the order of the bar, each field with its hint', () => {
-    const out = html({ shown: ROW_ACTIONS, always: false });
+    const out = html({ shown: ROW_ACTIONS, always: false }, { selected: true });
     expect(actions(out)).toEqual([...ROW_ACTIONS]);
     expect(out).toContain('data-hint="The status of this task. A choice is written at once."');
     expect(out).toContain('Status of pub/a');
@@ -61,5 +61,20 @@ describe('the actions at the end of a row', () => {
     const locked = html({ shown: ['move', 'copy'], always: false }, { locked: true });
     expect(locked).toMatch(/data-row-action="move"[^>]*disabled/);
     expect(locked).not.toMatch(/data-row-action="copy"[^>]*disabled/);
+  });
+
+  it('draws the choices of status and priority as a select only in the row that is meant, and as a stand-in in every other', () => {
+    const prefs: RowActionPrefs = { shown: ['status', 'prio'], always: true };
+    const other = html(prefs);
+    // The stand-ins keep the place and the name of the action, and are not reached.
+    expect(actions(other)).toEqual(['status', 'prio']);
+    expect(other).not.toContain('<select');
+    expect(other).not.toContain('<option');
+    expect(other).toMatch(/<span class="ghost[^"]*" data-row-action="status" aria-hidden="true"[^>]*>open<\/span>/);
+    expect(other).toMatch(/data-row-action="prio" aria-hidden="true"[^>]*>P2<\/span>/);
+    const meant = html(prefs, { selected: true });
+    expect(actions(meant)).toEqual(['status', 'prio']);
+    expect(meant.match(/<select/g)).toHaveLength(2);
+    expect(meant).not.toContain('class="ghost');
   });
 });
