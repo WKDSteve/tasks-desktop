@@ -17,10 +17,18 @@
   const key = $derived(`${task.id}\u0000${named.join(',')}`);
   const split = $derived(items ? splitMeetings(items, app.nowMs()) : { coming: [], past: [] });
 
+  // The task the list was read for: another task (the detail switched) shows nothing of the one before while its own
+  // meetings are read; a reread of the same task keeps its list until the new one is there.
+  let readFor = '';
+
   $effect(() => {
     const id = task.id;
     void key;
     void app.snapshot?.rev;
+    if (readFor !== id) {
+      readFor = id;
+      items = null;
+    }
     if (named.length === 0 || !app.canMeetings) {
       items = [];
       failed = false;
