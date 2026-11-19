@@ -42,7 +42,7 @@ pub(super) struct VaultRuntime {
     /// The check of the vault, run as a job: at most one at a time, and gone with the vault.
     pub(super) check: StdMutex<CheckJob>,
     /// When the last check was started, by a person or by the hub itself.
-    pub(super) check_started: StdMutex<Option<std::time::Instant>>,
+    pub(super) check_started: StdMutex<Option<tokio::time::Instant>>,
     /// Whether the hub runs the check again after the vault was changed (see `follow_changes`): on once a person
     /// started a check without `refs`, off when one with `refs` was started (running it again would take those out).
     pub(super) auto_check: std::sync::atomic::AtomicBool,

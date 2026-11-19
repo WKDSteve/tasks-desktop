@@ -308,7 +308,7 @@ pub(super) fn start_check_job(
         *job = CheckJob::Running { id };
         *rt.check_started
             .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(std::time::Instant::now());
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(tokio::time::Instant::now());
         id
     };
     let runtime = Arc::clone(rt);

@@ -711,7 +711,7 @@ mod tests {
         engine.0.load(std::sync::atomic::Ordering::SeqCst)
     }
 
-    #[tokio::test]
+    #[tokio::test(start_paused = true)]
     async fn the_check_runs_again_once_after_a_burst_of_changes_has_gone_quiet() {
         let (rt, engine, tx, _handle) = follower(true, true);
         for seq in 1..=5 {
@@ -725,7 +725,7 @@ mod tests {
         assert_eq!(rt.check.lock().unwrap().to_json()["job"]["state"], "done");
     }
 
-    #[tokio::test]
+    #[tokio::test(start_paused = true)]
     async fn two_starts_are_at_least_a_gap_apart_however_the_vault_changes() {
         let (_rt, engine, tx, _handle) = follower(true, true);
         tx.send(change(1)).unwrap();
@@ -739,7 +739,7 @@ mod tests {
         assert_eq!(asked(&engine), 2);
     }
 
-    #[tokio::test]
+    #[tokio::test(start_paused = true)]
     async fn no_check_runs_without_a_client_and_none_after_a_check_with_refs() {
         let (_rt, engine, tx, _handle) = follower(false, true);
         tx.send(change(1)).unwrap();
@@ -751,7 +751,7 @@ mod tests {
         assert_eq!(asked(&engine), 0, "the last check was one with refs");
     }
 
-    #[tokio::test]
+    #[tokio::test(start_paused = true)]
     async fn a_check_that_runs_is_not_joined_by_another_and_the_change_is_checked_after_it() {
         let (rt, engine, tx, _handle) = follower(true, true);
         start_check_job(&rt, engine.clone(), serde_json::Map::new()).unwrap();
@@ -780,7 +780,7 @@ mod tests {
         }
     }
 
-    #[tokio::test]
+    #[tokio::test(start_paused = true)]
     async fn the_check_of_the_hub_asks_for_the_area_the_person_asked_for() {
         let rt = bare_runtime();
         rt.auto_check
