@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { View } from './contract';
 import { emptyFilter, type Filter } from './filter';
-import { cleanTitle, emptySelect, filterOfSelect, formOf, selectOfFilter, selectParts, TITLE_MAX, toggledGroup } from './views';
+import { cleanTitle, emptySelect, filterOfSelect, formOf, isViewField, selectOfFilter, selectParts, TITLE_MAX, toggledGroup } from './views';
 
 const filter = (extra: Partial<Filter> = {}): Filter => ({ ...emptyFilter, ...extra });
 
@@ -94,5 +94,12 @@ describe('selectParts', () => {
       { key: 'tags', values: ['ui'] },
       { key: 'query', values: ['hub'] },
     ]);
+  });
+});
+
+describe('isViewField', () => {
+  it('takes the fields a saved view is grouped by, not the others the engine groups by (outcome of the finished)', () => {
+    for (const f of ['status', 'prio', 'tags', 'area', 'state', 'cross']) expect(isViewField(f), f).toBe(true);
+    for (const f of ['outcome', '', 'Status', 'meetings']) expect(isViewField(f), f).toBe(false);
   });
 });
