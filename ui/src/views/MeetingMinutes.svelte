@@ -6,6 +6,8 @@
   // of the engine, sent without `if_match`: two devices writing at once lose nothing. A plain line can afterwards be made
   // a task, a decision or a question. An entry that reached no hub stays as a draft in this browser and is written once
   // the hub answers; the page says so.
+  // A board (✎) is drawn on the page's own surface (`BoardEditor`, loaded on demand); its first save becomes a line of
+  // the kind `board` with its preview, and a board of the minutes opens there again to draw on.
   import { untrack } from 'svelte';
   import type { App } from '../lib/app.svelte';
   import { translate, type Key } from '../lib/i18n';
@@ -24,6 +26,9 @@
     type Shortcuts,
   } from '../lib/minutes';
   import { markHidden } from '../lib/text';
+  import { boardOfAsset } from '../lib/ink';
+  import type { BoardSaved } from '../lib/api';
+  import Lazy from './Lazy.svelte';
 
   let {
     app,
@@ -118,6 +123,14 @@
     await app.write([captureOp(id, { kind, text: '', asset }, clockOf(app.nowMs()))]);
   }
 
+  /** The board open on the drawing surface: a new one (no name) or one of the minutes. */
+  let board = $state<{ name?: string } | null>(null);
+
+  /** A new board, saved for the first time: a line of the minutes with its preview. */
+  async function boardSaved(saved: BoardSaved & { name: string }): Promise<void> {
+    if (saved.preview) await app.write([captureOp(id, { kind: 'board', text: saved.name, asset: saved.preview }, clockOf(app.nowMs()))]);
+  }
+
   async function convert(line: MinuteLine, to: 'task' | 'decision' | 'question'): Promise<void> {
     if (!canWrite || cut || refused()) return;
     const ops = convertOps(id, body, line, to, etag);
@@ -177,6 +190,12 @@
               {/each}
             </span>
           {/if}
+          {#if canWrite && app.canAttach && line.kind === 'image' && line.asset && boardOfAsset(line.asset)}
+            {@const name = boardOfAsset(line.asset) ?? ''}
+            <button type="button" class="small" aria-label={t('minutes.board.edit', { name })} title={t('minutes.board.edit', { name })} onclick={() => (board = { name })}
+              >✎</button
+            >
+          {/if}
         </li>
       {/each}
     </ol>
@@ -206,6 +225,7 @@
       {#if app.canAttach}
         <button type="button" disabled={busy || app.uploading !== null} onclick={() => photoInput?.click()}>{SIGNS.image} {t('minutes.kind.image')}</button>
         <button type="button" disabled={busy || app.uploading !== null} onclick={() => audioInput?.click()}>{SIGNS.audio} {t('minutes.kind.audio')}</button>
+        <button type="button" disabled={board !== null} onclick={() => (board = {})}>✎ {t('minutes.kind.board')}</button>
         <input bind:this={photoInput} type="file" accept="image/*" capture="environment" hidden onchange={() => attach('photo', photoInput)} />
         <input bind:this={audioInput} type="file" accept="audio/*" capture="user" hidden onchange={() => attach('audio', audioInput)} />
       {/if}
@@ -226,6 +246,14 @@
         <button type="button" onclick={() => (editing = { ...DEFAULT_SHORTCUTS })}>{t('minutes.shortcuts.reset')}</button>
       </form>
     {/if}
+  {/if}
+  {#if board}
+    <Lazy
+      {app}
+      load={() => import('./BoardEditor.svelte')}
+      extra={{ owner: 'meeting' as const, id, name: board.name, onsaved: boardSaved, onclose: () => (board = null) }}
+      onfailed={() => (board = null)}
+    />
   {/if}
 </section>
 

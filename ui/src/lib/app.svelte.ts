@@ -28,7 +28,7 @@ import {
 import { addOps, type AddTarget } from './picker';
 import { connectOp, edgeOp, parseGraphOrder, phaseOp, type DepEdge, type EdgeAction, type EdgeKind, type GraphOrder } from './depGraph';
 import { COLUMNS, columnsOf, isColumn, neighbourColumn, placeNear, stepInGroup, type Column, type Move } from './board';
-import { ApiError, type AgentKind, type AgentTab, type AiDesktop, type CheckAll, type SheetRunState, type Hub, type HubArea, type HubAreas, type SearchResult, type VaultList } from './api';
+import { ApiError, type AgentKind, type AgentTab, type AiDesktop, type BoardRequest, type BoardSaved, type CheckAll, type SheetRunState, type Hub, type HubArea, type HubAreas, type SearchResult, type VaultList } from './api';
 import { cacheableClass, cacheableList, type CachedList, type ListStore } from './cache';
 import type {
   DonePreview,
@@ -1853,6 +1853,17 @@ export class App {
     if (!this.can('meeting_ops')) return false;
     const result = await this.write([{ op: 'meeting_set', id: m.id, patch, ...(m.etag ? { if_match: m.etag } : {}) }]);
     return result?.results.every((r) => r.ok) === true;
+  }
+
+  /** Save a board of the drawing surface; the engine's entry, or null when it reached no engine (said). */
+  async saveBoard(body: BoardRequest): Promise<BoardSaved | null> {
+    if (this.refusedReadOnly()) return null;
+    try {
+      return (await this.env.hub.board(body)).results[0] ?? null;
+    } catch (error) {
+      this.say('error', 'write.failed', { code: error instanceof ApiError ? error.code : 'offline' });
+      return null;
+    }
   }
 
   /** The small picture of a meeting, read with the session. */

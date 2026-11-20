@@ -230,6 +230,25 @@ export interface SearchResult {
 
 export type SnapshotResult = KitSnapshotResult<Snapshot>;
 
+/** A board to save: its container, its name, the version it was drawn on, its file and its preview as text. */
+export interface BoardRequest {
+  id: string;
+  name: string;
+  if_match?: string;
+  ink: string;
+  svg: string;
+}
+
+/** What `board_save` answered (an entry of `tasks.result`); a conflict names a free name in `details.suggestion`. */
+export interface BoardSaved {
+  ok: boolean;
+  asset?: string;
+  preview?: string;
+  etag?: string;
+  created?: boolean;
+  error?: { code: string; message?: string; details?: { suggestion?: string } };
+}
+
 /** The run of the test sheets of a task. Exit codes of `testing sheets run`: 0 green, 1 red, 2 refused, 3 not reached. */
 export interface SheetRunState {
   state: 'idle' | 'running' | 'done' | 'failed';
@@ -707,6 +726,11 @@ export class Hub extends HubClient<Snapshot> {
   /** A line of the quick capture read by the engine into a proposal of a meeting; nothing is written. */
   meetingParse(text: string, signal?: AbortSignal): Promise<MeetingParse> {
     return this.postJson<MeetingParse>('/api/tasks/meeting_parse', { text }, signal);
+  }
+
+  /** A whiteboard of the drawing surface saved through the engine's `board_save` (`<name>.ink.json` and its SVG). */
+  board(body: BoardRequest): Promise<{ results: BoardSaved[] }> {
+    return this.postJson<{ results: BoardSaved[] }>('/api/tasks/board', body);
   }
 
   /** Changes, through the one door of the engine. The answer says per operation what happened. */

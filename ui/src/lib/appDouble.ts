@@ -2,7 +2,7 @@
 // that are maps, a clock that stands still. `make` builds an `App` on them; the tests of the state (app.test.ts) and
 // the tests that mount a component in a DOM (`*.dom.test.ts`) share it, so both test the app as it is, not a copy.
 import type { IntentAnswer } from './intent';
-import { ApiError, type Hub, type HubArea, type OpsRequest, type SetupInfo, type SetupStep, type VaultList } from './api';
+import { ApiError, type BoardRequest, type BoardSaved, type Hub, type HubArea, type OpsRequest, type SetupInfo, type SetupStep, type VaultList } from './api';
 import { App, type Env } from './app.svelte';
 import type { CachedList, ListStore } from './cache';
 import type { DonePreview, Groupings, MeetingDocument, MeetingEntry, MeetingParse, Meetings, Result, Snapshot, TaskDocument, TaskEntry, View, Views } from './contract';
@@ -482,6 +482,22 @@ export class FakeHub {
   async asset(kind: string, id: string, file: string): Promise<Blob | null> {
     this.assetReads.push(`${kind} ${id} ${file}`);
     return this.assetAnswers.get(file) ?? null;
+  }
+  /** The boards saved, and what `board` answers next (none: saved as asked; an error: thrown). */
+  boards: BoardRequest[] = [];
+  boardAnswers: (BoardSaved | Error)[] = [];
+  async board(body: BoardRequest): Promise<{ results: BoardSaved[] }> {
+    this.boards.push(body);
+    const next = this.boardAnswers.shift();
+    if (next instanceof Error) throw next;
+    const saved: BoardSaved = {
+      ok: true,
+      asset: `assets/boards/${body.name}.ink.json`,
+      preview: `assets/boards/${body.name}.svg`,
+      etag: `sha256:${String(this.boards.length).padStart(16, '0')}`,
+      created: body.if_match === undefined,
+    };
+    return { results: [next ?? saved] };
   }
   /** The ids whose picture was asked, and what `meetingThumb` answers (null: no picture). */
   thumbReads: string[] = [];

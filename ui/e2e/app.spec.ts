@@ -11242,3 +11242,82 @@ test('the minutes of a meeting: every kind of entry, a line turned into a decisi
     for (const f of readdirSync(meetings)) if (!before.has(f)) rmSync(join(meetings, f), { recursive: true, force: true });
   }
 });
+
+test('the whiteboard of a meeting: drawn with a pen, a finger ignored, saved as a board and a line, drawn on again', async ({ page }) => {
+  const meetings = join(state().vault, 'lib.nvim', 'MEETINGS');
+  mkdirSync(meetings, { recursive: true });
+  const before = new Set(readdirSync(meetings));
+  const slug = 'board-e2e-m004';
+  const file = join(meetings, `${slug}.md`);
+  const now = new Date();
+  const two = (n: number) => String(n).padStart(2, '0');
+  const day = `${now.getFullYear()}-${two(now.getMonth() + 1)}-${two(now.getDate())}`;
+  const begins = new Date(Math.max(now.getTime() - 30 * 60_000, new Date(day + 'T00:00:00').getTime()));
+  writeFileSync(
+    file,
+    `---\ntitle: Board e2e m004\nstatus: planned\ndate: ${day}\ntime: "${two(begins.getHours())}:${two(begins.getMinutes())}"\nduration: 3h\ntasks: [lib.nvim/alpha]\n---\n\nA meeting of one browser test.\n`,
+  );
+  const boards = join(meetings, slug, 'assets', 'boards');
+  const text = (): string => {
+    const folder = join(meetings, slug, `${slug}.md`);
+    return readFileSync(existsSync(folder) ? folder : file, 'utf8');
+  };
+  /** A stroke of synthetic pointer events (a pen with pressure, or a finger) across the surface. */
+  const stroke = async (surface: Locator, pointerType: 'pen' | 'touch', y: number, pointerId: number): Promise<void> => {
+    const box = await surface.boundingBox();
+    if (!box) throw new Error('no surface');
+    const at = (f: number) => ({ clientX: box.x + box.width * f, clientY: box.y + box.height * y });
+    const base = { pointerType, pointerId, isPrimary: true, bubbles: true, button: 0, buttons: 1, pressure: 0.8 };
+    await surface.dispatchEvent('pointerdown', { ...base, ...at(0.3) });
+    for (const f of [0.35, 0.4, 0.45, 0.5, 0.55, 0.6]) await surface.dispatchEvent('pointermove', { ...base, button: -1, ...at(f) });
+    await surface.dispatchEvent('pointerup', { ...base, buttons: 0, pressure: 0, ...at(0.6) });
+  };
+  try {
+    await watchViolations(page);
+    await pair(page);
+    await showList(page);
+    await open(page, 'lib.nvim/alpha');
+    await page.locator('aside.detail').getByRole('button', { name: 'Board e2e m004' }).click();
+    const meetingPage = page.getByRole('dialog', { name: /Board e2e m004/ });
+    await expect(meetingPage.getByRole('tab', { name: 'In the meeting' })).toHaveAttribute('aria-selected', 'true');
+
+    // A new board: a pen draws (and from then on a finger only moves the view).
+    await meetingPage.getByRole('button', { name: '✎ Board' }).click();
+    const board = page.getByRole('dialog', { name: /^Board board-/ });
+    const surface = board.getByRole('img', { name: /page 1 of 1/ });
+    await expect(surface).toBeVisible();
+    await stroke(surface, 'pen', 0.4, 11);
+    await expect(surface.locator('path:not(.rules)')).toHaveCount(1);
+    await stroke(surface, 'touch', 0.6, 12);
+    await expect(surface.locator('path:not(.rules)')).toHaveCount(1);
+    await expectAccessible(page, 'the drawing surface');
+
+    // Closed: saved as a board with its preview, and a line of the minutes shows it.
+    await board.getByRole('button', { name: 'Close', exact: true }).click();
+    await expect(board).toHaveCount(0);
+    await expect.poll(text, { timeout: 15_000 }).toMatch(/- \d\d:\d\d !\[board-[0-9-]+\]\(assets\/boards\/board-[0-9-]+\.svg\)/);
+    const name = (/\(assets\/boards\/(board-[0-9-]+)\.svg\)/.exec(text()) ?? [])[1] ?? '';
+    const ink = (): { pages: { strokes: { points: number[] }[] }[] } => JSON.parse(readFileSync(join(boards, `${name}.ink.json`), 'utf8'));
+    expect(ink().pages[0]?.strokes).toHaveLength(1);
+    expect(ink().pages[0]?.strokes[0]?.points[2]).toBe(0.8);
+    expect(readFileSync(join(boards, `${name}.svg`), 'utf8')).toMatch(/^<svg xmlns="http:\/\/www\.w3\.org\/2000\/svg"[\s\S]*<path d="M/);
+
+    // The board of the line opens again with its stroke; a second one replaces the file on the version read.
+    await meetingPage.getByRole('button', { name: `Edit board ${name}` }).click();
+    await expect(board).toBeVisible();
+    await expect(surface.locator('path:not(.rules)')).toHaveCount(1);
+    await expect(board.getByRole('status')).toHaveText('Saved');
+    await stroke(surface, 'pen', 0.7, 13);
+    await board.getByRole('button', { name: 'Close', exact: true }).click();
+    await expect(board).toHaveCount(0);
+    await expect.poll(() => ink().pages[0]?.strokes.length, { timeout: 15_000 }).toBe(2);
+    expect(readdirSync(boards).sort()).toEqual([`${name}.ink.json`, `${name}.svg`]);
+
+    expect(await violations(page)).toEqual([]);
+    expect(consoleProblems.get(page)).toEqual([]);
+  } finally {
+    rmSync(join(meetings, slug), { recursive: true, force: true });
+    rmSync(file, { force: true });
+    for (const f of readdirSync(meetings)) if (!before.has(f)) rmSync(join(meetings, f), { recursive: true, force: true });
+  }
+});

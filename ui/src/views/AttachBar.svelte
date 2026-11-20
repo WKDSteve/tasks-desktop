@@ -4,6 +4,8 @@
   // the clipboard of the hub's machine), a recording (a file: `assets/audio/`). Whatever is taken here goes the way of every file from the page: through the
   // hub's upload to the engine, which puts it into the folder of its kind (`assets/videos/`, `assets/images/`,
   // `assets/screenshots/`). An entry the page may not start (no camera for it, a browser that cannot) says why.
+  // A board is drawn on the page's own surface (`BoardEditor`, a chunk of its own) and saved with `board_save` below
+  // `assets/boards/`; its first save is linked in the notes.
   import { onDestroy, tick, untrack } from 'svelte';
   import type { App } from '../lib/app.svelte';
   import {
@@ -27,8 +29,12 @@
   import { saveBlob } from '../lib/exportDom';
   import { translate, type Key } from '../lib/i18n';
   import ChoiceMenu, { type Choice } from './ChoiceMenu.svelte';
+  import Lazy from './Lazy.svelte';
+  import type { BoardSaved } from '../lib/api';
 
   let { app, id }: { app: App; id: string } = $props();
+  /** The drawing surface is open for a new board of this item. */
+  let drawing = $state(false);
 
   const t = (key: Key, params: Record<string, string | number> = {}) => translate(app.lang, key, params);
 
@@ -273,6 +279,14 @@
     disabled={busy || taking !== null}
     onclick={() => audioPicker?.click()}>{t('attach.audio')}</button
   >
+  <button
+    type="button"
+    class="attach"
+    data-attach="board"
+    data-hint={t('hint.ui.detail.attach_board')}
+    disabled={busy || drawing}
+    onclick={() => (drawing = true)}>✎ {t('minutes.kind.board')}</button
+  >
   <input
     type="file"
     class="picker"
@@ -313,6 +327,20 @@
     onchange={(e) => picked(e.currentTarget, 'audio')}
   />
 </span>
+{#if drawing}
+  <!-- A new board on the drawing surface (its own chunk); its first save is linked in the notes. -->
+  <Lazy
+    {app}
+    load={() => import('./BoardEditor.svelte')}
+    extra={{
+      owner: 'task' as const,
+      id,
+      onsaved: (s: BoardSaved & { name: string }) => s.preview && void app.write([{ op: 'append_note', id, text: `![${s.name}](${s.preview})` }]),
+      onclose: () => (drawing = false),
+    }}
+    onfailed={() => (drawing = false)}
+  />
+{/if}
 {#if taking === null}
   {#each kept as one (one.file)}
     <div class="taking" role="group" aria-label={t('attach.capture.kept')} data-kept={one.kind}>

@@ -1,0 +1,86 @@
+// The words of the drawing surface (`views/BoardEditor.svelte`), English and German. They live here and not in `i18n`:
+// the surface is a chunk of its own, and its words come with it instead of with the start of the page.
+import type { Lang } from './i18n';
+
+const EN = {
+  title: 'Board {name}',
+  surface: 'Drawing surface, page {n} of {m}',
+  pen: 'Pen',
+  marker: 'Marker',
+  eraser: 'Eraser',
+  color: 'Colour {n}',
+  width: 'Width {n}',
+  undo: 'Undo',
+  redo: 'Redo',
+  prev: 'Previous page',
+  next: 'Next page',
+  add: 'New page',
+  page: 'Page {n} / {m}',
+  background: 'Background',
+  'bg.none': 'Plain',
+  'bg.grid': 'Grid',
+  'bg.lines': 'Lines',
+  image: 'Picture behind',
+  'image.drop': 'Remove picture',
+  zoomIn: 'Zoom in',
+  zoomOut: 'Zoom out',
+  fit: 'Fit page',
+  excalidraw: 'Continue in Excalidraw',
+  external: 'Open with app',
+  later: 'Comes with a later version',
+  close: 'Close',
+  closeAgain: 'The board is not saved. Close again to give up what was drawn since the last save.',
+  loading: 'Loading the board…',
+  saving: 'Saving…',
+  saved: 'Saved',
+  unsaved: 'Not saved yet',
+  failed: 'Not saved: {code}. It is tried again with the next stroke.',
+  renamed: 'Another device changed this board: yours is saved as {name}.',
+  unreadable: 'This board cannot be read; a new one is started.',
+  help: 'Pen draws with pressure; its eraser end erases. Space + drag or two fingers move, Ctrl + wheel zooms.',
+} as const;
+
+export type InkKey = keyof typeof EN;
+
+const DE: Record<InkKey, string> = {
+  title: 'Board {name}',
+  surface: 'Zeichenfläche, Seite {n} von {m}',
+  pen: 'Stift',
+  marker: 'Textmarker',
+  eraser: 'Radierer',
+  color: 'Farbe {n}',
+  width: 'Breite {n}',
+  undo: 'Rückgängig',
+  redo: 'Wiederholen',
+  prev: 'Vorige Seite',
+  next: 'Nächste Seite',
+  add: 'Neue Seite',
+  page: 'Seite {n} / {m}',
+  background: 'Hintergrund',
+  'bg.none': 'Leer',
+  'bg.grid': 'Raster',
+  'bg.lines': 'Linien',
+  image: 'Bild dahinter',
+  'image.drop': 'Bild entfernen',
+  zoomIn: 'Vergrößern',
+  zoomOut: 'Verkleinern',
+  fit: 'Seite einpassen',
+  excalidraw: 'In Excalidraw weiter',
+  external: 'Mit App öffnen',
+  later: 'Kommt mit einer späteren Fassung',
+  close: 'Schließen',
+  closeAgain: 'Das Board ist nicht gespeichert. Nochmal schließen verwirft, was seit dem letzten Speichern gezeichnet wurde.',
+  loading: 'Board wird geladen…',
+  saving: 'Speichert…',
+  saved: 'Gespeichert',
+  unsaved: 'Noch nicht gespeichert',
+  failed: 'Nicht gespeichert: {code}. Mit dem nächsten Strich wird es wieder versucht.',
+  renamed: 'Ein anderes Gerät hat dieses Board geändert: deins ist als {name} gespeichert.',
+  unreadable: 'Dieses Board lässt sich nicht lesen; ein neues wird angefangen.',
+  help: 'Der Stift zeichnet mit Druck, sein Radier-Ende radiert. Leertaste + Ziehen oder zwei Finger verschieben, Strg + Rad zoomt.',
+};
+
+export function inkText(lang: Lang, key: InkKey, params: Record<string, string | number> = {}): string {
+  const text: string = lang === 'de' ? DE[key] : EN[key];
+  return text.replace(/\{(\w+)\}/g, (all, k: string) => (k in params ? String(params[k]) : all));
+}

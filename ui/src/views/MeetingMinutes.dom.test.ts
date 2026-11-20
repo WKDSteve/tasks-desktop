@@ -182,6 +182,44 @@ describe('the minutes of a meeting', () => {
       { op: 'meeting_capture', id: 'pub/now', entry: { kind: 'task', text: 'Folie fehlt', at: '09:40' } },
     ]);
   });
+
+  it('draws a new board that becomes a line once it is saved, and offers a board of the minutes to draw on', async () => {
+    globalThis.ResizeObserver ??= class {
+      observe(): void {}
+      unobserve(): void {}
+      disconnect(): void {}
+    } as unknown as typeof ResizeObserver;
+    const m = await ready();
+    m.hub.meetingBodies.set('pub/now', { body: 'Kurz.\n\n## Protokoll\n\n- 09:50 ![skizze](assets/boards/skizze.svg)\n' });
+    const target = await openOn(m);
+    await vi.waitFor(() => expect(target.querySelector('button[aria-label="Board skizze bearbeiten"]')).not.toBeNull());
+    const open = [...target.querySelectorAll('.buttons button')].find((b) => b.textContent === '✎ Board') as HTMLButtonElement;
+    open.click();
+    flushSync();
+    const svg = await vi.waitFor(() => {
+      const found = target.querySelector('dialog.board svg[role="img"]');
+      expect(found).not.toBeNull();
+      return found as SVGSVGElement;
+    });
+    for (const [kind, x] of [['pointerdown', 10], ['pointermove', 60], ['pointerup', 90]] as const) {
+      const e = new MouseEvent(kind, { bubbles: true, clientX: x, clientY: 40 });
+      Object.defineProperties(e, { pointerType: { value: 'pen' }, pointerId: { value: 1 }, pressure: { value: 0.6 }, buttons: { value: 1 } });
+      svg.dispatchEvent(e);
+      flushSync();
+    }
+    ([...target.querySelectorAll('dialog.board button')].find((b) => b.textContent === 'Schließen') as HTMLButtonElement).click();
+    await vi.waitFor(() => expect(m.hub.boards).toHaveLength(1));
+    expect(m.hub.boards[0]?.name).toBe('board-2026-11-20-1000');
+    await vi.waitFor(() => expect(m.hub.sent).toHaveLength(1));
+    expect(m.hub.sent[0]?.ops).toEqual([
+      {
+        op: 'meeting_capture',
+        id: 'pub/now',
+        entry: { kind: 'board', text: 'board-2026-11-20-1000', asset: 'assets/boards/board-2026-11-20-1000.svg', at: '10:00' },
+      },
+    ]);
+    await vi.waitFor(() => expect(target.querySelector('dialog.board')).toBeNull());
+  });
 });
 
 describe('the minutes, from one meeting to the next', () => {
