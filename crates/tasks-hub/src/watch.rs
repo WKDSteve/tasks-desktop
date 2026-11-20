@@ -90,9 +90,17 @@ pub fn relevant(relative: &Path, entry: impl FnOnce() -> Entry) -> bool {
         [name] => !name.starts_with('.') && !ignored_name(name) && entry() != Entry::File,
         // The structure of an area: its two folders and the folders of the
         // tasks and plans. A folder only.
-        [_, "ROADMAP" | "Backlog"]
+        [_, "ROADMAP" | "Backlog" | "MEETINGS"]
         | [_, "ROADMAP", "tasks" | "plans" | "views"]
         | [_, "Backlog", "FEATURES" | "TASKS"] => entry() != Entry::File,
+        // The meetings of an area (`<area>/MEETINGS/<slug>.md`, or the folder form `<slug>/<slug>.md`): they are part
+        // of the `rev` of the snapshot, and the meetings of a window are held for that `rev` (`ask_held`). A meeting
+        // made, moved or removed outside the hub (Neovim, the CLI, a sync) must change it, or the calendar keeps the
+        // old window.
+        [_, "MEETINGS", name] => {
+            !ignored_name(name) && (is_markdown(name) || entry() != Entry::File)
+        }
+        [_, "MEETINGS", .., last] => is_markdown(last) && !ignored_name(last),
         // A saved view is one file, directly in its folder; nothing deeper is read.
         [_, "ROADMAP", "views", name] => is_markdown(name) && !ignored_name(name),
         // What sits directly in them: a task file, or the folder of a folder
@@ -163,6 +171,34 @@ mod tests {
         ] {
             assert!(file(yes), "{yes}");
         }
+    }
+
+    #[test]
+    fn the_meetings_of_an_area_matter() {
+        for yes in [
+            "lib.nvim/MEETINGS/sync-2026-11-24.md",
+            "lib.nvim/MEETINGS/sync-2026-11-24/sync-2026-11-24.md",
+            "lib.nvim/MEETINGS/UPPER.MD",
+        ] {
+            assert!(file(yes), "{yes}");
+            assert!(gone(yes), "{yes}");
+        }
+        // The folder of the meetings, and the folder of a meeting in the folder form, made or removed as a whole.
+        assert!(folder("lib.nvim/MEETINGS"));
+        assert!(gone("lib.nvim/MEETINGS"));
+        assert!(folder("lib.nvim/MEETINGS/sync-2026-11-24"));
+        for no in [
+            "lib.nvim/MEETINGS/notes.txt",
+            "lib.nvim/MEETINGS/sync.tasks-tmp.1.md",
+            "lib.nvim/MEETINGS/sync-2026-11-24/assets/boards/b1.png",
+            "lib.nvim/ROADMAP/MEETINGS/x.md",
+        ] {
+            assert!(!file(no), "{no}");
+        }
+        assert!(
+            !file("lib.nvim/MEETINGS"),
+            "a file named like the folder is none"
+        );
     }
 
     #[test]
