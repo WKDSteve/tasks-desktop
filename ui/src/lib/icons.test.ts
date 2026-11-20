@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { containerOfPoint, drawable, shownIcon } from './icons';
-import { lacksAlt } from './images';
+import { hasAssetImage, lacksAlt } from './images';
 
 describe('shownIcon: the item, its path, its category (concept 11.3)', () => {
   const paths = new Map([
@@ -57,5 +57,14 @@ describe('lacksAlt', () => {
     expect(lacksAlt('see ![ ](assets/x.png)')).toBe(true);
     expect(lacksAlt('see ![Diagram](assets/x.png)')).toBe(false);
     expect(lacksAlt('a [link](https://example.org) and [](x)')).toBe(false);
+  });
+});
+
+describe('hasAssetImage', () => {
+  it('finds an image below assets/ and nothing else', () => {
+    expect(hasAssetImage('see ![Board](assets/boards/b.svg)')).toBe(true);
+    expect(hasAssetImage('see ![](./assets/x.png)')).toBe(true);
+    expect(hasAssetImage('see ![x](https://tracker.example/assets/x.png)')).toBe(false);
+    expect(hasAssetImage('a [link](assets/x.png) and plain text')).toBe(false);
   });
 });

@@ -1,7 +1,6 @@
 <script lang="ts">
   // The large picture of an item (`cover:`) in its head: read from the item's folder like every asset, larger on a
   // click, the page's word when the file is missing. Its own store, given back when the item changes or the head goes.
-  import { onDestroy } from 'svelte';
   import type { App } from '../lib/app.svelte';
   import type { AssetOwner } from '../lib/api';
   import { AssetImages } from '../lib/assetImages.svelte';
@@ -12,18 +11,17 @@
   let { app, kind, id, file, title }: { app: App; kind: AssetOwner; id: string; file: string; title: string } = $props();
   const t = (key: Parameters<typeof translate>[1], params: Record<string, string | number> = {}) => translate(app.lang, key, params);
 
-  let store: AssetImages | null = null;
-  const images = $derived.by(() => {
-    if (store && store.kind === kind && store.id === id) return store;
-    store?.dispose();
-    store = new AssetImages((k, i, f) => app.asset(k, i, f), kind, id);
-    return store;
+  // The store of the item, given back when the item changes or the head goes (the cleanup of the effect).
+  let images = $state<AssetImages | null>(null);
+  $effect(() => {
+    const store = new AssetImages((k, i, f) => app.asset(k, i, f), kind, id);
+    images = store;
+    return () => store.dispose();
   });
-  onDestroy(() => store?.dispose());
   let viewing = $state<{ url: string; alt: string } | null>(null);
 </script>
 
-{#if file.startsWith('assets/')}
+{#if file.startsWith('assets/') && images}
   <div class="cover" data-cover={kind}>
     <AssetImg {images} {file} alt={t('image.cover_of', { title })} missing={t('image.missing')} onopen={(url, alt) => (viewing = { url, alt })} />
   </div>

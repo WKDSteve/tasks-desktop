@@ -5,3 +5,8 @@
 export function lacksAlt(text: string): boolean {
   return /!\[\s*\]\(/.test(text);
 }
+
+/** Whether the text names an image below `assets/` of its folder (`![…](assets/…)`): only such a text is drawn with it. */
+export function hasAssetImage(text: string): boolean {
+  return /!\[[^\]]*\]\(\s*(?:\.\/)?assets\//.test(text);
+}

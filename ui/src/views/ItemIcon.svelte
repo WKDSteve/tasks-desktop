@@ -1,25 +1,29 @@
 <script lang="ts">
   // The icon of an item as the inheritance found it (`shownIcon`): an emoji as text, an asset as a small `<img>` of
   // its owner's folder. Decorative: the title next to it says what the item is, so it is hidden from a screen reader.
-  import { onDestroy } from 'svelte';
   import type { App } from '../lib/app.svelte';
+  import type { AssetOwner } from '../lib/api';
   import { AssetImages } from '../lib/assetImages.svelte';
   import type { ShownIcon } from '../lib/icons';
   import AssetImg from './AssetImg.svelte';
 
   let { app, shown, size = 16 }: { app: App; shown: ShownIcon | null; size?: number } = $props();
 
-  // One store per owner the icon came from; given back when the owner changes or the row goes.
-  let store: AssetImages | null = null;
-  const images = $derived.by(() => {
-    if (!shown || shown.icon.kind !== 'asset') return null;
-    const { kind, id } = shown.owner;
-    if (store && store.kind === kind && store.id === id) return store;
-    store?.dispose();
-    store = new AssetImages((k, i, f) => app.asset(k, i, f), kind, id);
-    return store;
+  // One store per owner of an asset icon; given back when the icon is no asset any more, the owner changes or the row
+  // goes (the cleanup of the effect).
+  const owner = $derived(shown && shown.icon.kind === 'asset' ? `${shown.owner.kind}|${shown.owner.id}` : null);
+  let images = $state<AssetImages | null>(null);
+  $effect(() => {
+    const key = owner;
+    if (key === null) {
+      images = null;
+      return;
+    }
+    const cut = key.indexOf('|');
+    const store = new AssetImages((k, i, f) => app.asset(k, i, f), key.slice(0, cut) as AssetOwner, key.slice(cut + 1));
+    images = store;
+    return () => store.dispose();
   });
-  onDestroy(() => store?.dispose());
 </script>
 
 {#if shown}

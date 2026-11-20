@@ -13,6 +13,7 @@
   import ImageViewer from './ImageViewer.svelte';
   import ItemCover from './ItemCover.svelte';
   import ItemIcon from './ItemIcon.svelte';
+  import { hasAssetImage } from '../lib/images';
   import type { App } from '../lib/app.svelte';
   import type { MeetingDocument, Result } from '../lib/contract';
   import { floating } from '../lib/floating';
@@ -64,8 +65,11 @@
   });
   let viewing = $state<{ url: string; alt: string } | null>(null);
   const imageSource = $derived(images?.source(t('image.missing'), (_src, url, alt) => (viewing = { url, alt })));
-  /** A section as Markdown, its images drawn when the meeting has a folder. */
-  const blocksOf = (text: string) => parseMarkdown(text, { assets: images !== null });
+  /**
+   * A section with an image of the meeting's folder, as Markdown with the image drawn. A section without one stays its
+   * text as written (its lines as they are), as before.
+   */
+  const blocksOf = (text: string) => parseMarkdown(text, { assets: true });
   const etag = $derived(m?.etag);
   const join = $derived(m ? joinLink(m.online) : null);
   const present = $derived(doc ? doc.participants.filter((p) => p.present).length : 0);
@@ -385,7 +389,9 @@
       {:else}
         <section aria-labelledby="meeting-decisions">
           <h3 id="meeting-decisions">{t('meeting.decisions')}</h3>
-          {#if section('Beschlüsse', 'Decisions') !== ''}<div class="prose"><Blocks blocks={blocksOf(section('Beschlüsse', 'Decisions'))} headingBase={3} images={imageSource} /></div>{:else}<p class="muted">{t('meeting.empty')}</p>{/if}
+          {#if section('Beschlüsse', 'Decisions') !== '' && images && hasAssetImage(section('Beschlüsse', 'Decisions'))}<div class="prose"
+            ><Blocks blocks={blocksOf(section('Beschlüsse', 'Decisions'))} headingBase={3} images={imageSource} /></div
+          >{:else if section('Beschlüsse', 'Decisions') !== ''}<pre>{markHidden(section('Beschlüsse', 'Decisions'))}</pre>{:else}<p class="muted">{t('meeting.empty')}</p>{/if}
         </section>
         <section aria-labelledby="meeting-followups">
           <h3 id="meeting-followups">{t('meeting.followups')}</h3>
@@ -401,7 +407,9 @@
         </section>
         <section aria-labelledby="meeting-result">
           <h3 id="meeting-result">{t('meeting.result')}</h3>
-          {#if section('Ergebnis', 'Result') !== ''}<div class="prose"><Blocks blocks={blocksOf(section('Ergebnis', 'Result'))} headingBase={3} images={imageSource} /></div>{:else}<p class="muted">{t('meeting.empty')}</p>{/if}
+          {#if section('Ergebnis', 'Result') !== '' && images && hasAssetImage(section('Ergebnis', 'Result'))}<div class="prose"
+            ><Blocks blocks={blocksOf(section('Ergebnis', 'Result'))} headingBase={3} images={imageSource} /></div
+          >{:else if section('Ergebnis', 'Result') !== ''}<pre>{markHidden(section('Ergebnis', 'Result'))}</pre>{:else}<p class="muted">{t('meeting.empty')}</p>{/if}
           {#if m.recording && joinLink(m.recording)}
             <p><a href={joinLink(m.recording)} target="_blank" rel="noopener noreferrer">{t('meeting.recording')}</a></p>
           {/if}
@@ -502,6 +510,11 @@
   }
   .prose {
     overflow-wrap: anywhere;
+  }
+  pre {
+    white-space: pre-wrap;
+    font: inherit;
+    margin: 0;
   }
   .row {
     display: flex;
