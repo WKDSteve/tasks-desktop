@@ -3,8 +3,8 @@
 
 import type { TaskEntry } from './contract';
 
-export type CalendarMode = 'month' | 'week';
-export const CALENDAR_MODES: readonly CalendarMode[] = ['month', 'week'];
+export type CalendarMode = 'month' | 'week' | 'day';
+export const CALENDAR_MODES: readonly CalendarMode[] = ['month', 'week', 'day'];
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const DAY_MS = 86_400_000;
@@ -40,8 +40,9 @@ export function addMonths(date: string, months: number): string {
   return iso(new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + months, 1)));
 }
 
-/** The days a grid shows around `anchor`: the weeks (Monday first) that hold the month, or the one week. */
+/** The days a grid shows around `anchor`: the weeks (Monday first) that hold the month, the one week, or the day. */
 export function daysOf(mode: CalendarMode, anchor: string): string[] {
+  if (mode === 'day') return [parseDate(anchor) ? anchor : startOfWeek(anchor)];
   if (mode === 'week') {
     const first = startOfWeek(anchor);
     return Array.from({ length: 7 }, (_, i) => addDays(first, i));
@@ -55,8 +56,9 @@ export function daysOf(mode: CalendarMode, anchor: string): string[] {
   return Array.from({ length: weeks * 7 }, (_, i) => addDays(start, i));
 }
 
-/** The anchor after a step: a month or a week forward (`1`) or back (`-1`). */
+/** The anchor after a step: a month, a week or a day forward (`1`) or back (`-1`). */
 export function step(mode: CalendarMode, anchor: string, direction: 1 | -1): string {
+  if (mode === 'day') return addDays(anchor, direction);
   return mode === 'week' ? addDays(anchor, 7 * direction) : addMonths(anchor, direction);
 }
 
@@ -150,9 +152,9 @@ export function dayAfterKey(mode: CalendarMode, day: string, key: string): strin
     case 'End':
       return addDays(startOfWeek(day), 6);
     case 'PageUp':
-      return mode === 'week' ? addDays(day, -7) : sameDayOfMonth(day, -1);
+      return mode !== 'month' ? addDays(day, mode === 'day' ? -1 : -7) : sameDayOfMonth(day, -1);
     case 'PageDown':
-      return mode === 'week' ? addDays(day, 7) : sameDayOfMonth(day, 1);
+      return mode !== 'month' ? addDays(day, mode === 'day' ? 1 : 7) : sameDayOfMonth(day, 1);
     default:
       return null;
   }

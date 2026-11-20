@@ -4,7 +4,7 @@
 // `start > due` in its own words); an arrow that points back in time is geometry, read from the two bars it joins.
 
 import { addDays, addMonths, parseDate, startOfWeek } from './calendar';
-import type { TaskEntry } from './contract';
+import type { MeetingEntry, TaskEntry } from './contract';
 import type { EdgeKind } from './depGraph';
 
 export type TimelineZoom = 'week' | 'month' | 'quarter';
@@ -179,7 +179,7 @@ export function patchOf(bar: Bar, part: BarPart, days: number): { start?: string
 }
 
 /** A row of the timeline: the head of a group (with the span of all its bars), or a task. */
-export type Row =
+export type BaseRow =
   | {
       type: 'group';
       key: string;
@@ -191,6 +191,12 @@ export type Row =
       folded: boolean;
     }
   | { type: 'task'; bar: Bar; level: number };
+
+/** A row of the timeline with the meetings of `timelineMeetings.ts`. */
+export type Row =
+  | BaseRow
+  /** The meetings of a group that belong to none of its tasks (concept 7.4): diamonds on their days (`timelineMeetings.ts`). */
+  | { type: 'meetings'; key: string; level: number; meetings: MeetingEntry[] };
 
 /** What the rows need to know of the vault: the names, and the project a task belongs to (none without `projects`). */
 export interface Names {
@@ -226,7 +232,7 @@ function spanOf(bars: readonly Bar[]): { from: string; to: string } {
  * above its plans and its own tasks, and its bar spans them all. A group in `folded` shows its head only. Groups are
  * in the order of their first day, then by name. Every group row has a key of its own.
  */
-export function rowsOf(bars: readonly Bar[], grouping: TimelineGrouping, names: Names, folded: ReadonlySet<string>): Row[] {
+export function rowsOf(bars: readonly Bar[], grouping: TimelineGrouping, names: Names, folded: ReadonlySet<string>): BaseRow[] {
   const top = new Map<string, Node>();
   const node = (into: Map<string, Node> | Node[], key: string, kind: Node['kind'], label: string): Node => {
     const found = Array.isArray(into) ? into.find((n) => n.key === key) : into.get(key);
@@ -258,7 +264,7 @@ export function rowsOf(bars: readonly Bar[], grouping: TimelineGrouping, names: 
       if ((a.kind === 'none') !== (b.kind === 'none')) return a.kind === 'none' ? 1 : -1;
       return spanOf(all(a)).from.localeCompare(spanOf(all(b)).from) || a.label.localeCompare(b.label);
     });
-  const rows: Row[] = [];
+  const rows: BaseRow[] = [];
   const emit = (n: Node, level: number): void => {
     const inside = all(n);
     const isFolded = folded.has(n.key);

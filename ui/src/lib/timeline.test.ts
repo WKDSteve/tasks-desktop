@@ -17,7 +17,7 @@ import {
   DAYS_AFTER,
   DAYS_BEFORE,
   type Names,
-  type Row,
+  type BaseRow,
 } from './timeline';
 
 const names: Names = {
@@ -131,7 +131,7 @@ describe('the rows', () => {
     task('app/c', { title: 'C', plan: 'app/p2', due: '2026-11-01' }),
     task('app/d', { title: 'D', due: '2026-10-01' }),
   ];
-  const text = (rows: Row[]) =>
+  const text = (rows: BaseRow[]) =>
     rows.map((r) => (r.type === 'group' ? `${'  '.repeat(r.level)}[${r.key}] ${r.span.from}..${r.span.to} (${r.count})` : `${'  '.repeat(r.level)}${r.bar.task.id}`));
 
   it('are by plan, the earlier plan first and the tasks of no plan last', () => {
