@@ -6,7 +6,7 @@
   // version read (`if_match`: of an occurrence without a file, the version of the series).
   import type { App } from '../lib/app.svelte';
   import type { MeetingEntry } from '../lib/contract';
-  import { exceptDays, REPEATS, repeatLabel, seriesWord, withExcept, type SeriesWord } from '../lib/series';
+  import { REPEATS, repeatLabel, seriesPatch, seriesWord, withExcept, type SeriesWord } from '../lib/series';
 
   let { app, meeting, busy }: { app: App; meeting: MeetingEntry; busy: boolean } = $props();
   const s = (key: SeriesWord, day = '') => seriesWord(app.lang, key, day);
@@ -55,7 +55,8 @@
   async function saveSeries(event: SubmitEvent): Promise<void> {
     event.preventDefault();
     if (!canWrite || busy) return;
-    const patch = { repeat: repeat === '' ? null : repeat, repeat_until: until === '' ? null : until, except: exceptDays(except) };
+    const patch = seriesPatch(meeting, { repeat, until, except });
+    if (Object.keys(patch).length === 0) return;
     await app.write([{ op: 'meeting_set', id: meeting.id, patch, ...guard(meeting.etag) }]);
   }
 </script>

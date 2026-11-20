@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { MeetingEntry } from './contract';
 import { emptyMeetingForm, meetingFields } from './meetings';
-import { exceptDays, foldSeries, repeatLabel, seriesNote, withExcept } from './series';
+import { exceptDays, foldSeries, repeatLabel, seriesNote, seriesPatch, withExcept } from './series';
 
 /** The instant of a wall time of this machine (the tests run in its zone). */
 const at = (wall: string): number => new Date(`${wall}:00`).getTime();
@@ -37,6 +37,22 @@ describe('a series of meetings', () => {
     expect(withExcept(undefined, '2026-12-24')).toEqual(['2026-12-24']);
     expect(withExcept(['2026-12-31', '2026-12-24'], '2026-12-24')).toEqual(['2026-12-24', '2026-12-31']);
     expect(withExcept(['2026-12-31'], '2026-12-03')).toEqual(['2026-12-03', '2026-12-31']);
+  });
+
+  it('patches of a series only what was changed, a value cleared as null', () => {
+    const read = { repeat: '1w', except: ['2026-12-24'] };
+    expect(seriesPatch(read, { repeat: '1w', until: '', except: '2026-12-24' })).toEqual({});
+    expect(seriesPatch({ repeat: '1w' }, { repeat: '1w', until: '', except: '' })).toEqual({});
+    expect(seriesPatch(read, { repeat: '2w', until: '2027-06-30', except: '2026-12-31, 2026-12-24' })).toEqual({
+      repeat: '2w',
+      repeat_until: '2027-06-30',
+      except: ['2026-12-24', '2026-12-31'],
+    });
+    expect(seriesPatch({ ...read, repeat_until: '2027-01-01' }, { repeat: '', until: '', except: '' })).toEqual({
+      repeat: null,
+      repeat_until: null,
+      except: null,
+    });
   });
 
   it('names an interval in words, any other as the engine wrote it, and tells an occurrence without a file', () => {

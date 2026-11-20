@@ -85,6 +85,22 @@ export function withExcept(except: readonly string[] | undefined, day: string): 
   return exceptDays([...(except ?? []), day].join(','));
 }
 
+/**
+ * The patch of `meeting_set` for a series as typed: only what differs from what was read (a value cleared is `null`),
+ * so saving an unchanged series writes nothing.
+ */
+export function seriesPatch(
+  read: Pick<MeetingEntry, 'repeat' | 'repeat_until' | 'except'>,
+  typed: { repeat: string; until: string; except: string },
+): Record<string, unknown> {
+  const patch: Record<string, unknown> = {};
+  if (typed.repeat !== (read.repeat ?? '')) patch.repeat = typed.repeat === '' ? null : typed.repeat;
+  if (typed.until !== (read.repeat_until ?? '')) patch.repeat_until = typed.until === '' ? null : typed.until;
+  const days = exceptDays(typed.except);
+  if (days.join(',') !== exceptDays((read.except ?? []).join(',')).join(',')) patch.except = days.length > 0 ? days : null;
+  return patch;
+}
+
 /** Two pages of meetings as one: the first, then those of the later one it does not hold (by id). */
 export function joinPages<T extends Pick<MeetingEntry, 'id'>>(first: readonly T[], later: readonly T[]): T[] {
   const held = new Set(first.map((m) => m.id));
