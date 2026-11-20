@@ -101,3 +101,60 @@ test('a series in the calendar: its occurrences marked, the first entry into one
     for (const file of [seriesFile, occurrenceFile]) if (existsSync(file)) rmSync(file, { force: true });
   }
 });
+
+/** A weekly series beginning today at 10:00, written as a file of the vault; its file and that of today's occurrence. */
+function series(slug: string): { seriesFile: string; occurrenceFile: string; id: string; today: string } {
+  const dir = join(state().vault, 'lib.nvim', 'MEETINGS');
+  mkdirSync(dir, { recursive: true });
+  const seriesFile = join(dir, `${slug}.md`);
+  writeFileSync(seriesFile, `---\ntitle: ${slug}\nstatus: planned\ndate: ${day()}\ntime: "10:00"\nduration: 30m\nrepeat: weekly\n---\n\nA series of one browser test.\n`);
+  return { seriesFile, occurrenceFile: join(dir, `${slug}-${day()}.md`), id: `lib.nvim/${slug}`, today: `lib.nvim/${slug}-${day()}` };
+}
+
+test('an occurrence without a file moved in the hour grid gets its file at the new time, the series stays', async ({ page }) => {
+  const s = series('ser-e2e-s02');
+  try {
+    const problems = await pair(page, '/#view=calendar');
+    await page.getByRole('combobox', { name: 'Show' }).selectOption('week');
+    const grid = page.locator('[data-timegrid="week"]');
+    const block = grid.locator(`.block[data-meeting="${s.today}"]`);
+    await expect(block).toHaveAttribute('data-series', s.id);
+    await expect(block).toHaveClass(/virtual/);
+    await block.locator('.open').focus();
+    const answer = nextAnswer(page);
+    await page.keyboard.press('Shift+ArrowDown');
+    await answer;
+    await expect.poll(() => existsSync(s.occurrenceFile), { timeout: WRITE_BUDGET }).toBe(true);
+    const made = readFileSync(s.occurrenceFile, 'utf8');
+    expect(made).toMatch(/time: "?10:15/);
+    expect(made).toMatch(new RegExp(`series: "?${s.id}`));
+    expect(readFileSync(s.seriesFile, 'utf8')).toMatch(/time: "?10:00/);
+    // Read again from its file: no longer dotted, at 10:15 (615 minutes).
+    await expect(block).not.toHaveClass(/virtual/, { timeout: WRITE_BUDGET });
+    await expect(block).toHaveCSS('top', `${615 * 0.8}px`);
+    expect(problems).toEqual([]);
+  } finally {
+    for (const file of [s.seriesFile, s.occurrenceFile]) if (existsSync(file)) rmSync(file, { force: true });
+  }
+});
+
+test('the day of an occurrence without a file is skipped as an exception of its series: no file, no chip', async ({ page }) => {
+  const s = series('ser-e2e-s03');
+  try {
+    const problems = await pair(page, '/#view=calendar');
+    const chip = page.locator(`.chip[data-meeting="${s.today}"]`);
+    await chip.click();
+    const bar = page.locator(`dialog.meeting-page [data-occurrence="${day()}"]`);
+    const answer = nextAnswer(page);
+    await bar.getByRole('button', { name: 'Skip as exception' }).click();
+    await answer;
+    await expect.poll(() => readFileSync(s.seriesFile, 'utf8'), { timeout: WRITE_BUDGET }).toMatch(new RegExp(`except:[\\s\\S]*${day()}`));
+    expect(existsSync(s.occurrenceFile)).toBe(false);
+    // The day has no occurrence any more: its page closed, its chip gone.
+    await expect(page.locator('dialog.meeting-page')).not.toBeVisible();
+    await expect(chip).toHaveCount(0, { timeout: WRITE_BUDGET });
+    expect(problems).toEqual([]);
+  } finally {
+    for (const file of [s.seriesFile, s.occurrenceFile]) if (existsSync(file)) rmSync(file, { force: true });
+  }
+});
