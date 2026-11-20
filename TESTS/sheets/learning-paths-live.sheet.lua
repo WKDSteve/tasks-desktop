@@ -41,7 +41,7 @@ return {
     },
     {
       ask = "Five points ticked quickly from top to bottom: never 'The path changed meanwhile'; a click while the path is"
-        .. " read again says 'Still saving' and a second click takes?",
+        .. " read again says 'The path is still being read' and a second click takes?",
     },
     {
       ask = "With NVDA or Narrator: a mark names the point, its state and what a click does; folding says"

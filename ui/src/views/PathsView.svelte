@@ -145,7 +145,7 @@
   /** Whether a change must wait (a write on its way, or the path being read again): then it is said, not sent. */
   function refused(): boolean {
     if (!busy) return false;
-    app.tell('error', 'write.busy');
+    app.tell('error', app.saving ? 'write.busy' : 'paths.busy_reading');
     return true;
   }
 

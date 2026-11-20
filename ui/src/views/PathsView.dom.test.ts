@@ -242,7 +242,8 @@ describe('PathsView', () => {
     mark.click();
     await settle();
     expect(sentOps(m)).toHaveLength(1);
-    expect(m.app.toast).toMatchObject({ kind: 'error', text: 'Speichert noch - gleich noch einmal versuchen.' });
+    // Said as what it is: the write is done, the path is being read again.
+    expect(m.app.toast).toMatchObject({ kind: 'error', text: 'Der Pfad wird noch gelesen - gleich noch einmal versuchen.' });
     release();
     await vi.waitFor(() => expect(point(page, 'manual').querySelector('button.mark')?.getAttribute('aria-disabled')).toBeNull());
     point(page, 'manual').querySelector<HTMLButtonElement>('button.mark')!.click();
@@ -261,6 +262,11 @@ describe('PathsView', () => {
     expect(mark.disabled).toBe(false);
     expect(mark.getAttribute('aria-disabled')).toBe('true');
     expect(document.activeElement).toBe(mark);
+    // A second click while the write is on its way is refused as such.
+    mark.click();
+    await settle();
+    expect(m.hub.sent).toHaveLength(1);
+    expect(m.app.toast).toMatchObject({ kind: 'error', text: 'Speichert noch - gleich noch einmal versuchen.' });
     release();
     m.hub.holdOps = null;
     await vi.waitFor(() => expect(m.app.saving).toBe(false));
