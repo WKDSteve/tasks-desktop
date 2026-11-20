@@ -161,8 +161,10 @@ pub struct Meeting {
     pub end: Option<DateTime>,
     /// The zone the times are written in, as written; none: the hub's.
     pub tz: Option<String>,
-    /// The meeting's own notices; empty: the default of the vault.
+    /// The meeting's own notices; empty: the default of the vault, unless `notify_set`.
     pub notify: Vec<Notify>,
+    /// The file names `notify` (the engine's `notify_set`): an empty `notify` is then no notice at all.
+    pub notify_set: bool,
     pub notify_to: Vec<String>,
     pub location: Option<String>,
     pub online: Option<String>,
@@ -250,6 +252,7 @@ pub fn meeting_of(v: &Value) -> Option<Meeting> {
             .as_array()
             .map(|l| l.iter().filter_map(notify_entry).take(MAX_NOTIFY).collect())
             .unwrap_or_default(),
+        notify_set: v["notify_set"] == true,
         notify_to: addresses(&v["notify_to"]),
         location: text(v, "location")
             .map(|l| crate::mail::one_line(&l))
@@ -369,8 +372,11 @@ fn candidates(inputs: &Inputs, zone: &TimeZone, rules: &Rules) -> Vec<Candidate>
         let Some(begins) = instant(wall, &mz) else {
             continue;
         };
+        // A file that names `notify` decides for itself: `notify: []` is no notice, not the vault's default.
         let specs = if !m.notify.is_empty() {
             m.notify.as_slice()
+        } else if m.notify_set {
+            &[]
         } else if timed {
             rules.notify.as_slice()
         } else {
@@ -1156,6 +1162,46 @@ mod tests {
         );
         // 08:00 of the day is after its beginning (midnight): an all-day meeting has begun by then.
         assert!(look(&memory, &own, at("2026-11-24T08:00")).is_empty());
+    }
+
+    #[test]
+    fn a_meeting_whose_file_says_notify_empty_gets_no_default_notice() {
+        let memory = Memory::open(None);
+        // Without `notify` in the file: the default of the vault (-15m).
+        let plain = inputs(&[meeting(
+            "a/p",
+            "2026-11-24T10:00",
+            "2026-11-24T11:00",
+            json!({}),
+        )]);
+        assert_eq!(
+            shown(&look(&memory, &plain, at("2026-11-24T09:45"))),
+            [one(MEETING, "a/p", "2026-11-24 09:45")]
+        );
+        // `notify: []` in the file (`notify_set`): no notice before it, only the question after its end.
+        let quiet = inputs(&[meeting(
+            "a/q",
+            "2026-11-24T10:00",
+            "2026-11-24T11:00",
+            json!({ "notify_set": true }),
+        )]);
+        assert!(look(&memory, &quiet, at("2026-11-24T09:45")).is_empty());
+        assert_eq!(
+            next_after(&quiet, at("2026-11-24T00:00"), &vienna(), &Rules::default()),
+            Some(at("2026-11-24T11:00")),
+            "the next thing is the question after the end, not a notice"
+        );
+        // Its own notices still count.
+        let own = inputs(&[meeting(
+            "a/o",
+            "2026-11-24T10:00",
+            "2026-11-24T11:00",
+            json!({ "notify_set": true, "notify": [{ "spec": "-2h", "before_min": 120 }] }),
+        )]);
+        assert_eq!(
+            shown(&look(&memory, &own, at("2026-11-24T08:00"))),
+            [one(MEETING, "a/o", "2026-11-24 08:00")]
+        );
     }
 
     #[test]
