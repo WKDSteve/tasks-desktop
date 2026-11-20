@@ -121,15 +121,29 @@ test('the phone page names a coming meeting of an internal area without its addr
     `---\ntitle: Phone meeting m003\nstatus: planned\ndate: ${day}\ntime: "23:30"\nduration: 15m\nonline: https://teams.microsoft.com/l/meetup-join/m003\n---\n\nA meeting of one phone test.\n\n## Teilnehmer\n\n- [ ] Rick <rick@example.org>\n\n## Protokoll\n`,
   );
   try {
+    // The hub holds the meetings for the state of the vault it last read: the phone is paired once the hub sees the file
+    // just written (asked with the PC's session). Not by loading the phone page again: every start of a paired phone
+    // is a sign-in of its device, and the hub limits those (a later test would get 429).
+    const token = (JSON.parse(readFileSync(STATE, 'utf8')) as { token: string }).token;
+    // The very question the phone page asks (today and the 13 days after it, `MEETING_DAYS` of tasks-mobile): the hub
+    // holds an answer per question and state of the vault, so only this one tells what the phone will get.
+    const end = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 14);
+    const until = `${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, '0')}-${String(end.getDate()).padStart(2, '0')}`;
+    await expect
+      .poll(
+        async () => {
+          const r = await page.request.get(`${origin()}/api/tasks/meetings?since=${day}&until=${until}&limit=100`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          return r.ok() ? (await r.text()).includes(`lib.nvim/${slug}`) : false;
+        },
+        { timeout: 20_000 },
+      )
+      .toBe(true);
     await page.goto(pairingLink(config).replace('/#pair=', '/m/#pair='));
     await expect(page.getByTestId('connection')).toHaveAttribute('data-state', 'live');
     const row = page.getByTestId('meetings').locator(`[data-meeting="lib.nvim/${slug}"]`);
-    // The hub holds the meetings for the state of the vault it last read: the file written just now is there once its
-    // watcher saw it, and the page reads them again on its next start.
-    await expect(async () => {
-      if ((await row.count()) === 0) await page.reload();
-      await expect(row).toBeVisible({ timeout: 2000 });
-    }).toPass({ timeout: 20_000 });
+    await expect(row).toBeVisible();
     await row.click();
     await expect(page.getByTestId('meeting-title')).toContainText('Phone meeting m003');
     // lib.nvim is internal and the hub's settings let no address of it out: no Join, no people.
