@@ -93,3 +93,38 @@ test('a meeting in the calendar: a chip in the month, a block in the week, moved
     if (existsSync(file)) rmSync(file, { force: true });
   }
 });
+
+test('a meeting moved in the hour grid comes back with Undo on the toast: its beginning and its end as the file had them', async ({ page }) => {
+  const slug = 'cal-e2e-m02';
+  const dir = join(state().vault, 'lib.nvim', 'MEETINGS');
+  mkdirSync(dir, { recursive: true });
+  const file = join(dir, `${slug}.md`);
+  const id = `lib.nvim/${slug}`;
+  writeFileSync(file, `---\ntitle: Cal e2e m02\nstatus: planned\ndate: ${today()}\ntime: "13:00"\nend: "14:00"\n---\n\nA meeting of one browser test.\n`);
+  try {
+    const problems = await pair(page, '/#view=calendar');
+    await page.getByRole('combobox', { name: 'Show' }).selectOption('week');
+    const grid = page.locator('[data-timegrid="week"]');
+    const block = grid.locator(`.block[data-meeting="${id}"] .open`);
+    await expect(block).toBeVisible();
+    await block.focus();
+    let answer = nextAnswer(page);
+    await page.keyboard.press('Shift+ArrowDown');
+    await answer;
+    await expect.poll(() => readFileSync(file, 'utf8'), { timeout: WRITE_BUDGET }).toMatch(/time: "?13:15/);
+    expect(readFileSync(file, 'utf8')).toMatch(/duration: 1h/);
+
+    answer = nextAnswer(page);
+    await page.getByRole('button', { name: 'Undo' }).click();
+    await answer;
+    await expect.poll(() => readFileSync(file, 'utf8'), { timeout: WRITE_BUDGET }).toMatch(/time: "?13:00/);
+    const text = readFileSync(file, 'utf8');
+    expect(text).toMatch(/end: "?14:00/);
+    expect(text).not.toMatch(/duration:/);
+    // 13:00 is 780 minutes: the block stands there again
+    await expect(grid.locator(`.block[data-meeting="${id}"]`)).toHaveCSS('top', `${780 * 0.8}px`, { timeout: WRITE_BUDGET });
+    expect(problems).toEqual([]);
+  } finally {
+    if (existsSync(file)) rmSync(file, { force: true });
+  }
+});

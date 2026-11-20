@@ -190,6 +190,20 @@ describe('the hour grid', () => {
     ]);
   });
 
+  it('offers the way back on the toast after a move: the inverse the engine answered', async () => {
+    const { m, root } = await week();
+    const inverse = { op: 'meeting_set', id: 'pub/free', patch: { date: TODAY, time: '14:00', duration: null, end: '15:00' }, if_match: 'sha256:after' };
+    m.hub.next_ops = {
+      kind: 'tasks.result',
+      ok: true,
+      dry_run: false,
+      results: [{ n: 1, op: 'meeting_set', id: 'pub/free', ok: true, outcome: 'changed', changed_ids: ['pub/free'], inverse }],
+    } as never;
+    press(block(root, 'pub/free'), 'ArrowDown', { shiftKey: true });
+    await until(() => m.app.toast?.undo !== undefined);
+    expect(m.app.toast?.undo).toEqual([inverse]);
+  });
+
   it('moves it to the next day with Shift+Right and changes the length with Ctrl+Shift+Down', async () => {
     const { m, root } = await week();
     press(block(root, 'pub/free'), 'ArrowRight', { shiftKey: true });

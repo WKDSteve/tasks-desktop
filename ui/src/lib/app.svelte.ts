@@ -1797,11 +1797,12 @@ export class App {
 
   /**
    * Put a meeting on another time (`meeting_set` on the version the calendar showed: another change in between is
-   * refused by the engine and said). `patch` is the one of `movePatch`. True when it was written.
+   * refused by the engine and said). `patch` is the one of `movePatch`. True when it was written. The toast offers the
+   * way back: the engine's inverse puts the old date, time, end and duration back.
    */
   async moveMeeting(m: Pick<MeetingEntry, 'id' | 'etag'>, patch: Record<string, unknown>): Promise<boolean> {
     if (!this.can('meeting_ops')) return false;
-    const result = await this.write([{ op: 'meeting_set', id: m.id, patch, ...(m.etag ? { if_match: m.etag } : {}) }], { undoable: false });
+    const result = await this.write([{ op: 'meeting_set', id: m.id, patch, ...(m.etag ? { if_match: m.etag } : {}) }]);
     return result?.results.every((r) => r.ok) === true;
   }
 
