@@ -73,12 +73,17 @@ Foreign: ![Tracker](https://tracker.example/pixel.png)
 `,
   );
   try {
-    // The hub reads a new file when its watcher tells it: the page opens the task once the hub knows it.
+    // The hub reads a new file when its watcher tells it: the page opens the task once the snapshot the page draws
+    // from holds it (the route of one task reads the file at once, the list only after the watcher).
     await expect
-      .poll(async () => (await page.request.get(`/api/tasks/task?id=lib.nvim/${slug}`, { headers: { Authorization: `Bearer ${state().token}` } })).status(), {
-        timeout: 15_000,
-      })
-      .toBe(200);
+      .poll(
+        async () => {
+          const r = await page.request.get('/api/tasks/snapshot', { headers: { Authorization: `Bearer ${state().token}` } });
+          return r.ok() && (await r.text()).includes(`"lib.nvim/${slug}"`);
+        },
+        { timeout: 20_000 },
+      )
+      .toBe(true);
     const { problems, foreign } = await pair(page, `/#task=lib.nvim%2F${slug}`);
     const detail = page.locator('aside.detail');
     const prose = detail.locator('.prose');
