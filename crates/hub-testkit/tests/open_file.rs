@@ -204,6 +204,7 @@ row two
             repo_status: None,
             tailnet: None,
             push: None,
+            past_the_guard: Vec::new(),
         },
     )
     .await

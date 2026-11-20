@@ -248,6 +248,7 @@ async fn rig(name: &str, with_admin: bool) -> Rig {
                 repo_status: None,
                 tailnet: None,
                 push: None,
+                past_the_guard: Vec::new(),
             },
         )
         .await

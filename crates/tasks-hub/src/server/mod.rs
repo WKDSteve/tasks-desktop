@@ -164,6 +164,10 @@ pub struct Extras {
     /// Web Push to the paired phones (`remind`, `decision`); none: this hub sends none. Needs the devices of
     /// `ServerConfig`.
     pub push: Option<HubPush>,
+    /// Tests only: routes the guard lets a paired device through to (at `read`), so that what answers it is the
+    /// handler's own refusal, the second wall of a route that is not released for devices. Empty in every hub.
+    #[doc(hidden)]
+    pub past_the_guard: Vec<&'static str>,
 }
 
 /// Bind and serve, with a list of vaults the page may choose from.
@@ -197,9 +201,13 @@ pub async fn start_with(cfg: ServerConfig, extras: Extras) -> std::io::Result<Ru
         meetings,
         tailnet,
         push,
+        past_the_guard,
     } = extras;
+    let rules = past_the_guard.iter().fold(guard_rules(), |rules, name| {
+        rules.with_device_route(crate::IDENTITY.route(name), Level::Read)
+    });
     let guard_rules = device_rules(
-        guard_rules(),
+        rules,
         cfg.devices.clone(),
         tailnet,
         push.as_ref().map(|p| Arc::clone(&p.push)),

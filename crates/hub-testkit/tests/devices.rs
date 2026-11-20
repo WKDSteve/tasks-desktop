@@ -47,6 +47,15 @@ impl Rig {
     }
 
     async fn with_tailnet(name: &str, tailnet: Option<&str>) -> Self {
+        Self::build(name, tailnet, Vec::new()).await
+    }
+
+    /// A hub whose guard lets a device through to `routes`: what answers it there is the handler's own refusal.
+    async fn past_the_guard(name: &str, routes: Vec<&'static str>) -> Self {
+        Self::build(name, None, routes).await
+    }
+
+    async fn build(name: &str, tailnet: Option<&str>, past_the_guard: Vec<&'static str>) -> Self {
         let dir = Scratch::new(&format!("devices-{name}"));
         let vault = dir.join("vault");
         std::fs::create_dir_all(vault.join("alpha.nvim").join("ROADMAP").join("tasks")).unwrap();
@@ -98,6 +107,7 @@ beta.nvim/loose
             Extras {
                 upload_dir: Some(dir.join("uploads")),
                 tailnet: tailnet.map(str::to_owned),
+                past_the_guard,
                 ..Extras::default()
             },
         )
@@ -698,6 +708,53 @@ async fn a_phone_upload_whose_task_is_gone_during_the_transfer_attaches_nothing(
         attached.lines().all(|line| line.starts_with("true ")),
         "a real attach reached the engine: {attached}"
     );
+}
+
+/// The second wall: a route that is not released for devices refuses a phone in its handler too, so that releasing it
+/// at the guard later does not hand the phone what it may not see. The guard of this hub lets the phone through.
+#[tokio::test]
+async fn a_route_not_released_for_devices_refuses_a_phone_in_its_handler_too() {
+    let _one = ONE_AT_A_TIME.lock().await;
+    let r = Rig::past_the_guard(
+        "second-wall",
+        vec![
+            "asset",
+            "meetings",
+            "meeting",
+            "meeting/ics",
+            "meeting/thumb",
+            "paths",
+            "path",
+            "meeting_parse",
+        ],
+    )
+    .await;
+    let (_, phone) = r.phone().await;
+    for (method, path, body) in [
+        (
+            "GET",
+            "/api/tasks/asset?kind=task&id=alpha.nvim/t1&file=assets/x.png",
+            "",
+        ),
+        ("GET", "/api/tasks/meetings", ""),
+        ("GET", "/api/tasks/meeting?id=alpha.nvim/m1", ""),
+        ("GET", "/api/tasks/meeting/ics?id=alpha.nvim/m1", ""),
+        ("GET", "/api/tasks/meeting/thumb?id=alpha.nvim/m1", ""),
+        ("GET", "/api/tasks/paths", ""),
+        ("GET", "/api/tasks/path?id=alpha.nvim/p1", ""),
+        (
+            "POST",
+            "/api/tasks/meeting_parse",
+            r#"{"text":"24.11. 9:30 Stand"}"#,
+        ),
+    ] {
+        let (status, doc) = r.send(method, path, &phone, body).await;
+        assert_eq!(
+            (status, doc["error"]["code"].clone()),
+            (403, json!("not_for_devices")),
+            "{method} {path}: {doc}"
+        );
+    }
 }
 
 #[tokio::test]

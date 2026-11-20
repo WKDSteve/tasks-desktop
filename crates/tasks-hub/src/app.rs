@@ -845,6 +845,7 @@ pub async fn serve(opts: ServeOptions) -> Result<(), String> {
     let extras = || Extras {
         tailnet: tailnet.clone(),
         push: Some(push.clone()),
+        past_the_guard: Vec::new(),
         attach_dirs: attach_dirs.clone(),
         upload_dir: Some(upload_dir.clone()),
         upload_engine: Some(Arc::clone(&upload_engine)),
