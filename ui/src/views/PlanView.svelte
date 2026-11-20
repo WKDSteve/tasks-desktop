@@ -27,6 +27,9 @@
   import PlanFiles from './PlanFiles.svelte';
   import type { AddTarget } from '../lib/picker';
   import { projectOfPlan } from '../lib/projects';
+  import { shownIcon } from '../lib/icons';
+  import ItemCover from './ItemCover.svelte';
+  import ItemIcon from './ItemIcon.svelte';
   import { allButtonFold, foldOf, withAll, withFold } from '../lib/fold';
 
   let { app }: { app: App } = $props();
@@ -47,6 +50,7 @@
   const projectId = $derived(planId === '' && projects.some((p) => p.id === app.projectChoice) ? app.projectChoice : '');
   // Over a plan of a project: the trail "project › plan".
   const planProject = $derived(projectOfPlan(projects, plans.find((p) => p.id === planId)));
+  const currentPlan = $derived(plans.find((p) => p.id === planId));
   const stages = $derived(stagesOf(app.shown, planId === '' ? null : planId));
   // The first tasks are drawn at once and the rest in the frames after, like the list: a plan of two thousand tasks
   // is not one block of work between the click and the first stage (measured: 50 ms for 600, 150 ms for 2000).
@@ -133,8 +137,15 @@
     <nav class="trail" aria-label={t('project.trail')}>
       <button type="button" class="link" onclick={() => app.openProject(planProject.id)}>{markHidden(planProject.title)}</button>
       <span aria-hidden="true">›</span>
-      <span aria-current="page">{markHidden(plans.find((p) => p.id === planId)?.title ?? planId)}</span>
+      <span aria-current="page"
+        >{#if currentPlan}<ItemIcon {app} shown={shownIcon({ kind: 'plan', id: currentPlan.id, icon: currentPlan.icon })} />{/if}{markHidden(
+          currentPlan?.title ?? planId,
+        )}</span
+      >
     </nav>
+  {/if}
+  {#if currentPlan?.cover && currentPlan.folder}
+    <ItemCover {app} kind="plan" id={currentPlan.id} file={currentPlan.cover} title={currentPlan.title} />
   {/if}
   {#if !snapshot}
     <p class="muted">{t('state.loading')}</p>

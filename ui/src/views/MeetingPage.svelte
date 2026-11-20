@@ -6,7 +6,13 @@
   // there, the agenda. Result: decisions, follow-ups, the result, "Mark as done". Every change is one operation of the
   // engine on the version read (`if_match`); the page reads the meeting again after it.
   import { closeOnBackdrop } from 'appkit-ui/backdrop';
-  import { hostOf } from 'appkit-ui/markdown';
+  import { hostOf, parseMarkdown } from 'appkit-ui/markdown';
+  import Blocks from 'appkit-ui/Blocks.svelte';
+  import { AssetImages } from '../lib/assetImages.svelte';
+  import { shownIcon } from '../lib/icons';
+  import ImageViewer from './ImageViewer.svelte';
+  import ItemCover from './ItemCover.svelte';
+  import ItemIcon from './ItemIcon.svelte';
   import type { App } from '../lib/app.svelte';
   import type { MeetingDocument, Result } from '../lib/contract';
   import { floating } from '../lib/floating';
@@ -43,6 +49,23 @@
 
   const id = $derived(app.meetingOpen);
   const m = $derived(doc?.meeting ?? null);
+  // The images below `assets/` of a meeting in its folder form, for the text of its decisions and its result.
+  const assetOwner = $derived(m?.folder ? m.id : null);
+  let images = $state<AssetImages | null>(null);
+  $effect(() => {
+    const owner = assetOwner;
+    if (owner === null) {
+      images = null;
+      return;
+    }
+    const store = new AssetImages((kind, of, file) => app.asset(kind, of, file), 'meeting', owner);
+    images = store;
+    return () => store.dispose();
+  });
+  let viewing = $state<{ url: string; alt: string } | null>(null);
+  const imageSource = $derived(images?.source(t('image.missing'), (_src, url, alt) => (viewing = { url, alt })));
+  /** A section as Markdown, its images drawn when the meeting has a folder. */
+  const blocksOf = (text: string) => parseMarkdown(text, { assets: images !== null });
   const etag = $derived(m?.etag);
   const join = $derived(m ? joinLink(m.online) : null);
   const present = $derived(doc ? doc.participants.filter((p) => p.present).length : 0);
@@ -165,9 +188,10 @@
   {:else}
     <header>
       <h2 id="meeting-page-title">
-        {#if m.icon?.kind === 'emoji'}<span aria-hidden="true">{m.icon.value}</span>{/if}
+        <ItemIcon {app} shown={shownIcon({ kind: 'meeting', id: m.id, icon: m.icon })} size={20} />
         {markHidden(m.title)}
       </h2>
+      {#if cover && m.folder}<ItemCover {app} kind="meeting" id={m.id} file={cover} title={m.title} />{/if}
       <p class="when">
         <span>{whenText(m, t('meeting.all_day'))}</span>
         {#if m.status}<span class="chip status" data-status={m.status}>{t(`meeting.status.${m.status}` as Key)}</span>{/if}
@@ -361,7 +385,7 @@
       {:else}
         <section aria-labelledby="meeting-decisions">
           <h3 id="meeting-decisions">{t('meeting.decisions')}</h3>
-          {#if section('Beschlüsse', 'Decisions') !== ''}<pre>{markHidden(section('Beschlüsse', 'Decisions'))}</pre>{:else}<p class="muted">{t('meeting.empty')}</p>{/if}
+          {#if section('Beschlüsse', 'Decisions') !== ''}<div class="prose"><Blocks blocks={blocksOf(section('Beschlüsse', 'Decisions'))} headingBase={3} images={imageSource} /></div>{:else}<p class="muted">{t('meeting.empty')}</p>{/if}
         </section>
         <section aria-labelledby="meeting-followups">
           <h3 id="meeting-followups">{t('meeting.followups')}</h3>
@@ -377,7 +401,7 @@
         </section>
         <section aria-labelledby="meeting-result">
           <h3 id="meeting-result">{t('meeting.result')}</h3>
-          {#if section('Ergebnis', 'Result') !== ''}<pre>{markHidden(section('Ergebnis', 'Result'))}</pre>{:else}<p class="muted">{t('meeting.empty')}</p>{/if}
+          {#if section('Ergebnis', 'Result') !== ''}<div class="prose"><Blocks blocks={blocksOf(section('Ergebnis', 'Result'))} headingBase={3} images={imageSource} /></div>{:else}<p class="muted">{t('meeting.empty')}</p>{/if}
           {#if m.recording && joinLink(m.recording)}
             <p><a href={joinLink(m.recording)} target="_blank" rel="noopener noreferrer">{t('meeting.recording')}</a></p>
           {/if}
@@ -391,6 +415,7 @@
       <button type="button" onclick={() => app.closeMeeting()}>{t('meeting.close_page')}</button>
     </div>
   {/if}
+  <ImageViewer image={viewing} close={() => (viewing = null)} label={{ close: t('image.close'), view: t('image.view') }} />
 </dialog>
 
 <style>
@@ -475,10 +500,8 @@
     text-decoration: line-through;
     color: var(--muted);
   }
-  pre {
-    white-space: pre-wrap;
-    font: inherit;
-    margin: 0;
+  .prose {
+    overflow-wrap: anywhere;
   }
   .row {
     display: flex;

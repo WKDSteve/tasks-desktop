@@ -12,6 +12,9 @@
   import { PLAN_STATUSES } from '../lib/planwizard';
   import AddTasksDialog from './AddTasksDialog.svelte';
   import PlanFiles from './PlanFiles.svelte';
+  import { shownIcon } from '../lib/icons';
+  import ItemCover from './ItemCover.svelte';
+  import ItemIcon from './ItemIcon.svelte';
   import type { AddTarget } from '../lib/picker';
 
   let { app, projectId }: { app: App; projectId: string } = $props();
@@ -98,7 +101,7 @@
 {:else}
   <section class="card head" aria-label={t('project.page')} data-project={project.id}>
     <div class="title-row">
-      <h2 class="title">{markHidden(project.title)}</h2>
+      <h2 class="title"><ItemIcon {app} shown={shownIcon({ kind: 'project', id: project.id, icon: project.icon })} size={20} />{markHidden(project.title)}</h2>
       {#if project.status}<span class="tag">{t(`plan.status.${project.status}` as Key)}</span>{/if}
       <span class="leave">
         {#if app.projects.length > 1}
@@ -112,6 +115,9 @@
         <button type="button" class="link" onclick={() => app.openProject('')}>{t('project.leave')}</button>
       </span>
     </div>
+    {#if project.cover && project.folder}
+      <ItemCover {app} kind="project" id={project.id} file={project.cover} title={project.title} />
+    {/if}
     {#if project.target}
       <p class="goal">
         <span class="label">{t('project.target')}:</span>
@@ -205,7 +211,7 @@
             <li class="card plan-card" data-plan={card.plan.id}>
               <div class="title-row">
                 <button type="button" class="link plan-title" onclick={() => app.openPlan(card.plan.id)}
-                  >{markHidden(card.plan.title)}</button
+                  ><ItemIcon {app} shown={shownIcon({ kind: 'plan', id: card.plan.id, icon: card.plan.icon })} />{markHidden(card.plan.title)}</button
                 >
                 {#if card.plan.status}<span class="tag">{t(`plan.status.${card.plan.status}` as Key)}</span>{/if}
               </div>

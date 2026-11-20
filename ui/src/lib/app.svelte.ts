@@ -43,6 +43,7 @@ import type {
   Next,
   PathDocument,
   Paths,
+  PathEntry,
   PlanCompare,
   Result,
   Snapshot,
@@ -53,7 +54,7 @@ import type {
   Waits,
 } from './contract';
 import { expandAreas, isAreaGroup, NO_AREA, type AreaGroupInfo } from './areaGroups';
-import type { Op } from './api';
+import type { AssetOwner, Op } from './api';
 import { adoptOps, followUpOp, runAnswer, type Answer, type AnswerKind } from './agentAnswer';
 
 /** The note an inverse of `node_set` carries (capability `node_note`), as a part of the operation; none: `{}`. */
@@ -1456,6 +1457,30 @@ export class App {
     return this.env.hub.paths(signal);
   }
 
+  /**
+   * The icons of the open learning paths by id: the second step of an item's icon (its own, its path's, its
+   * category's; lib/icons.ts). Read once when an item asks (`wantPathIcons`), and each time the paths view reads the
+   * list (`rememberPaths`).
+   */
+  pathIcons = $state<ReadonlyMap<string, PathEntry['icon']>>(new Map());
+  #pathIconsAsked = false;
+
+  /** Read the icons of the paths, once: an item of a learning point is shown. */
+  wantPathIcons(): void {
+    if (this.#pathIconsAsked || !this.can('paths')) return;
+    this.#pathIconsAsked = true;
+    void this.paths()
+      .then((doc) => this.rememberPaths(doc.items))
+      .catch(() => {
+        this.#pathIconsAsked = false;
+      });
+  }
+
+  /** The list of the paths as it was read: their icons for the inheritance. */
+  rememberPaths(items: readonly Pick<PathEntry, 'id' | 'icon'>[]): void {
+    this.pathIcons = new Map(items.map((p) => [p.id, p.icon]));
+  }
+
   /** One learning path with its tree (`tasks.path`): the states, the progress and the derived state are the engine's. */
   path(id: string, signal?: AbortSignal): Promise<PathDocument> {
     return this.env.hub.path(id, signal);
@@ -1817,6 +1842,11 @@ export class App {
   /** The small picture of a meeting, read with the session. */
   meetingThumb(id: string): Promise<Blob | null> {
     return this.env.hub.meetingThumb(id);
+  }
+
+  /** An image below `assets/` of a container, read with the session; null when there is none to draw. */
+  asset(kind: AssetOwner, id: string, file: string): Promise<Blob | null> {
+    return this.env.hub.asset(kind, id, file);
   }
 
   /** One meeting with its body and its sections. */

@@ -38,6 +38,12 @@
   } from '../lib/fields';
   import Blocks from 'appkit-ui/Blocks.svelte';
   import { parseSheets } from '../lib/sheets';
+  import { AssetImages } from '../lib/assetImages.svelte';
+  import { shownIcon } from '../lib/icons';
+  import { lacksAlt } from '../lib/images';
+  import AssetImg from './AssetImg.svelte';
+  import ImageViewer from './ImageViewer.svelte';
+  import ItemIcon from './ItemIcon.svelte';
 
   let { app }: { app: App } = $props();
   // The detail can stand twice at once (the float and the side): each has its own list of the reasons.
@@ -51,7 +57,31 @@
   const detail = $derived(app.detail);
   const body = $derived(detail.state === 'ok' ? detail.doc.body : '');
   let raw = $state(false);
-  const blocks = $derived(raw ? [] : parseMarkdown(body));
+  // The images below `assets/` of a task in its folder form: one store per task, given back when another is shown.
+  const assetOwner = $derived(task?.folder ? task.id : null);
+  let images = $state<AssetImages | null>(null);
+  $effect(() => {
+    const id = assetOwner;
+    if (id === null) {
+      images = null;
+      return;
+    }
+    const store = new AssetImages((kind, owner, file) => app.asset(kind, owner, file), 'task', id);
+    images = store;
+    return () => store.dispose();
+  });
+  // An image of the text, larger (a click on it).
+  let viewing = $state<{ url: string; alt: string } | null>(null);
+  const openImage = (_src: string, url: string, alt: string) => (viewing = { url, alt });
+  const imageSource = $derived(images?.source(t('image.missing'), openImage));
+  const blocks = $derived(raw ? [] : parseMarkdown(body, { assets: images !== null }));
+  const icon = $derived(
+    task ? shownIcon({ kind: 'task', id: task.id, icon: task.icon, point: task.point, category: task.category }, app.pathIcons) : null,
+  );
+  // A task of a learning point takes the icon of its path when it has none of its own: the paths are read once.
+  $effect(() => {
+    if (task?.point && !task.icon) app.wantPathIcons();
+  });
   // The test sheets that name the task, as the last report of testing.nvim wrote them into its body (name, id, state).
   // Nothing is run from here.
   const sheets = $derived(parseSheets(body));
@@ -376,7 +406,18 @@
   {#if !task}
     <p class="muted">{t('detail.none')}</p>
   {:else}
-    <h2 class="task-title">{markHidden(task.title)}</h2>
+    <h2 class="task-title"><ItemIcon {app} shown={icon} size={20} />{markHidden(task.title)}</h2>
+    {#if task.cover && images}
+      <div class="cover">
+        <AssetImg
+          {images}
+          file={task.cover}
+          alt={t('image.cover_of', { title: task.title })}
+          missing={t('image.missing')}
+          onopen={(url, alt) => (viewing = { url, alt })}
+        />
+      </div>
+    {/if}
     <p class="id"><code>{task.id}</code></p>
 
     {#if task.problems.length > 0 || !task.valid}
@@ -1101,6 +1142,7 @@
             }}
           ></textarea>
         </label>
+        {#if lacksAlt(draft)}<p class="warn" role="note" data-alt-missing>{t('image.alt_missing')}</p>{/if}
         <div class="edit-actions">
           <button type="button" disabled={app.locked} onclick={() => void saveBody()}>{t('detail.body_save')}</button>
           <button type="button" disabled={app.locked} onclick={() => (editing = false)}>{t('detail.body_cancel')}</button>
@@ -1111,7 +1153,7 @@
       {:else}
         <!-- A long text scrolls in its box: the box takes the focus, so the keyboard can scroll it (as the plain text). -->
         <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
-        <div class="body prose" tabindex="0"><Blocks {blocks} headingBase={2} /></div>
+        <div class="body prose" tabindex="0"><Blocks {blocks} headingBase={2} images={imageSource} /></div>
       {/if}
       {#if detail.doc.body_truncated}<p class="muted">{t('detail.body_truncated')}</p>{/if}
       {#if app.can('append_note')}
@@ -1295,6 +1337,7 @@
       >
     </div>
   {/if}
+  <ImageViewer image={viewing} close={() => (viewing = null)} label={{ close: t('image.close'), view: t('image.view') }} />
 </aside>
 
 <style>
@@ -1507,6 +1550,15 @@
   }
   .task-title {
     font-size: 1.25rem;
+    display: flex;
+    align-items: center;
+  }
+  .cover {
+    margin: 0 0 0.75rem;
+  }
+  .cover :global(img) {
+    max-height: 12rem;
+    border-radius: var(--radius);
   }
   .id {
     margin: -0.25rem 0 0.75rem;

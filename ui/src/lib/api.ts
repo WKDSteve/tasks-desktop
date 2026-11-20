@@ -280,6 +280,9 @@ export interface SetupStep {
   problem: string | null;
 }
 
+/** The kinds of container whose images the hub hands on (`GET /api/tasks/asset`). */
+export type AssetOwner = 'task' | 'plan' | 'project' | 'path' | 'meeting';
+
 export class Hub extends HubClient<Snapshot> {
   constructor(fetchFn: typeof fetch, base: string = '') {
     super(fetchFn, '/api/tasks', base);
@@ -663,6 +666,20 @@ export class Hub extends HubClient<Snapshot> {
   async meetingThumb(id: string): Promise<Blob | null> {
     try {
       const response = await this.request(`/api/tasks/meeting/thumb?id=${encodeURIComponent(id).replace(/%2F/gi, '/')}`);
+      return response.ok ? await response.blob() : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * An image below `assets/` of a container (`asset`: a task, plan, project, path or meeting), read with the session
+   * (an `<img src>` would not send it); `null` when it has no such image, it is too large, or it cannot be read.
+   */
+  async asset(kind: AssetOwner, id: string, file: string): Promise<Blob | null> {
+    const plain = (text: string) => encodeURIComponent(text).replace(/%2F/gi, '/');
+    try {
+      const response = await this.request(`/api/tasks/asset?kind=${kind}&id=${plain(id)}&file=${plain(file)}`);
       return response.ok ? await response.blob() : null;
     } catch {
       return null;

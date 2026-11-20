@@ -25,7 +25,7 @@ export default defineConfig({
   },
   projects: [
     { name: 'chrome', use: { channel: 'chrome' } },
-    { name: 'firefox', use: { browserName: 'firefox' }, testMatch: /(readonly|engines)\.spec\.ts/ },
-    { name: 'webkit', use: { browserName: 'webkit' }, testMatch: /(readonly|engines)\.spec\.ts/ },
+    { name: 'firefox', use: { browserName: 'firefox' }, testMatch: /(readonly|engines|images)\.spec\.ts/ },
+    { name: 'webkit', use: { browserName: 'webkit' }, testMatch: /(readonly|engines|images)\.spec\.ts/ },
   ],
 });

@@ -459,6 +459,7 @@
     {#snippet row(task: TaskEntry, band: boolean)}
       <TaskRow
         {task}
+        {app}
         lang={app.lang}
         today={app.today}
         selected={task.id === app.selectedId}

@@ -12,6 +12,11 @@
   import Info from 'appkit-ui/Info.svelte';
   import { hostOf } from 'appkit-ui/markdown';
   import ChoiceMenu, { type Choice } from './ChoiceMenu.svelte';
+  import AssetImg from './AssetImg.svelte';
+  import ImageViewer from './ImageViewer.svelte';
+  import ItemIcon from './ItemIcon.svelte';
+  import { AssetImages } from '../lib/assetImages.svelte';
+  import { shownIcon } from '../lib/icons';
   import { markHidden } from '../lib/text';
   import {
     clickedState,
@@ -78,6 +83,25 @@
   const editingOf = (node: PathNode, kind: 'reason' | 'note' | 'xp'): boolean => editing?.kind === kind && editing.id === idOf(node);
   /** A leaf whose XP are its own to set here (a point whose task carries `xp:` takes the task's). */
   const ownsXp = (node: PathNode): boolean => node.children === 0 && node.xp_from !== 'task';
+  // The images below `assets/` of the open path (its points, its cover, its badges): one store per path in its folder
+  // form, given back when another path is opened or the view goes.
+  const assetOwner = $derived(doc && doc.path.id === chosen && doc.path.folder ? doc.path.id : null);
+  let images = $state<AssetImages | null>(null);
+  $effect(() => {
+    const id = assetOwner;
+    if (id === null) {
+      images = null;
+      return;
+    }
+    const store = new AssetImages((kind, owner, file) => app.asset(kind, owner, file), 'path', id);
+    images = store;
+    return () => store.dispose();
+  });
+  // An image of the path, larger (a click on it).
+  let viewing = $state<{ url: string; alt: string } | null>(null);
+  const view = (url: string, alt: string) => (viewing = { url, alt });
+  // The badges of the levels that have one, in file order: the gallery, the reached ones apart from the others.
+  const badges = $derived((doc?.levels ?? []).filter((level) => level.badge?.startsWith('assets/badges/')));
   /** The text of a label as shown: the link's text, with the characters that hide or reorder text made visible. */
   const shownLabel = (node: PathNode): string => markHidden(labelText(node));
 
@@ -90,6 +114,7 @@
       const answer = await app.paths();
       if (mine !== askedList) return;
       list = answer.items;
+      app.rememberPaths(answer.items);
       listProblem = false;
       // Nothing chosen yet (or the chosen one is gone): the first path, so the view never stands empty beside a list.
       if (answer.items.length > 0 && !answer.items.some((p) => p.id === app.pathChoice)) app.pathChoice = answer.items[0]!.id;
@@ -382,7 +407,9 @@
                 data-path={entry.id}
                 onclick={() => choose(entry.id)}
               >
-                <span class="name">{#if entry.icon?.kind === 'emoji'}<span aria-hidden="true">{entry.icon.value} </span>{/if}{markHidden(entry.title)}</span>
+                <span class="name"
+                  ><ItemIcon {app} shown={shownIcon({ kind: 'path', id: entry.id, icon: entry.icon })} />{markHidden(entry.title)}</span
+                >
                 <span class="sub"
                   >{markHidden(entry.area)} · {progressText(entry.progress)}{#if game && entry.xp}{` · ${t('paths.xp', {
                       earned: entry.xp.earned,
@@ -404,6 +431,11 @@
           {@const progress = doc.progress}
           {@const title = markHidden(doc.path.title)}
           <h3>{title}</h3>
+          {#if doc.path.cover && images}
+            <div class="cover">
+              <AssetImg {images} file={doc.path.cover} alt={t('image.cover_of', { title: doc.path.title })} missing={t('image.missing')} onopen={view} />
+            </div>
+          {/if}
           {#if doc.path.summary}<p class="summary">{markHidden(doc.path.summary)}</p>{/if}
           <div class="progress" role="img" aria-label={t('paths.progress_of', { title }) + ': ' + progressText(progress)} data-progress>
             {#each progressParts(progress) as part (part.kind)}
@@ -421,7 +453,31 @@
             </p>
           {/if}
           {#if game && doc.path.level}
-            <p class="level" data-level={doc.path.level.level}>{levelText(doc.path.level)}</p>
+            <p class="level" data-level={doc.path.level.level}
+              >{#if doc.path.level.badge?.startsWith('assets/badges/') && images}<AssetImg
+                  {images}
+                  file={doc.path.level.badge}
+                  alt={t('paths.badge_of', { n: doc.path.level.level })}
+                  size={32}
+                  cls="badge"
+                />{/if}{levelText(doc.path.level)}</p
+            >
+            {#if badges.length > 0 && images}
+              <ul class="badges" aria-label={t('paths.badges')} data-badges>
+                {#each badges as level (level.ref)}
+                  <li class:reached={level.reached} data-badge={level.ref}>
+                    <AssetImg
+                      {images}
+                      file={level.badge ?? ''}
+                      alt={t('paths.badge_of', { n: level.number ?? 0 })}
+                      missing={t('image.missing')}
+                      size={48}
+                      onopen={view}
+                    />
+                  </li>
+                {/each}
+              </ul>
+            {/if}
             {#each doc.path.level.open_rewards as reward (reward.ref)}
               {@const text = markHidden(reward.reward)}
               <p class="reward" data-reward={reward.ref}>
@@ -535,6 +591,11 @@
                   {/if}
                 </div>
 
+                {#if node.image && images}
+                  <div class="point-image">
+                    <AssetImg {images} file={node.image} alt={labelText(node)} missing={t('image.missing')} onopen={view} />
+                  </div>
+                {/if}
                 {#if node.reason}
                   <p class="reason">{t(node.state === 'blocked' ? 'paths.key' : 'paths.reason', { reason: markHidden(node.reason) })}</p>
                 {/if}
@@ -629,6 +690,7 @@
       </div>
     </div>
   {/if}
+  <ImageViewer image={viewing} close={() => (viewing = null)} label={{ close: t('image.close'), view: t('image.view') }} />
 </section>
 
 <style>
@@ -648,6 +710,33 @@
   h2,
   h3 {
     margin: 0;
+  }
+  .cover :global(img) {
+    max-height: 10rem;
+    border-radius: var(--radius);
+  }
+  .point-image {
+    margin: 0.2rem 0 0.3rem calc(var(--depth, 0) * 1.2rem + 3rem);
+  }
+  .point-image :global(img) {
+    max-height: 16rem;
+  }
+  .level {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+  .badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    list-style: none;
+    padding: 0;
+    margin: 0.3rem 0;
+  }
+  .badges li:not(.reached) {
+    opacity: 0.4;
+    filter: grayscale(1);
   }
   .none,
   .summary,

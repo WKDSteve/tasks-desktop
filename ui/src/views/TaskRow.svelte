@@ -10,6 +10,9 @@
   import { markGesture, type Marker } from '../lib/markDom';
   import { isLearning } from '../lib/learning';
   import type { Snippet } from 'svelte';
+  import type { App } from '../lib/app.svelte';
+  import { shownIcon } from '../lib/icons';
+  import ItemIcon from './ItemIcon.svelte';
 
   let {
     task,
@@ -31,8 +34,11 @@
     area,
     marker,
     actions,
+    app,
   }: {
     task: TaskEntry;
+    /** With the app the row shows the task's icon (its own, its path's, its category's; lib/icons.ts). */
+    app?: App;
     lang: Lang;
     today: string;
     selected?: boolean;
@@ -64,6 +70,12 @@
     /** The actions at the end of the row (`RowActions.svelte`): beside the row, never inside its button. */
     actions?: Snippet;
   } = $props();
+  const icon = $derived(
+    app ? shownIcon({ kind: 'task', id: task.id, icon: task.icon, point: task.point, category: task.category }, app.pathIcons) : null,
+  );
+  $effect(() => {
+    if (app && task.point && !task.icon) app.wantPathIcons();
+  });
 
   // A word this version does not know is shown as it is.
   // When the status and the state say the same word there is one mark (statusTags).
@@ -110,7 +122,7 @@
 >
   <span class="id">{task.id}</span>
   <!-- The area stands beside the title, not in it: the title's cell holds the title alone (its hint when cut, the tests). -->
-  <span class="what">{#if area}<span class="area" data-area={area.name}><span class="sr-only">{translate(lang, 'areas.row', { area: area.name })} </span><span aria-hidden="true">{area.label}</span></span>{/if}<span class="title">{markHidden(task.title)}</span></span>
+  <span class="what">{#if area}<span class="area" data-area={area.name}><span class="sr-only">{translate(lang, 'areas.row', { area: area.name })} </span><span aria-hidden="true">{area.label}</span></span>{/if}{#if app && icon}<ItemIcon {app} shown={icon} />{/if}<span class="title">{markHidden(task.title)}</span></span>
   <span class="meta">
     <!-- A sign carries its meaning only for the eye: a screen reader gets the word (the hint is the long form). -->
     {#if !task.valid}<span class="tag bad" data-hint={hintOf(lang, 'hint', 'invalid')}><span aria-hidden="true">!</span><span class="sr-only">{translate(lang, 'mark.invalid')}</span></span>{/if}

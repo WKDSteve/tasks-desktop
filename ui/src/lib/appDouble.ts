@@ -433,9 +433,11 @@ export class FakeHub {
     return { alternatives: [], cdx: [], incomplete: [] };
   }
   taskSignals: AbortSignal[] = [];
+  /** The body every task's document has. */
+  taskBody = 'body';
   async task(id: string, signal?: AbortSignal): Promise<TaskDocument> {
     if (signal) this.taskSignals.push(signal);
-    return { task: this.doc.tasks.find((t) => t.id === id), body: 'body', steps: [] } as never;
+    return { task: this.doc.tasks.find((t) => t.id === id), body: this.taskBody, steps: [] } as never;
   }
   /** The meetings the hub knows (`meetings`, `meeting`), what was asked of them, and the proposals of the quick line. */
   meetingItems: MeetingEntry[] = [];
@@ -473,6 +475,13 @@ export class FakeHub {
       return { kind: 'tasks.meetings', items: page, total: items.length, offset, limit: size, ...(next === undefined ? {} : { next_offset: next }), undated: 0, incomplete: [] } as unknown as Meetings;
     }
     return { kind: 'tasks.meetings', items, total: items.length, offset: 0, limit: 100, undated: 0, incomplete: [] } as unknown as Meetings;
+  }
+  /** The images asked (`kind id file`), and what `asset` answers for a file (missing: null). */
+  assetReads: string[] = [];
+  assetAnswers = new Map<string, Blob>();
+  async asset(kind: string, id: string, file: string): Promise<Blob | null> {
+    this.assetReads.push(`${kind} ${id} ${file}`);
+    return this.assetAnswers.get(file) ?? null;
   }
   /** The ids whose picture was asked, and what `meetingThumb` answers (null: no picture). */
   thumbReads: string[] = [];
