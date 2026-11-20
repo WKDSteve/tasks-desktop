@@ -672,6 +672,206 @@ fn json_str(text: &str) -> Value {
     Value::String(text.to_owned())
 }
 
+/// The fields of a meeting entry a phone is given: its time, its place and its counts. The address to join and the
+/// recording are given apart (`meeting_links`); left out: its file and folder (`file`, `folder`, `assets`, `cover`,
+/// `image`), whom notices go to (`notify_to`) and the faults of its file as text (`problems`).
+const MEETING_FIELDS: &[&str] = &[
+    "id",
+    "area",
+    "slug",
+    "title",
+    "status",
+    "date",
+    "time",
+    "end",
+    "duration_min",
+    "all_day",
+    "starts_at",
+    "ends_at",
+    "tz",
+    "location",
+    "tags",
+    "summary",
+    "agenda",
+    "followups",
+    "has_result",
+    "has_decisions",
+    "has_protocol",
+    "created",
+    "updated",
+    "etag",
+    "valid",
+    "repeat",
+    "repeat_until",
+    "except",
+    "series",
+    "occurrence",
+    "virtual",
+];
+
+/// Whether the addresses of a meeting of `area` (to join, of the recording, of its documents) may reach a phone: those
+/// of a `public` area, those of an `internal` one only with the settings' `meetings.internal_links` (as for the mails).
+fn meeting_links(classes: &AreaPolicy, area: &str, internal_links: bool) -> bool {
+    match classes.shown(area) {
+        Shown::Public => true,
+        Shown::Internal => internal_links,
+        Shown::Private | Shown::Unclassified => false,
+    }
+}
+
+/// A web address, or nothing: a path of the vault or of this machine never leaves for a phone.
+fn web_address(value: &Value) -> Option<Value> {
+    value
+        .as_str()
+        .filter(|l| l.starts_with("https://") || l.starts_with("http://"))
+        .map(json_str)
+}
+
+/// A meeting entry for a phone, or `None` when the meeting is not of a released area.
+pub(crate) fn meeting_entry(
+    classes: &AreaPolicy,
+    entry: &Value,
+    internal_links: bool,
+) -> Option<Value> {
+    let id = entry["id"].as_str()?;
+    let area = area_of(id)?;
+    if !released(classes, area) || entry["area"].as_str() != Some(area) {
+        return None;
+    }
+    let mut out = copy(entry, MEETING_FIELDS);
+    if meeting_links(classes, area, internal_links) {
+        for field in ["online", "recording"] {
+            if let Some(link) = web_address(&entry[field]) {
+                out.insert(field.to_owned(), link);
+            }
+        }
+        if let Some(service) = entry.get("online_service") {
+            out.insert("online_service".to_owned(), service.clone());
+        }
+    }
+    // Who comes is the people of the meeting: a count of them is given for a public area only.
+    if matches!(classes.shown(area), Shown::Public)
+        && let Some(count) = entry.get("participants")
+    {
+        out.insert("participants".to_owned(), count.clone());
+    }
+    if let Some(icon) = plain_icon(&entry["icon"]) {
+        out.insert("icon".to_owned(), icon);
+    }
+    out.insert("tasks".to_owned(), ids(classes, &entry["tasks"]));
+    Some(Value::Object(out))
+}
+
+/// `tasks.meetings` for a phone: the meetings of released areas. No count over the vault (`total`, `next_offset` tell
+/// of the others too); `partial` says that the window held more than this page, or that an area could not be read.
+pub(crate) fn meetings(classes: &AreaPolicy, doc: &Value, internal_links: bool) -> Value {
+    let mut out = copy(doc, &["kind", "schema", "plugin", "engine", "generated_at"]);
+    let items: Vec<Value> = doc["items"]
+        .as_array()
+        .map_or(&[][..], Vec::as_slice)
+        .iter()
+        .filter_map(|entry| meeting_entry(classes, entry, internal_links))
+        .collect();
+    out.insert("items".to_owned(), Value::Array(items));
+    let partial = doc.get("next_offset").is_some_and(|n| !n.is_null())
+        || doc["incomplete"]
+            .as_array()
+            .is_some_and(|list| !list.is_empty());
+    out.insert("partial".to_owned(), Value::Bool(partial));
+    Value::Object(out)
+}
+
+/// The body of a meeting without its section of participants (`## Teilnehmer` / `## Participants`), for a phone of an
+/// area that is not public.
+fn without_participants(body: &str) -> String {
+    let mut out = Vec::new();
+    let mut skipping = false;
+    for line in body.lines() {
+        let heading = line.trim_end();
+        if heading.starts_with("## ") {
+            skipping = heading == "## Teilnehmer" || heading == "## Participants";
+        }
+        if !skipping {
+            out.push(line);
+        }
+    }
+    out.join("\n")
+}
+
+/// `tasks.meeting` for a phone, or `None` (the hub answers `not_found`) when the meeting is not of a released area.
+pub(crate) fn meeting(classes: &AreaPolicy, doc: &Value, internal_links: bool) -> Option<Value> {
+    let entry = meeting_entry(classes, &doc["meeting"], internal_links)?;
+    let area = area_of(entry["id"].as_str()?)?;
+    let public = matches!(classes.shown(area), Shown::Public);
+    let links = meeting_links(classes, area, internal_links);
+    let mut out = copy(
+        doc,
+        &[
+            "kind",
+            "schema",
+            "plugin",
+            "engine",
+            "generated_at",
+            "body_truncated",
+            "agenda",
+        ],
+    );
+    out.insert("meeting".to_owned(), entry);
+    let body = doc["body"].as_str().unwrap_or("");
+    out.insert(
+        "body".to_owned(),
+        json_str(&if public {
+            body.to_owned()
+        } else {
+            without_participants(body)
+        }),
+    );
+    if public {
+        if let Some(people) = doc.get("participants") {
+            out.insert("participants".to_owned(), people.clone());
+        }
+    } else {
+        out.insert("participants".to_owned(), Value::Array(Vec::new()));
+    }
+    // A document's text is given; its address only as a web address the class lets out, never a path.
+    let documents: Vec<Value> = doc["documents"]
+        .as_array()
+        .map_or(&[][..], Vec::as_slice)
+        .iter()
+        .map(|d| {
+            let mut cut = copy(d, &["n", "text"]);
+            let web = d["kind"] == "web";
+            cut.insert(
+                "kind".to_owned(),
+                json_str(if web { "web" } else { "text" }),
+            );
+            if let Some(href) = web
+                .then(|| web_address(&d["href"]))
+                .flatten()
+                .filter(|_| links)
+            {
+                cut.insert("href".to_owned(), href);
+            }
+            Value::Object(cut)
+        })
+        .collect();
+    out.insert("documents".to_owned(), Value::Array(documents));
+    let followups: Vec<Value> = doc["followups"]
+        .as_array()
+        .map_or(&[][..], Vec::as_slice)
+        .iter()
+        .map(|f| {
+            let mut cut = copy(f, &["n", "text", "ticked"]);
+            if let Some(task) = f["task"].as_str().filter(|id| released_id(classes, id)) {
+                cut.insert("task".to_owned(), json_str(task));
+            }
+            Value::Object(cut)
+        })
+        .collect();
+    out.insert("followups".to_owned(), Value::Array(followups));
+    Some(Value::Object(out))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -975,6 +1175,117 @@ mod tests {
         assert_eq!(cut["partial"], true);
         assert!(!cut.to_string().contains("secret"), "{cut}");
         assert!(cut.get("rev").is_none());
+    }
+
+    fn meeting_doc(id: &str) -> Value {
+        let area = id.split_once('/').map_or("", |(a, _)| a);
+        json!({
+            "kind": "tasks.meeting", "rev": "r", "digest": "d", "body_truncated": false,
+            "body": "Kurz.\n\n## Teilnehmer\n\n- [ ] Rick <rick@example.org>\n\n## Protokoll\n\n- 10:00 Start\n",
+            "meeting": {
+                "id": id, "area": area, "slug": "m", "title": "Sync", "status": "planned", "date": "2026-11-24",
+                "time": "10:00", "starts_at": "2026-11-24T10:00", "location": "Raum 3",
+                "online": "https://teams.microsoft.com/l/x", "online_service": "teams",
+                "recording": "https://example.org/rec", "notify_to": ["rick@example.org"],
+                "participants": { "total": 1, "present": 0 }, "tasks": [format!("{area}/t1"), "secret/t2"],
+                "file": "E:/v/m.md", "folder": true, "assets": ["assets/a.png"], "cover": "assets/c.png",
+                "icon": { "kind": "emoji", "value": "📅" }, "problems": ["secret"], "etag": "e1",
+            },
+            "agenda": [{ "n": 1, "text": "Stand", "ticked": false }],
+            "participants": [{ "n": 1, "name": "Rick", "email": "rick@example.org", "present": false }],
+            "documents": [
+                { "n": 1, "text": "Folien", "kind": "web", "href": "https://example.org/slides" },
+                { "n": 2, "text": "Notiz", "kind": "path", "href": "E:/notes/n.md" },
+                { "n": 3, "text": "Bild", "kind": "asset", "href": "assets/a.png" },
+            ],
+            "followups": [
+                { "n": 1, "text": "Mail", "ticked": false, "task": format!("{area}/t3") },
+                { "n": 2, "text": "Geheim", "ticked": false, "task": "secret/t4" },
+            ],
+        })
+    }
+
+    #[test]
+    fn a_meeting_of_an_internal_area_reaches_a_phone_without_its_people_and_without_its_links() {
+        let c = classes();
+        assert!(meeting(&c, &meeting_doc("secret/m"), true).is_none());
+        let cut = meeting(&c, &meeting_doc("open/m"), false).expect("internal is released");
+        let text = cut.to_string();
+        for word in [
+            "rick",
+            "Rick",
+            "teams",
+            "example.org",
+            "E:/",
+            "assets/",
+            "secret",
+            "\"rev\"",
+            "Teilnehmer",
+        ] {
+            assert!(!text.contains(word), "{word} in {text}");
+        }
+        assert_eq!(cut["meeting"]["location"], "Raum 3");
+        assert_eq!(cut["meeting"]["tasks"], json!(["open/t1"]));
+        assert_eq!(
+            cut["meeting"]["icon"],
+            json!({ "kind": "emoji", "value": "📅" })
+        );
+        assert_eq!(cut["participants"], json!([]));
+        assert!(cut["body"].as_str().unwrap().contains("## Protokoll"));
+        assert_eq!(cut["agenda"][0]["text"], "Stand");
+        assert_eq!(
+            cut["documents"],
+            json!([{ "n": 1, "text": "Folien", "kind": "web" }, { "n": 2, "text": "Notiz", "kind": "text" },
+                   { "n": 3, "text": "Bild", "kind": "text" }])
+        );
+        assert_eq!(cut["followups"][0]["task"], "open/t3");
+        assert!(cut["followups"][1].get("task").is_none());
+        // With `meetings.internal_links` the addresses of an internal meeting may leave, its people still not.
+        let linked = meeting(&c, &meeting_doc("open/m"), true).unwrap();
+        assert_eq!(
+            linked["meeting"]["online"],
+            "https://teams.microsoft.com/l/x"
+        );
+        assert_eq!(linked["documents"][0]["href"], "https://example.org/slides");
+        assert!(!linked.to_string().contains("rick"), "{linked}");
+    }
+
+    #[test]
+    fn a_meeting_of_a_public_area_reaches_a_phone_with_its_people_and_links_but_no_file() {
+        let c = classes();
+        let cut = meeting(&c, &meeting_doc("pub/m"), false).unwrap();
+        assert_eq!(cut["meeting"]["online"], "https://teams.microsoft.com/l/x");
+        assert_eq!(cut["meeting"]["recording"], "https://example.org/rec");
+        assert_eq!(cut["meeting"]["participants"]["total"], 1);
+        assert_eq!(cut["participants"][0]["name"], "Rick");
+        assert!(cut["body"].as_str().unwrap().contains("## Teilnehmer"));
+        let text = cut.to_string();
+        for word in ["notify_to", "E:/", "assets/", "problems", "secret"] {
+            assert!(!text.contains(word), "{word} in {text}");
+        }
+    }
+
+    #[test]
+    fn the_list_of_meetings_holds_those_of_released_areas_and_no_count_of_the_vault() {
+        let c = classes();
+        let doc = json!({
+            "kind": "tasks.meetings", "total": 3, "next_offset": 100,
+            "items": [meeting_doc("open/m")["meeting"], meeting_doc("secret/m")["meeting"], meeting_doc("pub/m")["meeting"]],
+        });
+        let cut = meetings(&c, &doc, false);
+        let ids: Vec<&str> = cut["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|m| m["id"].as_str())
+            .collect();
+        assert_eq!(ids, ["open/m", "pub/m"]);
+        assert!(
+            cut.get("total").is_none() && cut.get("next_offset").is_none(),
+            "{cut}"
+        );
+        assert_eq!(cut["partial"], true);
+        assert!(cut["items"][0].get("online").is_none());
     }
 
     #[test]

@@ -2352,6 +2352,9 @@ pub(super) fn guard_rules() -> GuardRules {
     .with_device_route(crate::IDENTITY.route("testing_start"), Level::Trigger)
     // The learning paths of the released areas, cut for a phone (`device_cut::paths`, `device_cut::path`).
     .with_device_route(crate::IDENTITY.route("paths"), Level::Read)
+    // The meetings of the released areas, cut for a phone (`device_cut::meetings`, `device_cut::meeting`).
+    .with_device_route(crate::IDENTITY.route("meetings"), Level::Read)
+    .with_device_route(crate::IDENTITY.route("meeting"), Level::Read)
     .with_device_route(crate::IDENTITY.route("path"), Level::Read)
     .with_device_route(crate::IDENTITY.route("ops"), Level::Create)
     .with_device_route(crate::IDENTITY.route("upload"), Level::Change)
@@ -2366,7 +2369,7 @@ pub(super) fn guard_rules() -> GuardRules {
 pub(super) fn device_op_level(op: &str) -> Option<Level> {
     match op {
         "new" | "answer" => Some(Level::Create),
-        "set" | "done" | "node_set" => Some(Level::Change),
+        "set" | "done" | "node_set" | "meeting_capture" => Some(Level::Change),
         _ => None,
     }
 }
@@ -2382,6 +2385,8 @@ pub(super) fn device_op_fields(op: &str) -> &'static [&'static str] {
         "done" => &["op", "id", "confirm"],
         // A learning point ticked: its state and the reason of `seen` or `dropped`; no note, no XP.
         "node_set" => &["op", "id", "point", "state", "reason", "if_match"],
+        // A line of the minutes written on the phone: text, a task, a decision or a question; no file (`device_op_shape`).
+        "meeting_capture" => &["op", "id", "entry"],
         _ => &[],
     }
 }
@@ -2401,6 +2406,21 @@ pub(super) fn device_op_shape(op: &serde_json::Value) -> bool {
     let fields = device_op_fields(name);
     if !map.keys().all(|k| fields.contains(&k.as_str())) {
         return false;
+    }
+    if name == "meeting_capture" {
+        // The entry of a phone names its kind and its text, and a time; never a file of the folder.
+        return map
+            .get("entry")
+            .and_then(serde_json::Value::as_object)
+            .is_some_and(|entry| {
+                entry
+                    .keys()
+                    .all(|k| matches!(k.as_str(), "kind" | "text" | "at"))
+                    && matches!(
+                        entry.get("kind").and_then(serde_json::Value::as_str),
+                        Some("text" | "task" | "decision" | "question")
+                    )
+            });
     }
     if name != "set" {
         return true;

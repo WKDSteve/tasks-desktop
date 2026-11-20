@@ -326,8 +326,6 @@ async fn a_phone_reaches_the_routes_of_the_phone_page_and_nothing_else() {
         ("POST", "/api/tasks/intent"),
         ("POST", "/api/tasks/estimate"),
         ("POST", "/api/tasks/open"),
-        ("GET", "/api/tasks/meetings"),
-        ("GET", "/api/tasks/meeting?id=alpha.nvim/m1"),
         ("GET", "/api/tasks/meeting/ics?id=alpha.nvim/m1"),
         ("GET", "/api/tasks/meeting/thumb?id=alpha.nvim/m1"),
         (
@@ -714,14 +712,7 @@ async fn a_route_not_released_for_devices_refuses_a_phone_in_its_handler_too() {
     let _one = ONE_AT_A_TIME.lock().await;
     let r = Rig::past_the_guard(
         "second-wall",
-        vec![
-            "asset",
-            "meetings",
-            "meeting",
-            "meeting/ics",
-            "meeting/thumb",
-            "meeting_parse",
-        ],
+        vec!["asset", "meeting/ics", "meeting/thumb", "meeting_parse"],
     )
     .await;
     let (_, phone) = r.phone().await;
@@ -731,8 +722,6 @@ async fn a_route_not_released_for_devices_refuses_a_phone_in_its_handler_too() {
             "/api/tasks/asset?kind=task&id=alpha.nvim/t1&file=assets/x.png",
             "",
         ),
-        ("GET", "/api/tasks/meetings", ""),
-        ("GET", "/api/tasks/meeting?id=alpha.nvim/m1", ""),
         ("GET", "/api/tasks/meeting/ics?id=alpha.nvim/m1", ""),
         ("GET", "/api/tasks/meeting/thumb?id=alpha.nvim/m1", ""),
         (
@@ -827,6 +816,92 @@ async fn a_phone_reads_the_paths_of_released_areas_and_ticks_a_point() {
     // Ticking changes the path: below `change` the phone may not.
     r.set_level(&device, "create").await;
     let (status, doc) = r.op(&phone, &tick).await;
+    assert!(refused(status, &doc, "level_too_low"), "{status} {doc}");
+}
+
+/// The meetings reach a phone cut (MOB-02): those of released areas; of an internal area without the people and,
+/// unless the settings say so, without the address to join; a meeting of a private area is not there. A phone writes
+/// a line of the minutes (text, a task, a decision, a question), never a file and never a field more.
+#[tokio::test]
+async fn a_phone_reads_the_meetings_of_released_areas_and_writes_a_line_of_the_minutes() {
+    let _one = ONE_AT_A_TIME.lock().await;
+    let r = Rig::new("meetings").await;
+    let entry = |id: &str, area: &str| {
+        json!({ "id": id, "area": area, "slug": "m1", "title": format!("Meeting {id}"), "status": "planned",
+                "date": "2026-11-24", "time": "10:00", "online": "https://teams.microsoft.com/l/x",
+                "online_service": "teams", "notify_to": ["rick@example.org"], "file": format!("E:/v/{area}/MEETINGS/m1.md"),
+                "participants": { "total": 1 }, "tasks": [], "etag": "e1" })
+    };
+    r.merge(
+        "meetings",
+        &json!({ "items": [entry("alpha.nvim/m1", "alpha.nvim"), entry("secret-area/m9", "secret-area")],
+                 "total": 2 }),
+    );
+    r.merge(
+        "meeting",
+        &json!({ "meeting": entry("alpha.nvim/m1", "alpha.nvim"),
+                 "body": "## Teilnehmer\n\n- [ ] Rick <rick@example.org>\n\n## Protokoll\n",
+                 "participants": [{ "n": 1, "name": "Rick", "email": "rick@example.org", "present": false }],
+                 "agenda": [], "documents": [], "followups": [] }),
+    );
+    let (device, phone) = r.phone().await;
+    let (status, doc) = r
+        .send(
+            "GET",
+            "/api/tasks/meetings?since=2026-11-01&until=2026-11-30",
+            &phone,
+            "",
+        )
+        .await;
+    assert_eq!(status, 200, "{doc}");
+    let text = doc.to_string();
+    assert!(text.contains("alpha.nvim/m1"), "{doc}");
+    for word in ["secret-area", "teams", "rick", "E:/", "\"total\""] {
+        assert!(!text.contains(word), "{word} in {doc}");
+    }
+    let (status, doc) = r
+        .send("GET", "/api/tasks/meeting?id=alpha.nvim/m1", &phone, "")
+        .await;
+    assert_eq!(status, 200, "{doc}");
+    assert!(!doc.to_string().contains("Rick"), "{doc}");
+    assert!(
+        doc["body"].as_str().unwrap().contains("## Protokoll"),
+        "{doc}"
+    );
+    let (status, doc) = r
+        .send("GET", "/api/tasks/meeting?id=secret-area/m9", &phone, "")
+        .await;
+    assert_eq!(
+        (status, doc["error"]["code"].clone()),
+        (404, json!("not_found")),
+        "{doc}"
+    );
+
+    let line = json!({ "op": "meeting_capture", "id": "alpha.nvim/m1", "entry": { "kind": "task", "text": "Mail" } });
+    let (status, doc) = r.op(&phone, &line).await;
+    assert_eq!(status, 200, "{doc}");
+    for refused_op in [
+        json!({ "op": "meeting_capture", "id": "alpha.nvim/m1", "entry": { "kind": "photo", "asset": "assets/images/a.png" } }),
+        json!({ "op": "meeting_capture", "id": "alpha.nvim/m1", "entry": { "kind": "text", "text": "x", "asset": "a" } }),
+        json!({ "op": "meeting_capture", "id": "alpha.nvim/m1", "entry": { "kind": "text", "text": "x" }, "if_match": "e1" }),
+        json!({ "op": "meeting_capture", "id": "alpha.nvim/m1", "entry": "text" }),
+        json!({ "op": "meeting_attend", "id": "alpha.nvim/m1", "n": 1, "present": true }),
+    ] {
+        let (status, doc) = r.op(&phone, &refused_op).await;
+        assert!(
+            refused(status, &doc, "not_for_devices"),
+            "{refused_op}: {status} {doc}"
+        );
+    }
+    let secret = json!({ "op": "meeting_capture", "id": "secret-area/m9", "entry": { "kind": "text", "text": "x" } });
+    let (status, doc) = r.op(&phone, &secret).await;
+    assert_eq!(
+        (status, doc["error"]["code"].clone()),
+        (404, json!("not_found")),
+        "{doc}"
+    );
+    r.set_level(&device, "create").await;
+    let (status, doc) = r.op(&phone, &line).await;
     assert!(refused(status, &doc, "level_too_low"), "{status} {doc}");
 }
 

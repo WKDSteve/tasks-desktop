@@ -782,12 +782,21 @@ one line of at most 200 characters.
 
 ## Meetings (`GET /api/tasks/meetings`, `meeting`, `meeting/ics`, `meeting/thumb`)
 
-Four data routes, each behind a session (they are in the security matrix, `crates/hub-testkit/src/subjects/tasks.rs`)
-and none released for a paired phone: the guard keeps them from a device (`MOB-02`), and each handler refuses one
-again with `403 not_for_devices` (what of a meeting may reach a phone is decided with the phone's view of meetings).
-The query is plain (`parse_query`): days `YYYY-MM-DD`, an area name, one status word, an id `<area>/<slug>`, a limit of
-1 to 100; anything else is `400` before the engine is asked. `meetings` and `meeting` pass the engine's documents on as
-they are; the writes are operations of `ops`, which refuses them to a phone (`device_op_level`).
+Four data routes, each behind a session (they are in the security matrix, `crates/hub-testkit/src/subjects/tasks.rs`).
+`meeting/ics` and `meeting/thumb` are not released for a paired phone: the guard keeps them from a device (`MOB-02`),
+and each handler refuses one again with `403 not_for_devices`. The query is plain (`parse_query`): days `YYYY-MM-DD`,
+an area name, one status word, an id `<area>/<slug>`, a limit of 1 to 100; anything else is `400` before the engine is
+asked. `meetings` and `meeting` pass the engine's documents on to the PC as they are. A paired phone (released at
+`read`) gets them cut field by field (`device_cut::meetings`, `device_cut::meeting`): only meetings of a released area
+(`meeting` of another area is `404` before the engine is asked), the tasks they name only of released areas; never
+their file and folder (`file`, `folder`, `assets`, `cover`, `image`, an icon that is a file), whom notices go to
+(`notify_to`) or the faults of the file; no count over the vault (`total`, `next_offset`; the list says `partial`). The
+address to join, the recording and the address of a document leave only for a `public` area, or for an `internal` one
+with the settings' `meetings.internal_links`, and only as `http(s)`; a document that is a path or a file of the folder
+is given as text. The people of a meeting (the list, its count, the section `## Teilnehmer` / `## Participants` of the
+body) reach a phone of a `public` area only. The writes are operations of `ops`; a phone may only write a line of the
+minutes (`meeting_capture` at `change`, with `kind` `text`, `task`, `decision` or `question`, `text` and `at`, no file and
+no `if_match`: `device_op_shape`), every other meeting operation is refused to it (`device_op_level`).
 
 The upload is no way around this. A paired phone attaches to a task, nothing else: the engine's `attach` takes a
 plan, a project, a learning path or a meeting under the same id when no open task has it, so for a device the upload

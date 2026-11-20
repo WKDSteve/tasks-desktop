@@ -87,9 +87,7 @@ pub(super) async fn meetings(
     caller: Option<axum::Extension<Caller>>,
     RawQuery(query): RawQuery,
 ) -> Response {
-    if is_device(caller.as_deref()) {
-        return not_for_devices();
-    }
+    let device = is_device(caller.as_deref());
     let request = match meetings_request(query.as_deref()) {
         Ok(r) => r,
         Err(why) => return bad_query(why),
@@ -98,18 +96,24 @@ pub(super) async fn meetings(
     let answer = if dated {
         ask_held(
             &st,
-            false,
+            device,
             &format!("meetings {request}"),
             Calls::Meetings,
             Some(&request),
         )
         .await
     } else {
-        ask_as(&st, false, Calls::Meetings, Some(&request))
+        ask_as(&st, device, Calls::Meetings, Some(&request))
             .await
             .map(|reply| reply.text)
     };
     match answer {
+        // A phone gets the meetings of the released areas, cut (`device_cut::meetings`, MOB-02).
+        Ok(text) if device => {
+            let doc = serde_json::from_str::<serde_json::Value>(&text).unwrap_or_default();
+            let cut = device_cut::meetings(&st.rt().classes, &doc, files_of(&st).internal_links);
+            json_response(StatusCode::OK, cut.to_string(), None)
+        }
         Ok(text) => json_response(StatusCode::OK, text, None),
         Err(response) => response,
     }
@@ -170,14 +174,28 @@ pub(super) async fn meeting(
     caller: Option<axum::Extension<Caller>>,
     RawQuery(query): RawQuery,
 ) -> Response {
-    if is_device(caller.as_deref()) {
-        return not_for_devices();
-    }
+    let device = is_device(caller.as_deref());
     let id = match meeting_id(query.as_deref()) {
         Ok(id) => id,
         Err(response) => return response,
     };
+    let rt = st.rt();
+    // Not even asked for a meeting a phone may not see: the engine's answer would tell whether it is there.
+    if device && !device_cut::released_id(&rt.classes, &id) {
+        return not_found();
+    }
     match meeting_document(&st, &id).await {
+        Ok(text) if device => {
+            let cut = serde_json::from_str::<serde_json::Value>(&text)
+                .ok()
+                .and_then(|doc| {
+                    device_cut::meeting(&rt.classes, &doc, files_of(&st).internal_links)
+                });
+            match cut {
+                Some(doc) => json_response(StatusCode::OK, doc.to_string(), None),
+                None => not_found(),
+            }
+        }
         Ok(text) => json_response(StatusCode::OK, text, None),
         Err(response) => response,
     }
