@@ -38,6 +38,10 @@ export interface MeetingForm {
   icon: string;
   /** Comma separated, as in the task form. */
   tags: string;
+  /** A series (capability `meeting_series`): the interval (`1w`, `2w`, `1m`; '' none), its last day, the days without one. */
+  repeat?: string;
+  repeatUntil?: string;
+  except?: string[];
 }
 
 /** The notifications offered as chips (concept 4.7); any other is typed. */
@@ -139,6 +143,11 @@ export function meetingFields(form: MeetingForm): Record<string, unknown> {
   if (form.icon.trim() !== '') fields.icon = form.icon.trim();
   const tags = tagsOf(form.tags);
   if (tags.length > 0) fields.tags = tags;
+  if (form.repeat) {
+    fields.repeat = form.repeat;
+    if (form.repeatUntil) fields.repeat_until = form.repeatUntil;
+    if (form.except?.length) fields.except = [...form.except];
+  }
   return fields;
 }
 
@@ -282,13 +291,16 @@ export const REVIEW_MAX = 20;
 
 /**
  * The meetings to follow up (concept 7.5): over and still planned, or done without a result; not the ones the person put
- * away ("no result is fine"). The last first.
+ * away ("no result is fine"). The last first. Of a series only its last occurrence without a file: one that was let
+ * pass does not stand there once a week.
  */
 export function toReview<
-  T extends Pick<MeetingEntry, 'starts_at' | 'ends_at' | 'all_day' | 'tz' | 'id' | 'status' | 'has_result'>,
+  T extends Pick<MeetingEntry, 'starts_at' | 'ends_at' | 'all_day' | 'tz' | 'id' | 'status' | 'has_result' | 'series' | 'virtual'>,
 >(items: readonly T[], nowMs: number, dismissed: ReadonlySet<string>): T[] {
+  const seen = new Set<string>();
   return splitMeetings(items, nowMs)
     .past.filter((m) => !dismissed.has(m.id) && (m.status === 'planned' || (m.status === 'done' && !m.has_result)))
+    .filter((m) => !m.virtual || !m.series || (!seen.has(m.series) && seen.add(m.series)))
     .slice(0, REVIEW_MAX);
 }
 

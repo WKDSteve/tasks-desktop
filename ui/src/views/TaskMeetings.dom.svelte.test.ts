@@ -89,3 +89,37 @@ it('shows no failure of the task before while the meetings of the new one are re
   release();
   await vi.waitFor(() => expect(target.textContent).toContain('Meeting pub/mb'));
 });
+
+it('shows of a long series its occurrences with a file and the next one, also when the first page is all past', async () => {
+  const m = make({ token: 't', now: new Date('2026-11-20T10:00:00').getTime() });
+  stop = () => m.app.stop();
+  m.hub.capabilities = ['meetings', 'meeting', 'meeting_ops', 'meeting_series'];
+  const a = task('pub/a', { meetings: ['pub/sync'] } as Partial<TaskEntry>);
+  m.hub.doc = snapshot([a]);
+  const occ = (day: string, virtual: boolean): MeetingEntry =>
+    ({
+      ...entry(`pub/sync-${day}`, 'pub/a'),
+      date: day,
+      starts_at: `${day}T14:00`,
+      ends_at: `${day}T15:00`,
+      series: 'pub/sync',
+      occurrence: day,
+      ...(virtual ? { virtual: true } : {}),
+    }) as MeetingEntry;
+  m.hub.meetingItems = [occ('2026-10-30', true), occ('2026-11-06', false), occ('2026-11-13', true), occ('2026-11-27', true), occ('2026-12-04', true)];
+  // the engine's page of three holds only past occurrences
+  m.hub.meetingPageSize = 3;
+  await m.app.start(null);
+  m.app.stop();
+
+  const target = document.createElement('div');
+  document.body.append(target);
+  mounted = mount(TaskMeetings, { target, props: { app: m.app, task: a } });
+  await vi.waitFor(() => expect(target.textContent).toContain('Meeting pub/sync-2026-11-27'));
+  expect(m.hub.meetingQueries.map((q) => q.since)).toEqual(['1900-01-01', '2026-11-19']);
+  expect(target.textContent).toContain('Meeting pub/sync-2026-11-06');
+  expect(target.textContent).not.toContain('pub/sync-2026-10-30');
+  expect(target.textContent).not.toContain('pub/sync-2026-11-13');
+  expect(target.textContent).not.toContain('pub/sync-2026-12-04');
+  expect(target.querySelectorAll('[data-series="pub/sync"]')).toHaveLength(2);
+});

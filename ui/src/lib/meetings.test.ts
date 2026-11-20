@@ -183,4 +183,14 @@ describe('the meetings to follow up', () => {
     ];
     expect(toReview(items, at('2026-11-20T10:00'), new Set(['a/put-away'])).map((x) => x.id)).toEqual(['a/done-empty', 'a/over-planned']);
   });
+
+  it('names of a series its last occurrence without a file, and every one with a file', () => {
+    const occ = (day: string, virtual: boolean) => ({
+      ...m(`a/sync-${day}`, `${day}T09:00`, 'planned'),
+      series: 'a/sync',
+      ...(virtual ? { virtual: true as const } : {}),
+    });
+    const items = [occ('2026-11-02', true), occ('2026-11-09', false), occ('2026-11-16', true), occ('2026-11-23', true)];
+    expect(toReview(items, at('2026-11-20T10:00'), new Set()).map((x) => x.id)).toEqual(['a/sync-2026-11-16', 'a/sync-2026-11-09']);
+  });
 });

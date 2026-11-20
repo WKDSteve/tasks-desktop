@@ -7,6 +7,8 @@
   import type { MeetingEntry, TaskEntry } from '../lib/contract';
   import { translate, type Key } from '../lib/i18n';
   import { splitMeetings, whenText } from '../lib/meetings';
+  import { addDays } from '../lib/calendar';
+  import { foldSeries, joinPages, seriesNote } from '../lib/series';
   import { markHidden } from '../lib/text';
 
   let { app, task }: { app: App; task: TaskEntry } = $props();
@@ -16,7 +18,8 @@
   let failed = $state(false);
   const named = $derived(task.meetings ?? []);
   const key = $derived(`${task.id}\u0000${named.join(',')}`);
-  const split = $derived(items ? splitMeetings(items, app.nowMs()) : { coming: [], past: [] });
+  // A series names the task in each of its occurrences: the list keeps those with a file and the next one of each series.
+  const split = $derived(items ? splitMeetings(foldSeries(items, app.nowMs()), app.nowMs()) : { coming: [], past: [] });
 
   // The task the list was read for: another task (the detail switched) shows nothing of the one before while its own
   // meetings are read; a reread of the same task keeps its list until the new one is there.
@@ -39,9 +42,15 @@
     const abort = new AbortController();
     app
       .meetingsOfTask(id, abort.signal)
-      .then((doc) => {
+      .then(async (doc) => {
+        // More than a page: a series of many weeks; its coming occurrences are read from yesterday on.
+        if (doc.next_offset === undefined) return doc.items;
+        const later = await app.meetingsOfTask(id, abort.signal, addDays(app.today, -1));
+        return joinPages(doc.items, later.items);
+      })
+      .then((list) => {
         if (abort.signal.aborted) return;
-        items = doc.items;
+        items = list;
         failed = false;
       })
       .catch(() => {
@@ -73,6 +82,7 @@
               <li class:cancelled={m.status === 'cancelled'}>
                 <button type="button" class="link" onclick={() => app.openMeeting(m.id)}>{markHidden(m.title)}</button>
                 <span class="when">{whenText(m, t('meeting.all_day'))}</span>
+                {#if m.series}<span class="chip" data-series={m.series}>↻ {seriesNote(app.lang, m)}</span>{/if}
                 {#if m.online_service}<span class="chip">{t(`meeting.service.${m.online_service}` as Key)}</span>{/if}
                 {#if m.status && m.status !== 'planned'}<span class="chip">{t(`meeting.status.${m.status}` as Key)}</span>{/if}
               </li>

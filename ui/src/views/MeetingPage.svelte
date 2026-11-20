@@ -33,6 +33,7 @@
   import type { Op } from '../lib/api';
   import { markHidden } from '../lib/text';
   import AttachBar from './AttachBar.svelte';
+  import Lazy from './Lazy.svelte';
   import MeetingMinutes from './MeetingMinutes.svelte';
   import { untrack } from 'svelte';
 
@@ -253,6 +254,7 @@
         {#if m.status}<span class="chip status" data-status={m.status}>{t(`meeting.status.${m.status}` as Key)}</span>{/if}
         {#if m.online_service}<span class="chip">{t(`meeting.service.${m.online_service}` as Key)}</span>{/if}
       </p>
+      {#if m.series || m.repeat}<Lazy {app} load={() => import('./MeetingSeries.svelte')} extra={{ meeting: m, busy }} />{/if}
       {#if m.location}<p class="muted">{t('meeting.where')}: {markHidden(m.location)}</p>{/if}
       <p class="id muted">{markHidden(m.id)}</p>
     </header>

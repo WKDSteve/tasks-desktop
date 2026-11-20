@@ -32,6 +32,7 @@
   } from '../lib/timeGrid';
   import { addDays } from '../lib/calendar';
   import MeetingThumb from './MeetingThumb.svelte';
+  import { seriesNote } from '../lib/series';
 
   let { app, days, meetings, marks }: { app: App; days: string[]; meetings: MeetingEntry[]; marks: Map<string, Mark[]> } = $props();
   const t = (key: Key, params: Record<string, string | number> = {}) => translate(app.lang, key, params);
@@ -184,7 +185,8 @@
     const from = hhmm(b.start);
     const to = hhmm(b.end);
     const text = place !== '' ? t('calendar.block_place', { title: b.meeting.title, from, to, place }) : t('calendar.block', { title: b.meeting.title, from, to });
-    return `${text}${b.conflict ? `, ${t('calendar.conflict')}` : ''}${b.meeting.status === 'cancelled' ? `, ${t('calendar.cancelled')}` : ''}`;
+    const series = seriesNote(app.lang, b.meeting);
+    return `${text}${series !== '' ? `, ${series}` : ''}${b.conflict ? `, ${t('calendar.conflict')}` : ''}${b.meeting.status === 'cancelled' ? `, ${t('calendar.cancelled')}` : ''}`;
   }
   const columns = $derived(`3rem repeat(${days.length}, minmax(0, 1fr))`);
 </script>
@@ -203,8 +205,17 @@
       <ul data-allday={day}>
         {#each allDay.get(day) ?? [] as m (m.id)}
           <li>
-            <button type="button" class="chip meeting" class:cancelled={m.status === 'cancelled'} data-meeting={m.id} onclick={() => app.openMeeting(m.id)}>
+            <button
+              type="button"
+              class="chip meeting"
+              class:cancelled={m.status === 'cancelled'}
+              class:virtual={m.virtual === true}
+              data-meeting={m.id}
+              data-series={m.series}
+              onclick={() => app.openMeeting(m.id)}
+            >
               <span class="sr-only">{t('calendar.kind.meeting')}: </span><span aria-hidden="true">◷</span>
+              {#if m.series}<span aria-hidden="true">↻</span><span class="sr-only">{seriesNote(app.lang, m)}: </span>{/if}
               {markHidden(m.title)}
             </button>
           </li>
@@ -248,6 +259,7 @@
                 class="block"
                 class:conflict={b.conflict}
                 class:cancelled={b.meeting.status === 'cancelled'}
+                class:virtual={b.meeting.virtual === true}
                 class:clipped={b.clipped}
                 class:dragging={drag?.id === b.meeting.id && drag.moved && drag.day !== day}
                 style:top="{top(at.start)}px"
@@ -255,6 +267,7 @@
                 style:left="calc({(b.col / b.cols) * 100}% + 1px)"
                 style:width="calc({100 / b.cols}% - 3px)"
                 data-meeting={b.meeting.id}
+                data-series={b.meeting.series}
               >
                 <button
                   type="button"
@@ -268,7 +281,7 @@
                   onpointerup={(e) => void up(e, b)}
                   onpointercancel={(e) => void up(e, b)}
                 >
-                  <span class="time" aria-hidden="true">◷ {hhmm(at.start)}{#if b.conflict}<span class="warn" data-conflict> ⚠</span>{/if}</span>
+                  <span class="time" aria-hidden="true">◷ {hhmm(at.start)}{#if b.meeting.series} ↻{/if}{#if b.conflict}<span class="warn" data-conflict> ⚠</span>{/if}</span>
                   <span class="title" aria-hidden="true"><MeetingThumb {app} meeting={b.meeting} size={14} /> {markHidden(b.meeting.title)}</span>
                   {#if single}
                     <span class="more" aria-hidden="true">
@@ -376,6 +389,11 @@
   }
   .cancelled {
     text-decoration: line-through;
+  }
+  /* An occurrence of a series without a file: computed, nothing entered yet. */
+  .chip.virtual,
+  .block.virtual {
+    border-style: dotted;
   }
   .scroll {
     overflow-y: auto;

@@ -33,6 +33,7 @@
   import MeetingThumb from './MeetingThumb.svelte';
   import type { MeetingEntry } from '../lib/contract';
   import { filterMeetings, meetingsByDay, NO_FILTER, placeSign, type MeetingFilter } from '../lib/timeGrid';
+  import { seriesNote } from '../lib/series';
 
   let { app }: { app: App } = $props();
   const t = (key: Key, params: Record<string, string | number> = {}) => translate(app.lang, key, params);
@@ -489,12 +490,15 @@
                           type="button"
                           class="chip meeting"
                           class:cancelled={m.status === 'cancelled'}
+                          class:virtual={m.virtual === true}
                           data-meeting={m.id}
+                          data-series={m.series}
                           title={m.title}
                           onclick={() => app.openMeeting(m.id)}
                         >
                           <span class="sr-only">{t('calendar.kind.meeting')}: </span>
                           <span aria-hidden="true">◷</span>
+                          {#if m.series}<span title={seriesNote(app.lang, m)}>↻<span class="sr-only">{seriesNote(app.lang, m)}</span></span>{/if}
                           {#if !m.all_day && m.time}<span class="at">{m.time}</span>{/if}
                           {#if placeSign(m) !== ''}<span aria-hidden="true">{placeSign(m)}</span>{/if}
                           <MeetingThumb {app} meeting={m} size={16} />
@@ -730,6 +734,10 @@
   }
   .chip.cancelled {
     text-decoration: line-through;
+  }
+  /* An occurrence of a series without a file: computed, nothing entered yet. */
+  .chip.virtual {
+    border-style: dotted;
   }
   .at {
     color: var(--muted);

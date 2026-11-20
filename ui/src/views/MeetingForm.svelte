@@ -13,11 +13,13 @@
   import { translate, type Key } from '../lib/i18n';
   import { joinLink } from '../lib/meetingLink';
   import { MAX_NOTIFY, MAX_PARTICIPANTS, NOTIFY_PRESETS, type MeetingForm, type MeetingPreview } from '../lib/meetings';
+  import { exceptDays, REPEATS, repeatLabel, seriesWord, type SeriesWord } from '../lib/series';
   import { markHidden } from '../lib/text';
   import PendingAttachments from './PendingAttachments.svelte';
 
   let { app }: { app: App } = $props();
   const t = (key: Key, params: Record<string, string | number> = {}) => translate(app.lang, key, params);
+  const s = (key: SeriesWord) => seriesWord(app.lang, key);
 
   let dialog: HTMLDialogElement | undefined = $state();
   let form = $state<MeetingForm | null>(null);
@@ -57,7 +59,7 @@
   $effect(() => {
     if (!dialog) return;
     if (app.meetingDraft !== null && !dialog.open) {
-      form = $state.snapshot(app.meetingDraft) as MeetingForm;
+      form = { repeat: '', repeatUntil: '', except: [], ...($state.snapshot(app.meetingDraft) as MeetingForm) };
       answer = null;
       files = [];
       screenshot = false;
@@ -223,6 +225,40 @@
             </datalist>
             <small class="muted" id="meeting-tz-help">{t('meeting.field.tz_help')}</small>
           </details>
+          {#if app.can('meeting_series')}
+            <details class="tz" data-series-fields open={(form.repeat ?? '') !== ''}>
+              <summary>{s('repeat')}{form.repeat ? `: ${repeatLabel(app.lang, form.repeat)}` : ''}</summary>
+              <div class="row">
+                <label data-hint={s('hint_repeat')}>
+                  <span>{s('repeat')}</span>
+                  <select bind:value={form.repeat} data-series-repeat>
+                    {#each REPEATS as r (r)}<option value={r}>{repeatLabel(app.lang, r)}</option>{/each}
+                  </select>
+                </label>
+                {#if form.repeat}
+                  <label data-hint={s('hint_until')}>
+                    <span>{s('until')}</span>
+                    <input type="date" bind:value={form.repeatUntil} data-series-until />
+                  </label>
+                {/if}
+              </div>
+              {#if form.repeat}
+                <label data-hint={s('hint_except')}>
+                  <span>{s('exceptions')}</span>
+                  <input
+                    type="text"
+                    value={(form.except ?? []).join(', ')}
+                    onchange={(e) => {
+                      if (form) form.except = exceptDays(e.currentTarget.value);
+                    }}
+                    placeholder="2026-12-24, 2026-12-31"
+                    maxlength="2200"
+                    data-series-except
+                  />
+                </label>
+              {/if}
+            </details>
+          {/if}
           <label data-hint={t('hint.form.meeting.location')}>
             <span>{t('meeting.field.location')}</span>
             <input type="text" bind:value={form.location} maxlength="300" />
