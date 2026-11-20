@@ -55,6 +55,8 @@
   let showMeetings = $state(true);
   let filter = $state<MeetingFilter>({ ...NO_FILTER });
   let found = $state<MeetingEntry[]>([]);
+  /** The engine's count of the meetings of the days: more than `found` when the pages ran out (said under the bar). */
+  let foundTotal = $state(0);
   $effect(() => {
     void app.writes;
     void app.snapshot?.rev;
@@ -62,16 +64,21 @@
     const last = days[days.length - 1];
     if (!app.canMeetings || !showMeetings || first === undefined || last === undefined) {
       found = [];
+      foundTotal = 0;
       return;
     }
     const abort = new AbortController();
     app
       .meetingsIn(first, last, abort.signal)
-      .then((items) => {
-        if (!abort.signal.aborted) found = items;
+      .then((read) => {
+        if (abort.signal.aborted) return;
+        found = read.items;
+        foundTotal = read.total;
       })
       .catch(() => {
-        if (!abort.signal.aborted) found = [];
+        if (abort.signal.aborted) return;
+        found = [];
+        foundTotal = 0;
       });
     return () => abort.abort();
   });
@@ -434,6 +441,9 @@
       </div>
     {/if}
     <p class="help">{hourly ? t('calendar.grid_help') : t('calendar.help')}</p>
+    {#if foundTotal > found.length}
+      <p class="help cut" data-meetings-cut>{t('meetings.cut', { n: found.length, total: foundTotal })}</p>
+    {/if}
     <!-- Always in the page, so that a screen reader hears it fill. -->
     <p class="carry" role="status" data-calendar-carry>
       {#if carried !== null}
@@ -689,6 +699,9 @@
   }
   .carry:empty {
     display: none;
+  }
+  .help.cut {
+    color: var(--text);
   }
   .chip.carried {
     outline: 2px dashed var(--accent);

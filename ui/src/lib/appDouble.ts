@@ -450,7 +450,9 @@ export class FakeHub {
   /** Holds the answer of `meeting` (one meeting) back; and an error `meetings` throws instead of answering. */
   holdMeeting: Promise<void> | null = null;
   meetingsError: ApiError | null = null;
-  async meetings(query: { task?: string; area?: string; since?: string; until?: string }): Promise<Meetings> {
+  /** Pages of this many meetings, as the engine pages them (`offset`, `next_offset`); null: one page holds all. */
+  meetingPageSize: number | null = null;
+  async meetings(query: { task?: string; area?: string; since?: string; until?: string; limit?: number; offset?: number }): Promise<Meetings> {
     this.meetingQueries.push({ ...query });
     if (this.holdMeetings) await this.holdMeetings;
     if (this.meetingsError) throw this.meetingsError;
@@ -463,6 +465,13 @@ export class FakeHub {
         (m.starts_at ?? '').slice(0, 10) <= until &&
         (m.ends_at ?? m.starts_at ?? '').slice(0, 10) >= since,
     );
+    if (this.meetingPageSize !== null) {
+      const offset = query.offset ?? 0;
+      const size = this.meetingPageSize;
+      const next = offset + size < items.length ? offset + size : undefined;
+      const page = items.slice(offset, offset + size);
+      return { kind: 'tasks.meetings', items: page, total: items.length, offset, limit: size, ...(next === undefined ? {} : { next_offset: next }), undated: 0, incomplete: [] } as unknown as Meetings;
+    }
     return { kind: 'tasks.meetings', items, total: items.length, offset: 0, limit: 100, undated: 0, incomplete: [] } as unknown as Meetings;
   }
   /** The ids whose picture was asked, and what `meetingThumb` answers (null: no picture). */

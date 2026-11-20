@@ -62,10 +62,11 @@ async function until(ok: () => boolean): Promise<void> {
   expect(ok()).toBe(true);
 }
 
-async function show(items: MeetingEntry[], caps: string[] = CAPS): Promise<{ m: Made; root: HTMLElement }> {
+async function show(items: MeetingEntry[], caps: string[] = CAPS, pageSize: number | null = null): Promise<{ m: Made; root: HTMLElement }> {
   const m = make({ token: 't', now: NOW });
   made = m;
   m.hub.capabilities = caps;
+  m.hub.meetingPageSize = pageSize;
   m.hub.meetingItems = items;
   m.hub.doc = snapshot([task('pub/due', { title: 'Due today', due: TODAY, etag: 'e1' })]);
   await m.app.start(null);
@@ -126,6 +127,22 @@ describe('the month', () => {
     toggle.click();
     await settle();
     expect(ids()).toEqual([]);
+  });
+
+  it('says that only a part is shown when the pages run out before the meetings of the days do', async () => {
+    // pages of one meeting: five pages hold five of six
+    const six = ['a', 'b', 'c', 'd', 'e', 'f'].map((x, i) => meeting(`pub/p${x}`, `2026-11-${String(i + 2).padStart(2, '0')}T09:00`, `2026-11-${String(i + 2).padStart(2, '0')}T10:00`));
+    const cut = await show(six, CAPS, 1);
+    expect(cut.m.hub.meetingQueries).toHaveLength(5);
+    expect(cut.root.querySelectorAll('.chip[data-meeting]')).toHaveLength(5);
+    expect(cut.root.querySelector('[data-meetings-cut]')?.textContent).toBe('Nur die ersten 5 von 6 Meetings dieser Zeit sind zu sehen.');
+    if (mounted) void unmount(mounted);
+    made?.app.stop();
+    document.body.replaceChildren();
+    // five on five pages: all of them, nothing to say
+    const all = await show(six.slice(0, 5), CAPS, 1);
+    expect(all.root.querySelectorAll('.chip[data-meeting]')).toHaveLength(5);
+    expect(all.root.querySelector('[data-meetings-cut]')).toBeNull();
   });
 
   it('offers no meetings where the engine has none', async () => {

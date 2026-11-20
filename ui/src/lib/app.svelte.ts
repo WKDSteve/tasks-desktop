@@ -155,6 +155,8 @@ import { LEARNING, learningIds, withoutLearning } from './learning';
 import { localToday } from './remind';
 import {
   MEETINGS_EVER,
+  MEETING_PAGES,
+  type MeetingWindow,
   emptyMeetingForm,
   formOfProposal,
   meetingNewOp,
@@ -1782,17 +1784,20 @@ export class App {
 
   /**
    * The meetings whose days touch the window `since`..`until` (days), the engine's order, all pages (100 each, at most
-   * 5: a window of the calendar holds far fewer).
+   * `MEETING_PAGES`: a window of the calendar holds far fewer). `total` is the engine's count of the window: more than
+   * `items` when the pages ran out, and the page says that it shows only a part.
    */
-  async meetingsIn(since: string, until: string, signal?: AbortSignal): Promise<MeetingEntry[]> {
+  async meetingsIn(since: string, until: string, signal?: AbortSignal): Promise<MeetingWindow> {
     const items: MeetingEntry[] = [];
+    let total = 0;
     let offset: number | undefined = 0;
-    for (let page = 0; page < 5 && offset !== undefined; page += 1) {
+    for (let page = 0; page < MEETING_PAGES && offset !== undefined; page += 1) {
       const answer: Meetings = await this.env.hub.meetings({ since, until, limit: 100, offset }, signal);
       items.push(...answer.items);
+      total = answer.total;
       offset = answer.next_offset;
     }
-    return items;
+    return { items, total: offset === undefined ? items.length : Math.max(total, items.length + 1) };
   }
 
   /**

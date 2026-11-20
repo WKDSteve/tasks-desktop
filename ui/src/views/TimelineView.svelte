@@ -71,6 +71,8 @@
   };
   // The meetings of the days shown (concept 7.4): diamonds on the rows of their tasks, a row of their own in a group.
   let meetings = $state<MeetingEntry[]>([]);
+  /** The engine's count of the meetings of the range: more than `meetings` when the pages ran out (said under the bar). */
+  let meetingsTotal = $state(0);
   // The meeting under the pointer or the focus: its diamonds on every row light up together.
   let hot = $state<string | null>(null);
   const diamonds = $derived(diamondsByTask(meetings, bars));
@@ -80,16 +82,21 @@
     void app.snapshot?.rev;
     if (!app.canMeetings || bars.length === 0) {
       meetings = [];
+      meetingsTotal = 0;
       return;
     }
     const abort = new AbortController();
     app
       .meetingsIn(range.from, lastDay(range), abort.signal)
-      .then((items) => {
-        if (!abort.signal.aborted) meetings = items;
+      .then((read) => {
+        if (abort.signal.aborted) return;
+        meetings = read.items;
+        meetingsTotal = read.total;
       })
       .catch(() => {
-        if (!abort.signal.aborted) meetings = [];
+        if (abort.signal.aborted) return;
+        meetings = [];
+        meetingsTotal = 0;
       });
     return () => abort.abort();
   });
@@ -486,6 +493,9 @@
       </label>
     </div>
     <p class="help">{t('timeline.help')}</p>
+    {#if meetingsTotal > meetings.length}
+      <p class="note" data-meetings-cut>{t('meetings.cut', { n: meetings.length, total: meetingsTotal })}</p>
+    {/if}
     <!-- Always in the page, so that a screen reader hears it fill. -->
     <p class="status" role="status" data-timeline-moving>{moving}</p>
   </header>

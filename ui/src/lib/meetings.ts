@@ -52,6 +52,15 @@ export const MAX_PARTICIPANTS = 50;
 /** The window of days that holds every meeting a person writes: the meetings of a task are asked over it. */
 export const MEETINGS_EVER = { since: '1900-01-01', until: '2999-12-31' } as const;
 
+/** The pages (100 meetings each) a window of the calendar or the timeline reads at most. */
+export const MEETING_PAGES = 5;
+
+/** The meetings of a window as read: `total` is more than `items.length` when the pages ran out before the end. */
+export interface MeetingWindow {
+  items: MeetingEntry[];
+  total: number;
+}
+
 /** How long before its beginning a meeting opens on the tab "In the meeting" (concept 7.2: ±15 min). */
 export const DURING_MARGIN_MIN = 15;
 

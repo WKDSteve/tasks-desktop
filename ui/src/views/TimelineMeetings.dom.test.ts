@@ -42,10 +42,11 @@ async function settle(): Promise<void> {
   }
 }
 
-async function show(items: MeetingEntry[], caps: string[] = ['meetings', 'meeting']): Promise<HTMLElement> {
+async function show(items: MeetingEntry[], caps: string[] = ['meetings', 'meeting'], pageSize: number | null = null): Promise<HTMLElement> {
   const m = make({ token: 't', now: NOW });
   made = m;
   m.hub.capabilities = caps;
+  m.hub.meetingPageSize = pageSize;
   m.hub.meetingItems = items;
   m.hub.doc = snapshot([
     task('pub/first', { title: 'First', start: TODAY, due: addDays(TODAY, 4), etag: 'e1' }),
@@ -70,6 +71,18 @@ afterEach(() => {
 });
 
 describe('the meetings on the timeline', () => {
+  it('says that only a part of the meetings is shown when the pages run out', async () => {
+    // pages of one meeting: five pages hold five of six
+    const six = [0, 1, 2, 3, 4, 5].map((i) => meeting(`pub/p${i}`, addDays(TODAY, i - 2), { tasks: ['pub/first'] }));
+    const root = await show(six, ['meetings', 'meeting'], 1);
+    expect(root.querySelector('[data-meetings-cut]')?.textContent).toBe('Nur die ersten 5 von 6 Meetings dieser Zeit sind zu sehen.');
+    if (mounted) void unmount(mounted);
+    made?.app.stop();
+    document.body.replaceChildren();
+    const all = await show(six.slice(0, 5), ['meetings', 'meeting'], 1);
+    expect(all.querySelector('[data-meetings-cut]')).toBeNull();
+  });
+
   it('puts the same diamond on the row of each task of a meeting, at its day', async () => {
     const root = await show([meeting('pub/m1', addDays(TODAY, 1), { tasks: ['pub/first', 'pub/second'] })]);
     const found = diamonds(root, 'pub/m1');
