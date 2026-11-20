@@ -375,6 +375,11 @@ yet):
   (`24.11. 9:30 90m Workshop @Raum_3.14 https://meet.google.com/abc #lib.nvim/alpha !-15m`) into a proposal of a
   meeting (`tasks.meetingparse`: title, fields, the service of the address, the words it could not read); nothing is
   written. One line of at most 1000 bytes without control characters, in the body so it is in no log of an address.
+- `POST /api/tasks/board` with `{ "id", "name", "if_match"?, "ink", "svg" }`: a whiteboard of the page's drawing surface
+  saved into `assets/boards/` of a meeting, task, plan or project (`<name>.ink.json` and `<name>.svg`, the engine's
+  `board_save`). A board that is there is replaced only on the version read (`if_match`, the `etag` of its last save);
+  otherwise the answer is `conflict` with a free name (`<name>-2`). The strokes are read back with
+  `GET /api/tasks/asset?file=assets/boards/<name>.ink.json`. Not for a paired phone.
 
 Meetings are made and changed through `ops` (`meeting_new`, `meeting_set`, `meeting_close`, `meeting_capture`,
 `meeting_attend`, `meeting_followups`). The page opens the address to join of a meeting only when it is `https://`

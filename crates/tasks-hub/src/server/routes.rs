@@ -509,8 +509,8 @@ pub(super) const OPS_ALLOWED: [&str; 32] = [
     "view_save",
     "view_delete",
     "attach",
-    // the meetings (capability `meeting_ops`); not for devices. `board_save` waits for a way to hand the board's file
-    // over (its `upload` is a file of the hub's folder, as with `upload`).
+    // the meetings (capability `meeting_ops`); not for devices. `board_save` is not here: its `upload` is a file of the
+    // hub's folder, which a request of `ops` does not name; the page saves a board through `board` (`server/boards.rs`).
     "meeting_new",
     "meeting_set",
     "meeting_close",

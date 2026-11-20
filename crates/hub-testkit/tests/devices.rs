@@ -333,6 +333,7 @@ async fn a_phone_reaches_the_routes_of_the_phone_page_and_nothing_else() {
             "/api/tasks/asset?kind=task&id=alpha.nvim/t1&file=assets/x.png",
         ),
         ("POST", "/api/tasks/meeting_parse"),
+        ("POST", "/api/tasks/board"),
         ("GET", "/api/tasks/hello-not-a-route"),
     ] {
         let (status, doc) = r.send(method, path, &phone, r#"{"name":"main"}"#).await;
@@ -712,7 +713,13 @@ async fn a_route_not_released_for_devices_refuses_a_phone_in_its_handler_too() {
     let _one = ONE_AT_A_TIME.lock().await;
     let r = Rig::past_the_guard(
         "second-wall",
-        vec!["asset", "meeting/ics", "meeting/thumb", "meeting_parse"],
+        vec![
+            "asset",
+            "meeting/ics",
+            "meeting/thumb",
+            "meeting_parse",
+            "board",
+        ],
     )
     .await;
     let (_, phone) = r.phone().await;
@@ -728,6 +735,11 @@ async fn a_route_not_released_for_devices_refuses_a_phone_in_its_handler_too() {
             "POST",
             "/api/tasks/meeting_parse",
             r#"{"text":"24.11. 9:30 Stand"}"#,
+        ),
+        (
+            "POST",
+            "/api/tasks/board",
+            r#"{"id":"alpha.nvim/m1","name":"b","ink":"{}","svg":"<svg/>"}"#,
         ),
     ] {
         let (status, doc) = r.send(method, path, &phone, body).await;

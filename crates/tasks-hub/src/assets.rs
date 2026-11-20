@@ -54,6 +54,11 @@ impl Owner {
 /// The media type of an image asset by its kind; `None`: not an image the page may draw.
 #[must_use]
 pub fn content_type(file: &str) -> Option<&'static str> {
+    // The strokes of a board of the page's drawing surface (`board_save`, format `ink`): read back to draw on. Only
+    // there, and only as data: the answer is sealed like every asset.
+    if file.starts_with("assets/boards/") && file.to_ascii_lowercase().ends_with(".ink.json") {
+        return Some("application/json");
+    }
     let ext = file.rsplit_once('.')?.1.to_ascii_lowercase();
     Some(match ext.as_str() {
         "png" => "image/png",
@@ -264,6 +269,9 @@ mod tests {
             ("a.webp", Some("image/webp")),
             ("a.gif", Some("image/gif")),
             ("a.svg", Some("image/svg+xml")),
+            ("assets/boards/b.ink.json", Some("application/json")),
+            ("assets/b.ink.json", None),
+            ("assets/boards/b.json", None),
             ("a.mp4", None),
             ("a", None),
         ] {

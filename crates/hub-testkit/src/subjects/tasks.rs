@@ -80,7 +80,7 @@ fn start_phone_hub(
     })
 }
 
-const DATA_ROUTES: [&str; 25] = [
+const DATA_ROUTES: [&str; 26] = [
     "snapshot",
     "task",
     "next",
@@ -106,6 +106,7 @@ const DATA_ROUTES: [&str; 25] = [
     "paths",
     "path",
     "meeting_parse",
+    "board",
 ];
 
 impl Subject for TasksWithPhonePage {
@@ -201,6 +202,7 @@ impl Subject for Tasks {
             "meeting/thumb",
             "asset",
             "meeting_parse",
+            "board",
         ]
     }
 }

@@ -58,6 +58,7 @@ use appkit_hub::streams::StreamCounter;
 
 mod answer;
 mod assets;
+mod boards;
 mod check;
 pub(crate) mod device_cut;
 mod events;
@@ -397,6 +398,12 @@ fn app_routes(core: &Arc<Shared>) -> Router<Arc<Shared>> {
         .route(
             &r("upload"),
             post(self::upload::upload).layer(DefaultBodyLimit::disable()),
+        )
+        // A whiteboard of the page's drawing surface, saved with `board_save` (concept 7.8): the board and its preview
+        // as texts, written to the upload folder by the hub.
+        .route(
+            &r("board"),
+            post(self::boards::board).layer(DefaultBodyLimit::max(self::boards::BOARD_MAX_BYTES)),
         )
         .route(
             &r("sheet_run"),

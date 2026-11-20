@@ -711,3 +711,159 @@ async fn a_paired_phone_cannot_attach_to_a_meeting_a_plan_or_a_path() {
     assert_eq!(doc["results"][0]["ok"], true, "{doc}");
     drop(server);
 }
+
+#[tokio::test]
+async fn a_board_is_saved_replaced_on_its_version_and_read_back_through_the_hub() {
+    let dir = Scratch::new("real-boards");
+    let vault = dir.join("vault");
+    copy_dir(&fixture(), &vault);
+    let settings = dir.join("settings");
+    let home = Scratch::new("real-boards-home");
+    let Some(engine) = engine(&vault, &home).await else {
+        return;
+    };
+    let control = Secret::generate(TOKEN_BYTES).unwrap();
+    let uploads = settings.join("uploads");
+    let server = start_with(
+        ServerConfig {
+            devices: None,
+            addr: "127.0.0.1:0".parse().unwrap(),
+            limits: Limits {
+                snapshot_max_age: None,
+                ..Limits::default()
+            },
+            clock: Arc::new(ManualClock::new()),
+            pairing_ttl: Duration::from_secs(60),
+            control_secret: control.clone(),
+            instance: Secret::generate(CODE_BYTES).unwrap(),
+            status: HubStatus {
+                engine_ready: true,
+                problem: None,
+                capabilities: Vec::new(),
+            },
+            engine: Some(engine),
+            policy: Arc::new(policy()),
+            usage: None,
+            ui: tasks_hub::ui::UiFiles::none(),
+            watch: Some(WatchConfig {
+                vault: vault.clone(),
+                refresh: RefreshOptions::default(),
+            }),
+        },
+        Extras {
+            meetings: Some(Arc::new(MeetingFiles::in_dir(&settings, false))),
+            upload_dir: Some(uploads.clone()),
+            ..Extras::default()
+        },
+    )
+    .await
+    .unwrap();
+    let port = server.addr().port();
+    let hub = Hub {
+        port,
+        origin: format!("http://127.0.0.1:{port}"),
+        session: session(port, &control).await,
+    };
+    let made = hub
+        .ops(json!([{
+            "op": "meeting_new", "area": "lib.nvim", "title": "Board sketch",
+            "fields": { "date": "2026-11-27", "time": "10:00" },
+        }]))
+        .await;
+    let id = made["results"][0]["id"].as_str().unwrap().to_owned();
+    let save = |body: Value| {
+        let hub = &hub;
+        async move {
+            let reply = hub
+                .post("/api/tasks/board", "application/json", &body.to_string())
+                .await;
+            let doc: Value = serde_json::from_str(&reply.body).unwrap_or(Value::Null);
+            (reply.status, doc)
+        }
+    };
+    let ink = r#"{"schema":"tasks-ink/1","pages":[]}"#;
+    let svg = r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"></svg>"#;
+
+    // New: created, with its preview beside it.
+    let (status, doc) = save(json!({ "id": id, "name": "skizze", "ink": ink, "svg": svg })).await;
+    assert_eq!(status, 200, "{doc}");
+    let entry = &doc["results"][0];
+    assert_eq!(entry["ok"], true, "{doc}");
+    assert_eq!(entry["asset"], "assets/boards/skizze.ink.json", "{doc}");
+    assert_eq!(entry["preview"], "assets/boards/skizze.svg", "{doc}");
+    let etag = entry["etag"].as_str().unwrap().to_owned();
+
+    // Read back to draw on: the strokes as data, sealed like every asset.
+    let (head, bytes) = hub
+        .get_bytes(&format!(
+            "/api/tasks/asset?kind=meeting&id={id}&file=assets/boards/skizze.ink.json"
+        ))
+        .await;
+    assert!(head.starts_with("HTTP/1.1 200"), "{head}");
+    assert!(
+        head.to_ascii_lowercase()
+            .contains("content-type: application/json"),
+        "{head}"
+    );
+    assert_eq!(bytes, ink.as_bytes());
+
+    // Replaced on the version read; the same name without it, or on an old version, is a conflict with a free name.
+    let ink2 = r#"{"schema":"tasks-ink/1","pages":[{"strokes":[]}]}"#;
+    let (_, doc) =
+        save(json!({ "id": id, "name": "skizze", "if_match": etag, "ink": ink2, "svg": svg }))
+            .await;
+    assert_eq!(doc["results"][0]["ok"], true, "{doc}");
+    assert_eq!(doc["results"][0]["created"], false, "{doc}");
+    for stale in [json!(etag), Value::Null] {
+        let mut body = json!({ "id": id, "name": "skizze", "ink": ink, "svg": svg });
+        if !stale.is_null() {
+            body["if_match"] = stale;
+        }
+        let (_, doc) = save(body).await;
+        let entry = &doc["results"][0];
+        assert_eq!(entry["ok"], false, "{doc}");
+        assert_eq!(entry["error"]["code"], "conflict", "{doc}");
+        assert_eq!(entry["error"]["details"]["suggestion"], "skizze-2", "{doc}");
+    }
+
+    // What the page may not name: a path in the name, a wrong etag, an unknown field. Nothing of it reaches the engine.
+    for (body, code) in [
+        (
+            json!({ "id": id, "name": "../x", "ink": ink, "svg": svg }),
+            "bad_name",
+        ),
+        (
+            json!({ "id": id, "name": "a.b", "ink": ink, "svg": svg }),
+            "bad_name",
+        ),
+        (
+            json!({ "id": "../x", "name": "a", "ink": ink, "svg": svg }),
+            "bad_id",
+        ),
+        (
+            json!({ "id": id, "name": "a", "if_match": "x", "ink": ink, "svg": svg }),
+            "bad_if_match",
+        ),
+        (
+            json!({ "id": id, "name": "a", "ink": ink, "svg": "<html/>" }),
+            "bad_board",
+        ),
+    ] {
+        let (status, doc) = save(body.clone()).await;
+        assert_eq!(
+            (status, doc["error"]["code"].clone()),
+            (400, json!(code)),
+            "{body}: {doc}"
+        );
+    }
+    let (status, _) =
+        save(json!({ "id": id, "name": "a", "ink": ink, "svg": svg, "upload_dir": "C:/" })).await;
+    assert_eq!(status, 400);
+
+    // The staged files are gone, whatever came of them.
+    let left: Vec<_> = std::fs::read_dir(&uploads)
+        .map(|d| d.flatten().map(|e| e.file_name()).collect())
+        .unwrap_or_default();
+    assert!(left.is_empty(), "{left:?}");
+    drop(server);
+}

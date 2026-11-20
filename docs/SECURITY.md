@@ -827,13 +827,26 @@ picture to an `<img>` and runs nothing when opened. The small pictures are kept 
 folder, named by a hash of the source's path, size and time of change, at most 1000 (the oldest go first); nothing is
 written into a vault.
 
+## Whiteboards (`POST /api/tasks/board`)
+
+One route behind a session (in the security matrix), not released for a paired phone (the guard keeps it from a device,
+the handler refuses one again with `403 not_for_devices`). The body is JSON of at most 48 MiB with exactly the fields
+`id`, `name`, `if_match`, `ink` and `svg` (another field, `upload_dir` say, is `400`): an id `<area>/<slug>`, a name of
+letters, digits, `-` and `_` without a dot, an etag `sha256:` and 16 hex digits, the board as text and an SVG of it.
+The hub writes the two texts to its own upload folder under names it gives (`b<time>-<pid>-<n>.json`, `.svg`; nothing of
+a path comes from the page), asks the engine for `board_save` (format `ink`) and removes both files afterwards, whatever
+came of it. Where the board goes is the engine's: below `assets/boards/` of the item, replaced only on the version read.
+`board_save` is not an operation of `ops`: a request there cannot name the upload folder, and the page never names one.
+Tested against the real engine (`real_meetings.rs`) and in the guard matrix (`devices.rs`).
+
 ## Images of an item (`GET /api/tasks/asset`)
 
 One data route behind a session (in the security matrix), not released for a paired phone (the guard keeps it from a
 device, the handler refuses one again with `403 not_for_devices`). The query is plain (`parse_query`): `kind` one of
 `task`, `plan`, `project`, `path`, `meeting`, an id `<area>/<slug>`, and `file` a path that starts with `assets/`, has
 plain parts (no `..`, `.`, empty part, root, drive, colon, backslash or control character) and an image kind
-(`png`, `jpg`, `jpeg`, `webp`, `gif`, `svg`); anything else is `400` before the engine is asked. The folder is never the
+(`png`, `jpg`, `jpeg`, `webp`, `gif`, `svg`), or the strokes of a board (`assets/boards/<name>.ink.json`, given as
+`application/json` with the same seal); anything else is `400` before the engine is asked. The folder is never the
 page's: for a task, a path and a meeting it is the folder of the `file` the engine names, and only when the engine says
 the item is in its folder form (`folder: true`), so the folder of all plain tasks is no item's; for a plan and a project
 it is `<area>/ROADMAP/plans|projects/<slug>/`. Once every link is followed (`canonicalize`) the file must lie below
