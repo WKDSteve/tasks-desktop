@@ -105,6 +105,36 @@ test('the phone page pairs, shows only the classified areas and creates a task t
   expect(problems).toEqual([]);
 });
 
+test('the phone page shows a learning path cut by the hub and ticks a point through the engine', async ({ page }) => {
+  const problems = watchConsole(page);
+  const { vault, config } = state();
+  const file = join(vault, 'lib.nvim', 'ROADMAP', 'paths', 'lua-lernen.md');
+  const before = readFileSync(file, 'utf8');
+  try {
+    await page.goto(pairingLink(config).replace('/#pair=', '/m/#pair='));
+    await expect(page.getByTestId('connection')).toHaveAttribute('data-state', 'live');
+    await page.getByRole('button', { name: 'Learn', exact: true }).click();
+    const list = page.getByTestId('paths');
+    await expect(list.getByRole('button', { name: /Lua lernen/ })).toBeVisible();
+    await list.getByRole('button', { name: /Lua lernen/ }).click();
+    await expect(page.getByTestId('path-title')).toContainText('Lua lernen');
+    // The engine's tree as the hub cut it: a link of a point is a web address, its note and reason are there.
+    const manual = page.locator('[data-point="manual"]');
+    await expect(manual.getByRole('link')).toHaveAttribute('href', 'https://www.lua.org/manual/5.4/');
+    await expect(manual).toContainText('Operatorrangfolge');
+    await expect(page.locator('[data-point="pil"]')).toContainText('nur Kap. 1 gebraucht');
+
+    // Ticked on the phone, written by the engine into the file of the path.
+    const meta = page.locator('[data-point="meta"]');
+    await meta.getByRole('button', { name: 'Learned' }).click();
+    await expect(meta).toHaveAttribute('data-state', 'learned');
+    expect(readFileSync(file, 'utf8')).toMatch(/- \[x\] Metatables \{#meta\}/);
+    expect(problems).toEqual([]);
+  } finally {
+    writeFileSync(file, before);
+  }
+});
+
 test('the phone captures a task with a photo and a voice note, and both land in the vault as its assets', async ({ newContext }) => {
   const { vault, config } = state();
   // Chrome's fake microphone (a tone), granted without a prompt: the note is recorded for real, under the hub's policy.
