@@ -404,8 +404,26 @@ next (`Level 2 (Profi) · 30 XP to level 3`) and the open rewards of `## Level`,
 `[x]` in its line). **XP …** in a point's menu sets its XP (`{xp=N}`), filled in with its own or the engine's
 suggestion; empty removes them. A level reached since the path was looked at last is said once, in one line, with its
 reward; the first look at a path only notes its level. Everything here is optional and quiet: **Options › Defaults ›
-XP, levels and rewards in learning paths** turns it off (kept per browser), the progress stays. Badges are named, not
-yet drawn: their pictures come with the safe display of images.
+XP, levels and rewards in learning paths** turns it off (kept per browser), the progress stays. The badge of the level
+reached stands beside it, and the badges of all levels below the bar (the ones not reached yet grey).
+
+**Images in the texts.** A Markdown image of a file below `assets/` of the item's own folder (`![Syntax](assets/images/
+lua.svg)`; `png`, `jpg`, `jpeg`, `webp`, `gif`, `svg`) is drawn as a picture in the text of a task, in the decisions and
+the result of a meeting and in a point of a learning path, at most 24rem high; a click shows it larger (Escape closes
+it). A file that is not there is the line *Image missing: <description>*. An address of another host, `data:`, an
+absolute path or `..` stays its description as text and is never fetched; a video stays a link. An SVG is drawn only as
+a picture (`<img>`), never as markup of the page, so nothing in it runs. The editor of a task's text says when an image
+has no description (what a screen reader says, and what shows when the file is missing). The item's `icon` (an emoji or
+an image below `assets/`) stands before its title in the task rows and in the head of a task, a plan, a project, a
+learning path and a meeting: its own, else the one of the learning path its point belongs to, else the one of its
+category (learning 📚, bug 🐞, security 🔒, performance ⚡, docs 📄, tests 🧪). Its `cover` stands in its head. The page
+reads each image with the session through one route:
+
+- `GET /api/tasks/asset?kind=task|plan|project|path|meeting&id=<area>/<slug>&file=assets/...`: an image of the item
+  in its folder form. The folder is the engine's (the file of a task, a path, a meeting) or the layout's (a plan, a
+  project), never the page's; the path is plain and below `assets/`, also after every link is followed; a picture is at
+  most 20 MB, a drawing 2 MB (`413 too_large`). `404 no_asset`: none; not for a paired phone (`403 not_for_devices`).
+  The web variant answers the same route by reading the file from the chosen folder.
 
 **Making a meeting in the interface.** *New meeting ...* in the *Project* menu, *New meeting* in the command palette
 (`Ctrl+K`, for the task that is selected) and the button *New meeting* in the section *Meetings* of a task's detail (the

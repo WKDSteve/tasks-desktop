@@ -808,6 +808,30 @@ picture to an `<img>` and runs nothing when opened. The small pictures are kept 
 folder, named by a hash of the source's path, size and time of change, at most 1000 (the oldest go first); nothing is
 written into a vault.
 
+## Images of an item (`GET /api/tasks/asset`)
+
+One data route behind a session (in the security matrix), not released for a paired phone (the guard keeps it from a
+device, the handler refuses one again with `403 not_for_devices`). The query is plain (`parse_query`): `kind` one of
+`task`, `plan`, `project`, `path`, `meeting`, an id `<area>/<slug>`, and `file` a path that starts with `assets/`, has
+plain parts (no `..`, `.`, empty part, root, drive, colon, backslash or control character) and an image kind
+(`png`, `jpg`, `jpeg`, `webp`, `gif`, `svg`); anything else is `400` before the engine is asked. The folder is never the
+page's: for a task, a path and a meeting it is the folder of the `file` the engine names, and only when the engine says
+the item is in its folder form (`folder: true`), so the folder of all plain tasks is no item's; for a plan and a project
+it is `<area>/ROADMAP/plans|projects/<slug>/`. Once every link is followed (`canonicalize`) the file must lie below
+`assets/` of that folder, and the folder inside the vault. A picture is at most 20 MB, a drawing 2 MB (`413`). The bytes
+are passed on as they are, with their media type by the kind, `nosniff`, `default-src 'none'; style-src
+'unsafe-inline'; sandbox` and `no-store`: opened on its own an SVG runs nothing.
+
+The page reads the image with the session into a `blob:` address of its own and draws it only as `<img>` (rule E12 of
+the learning paths: an SVG is a picture, never markup of the page; the page's CSP has `img-src 'self' blob:`). The
+Markdown reader of appkit-ui keeps the address of an image only when the page asks for the images of an item
+(`parseMarkdown(text, { assets: true })`, `safeAssetPath`), and draws only a `blob:` address (`drawableImageUrl`); an
+image of another host, `data:` or a path outside `assets/` stays its description and is never fetched. The addresses
+are given back when the view goes (`URL.revokeObjectURL`). The browser tests put a malicious SVG (a script, an
+`onload`, a `foreignObject` with a frame, an image of another host) as an asset and check that nothing of it runs and
+that the page asks no other host, in the app and in the web variant (Chrome, Firefox, WebKit). The web variant reads
+the file from the chosen folder, part by part by its exact name, with the same checks and limits.
+
 ## Learning paths (`GET /api/tasks/paths`, `path`)
 
 Two data routes, each behind a session (in the security matrix) and not released for a paired phone: the guard keeps
