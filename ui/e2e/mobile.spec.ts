@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { devices } from '@playwright/test';
 import { expect, test } from './fixtures';
@@ -103,6 +103,47 @@ test('the phone page pairs, shows only the classified areas and creates a task t
   // The worker is registered under the policy of /m/ and keeps no route of the hub.
   await page.waitForFunction(async () => (await navigator.serviceWorker.ready).active !== null);
   expect(problems).toEqual([]);
+});
+
+test('the phone page names a coming meeting of an internal area without its address to join, and writes a line of its minutes', async ({
+  page,
+}) => {
+  const problems = watchConsole(page);
+  const { vault, config } = state();
+  const dir = join(vault, 'lib.nvim', 'MEETINGS');
+  mkdirSync(dir, { recursive: true });
+  const slug = 'phone-meeting-m003';
+  const file = join(dir, `${slug}.md`);
+  const now = new Date();
+  const day = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  writeFileSync(
+    file,
+    `---\ntitle: Phone meeting m003\nstatus: planned\ndate: ${day}\ntime: "23:30"\nduration: 15m\nonline: https://teams.microsoft.com/l/meetup-join/m003\n---\n\nA meeting of one phone test.\n\n## Teilnehmer\n\n- [ ] Rick <rick@example.org>\n\n## Protokoll\n`,
+  );
+  try {
+    await page.goto(pairingLink(config).replace('/#pair=', '/m/#pair='));
+    await expect(page.getByTestId('connection')).toHaveAttribute('data-state', 'live');
+    const row = page.getByTestId('meetings').locator(`[data-meeting="lib.nvim/${slug}"]`);
+    // The hub holds the meetings for the state of the vault it last read: the file written just now is there once its
+    // watcher saw it, and the page reads them again on its next start.
+    await expect(async () => {
+      if ((await row.count()) === 0) await page.reload();
+      await expect(row).toBeVisible({ timeout: 2000 });
+    }).toPass({ timeout: 20_000 });
+    await row.click();
+    await expect(page.getByTestId('meeting-title')).toContainText('Phone meeting m003');
+    // lib.nvim is internal and the hub's settings let no address of it out: no Join, no people.
+    await expect(page.getByTestId('join')).toHaveCount(0);
+    expect(await page.content()).not.toContain('rick@example.org');
+    await page.getByTestId('minutes-line').fill('Notiz vom Handy m003');
+    await page.getByRole('button', { name: 'Note', exact: true }).click();
+    await expect(page.getByTestId('minutes')).toContainText('Notiz vom Handy m003');
+    expect(readFileSync(file, 'utf8')).toMatch(/## Protokoll\s+- \d\d:\d\d Notiz vom Handy m003/);
+    expect(problems).toEqual([]);
+  } finally {
+    rmSync(join(dir, slug), { recursive: true, force: true });
+    rmSync(file, { force: true });
+  }
 });
 
 test('the phone page shows a learning path cut by the hub and ticks a point through the engine', async ({ page }) => {
