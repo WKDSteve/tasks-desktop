@@ -318,10 +318,10 @@ transfer that sends nothing for 60 seconds. The engine takes that file
 page), copies it below the folder of the task, and the hub removes its copy,
 whatever the engine said; what a killed hub left there goes after a day at the
 next start. The name the page sends is cleaned to letters, digits and `_ . -`,
-and it names no folder. `kind=video|image|screenshot` asks for the folder of that
+and it names no folder. `kind=video|image|screenshot|audio` asks for the folder of that
 kind below `assets/` of the task (`assets/videos/`, `assets/images/`,
-`assets/screenshots/`): the hub passes one of these three words to the engine
-and refuses any other (`400 bad_query`), so the page chooses among three
+`assets/screenshots/`, `assets/audio/`): the hub passes one of these four words to the engine
+and refuses any other (`400 bad_query`), so the page chooses among four
 folders the engine has and never names one. The hub serves no asset, so a file with an active type
 (HTML, SVG) is never shown in the origin of the page.
 
@@ -788,6 +788,15 @@ again with `403 not_for_devices` (what of a meeting may reach a phone is decided
 The query is plain (`parse_query`): days `YYYY-MM-DD`, an area name, one status word, an id `<area>/<slug>`, a limit of
 1 to 100; anything else is `400` before the engine is asked. `meetings` and `meeting` pass the engine's documents on as
 they are; the writes are operations of `ops`, which refuses them to a phone (`device_op_level`).
+
+The upload is no way around this. A paired phone attaches to a task, nothing else: the engine's `attach` takes a
+plan, a project, a learning path or a meeting under the same id when no open task has it, so for a device the upload
+first asks the engine for the task (`task`). When there is none and the dry run of `attach` would still find a file,
+the answer is `403 not_for_devices`, before any byte of the file is taken; when the dry run finds nothing, the phone
+gets the engine's refusal as before (`not_found`). The transfer may take minutes, so the hub asks for the task again
+right before the real `attach`: a task finished meanwhile gives `404 not_found` and nothing is attached. Tested in the
+guard matrix (`crates/hub-testkit/tests/devices.rs`)
+and against the real engine (`real_meetings.rs`).
 
 `meeting/ics` is a download (`Content-Disposition: attachment`, `text/calendar`, `nosniff`, a sandboxing CSP, not
 kept): nothing is mailed or sent. It follows the class of the meeting's area, read from the id, never from the page,

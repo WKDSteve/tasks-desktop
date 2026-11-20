@@ -545,3 +545,169 @@ b"}"#,
     );
     drop(server);
 }
+
+/// The public key a paired phone names (any valid P-256 point; the tests of the guard take the same).
+const DEVICE_KEY: &str = "046b17d1f2e12c4247f8bce6e563a440f277037d812deb33a0f4a13945d898c2964fe342e2fe1a7f9b8ee7eb4a7c0f9e162bce33576b315ececbb6406837bf51f5";
+
+/// A paired phone attaches to a task only: the real engine's `attach` would take a meeting, a plan or a learning path
+/// of a released area under its id, and the hub refuses that with `not_for_devices` before any byte is taken; the
+/// meeting stays without assets. A task of the same area is still attached to.
+#[tokio::test]
+async fn a_paired_phone_cannot_attach_to_a_meeting_a_plan_or_a_path() {
+    let dir = Scratch::new("real-meetings-phone");
+    let vault = dir.join("vault");
+    copy_dir(&fixture(), &vault);
+    let settings = dir.join("settings");
+    let home = Scratch::new("real-meetings-phone-home");
+    let Some(engine) = engine(&vault, &home).await else {
+        return;
+    };
+    let control = Secret::generate(TOKEN_BYTES).unwrap();
+    let server = start_with(
+        ServerConfig {
+            devices: Some(settings.join("devices.json")),
+            addr: "127.0.0.1:0".parse().unwrap(),
+            limits: Limits {
+                snapshot_max_age: None,
+                ..Limits::default()
+            },
+            clock: Arc::new(ManualClock::new()),
+            pairing_ttl: Duration::from_secs(60),
+            control_secret: control.clone(),
+            instance: Secret::generate(CODE_BYTES).unwrap(),
+            status: HubStatus {
+                engine_ready: true,
+                problem: None,
+                capabilities: Vec::new(),
+            },
+            engine: Some(engine),
+            policy: Arc::new(policy()),
+            usage: None,
+            ui: tasks_hub::ui::UiFiles::none(),
+            watch: None,
+        },
+        Extras {
+            meetings: Some(Arc::new(MeetingFiles::in_dir(&settings, false))),
+            upload_dir: Some(settings.join("uploads")),
+            ..Extras::default()
+        },
+    )
+    .await
+    .unwrap();
+    let port = server.addr().port();
+    let hub = Hub {
+        port,
+        origin: format!("http://127.0.0.1:{port}"),
+        session: session(port, &control).await,
+    };
+    let made = hub
+        .ops(json!([{
+            "op": "meeting_new", "area": "lib.nvim", "title": "Phone stays out",
+            "fields": { "date": "2026-11-26", "time": "11:00" },
+        }]))
+        .await;
+    let meeting = made["results"][0]["id"].as_str().unwrap().to_owned();
+
+    // The phone, paired with a code of the PC.
+    let auth = format!("Bearer {}", control.to_hex());
+    let reply = patient::request(
+        port,
+        "POST",
+        "/api/control/pair",
+        &[
+            ("Content-Type", "application/json"),
+            ("Authorization", &auth),
+        ],
+        "{}",
+    )
+    .await
+    .unwrap();
+    let code = serde_json::from_str::<Value>(&reply.body).unwrap()["code"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let reply = patient::request(
+        port,
+        "POST",
+        "/auth/device/pair",
+        &[
+            ("Content-Type", "application/json"),
+            ("Origin", &hub.origin),
+        ],
+        &json!({ "code": code, "name": "Phone", "key": DEVICE_KEY }).to_string(),
+    )
+    .await
+    .unwrap();
+    assert_eq!(reply.status, 200, "{}", reply.body);
+    let phone = format!(
+        "Bearer {}",
+        serde_json::from_str::<Value>(&reply.body).unwrap()["token"]
+            .as_str()
+            .unwrap()
+    );
+    let upload = |id: String, kind: &'static str| {
+        let phone = phone.clone();
+        let origin = hub.origin.clone();
+        async move {
+            let reply = patient::request(
+                port,
+                "POST",
+                &format!("/api/tasks/upload?id={id}&kind={kind}"),
+                &[
+                    ("Authorization", &phone),
+                    ("Origin", &origin),
+                    ("Content-Type", "application/octet-stream"),
+                    ("X-Upload-Name", "note.m4a"),
+                ],
+                "bytes",
+            )
+            .await
+            .unwrap();
+            let doc: Value = serde_json::from_str(&reply.body).unwrap_or(Value::Null);
+            (reply.status, doc)
+        }
+    };
+    for id in [
+        meeting.clone(),
+        "lib.nvim/the-plan".to_owned(),
+        "lib.nvim/lua-lernen".to_owned(),
+    ] {
+        for kind in ["audio", "image"] {
+            let (status, doc) = upload(id.clone(), kind).await;
+            assert_eq!(
+                (status, doc["error"]["code"].clone()),
+                (403, json!("not_for_devices")),
+                "{id} {kind}: {doc}"
+            );
+        }
+    }
+    let slug = meeting.split_once('/').unwrap().1;
+    let meetings = vault.join("lib.nvim").join("MEETINGS");
+    assert!(
+        !meetings.join(slug).exists(),
+        "the meeting took the folder form: an asset arrived"
+    );
+    for folder in [
+        vault
+            .join("lib.nvim")
+            .join("ROADMAP")
+            .join("plans")
+            .join("the-plan"),
+        vault
+            .join("lib.nvim")
+            .join("ROADMAP")
+            .join("paths")
+            .join("lua-lernen"),
+    ] {
+        assert!(
+            !folder.exists(),
+            "{} took the folder form",
+            folder.display()
+        );
+    }
+    // A task of the same area: attached.
+    let (status, doc) = upload("lib.nvim/alpha".to_owned(), "audio").await;
+    assert_eq!(status, 200, "{doc}");
+    assert_eq!(doc["results"][0]["ok"], true, "{doc}");
+    drop(server);
+}

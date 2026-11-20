@@ -25,6 +25,9 @@
 //!   note when it ran to its end, or fails;
 //! * `.fake-ops-conflict`: every operation of `ops` is refused with `conflict` (the file changed
 //!   since it was read), and nothing is written;
+//! * `.fake-not-tasks`: lines `<id>`, files of the vault that are no task (a meeting, a plan, a learning path): `task`
+//!   answers `not_found` for them, while `ops` (`attach`) takes them, as the engine's `attach` takes such a file when
+//!   no open task has the id; `alpha.nvim/missing` names nothing at all, and `ops` refuses it with `not_found`;
 //! * `.fake-attach-dirs`: written by an `ops` request that carries `attach_dirs` (the folders the hub
 //!   named), as JSON: what reached the engine;
 //! * `.fake-upload`: written by an `ops` request that carries `upload_dir`: the name of the asset, and the bytes of the
@@ -334,7 +337,9 @@ fn tasks_fill(call: &Call<'_>, doc: &mut Value) {
         }
         "task" => {
             let id = params.get("id").and_then(Value::as_str).unwrap_or("");
-            if id == "alpha.nvim/missing" {
+            let not_a_task = std::fs::read_to_string(vault.join(".fake-not-tasks"))
+                .is_ok_and(|text| text.lines().any(|line| line.trim() == id));
+            if id == "alpha.nvim/missing" || not_a_task {
                 doc["kind"] = json!(call.dialect.error_kind);
                 doc["code"] = json!("not_found");
                 doc["message"] = json!("no such task");
@@ -471,6 +476,17 @@ fn tasks_fill(call: &Call<'_>, doc: &mut Value) {
                             "outcome": "failed",
                             "changed_ids": [],
                             "error": { "code": "conflict", "message": "the file changed since it was read", "retryable": true },
+                        });
+                    }
+                    if id == "alpha.nvim/missing" {
+                        return json!({
+                            "n": i + 1,
+                            "op": op.get("op").cloned().unwrap_or(Value::Null),
+                            "id": id,
+                            "ok": false,
+                            "outcome": "failed",
+                            "changed_ids": [],
+                            "error": { "code": "not_found", "message": "no such open task", "retryable": false },
                         });
                     }
                     json!({

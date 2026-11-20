@@ -259,6 +259,20 @@ fn attach_op(
     op
 }
 
+/// For a phone: is there no open task under `id`? The engine's `attach` takes a plan, a project, a learning path or a
+/// meeting of that name when no open task has it, and none of them is released for devices (their routes answer
+/// `403 not_for_devices`). The engine's `not_found` for the task is `true`; any other failure is the answer to send
+/// (fail closed).
+// The error is the answer to send, as everywhere in this file: a response is large, and rare.
+#[allow(clippy::result_large_err)]
+async fn no_open_task(st: &Shared, id: &str) -> Result<bool, Response> {
+    match ask_as(st, true, Calls::Task, Some(&json!({ "id": id }))).await {
+        Ok(_) => Ok(false),
+        Err(response) if response.status() == StatusCode::NOT_FOUND => Ok(true),
+        Err(response) => Err(response),
+    }
+}
+
 pub(super) async fn upload(
     State(st): State<Arc<Shared>>,
     caller: Option<axum::Extension<Caller>>,
@@ -319,6 +333,17 @@ pub(super) async fn upload(
     if !st.post_limit.allow() {
         return too_many();
     }
+    // A phone attaches to a task, nothing else (`no_open_task`): when there is none, the dry run below tells "nothing
+    // there" (its refusal, as before) from "there, but not for a phone" (`not_for_devices`), before any byte of the file
+    // is taken. Asked behind the limit of writes, so a flood of uploads costs the engine nothing.
+    let not_a_task = if device {
+        match no_open_task(&st, &id).await {
+            Ok(missing) => missing,
+            Err(response) => return response,
+        }
+    } else {
+        false
+    };
     // Asked before the transfer: a task that is gone or read-only should not cost the whole file first. Nothing is read
     // in a dry run, so the file need not be there yet.
     let look = json!({
@@ -340,6 +365,13 @@ pub(super) async fn upload(
         }
         return json_response(StatusCode::OK, text, None);
     }
+    if not_a_task {
+        return error_body(
+            StatusCode::FORBIDDEN,
+            "not_for_devices",
+            "a phone attaches only to a task",
+        );
+    }
     let (incoming, written) = match receive(dir.clone(), size, body).await {
         Ok(done) => done,
         Err(response) => return response,
@@ -351,6 +383,20 @@ pub(super) async fn upload(
             "vault_changed",
             "another vault was chosen while the file was on its way: nothing was attached",
         );
+    }
+    // The transfer may have taken minutes: a task finished meanwhile leaves its id to a plan or meeting of that name.
+    if device {
+        match no_open_task(&st, &id).await {
+            Ok(false) => {}
+            Ok(true) => {
+                return error_body(
+                    StatusCode::NOT_FOUND,
+                    "not_found",
+                    "the task is no longer open: nothing was attached",
+                )
+            }
+            Err(response) => return response,
+        }
     }
     let Some(file_name) = incoming.path.file_name().and_then(|n| n.to_str()) else {
         return error_body(

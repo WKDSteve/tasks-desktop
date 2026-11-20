@@ -573,6 +573,133 @@ async fn a_phone_is_told_nothing_of_an_area_that_is_not_released() {
     );
 }
 
+/// A phone attaches to a task, nothing else: a meeting, a plan or a learning path of a released area (which the
+/// engine's `attach` would take under that id) is refused before a byte of the file is taken, for every kind; a task
+/// that is gone still answers as before (`not_found`), and a task is still attached to.
+#[tokio::test]
+async fn a_phone_uploads_to_a_task_only_not_to_a_meeting_plan_or_path() {
+    let _one = ONE_AT_A_TIME.lock().await;
+    let r = Rig::new("not-a-task").await;
+    let vault = r._dir.join("vault");
+    std::fs::write(
+        vault.join(".fake-not-tasks"),
+        "alpha.nvim/standup\nalpha.nvim/roadmap-plan\nalpha.nvim/learn-path\n",
+    )
+    .unwrap();
+    let (_, phone) = r.phone().await;
+    let upload = |id: String, kind: &'static str| {
+        let origin = r.origin();
+        let auth = format!("Bearer {phone}");
+        let port = r.server.addr().port();
+        async move {
+            let kind = if kind.is_empty() {
+                String::new()
+            } else {
+                format!("&kind={kind}")
+            };
+            let reply = client::request(
+                port,
+                "POST",
+                &format!("/api/tasks/upload?id={id}{kind}"),
+                &[
+                    ("Authorization", auth.as_str()),
+                    ("Origin", origin.as_str()),
+                    ("Content-Type", "application/octet-stream"),
+                    ("X-Upload-Name", "note.m4a"),
+                ],
+                "bytes",
+            )
+            .await
+            .unwrap();
+            let doc: Value = serde_json::from_str(&reply.body).unwrap_or(Value::Null);
+            (reply.status, doc)
+        }
+    };
+    for id in [
+        "alpha.nvim/standup",
+        "alpha.nvim/roadmap-plan",
+        "alpha.nvim/learn-path",
+    ] {
+        for kind in ["", "audio", "video", "image", "screenshot"] {
+            let (status, doc) = upload(id.to_owned(), kind).await;
+            assert_eq!(
+                (status, doc["error"]["code"].clone()),
+                (403, json!("not_for_devices")),
+                "{id} {kind}: {doc}"
+            );
+        }
+    }
+    // Nothing reached the engine but dry runs, and no file was taken into the upload folder.
+    let asked = std::fs::read_to_string(vault.join(".fake-exact")).unwrap_or_default();
+    assert!(
+        asked.lines().all(|line| line.starts_with("true ")),
+        "only dry runs: {asked}"
+    );
+    let taken = std::fs::read_dir(r._dir.join("uploads"))
+        .map(|d| d.count())
+        .unwrap_or(0);
+    assert_eq!(taken, 0, "a file was taken into the upload folder");
+    // A task that is gone answers as it did: the engine's `not_found`, not "only on the PC".
+    let (status, doc) = upload("alpha.nvim/missing".to_owned(), "audio").await;
+    assert_ne!(status, 403, "{doc}");
+    assert!(doc.to_string().contains("not_found"), "{status} {doc}");
+    // A task is attached to.
+    let (status, doc) = upload("alpha.nvim/t1".to_owned(), "audio").await;
+    assert_eq!(status, 200, "{doc}");
+    assert_eq!(
+        doc["results"][0]["changed_ids"],
+        json!(["alpha.nvim/t1"]),
+        "{doc}"
+    );
+}
+
+/// The transfer of a file can take minutes: a task that is no longer open when the file has arrived leaves its id to a
+/// plan or meeting of that name, so the hub asks again right before the real `attach`, and nothing is attached.
+#[tokio::test]
+async fn a_phone_upload_whose_task_is_gone_during_the_transfer_attaches_nothing() {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let _one = ONE_AT_A_TIME.lock().await;
+    let r = Rig::new("gone-in-transfer").await;
+    let vault = r._dir.join("vault");
+    let (_, phone) = r.phone().await;
+    let body = "x".repeat(4096);
+    let head = format!(
+        "POST /api/tasks/upload?id=alpha.nvim/t1&kind=audio HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nAuthorization: Bearer {phone}\r\nOrigin: {origin}\r\nContent-Type: application/octet-stream\r\nX-Upload-Name: note.m4a\r\nContent-Length: {len}\r\nConnection: close\r\n\r\n",
+        port = r.server.addr().port(),
+        origin = r.origin(),
+        len = body.len(),
+    );
+    let mut stream = tokio::net::TcpStream::connect(r.server.addr())
+        .await
+        .unwrap();
+    stream.write_all(head.as_bytes()).await.unwrap();
+    stream.write_all(&body.as_bytes()[..2048]).await.unwrap();
+    // The dry run has passed (the task was open then) ...
+    let asked = vault.join(".fake-exact");
+    let deadline = std::time::Instant::now() + Duration::from_secs(10);
+    while !std::fs::read_to_string(&asked).is_ok_and(|t| t.lines().any(|l| l.starts_with("true ")))
+    {
+        assert!(std::time::Instant::now() < deadline, "no dry run");
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    // ... and while the file is on its way, the task is finished: its id now names a meeting of that name.
+    std::fs::write(vault.join(".fake-not-tasks"), "alpha.nvim/t1\n").unwrap();
+    stream.write_all(&body.as_bytes()[2048..]).await.unwrap();
+    let mut reply = Vec::new();
+    tokio::time::timeout(Duration::from_secs(10), stream.read_to_end(&mut reply))
+        .await
+        .unwrap()
+        .unwrap();
+    let reply = String::from_utf8_lossy(&reply);
+    assert!(reply.starts_with("HTTP/1.1 404"), "{reply}");
+    assert!(reply.contains("not_found"), "{reply}");
+    let attached = std::fs::read_to_string(&asked).unwrap_or_default();
+    assert!(
+        attached.lines().all(|line| line.starts_with("true ")),
+        "a real attach reached the engine: {attached}"
+    );
+}
+
 #[tokio::test]
 async fn an_operation_of_a_phone_holds_only_the_fields_the_phone_page_sends() {
     let _one = ONE_AT_A_TIME.lock().await;
