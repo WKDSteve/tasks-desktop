@@ -4,7 +4,7 @@
   import { contextTarget } from 'appkit-ui/contextmenu';
   import { tagTarget } from '../lib/context';
   import { ownTags } from '../lib/tagging';
-  import { tick } from 'svelte';
+  import { tick, untrack } from 'svelte';
   import type { App } from '../lib/app.svelte';
   import { formatNumber, hintOf, labelOf, translate, type Key } from '../lib/i18n';
   import { areaLabel } from '../lib/filter';
@@ -69,6 +69,12 @@
     const store = new AssetImages((kind, owner, file) => app.asset(kind, owner, file), 'task', id);
     images = store;
     return () => store.dispose();
+  });
+  // A new version of the task: an image that was missing is read again (put into its folder after it was shown).
+  $effect(() => {
+    const store = images;
+    const etag = task?.etag;
+    untrack(() => store?.refresh(etag));
   });
   // An image of the text, larger (a click on it).
   let viewing = $state<{ url: string; alt: string } | null>(null);

@@ -124,6 +124,34 @@ describe('the images of a task text', () => {
     expect(root.querySelector('.cover img')?.getAttribute('src')).toMatch(/^blob:/);
   });
 
+  it('reads a missing image again when the task comes in a new version, and leaves a drawn one as it is', async () => {
+    const { m, root } = await show(
+      '![Later](assets/later.png) ![Here](assets/here.png)',
+      {},
+      { 'assets/here.png': 'here' },
+    );
+    expect(root.querySelector('.prose')?.textContent).toMatch(/(Image missing|Bild fehlt): Later/);
+    const reads = () => m.hub.assetReads.filter((r) => r.endsWith('assets/later.png')).length;
+    expect(reads()).toBe(1);
+    // The same version read again: nothing is asked anew.
+    await m.app.refresh();
+    await settle();
+    expect(reads()).toBe(1);
+    // The file came into the folder, and the task is read in a new version: the missing image is read again; the one
+    // that was drawn keeps its address.
+    m.hub.assetAnswers.set('assets/later.png', new Blob(['later'], { type: 'image/png' }));
+    m.hub.doc = snapshot([
+      task('pub/a', { title: 'A task', etag: 'e2', folder: true }),
+      task('pub/b', { title: 'B task', etag: 'e1', folder: true }),
+    ], 'rev:2');
+    await m.app.refresh();
+    await settle();
+    expect(reads()).toBe(2);
+    expect(m.hub.assetReads.filter((r) => r.endsWith('assets/here.png'))).toHaveLength(1);
+    const srcs = [...root.querySelectorAll<HTMLImageElement>('.prose img')].map((img) => img.getAttribute('alt'));
+    expect(srcs).toEqual(['Later', 'Here']);
+  });
+
   it('takes the category icon for a task without one of its own', async () => {
     const { root } = await show('text', { category: ['learning'] });
     expect(root.querySelector('.title-line [data-icon="category"]')?.textContent).toBe('📚');

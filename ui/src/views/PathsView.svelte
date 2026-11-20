@@ -97,6 +97,13 @@
     images = store;
     return () => store.dispose();
   });
+  // The path read again: an image that was missing, or one put into its folder since, is read again.
+  $effect(() => {
+    const store = images;
+    const etag = doc?.path.etag;
+    const assets = doc?.path.assets;
+    untrack(() => store?.refresh(etag, assets));
+  });
   // An image of the path, larger (a click on it).
   let viewing = $state<{ url: string; alt: string } | null>(null);
   const view = (url: string, alt: string) => (viewing = { url, alt });

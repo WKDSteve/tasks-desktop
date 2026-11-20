@@ -35,20 +35,65 @@ export class AssetImages {
     this.id = id;
   }
 
+  /** The version of the container last told (`refresh`), and the files it listed then. */
+  #version: string | null = null;
+  #listed = new Set<string>();
+
   /** The address of `file`: undefined while it loads (the read starts on the first ask), null when there is none. */
   url(file: string): string | null | undefined {
     if (!this.#asked.has(file) && !this.#gone) {
       this.#asked.add(file);
-      void this.#load(this.kind, this.id, file)
-        .catch(() => null)
-        .then((blob) => {
-          if (this.#gone) return;
-          const url = blob ? addressOf(blob) : null;
-          if (url) this.#made.push(url);
-          this.#urls.set(file, url);
-        });
+      this.#read(file);
     }
     return this.#urls.get(file);
+  }
+
+  /**
+   * The container was read again: its version (`etag`) and, where the engine names them, the files of its folder. When
+   * either changed, a file that was missing is read again, and so is one that is listed now and was not before (put
+   * into the folder after it was first shown). The others stay as read: a change of the text does not load every
+   * image anew. The first call only notes the version.
+   */
+  refresh(etag: string | undefined, assets?: readonly string[]): void {
+    if (this.#gone) return;
+    const listed = new Set(assets ?? []);
+    const version = `${etag ?? ''}\n${[...listed].sort().join('\n')}`;
+    if (this.#version === null || version === this.#version) {
+      this.#version = version;
+      this.#listed = listed;
+      return;
+    }
+    const before = this.#listed;
+    this.#version = version;
+    this.#listed = listed;
+    for (const file of this.#asked) {
+      const missing = this.#urls.get(file) === null;
+      const added = listed.has(file) && !before.has(file);
+      if (missing || added) this.#read(file);
+    }
+  }
+
+  /** Read `file`; its address replaces the one before, which is given back. */
+  #read(file: string): void {
+    void this.#load(this.kind, this.id, file)
+      .catch(() => null)
+      .then((blob) => {
+        if (this.#gone) return;
+        const url = blob ? addressOf(blob) : null;
+        if (url) this.#made.push(url);
+        const old = this.#urls.get(file);
+        this.#urls.set(file, url);
+        if (old && old !== url) this.#giveBack(old);
+      });
+  }
+
+  #giveBack(url: string): void {
+    this.#made = this.#made.filter((u) => u !== url);
+    try {
+      URL.revokeObjectURL(url);
+    } catch {
+      // nothing to give back in a page without blob addresses
+    }
   }
 
   /** The way of the kit's markdown to these images, with the page's word for a missing one and its larger view. */

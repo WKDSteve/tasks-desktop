@@ -65,6 +65,13 @@
     images = store;
     return () => store.dispose();
   });
+  // The meeting read again: an image that was missing, or one put into its folder since, is read again.
+  $effect(() => {
+    const store = images;
+    const etag = m?.etag;
+    const assets = m?.assets;
+    untrack(() => store?.refresh(etag, assets));
+  });
   let viewing = $state<{ url: string; alt: string } | null>(null);
   const imageSource = $derived(images?.source(t('image.missing'), (_src, url, alt) => (viewing = { url, alt })));
   /**
