@@ -843,12 +843,17 @@ the file from the chosen folder, part by part by its exact name, with the same c
 
 ## Learning paths (`GET /api/tasks/paths`, `path`)
 
-Two data routes, each behind a session (in the security matrix) and not released for a paired phone: the guard keeps
-them from a device (`MOB-02`), and each handler refuses one again with `403 not_for_devices`. The query is plain
-(`parse_query`): an area name for `paths`, an id `<area>/<slug>` for `path`; anything else is `400` before the engine
-is asked. Both pass the engine's documents on as they are, asked each time (not held: a path changed by `node_set`
-must not come back as it was). The writes are `node_set`, `promote` and `unpromote` of `ops`, refused to a phone
-(`device_op_level`). The page draws a label, a reason and a note as text, never as markup; it opens a link of a point
+Two data routes, each behind a session (in the security matrix). The query is plain (`parse_query`): an area name for
+`paths`, an id `<area>/<slug>` for `path`; anything else is `400` before the engine is asked. Both pass the engine's
+documents on to the PC as they are, asked each time (not held: a path changed by `node_set` must not come back as it
+was). A paired phone (`MOB-02`, released at `read`) gets them cut field by field (`device_cut::paths`,
+`device_cut::path`): only paths of a released area (`path` of another area is `404` before the engine is asked);
+without the other areas a path names (`areas`, `target`, `project`), its file and folder (`file`, `folder`, `assets`,
+`cover`, an icon or a badge that is a file, the image of a point), the line numbers and the faults of the file as text
+(`problems`, `tree_problems`; the list says only `partial`); a point's `link` only as `http://` or `https://`, the task a
+point was promoted to only when its area is released. The writes are `node_set`, `promote` and `unpromote` of `ops`; a
+phone may only tick a point (`node_set` with `state` and `reason`, at the level `change`; no note, no XP,
+`device_op_level`, `device_op_fields`), the others are refused to it. The page draws a label, a reason and a note as text, never as markup; it opens a link of a point
 only when it is `http://` or `https://`, in a new tab without a referrer (`rel="noopener noreferrer"`,
 `referrerpolicy="no-referrer"`).
 

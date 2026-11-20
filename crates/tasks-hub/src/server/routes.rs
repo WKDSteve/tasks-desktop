@@ -2350,6 +2350,9 @@ pub(super) fn guard_rules() -> GuardRules {
     .with_device_route(crate::IDENTITY.route("testing_sheets"), Level::Read)
     .with_device_route(crate::IDENTITY.route("testing_run"), Level::Read)
     .with_device_route(crate::IDENTITY.route("testing_start"), Level::Trigger)
+    // The learning paths of the released areas, cut for a phone (`device_cut::paths`, `device_cut::path`).
+    .with_device_route(crate::IDENTITY.route("paths"), Level::Read)
+    .with_device_route(crate::IDENTITY.route("path"), Level::Read)
     .with_device_route(crate::IDENTITY.route("ops"), Level::Create)
     .with_device_route(crate::IDENTITY.route("upload"), Level::Change)
     // A new phone reads, creates and changes; it never triggers (the PC raises one device at a time, if ever).
@@ -2363,7 +2366,7 @@ pub(super) fn guard_rules() -> GuardRules {
 pub(super) fn device_op_level(op: &str) -> Option<Level> {
     match op {
         "new" | "answer" => Some(Level::Create),
-        "set" | "done" => Some(Level::Change),
+        "set" | "done" | "node_set" => Some(Level::Change),
         _ => None,
     }
 }
@@ -2377,6 +2380,8 @@ pub(super) fn device_op_fields(op: &str) -> &'static [&'static str] {
         "set" => &["op", "id", "patch", "if_match"],
         "answer" => &["op", "id", "question", "option", "if_match"],
         "done" => &["op", "id", "confirm"],
+        // A learning point ticked: its state and the reason of `seen` or `dropped`; no note, no XP.
+        "node_set" => &["op", "id", "point", "state", "reason", "if_match"],
         _ => &[],
     }
 }

@@ -524,6 +524,154 @@ pub(crate) fn phone_export(
     })
 }
 
+/// The fields of a path entry a phone is given: what is of this path alone. Left out: the other areas it names
+/// (`areas`), the plan or task it serves (`target`, `project`), its file and its folder (`file`, `folder`, `assets`,
+/// `cover`), and the faults of its file as text (`problems`).
+const PATH_FIELDS: &[&str] = &[
+    "id", "area", "slug", "title", "status", "summary", "has_tree", "points", "progress", "links",
+    "created", "updated", "etag", "valid", "xp",
+];
+
+/// The fields of a learning point a phone is given. Left out: the line of the file and an image of the folder (the
+/// files of a path are not released for devices); `link` only as a web address, `promoted` only as a task of a released
+/// area.
+const NODE_FIELDS: &[&str] = &[
+    "index",
+    "key",
+    "parent",
+    "depth",
+    "state",
+    "derived",
+    "closed",
+    "mark",
+    "children",
+    "progress",
+    "xp",
+    "xp_from",
+    "xp_progress",
+    "label",
+    "note",
+    "reason",
+];
+
+/// The fields of a level of a path a phone is given (its badge is a file of the folder: left out).
+const LEVEL_FIELDS: &[&str] = &[
+    "number",
+    "name",
+    "kind",
+    "threshold",
+    "reached",
+    "given",
+    "reward",
+    "ref",
+];
+
+/// The level reached, as a path entry carries it (its badge left out).
+const REACHED_FIELDS: &[&str] = &[
+    "level",
+    "name",
+    "percent",
+    "finished",
+    "next",
+    "open_rewards",
+];
+
+/// An icon a phone draws without the files of the vault: an emoji or a word, never a file.
+fn plain_icon(icon: &Value) -> Option<Value> {
+    matches!(icon["kind"].as_str(), Some("emoji" | "word")).then(|| icon.clone())
+}
+
+/// A path entry for a phone, or `None` when the path is not of a released area.
+pub(crate) fn path_entry(classes: &AreaPolicy, entry: &Value) -> Option<Value> {
+    let id = entry["id"].as_str()?;
+    if !released_id(classes, id) || entry["area"].as_str() != area_of(id) {
+        return None;
+    }
+    let mut out = copy(entry, PATH_FIELDS);
+    if let Some(icon) = plain_icon(&entry["icon"]) {
+        out.insert("icon".to_owned(), icon);
+    }
+    if entry["level"].is_object() {
+        out.insert(
+            "level".to_owned(),
+            Value::Object(copy(&entry["level"], REACHED_FIELDS)),
+        );
+    }
+    Some(Value::Object(out))
+}
+
+/// `tasks.paths` for a phone: the paths of released areas. Which areas could not be read is told only as `partial`
+/// (the engine's texts may name others).
+pub(crate) fn paths(classes: &AreaPolicy, doc: &Value) -> Value {
+    let mut out = copy(doc, &["kind", "schema", "plugin", "engine", "generated_at"]);
+    let items: Vec<Value> = doc["items"]
+        .as_array()
+        .map_or(&[][..], Vec::as_slice)
+        .iter()
+        .filter_map(|entry| path_entry(classes, entry))
+        .collect();
+    out.insert("items".to_owned(), Value::Array(items));
+    let partial = doc["incomplete"]
+        .as_array()
+        .is_some_and(|list| !list.is_empty());
+    out.insert("partial".to_owned(), Value::Bool(partial));
+    Value::Object(out)
+}
+
+/// `tasks.path` for a phone, or `None` (the hub answers `not_found`) when the path is not of a released area.
+pub(crate) fn path(classes: &AreaPolicy, doc: &Value) -> Option<Value> {
+    let entry = path_entry(classes, &doc["path"])?;
+    let mut out = copy(
+        doc,
+        &[
+            "kind",
+            "schema",
+            "plugin",
+            "engine",
+            "generated_at",
+            "body",
+            "body_truncated",
+            "progress",
+            "xp",
+        ],
+    );
+    out.insert("path".to_owned(), entry);
+    let nodes: Vec<Value> = doc["nodes"]
+        .as_array()
+        .map_or(&[][..], Vec::as_slice)
+        .iter()
+        .map(|node| {
+            let mut cut = copy(node, NODE_FIELDS);
+            if let Some(link) = node["link"]
+                .as_str()
+                .filter(|l| l.starts_with("https://") || l.starts_with("http://"))
+            {
+                cut.insert("link".to_owned(), json_str(link));
+            }
+            if let Some(task) = node["promoted"]
+                .as_str()
+                .filter(|id| released_id(classes, id))
+            {
+                cut.insert("promoted".to_owned(), json_str(task));
+            }
+            Value::Object(cut)
+        })
+        .collect();
+    out.insert("nodes".to_owned(), Value::Array(nodes));
+    let levels: Vec<Value> = doc["levels"]
+        .as_array()
+        .map_or(&[][..], Vec::as_slice)
+        .iter()
+        .map(|level| Value::Object(copy(level, LEVEL_FIELDS)))
+        .collect();
+    out.insert("levels".to_owned(), Value::Array(levels));
+    Some(Value::Object(out))
+}
+
+fn json_str(text: &str) -> Value {
+    Value::String(text.to_owned())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -735,6 +883,98 @@ mod tests {
         assert_eq!(doc["snapshot"]["tasks"].as_array().unwrap().len(), 2);
         assert_eq!(doc["next"]["task"]["id"], "open/a");
         assert_eq!(doc["next"]["alternatives"].as_array().unwrap().len(), 2);
+    }
+
+    fn path_doc(id: &str) -> Value {
+        let area = id.split_once('/').map_or("", |(a, _)| a);
+        json!({
+            "kind": "tasks.path", "schema": 1, "rev": "r", "digest": "d", "vault": { "id": "v" },
+            "body": "Lernen.", "body_truncated": false, "progress": { "total": 3 }, "xp": { "earned": 10 },
+            "tree_problems": ["secret/x is broken"],
+            "path": {
+                "id": id, "area": area, "slug": "lua", "title": "Lua lernen", "status": "doing",
+                "areas": [area, "secret"], "target": "secret/goal", "project": "secret/p",
+                "file": "E:/vault/open/ROADMAP/paths/lua.md", "folder": true, "assets": ["assets/a.png"],
+                "cover": "assets/c.png", "problems": ["see secret/x"], "etag": "e1",
+                "icon": { "kind": "asset", "value": "assets/i.svg" },
+                "level": { "level": 1, "name": "Funke", "badge": "assets/badges/f.svg", "percent": 10 },
+            },
+            "nodes": [
+                { "index": 1, "key": "a", "line": 12, "state": "open", "label": "Docs", "note": "lies das",
+                  "link": "https://example.org/docs", "image": "assets/x.png", "promoted": "open/t1" },
+                { "index": 2, "key": "b", "parent": 1, "state": "learned", "link": "file:///E:/secret.pdf",
+                  "promoted": "secret/t2" },
+                { "index": 3, "key": "c", "parent": 1, "state": "seen", "reason": "kenne ich", "link": "assets/y.pdf" },
+            ],
+            "levels": [{ "number": 1, "name": "Funke", "badge": "assets/badges/f.svg", "threshold": 50, "line": 3 }],
+        })
+    }
+
+    #[test]
+    fn a_path_reaches_a_phone_cut_to_what_is_its_own_and_only_of_a_released_area() {
+        let c = classes();
+        assert!(path(&c, &path_doc("secret/lua")).is_none());
+        let cut = path(&c, &path_doc("open/lua")).expect("an internal area is released");
+        let text = cut.to_string();
+        for word in [
+            "secret",
+            "E:/",
+            "assets/",
+            "line",
+            "tree_problems",
+            "\"rev\"",
+            "digest",
+            "file:",
+        ] {
+            assert!(!text.contains(word), "{word} in {text}");
+        }
+        assert_eq!(cut["path"]["title"], "Lua lernen");
+        assert_eq!(cut["path"]["etag"], "e1");
+        assert_eq!(
+            cut["path"]["level"],
+            json!({ "level": 1, "name": "Funke", "percent": 10 })
+        );
+        assert!(cut["path"].get("icon").is_none(), "{cut}");
+        assert_eq!(cut["body"], "Lernen.");
+        assert_eq!(cut["nodes"][0]["link"], "https://example.org/docs");
+        assert_eq!(cut["nodes"][0]["promoted"], "open/t1");
+        assert_eq!(cut["nodes"][0]["note"], "lies das");
+        assert!(cut["nodes"][1].get("link").is_none());
+        assert!(cut["nodes"][1].get("promoted").is_none());
+        assert!(cut["nodes"][2].get("link").is_none());
+        assert_eq!(cut["nodes"][2]["reason"], "kenne ich");
+        assert_eq!(
+            cut["levels"],
+            json!([{ "number": 1, "name": "Funke", "threshold": 50 }])
+        );
+    }
+
+    #[test]
+    fn the_list_of_paths_holds_those_of_released_areas_and_says_only_that_it_is_partial() {
+        let c = classes();
+        let mut emoji = path_doc("pub/rust")["path"].clone();
+        emoji["icon"] = json!({ "kind": "emoji", "value": "🦀" });
+        let doc = json!({
+            "kind": "tasks.paths", "rev": "r",
+            "items": [path_doc("open/lua")["path"], path_doc("secret/lua")["path"], emoji,
+                      { "id": "nameless/x", "area": "nameless" }, { "id": "open/y", "area": "pub" }],
+            "incomplete": ["secret: cannot read"],
+        });
+        let cut = paths(&c, &doc);
+        let ids: Vec<&str> = cut["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|i| i["id"].as_str())
+            .collect();
+        assert_eq!(ids, ["open/lua", "pub/rust"]);
+        assert_eq!(
+            cut["items"][1]["icon"],
+            json!({ "kind": "emoji", "value": "🦀" })
+        );
+        assert_eq!(cut["partial"], true);
+        assert!(!cut.to_string().contains("secret"), "{cut}");
+        assert!(cut.get("rev").is_none());
     }
 
     #[test]

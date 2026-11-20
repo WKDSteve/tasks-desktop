@@ -334,8 +334,6 @@ async fn a_phone_reaches_the_routes_of_the_phone_page_and_nothing_else() {
             "GET",
             "/api/tasks/asset?kind=task&id=alpha.nvim/t1&file=assets/x.png",
         ),
-        ("GET", "/api/tasks/paths"),
-        ("GET", "/api/tasks/path?id=alpha.nvim/p1"),
         ("POST", "/api/tasks/meeting_parse"),
         ("GET", "/api/tasks/hello-not-a-route"),
     ] {
@@ -382,7 +380,6 @@ async fn ops_takes_from_a_phone_only_what_the_phone_page_sends_at_its_level() {
         json!({ "op": "view_delete", "name": "v" }),
         json!({ "op": "meeting_new", "area": "alpha.nvim", "title": "m", "fields": { "date": "2026-11-24" } }),
         json!({ "op": "meeting_close", "id": "alpha.nvim/m1" }),
-        json!({ "op": "node_set", "id": "alpha.nvim/p1", "point": "a", "state": "learned" }),
         json!({ "op": "promote", "container": "alpha.nvim/p1", "point": "a" }),
         json!({ "op": "unpromote", "container": "alpha.nvim/p1", "point": "a" }),
     ];
@@ -723,8 +720,6 @@ async fn a_route_not_released_for_devices_refuses_a_phone_in_its_handler_too() {
             "meeting",
             "meeting/ics",
             "meeting/thumb",
-            "paths",
-            "path",
             "meeting_parse",
         ],
     )
@@ -740,8 +735,6 @@ async fn a_route_not_released_for_devices_refuses_a_phone_in_its_handler_too() {
         ("GET", "/api/tasks/meeting?id=alpha.nvim/m1", ""),
         ("GET", "/api/tasks/meeting/ics?id=alpha.nvim/m1", ""),
         ("GET", "/api/tasks/meeting/thumb?id=alpha.nvim/m1", ""),
-        ("GET", "/api/tasks/paths", ""),
-        ("GET", "/api/tasks/path?id=alpha.nvim/p1", ""),
         (
             "POST",
             "/api/tasks/meeting_parse",
@@ -755,6 +748,86 @@ async fn a_route_not_released_for_devices_refuses_a_phone_in_its_handler_too() {
             "{method} {path}: {doc}"
         );
     }
+}
+
+/// The learning paths reach a phone cut (MOB-02): only those of released areas, without what names another area or a
+/// file; a path of a private area is not there. A phone ticks a point with a state and a reason, nothing more.
+#[tokio::test]
+async fn a_phone_reads_the_paths_of_released_areas_and_ticks_a_point() {
+    let _one = ONE_AT_A_TIME.lock().await;
+    let r = Rig::new("paths").await;
+    let entry = |id: &str, area: &str| {
+        json!({ "id": id, "area": area, "slug": "p1", "title": format!("Path {id}"), "status": "doing",
+                "areas": [area, "secret-area"], "file": format!("E:/v/{area}/ROADMAP/paths/p1.md"), "etag": "e1" })
+    };
+    r.merge(
+        "paths",
+        &json!({ "items": [entry("alpha.nvim/p1", "alpha.nvim"), entry("secret-area/p9", "secret-area")],
+                 "incomplete": [] }),
+    );
+    r.merge(
+        "path",
+        &json!({ "path": entry("alpha.nvim/p1", "alpha.nvim"), "body": "Text",
+                 "nodes": [{ "index": 1, "key": "a", "state": "open", "label": "A", "line": 4,
+                             "link": "https://example.org", "promoted": "secret-area/t" }],
+                 "levels": [] }),
+    );
+    let (device, phone) = r.phone().await;
+    let (status, doc) = r.send("GET", "/api/tasks/paths", &phone, "").await;
+    assert_eq!(status, 200, "{doc}");
+    let ids: Vec<&str> = doc["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|i| i["id"].as_str())
+        .collect();
+    assert_eq!(ids, ["alpha.nvim/p1"], "{doc}");
+    assert!(!doc.to_string().contains("secret-area"), "{doc}");
+    assert!(!doc.to_string().contains("E:/"), "{doc}");
+
+    let (status, doc) = r
+        .send("GET", "/api/tasks/path?id=alpha.nvim/p1", &phone, "")
+        .await;
+    assert_eq!(status, 200, "{doc}");
+    assert_eq!(doc["nodes"][0]["link"], "https://example.org");
+    assert!(doc["nodes"][0].get("promoted").is_none(), "{doc}");
+    assert!(doc["nodes"][0].get("line").is_none(), "{doc}");
+    let (status, doc) = r
+        .send("GET", "/api/tasks/path?id=secret-area/p9", &phone, "")
+        .await;
+    assert_eq!(
+        (status, doc["error"]["code"].clone()),
+        (404, json!("not_found")),
+        "{doc}"
+    );
+
+    // A point ticked with its state and reason; a note or XP is not the phone's.
+    let tick = json!({ "op": "node_set", "id": "alpha.nvim/p1", "point": "a", "state": "seen", "reason": "kenne ich" });
+    let (status, doc) = r.op(&phone, &tick).await;
+    assert_eq!(status, 200, "{doc}");
+    for extra in [json!({ "note": "x" }), json!({ "xp": 5 })] {
+        let mut op = tick.clone();
+        op.as_object_mut()
+            .unwrap()
+            .extend(extra.as_object().unwrap().clone());
+        let (status, doc) = r.op(&phone, &op).await;
+        assert!(
+            refused(status, &doc, "not_for_devices"),
+            "{op}: {status} {doc}"
+        );
+    }
+    let secret =
+        json!({ "op": "node_set", "id": "secret-area/p9", "point": "a", "state": "learned" });
+    let (status, doc) = r.op(&phone, &secret).await;
+    assert_eq!(
+        (status, doc["error"]["code"].clone()),
+        (404, json!("not_found")),
+        "{doc}"
+    );
+    // Ticking changes the path: below `change` the phone may not.
+    r.set_level(&device, "create").await;
+    let (status, doc) = r.op(&phone, &tick).await;
+    assert!(refused(status, &doc, "level_too_low"), "{status} {doc}");
 }
 
 #[tokio::test]

@@ -3,21 +3,12 @@
 //!
 //! The documents of the engine are passed on as it wrote them; the page draws them and computes nothing (WEB-13). They
 //! are asked each time and not held for the state of the vault: that state (the `rev` of the snapshot) is over the
-//! tasks, and a path changed by `node_set` would come back as it was before. A paired phone gets none of them yet: what
-//! of a path may reach a phone is decided with the phone's view of them; until then the answer is
-//! `403 not_for_devices` (fail closed). The writes go through `ops` (`node_set`, `promote`, `unpromote`), which refuses
-//! them to a phone as well.
+//! tasks, and a path changed by `node_set` would come back as it was before. A paired phone gets the paths of the
+//! released areas only, cut field by field (`device_cut::paths`, `device_cut::path`, MOB-02): nothing of another area,
+//! no file of the folder, a link only as a web address. The writes go through `ops` (`node_set`, `promote`,
+//! `unpromote`); a phone may tick a point (`node_set` with a state and a reason, `device_op_level`), nothing else.
 
 use super::*;
-
-/// What a phone is told on a route of the learning paths.
-fn not_for_devices() -> Response {
-    error_body(
-        StatusCode::FORBIDDEN,
-        "not_for_devices",
-        "the learning paths are not released for devices yet",
-    )
-}
 
 fn bad_query(why: &str) -> Response {
     error_body(StatusCode::BAD_REQUEST, "bad_query", why)
@@ -42,14 +33,17 @@ pub(super) async fn paths(
     caller: Option<axum::Extension<Caller>>,
     RawQuery(query): RawQuery,
 ) -> Response {
-    if is_device(caller.as_deref()) {
-        return not_for_devices();
-    }
+    let device = is_device(caller.as_deref());
     let request = match paths_request(query.as_deref()) {
         Ok(r) => r,
         Err(why) => return bad_query(why),
     };
-    match ask_as(&st, false, Calls::Paths, Some(&request)).await {
+    match ask_as(&st, device, Calls::Paths, Some(&request)).await {
+        Ok(reply) if device => {
+            let doc = serde_json::from_str::<serde_json::Value>(&reply.text).unwrap_or_default();
+            let cut = device_cut::paths(&st.rt().classes, &doc);
+            json_response(StatusCode::OK, cut.to_string(), None)
+        }
         Ok(reply) => json_response(StatusCode::OK, reply.text, None),
         Err(response) => response,
     }
@@ -71,14 +65,26 @@ pub(super) async fn path(
     caller: Option<axum::Extension<Caller>>,
     RawQuery(query): RawQuery,
 ) -> Response {
-    if is_device(caller.as_deref()) {
-        return not_for_devices();
-    }
+    let device = is_device(caller.as_deref());
     let id = match path_id(query.as_deref()) {
         Ok(id) => id,
         Err(why) => return error_body(StatusCode::BAD_REQUEST, "bad_id", why),
     };
-    match ask_as(&st, false, Calls::Path, Some(&json!({ "id": id }))).await {
+    let rt = st.rt();
+    // Not even asked for a path a phone may not see: the engine's answer would tell whether it is there.
+    if device && !device_cut::released_id(&rt.classes, &id) {
+        return not_found();
+    }
+    match ask_as(&st, device, Calls::Path, Some(&json!({ "id": id }))).await {
+        Ok(reply) if device => {
+            let cut = serde_json::from_str::<serde_json::Value>(&reply.text)
+                .ok()
+                .and_then(|doc| device_cut::path(&rt.classes, &doc));
+            match cut {
+                Some(doc) => json_response(StatusCode::OK, doc.to_string(), None),
+                None => not_found(),
+            }
+        }
         Ok(reply) => json_response(StatusCode::OK, reply.text, None),
         Err(response) => response,
     }
