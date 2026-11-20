@@ -6,8 +6,8 @@
 //! from the page) and handed to the engine, which copies them below the container and replaces a board only on the
 //! version read (`if_match`, else `conflict` with a free name). The files in the upload folder go when the request
 //! does, whatever came of it. `board_save` is not one of the operations of `ops`: a request there names no upload
-//! folder, and the page must not name one. A paired phone gets `403 not_for_devices`, as with every route of the
-//! meetings.
+//! folder, and the page must not name one. A paired phone gets `403 not_for_devices` (fail closed): drawing a board is
+//! not released for devices.
 
 use std::io::Write as _;
 
