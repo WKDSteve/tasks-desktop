@@ -167,6 +167,15 @@ import {
   type MeetingForm,
   type MeetingPreview,
 } from './meetings';
+import {
+  DEFAULT_SHORTCUTS,
+  MINUTES_DRAFTS_KEY,
+  MINUTES_SHORTCUTS_KEY,
+  draftsOf,
+  parseShortcuts,
+  type MinutesDraft,
+  type Shortcuts,
+} from './minutes';
 import type { RemindersMail } from './reminders';
 import { DEFAULT_ROW_ACTIONS, parseRowActions, serializeRowActions, type RowActionPrefs } from './rowActions';
 import type { RepoStatus } from './repoStatus';
@@ -901,6 +910,7 @@ export class App {
       getItem: (key) => safe(() => env.prefs.getItem(key)),
       setItem: (key, value) => void safe(() => env.prefs.setItem(key, value)),
     });
+    this.minutesShortcuts = parseShortcuts(safe(() => env.prefs.getItem(MINUTES_SHORTCUTS_KEY)));
     this.viewsState = new ViewsState({
       can: (capability) => this.can(capability),
       rev: () => this.snapshot?.rev,
@@ -1954,6 +1964,33 @@ export class App {
    * operation; whatever the answer, the list is read again, so the page
    * never stands on a state it guessed.
    */
+  /**
+   * The last `write` reached no hub (none answered, the hub had no engine, or the page was not ready): nothing of it was
+   * written, so it may be sent again as it is (the minutes keep such an entry as a draft). False after any answer, also a
+   * refusal, and after an outcome that is not known.
+   */
+  lastWriteUnsent = false;
+
+  /** The shortcuts of the minutes (concept 7.7), kept in this browser. */
+  minutesShortcuts = $state<Shortcuts>(DEFAULT_SHORTCUTS);
+
+  setMinutesShortcuts(shortcuts: Shortcuts): void {
+    this.minutesShortcuts = shortcuts;
+    safe(() => this.env.prefs.setItem(MINUTES_SHORTCUTS_KEY, JSON.stringify(shortcuts)));
+  }
+
+  /** The entries of the minutes of `id` that did not reach the hub yet, kept in this browser until they are written. */
+  minutesDrafts(id: string): MinutesDraft[] {
+    return draftsOf(safe(() => this.env.prefs.getItem(MINUTES_DRAFTS_KEY)))[id] ?? [];
+  }
+
+  setMinutesDrafts(id: string, drafts: readonly MinutesDraft[]): void {
+    const all = draftsOf(safe(() => this.env.prefs.getItem(MINUTES_DRAFTS_KEY)));
+    if (drafts.length === 0) delete all[id];
+    else all[id] = [...drafts];
+    safe(() => this.env.prefs.setItem(MINUTES_DRAFTS_KEY, JSON.stringify(all)));
+  }
+
   async write(
     ops: Op[],
     opts: {
@@ -1973,7 +2010,12 @@ export class App {
       if (this.phase === 'ready') this.say('error', 'write.read_only');
       return null;
     }
-    if (this.saving || this.phase !== 'ready') return null;
+    this.lastWriteUnsent = false;
+    if (this.saving) return null;
+    if (this.phase !== 'ready') {
+      this.lastWriteUnsent = true;
+      return null;
+    }
     this.saving = true;
     this.answering = true;
     let settle!: () => void;
@@ -2023,6 +2065,9 @@ export class App {
           code: error instanceof ApiError ? error.code : 'offline',
         });
       }
+      // No answer of the hub, or a hub without an engine: nothing of it was written (an unknown outcome is not this).
+      this.lastWriteUnsent =
+        !(error instanceof ApiError) || error.code === 'offline' || error.code === 'engine_unavailable' || error.status === 503;
       await this.readAfter(ops);
       return null;
     } finally {

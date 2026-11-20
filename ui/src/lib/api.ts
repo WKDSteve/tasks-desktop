@@ -123,7 +123,19 @@ export type Op =
   /** Mark a meeting done, with or without a result (`## Ergebnis`). */
   | { op: 'meeting_close'; id: string; result?: string; if_match?: string }
   /** Tick (or untick) a participant of `## Teilnehmer`: present. */
-  | { op: 'meeting_attend'; id: string; n?: number; name?: string; present?: boolean; if_match?: string };
+  | { op: 'meeting_attend'; id: string; n?: number; name?: string; present?: boolean; if_match?: string }
+  /**
+   * One line of the minutes (`## Protokoll`, with its time); a task, a decision or a question also into its section. An
+   * append, never a rewrite of the body: sent without `if_match`, so two devices writing at once lose nothing.
+   */
+  | {
+      op: 'meeting_capture';
+      id: string;
+      entry: { kind: 'text' | 'task' | 'decision' | 'question' | 'board' | 'photo' | 'audio'; text?: string; asset?: string; at?: string };
+      if_match?: string;
+    }
+  /** Tasks made of the follow-ups: line `n`, else every line that names no task yet; each id is written behind its line. */
+  | { op: 'meeting_followups'; id: string; n?: number; area?: string };
 
 /** The vaults the hub can read, and the one it reads. A folder is shown by its last part only. */
 export interface VaultList {

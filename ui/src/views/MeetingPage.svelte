@@ -33,6 +33,8 @@
   import type { Op } from '../lib/api';
   import { markHidden } from '../lib/text';
   import AttachBar from './AttachBar.svelte';
+  import MeetingMinutes from './MeetingMinutes.svelte';
+  import { untrack } from 'svelte';
 
   let { app }: { app: App } = $props();
   const t = (key: Key, params: Record<string, string | number> = {}) => translate(app.lang, key, params);
@@ -174,6 +176,44 @@
 
   /** The text of a section of the body, as the engine wrote the headings (de or en). */
   const section = (de: string, en: string): string => (doc ? sectionText(doc.body, de) || sectionText(doc.body, en) : '');
+
+  // The result and the link to the recording, as typed: what was read, until the person changes it.
+  let resultText = $state('');
+  let resultDirty = $state(false);
+  let recordingText = $state('');
+  let recordingDirty = $state(false);
+  $effect(() => {
+    const read = section('Ergebnis', 'Result');
+    const recording = m?.recording ?? '';
+    untrack(() => {
+      if (!resultDirty) resultText = read;
+      if (!recordingDirty) recordingText = recording;
+    });
+  });
+  /** The heading of the result in this body: English only when the meeting was written in English. */
+  const resultHeading = $derived(doc && /^## Result\s*$/m.test(doc.body) && !/^## Ergebnis\s*$/m.test(doc.body) ? 'Result' : 'Ergebnis');
+  const untasked = $derived(doc ? doc.followups.filter((f) => !f.task && !f.ticked) : []);
+
+  async function saveResult(event: SubmitEvent): Promise<void> {
+    event.preventDefault();
+    if (!id || !doc || doc.body_truncated) return;
+    const result = await send({ op: 'set_section', id, heading: `## ${resultHeading}`, text: resultText.trim(), ...guard() });
+    if (result?.results.every((r) => r.ok)) resultDirty = false;
+  }
+
+  async function saveRecording(event: SubmitEvent): Promise<void> {
+    event.preventDefault();
+    if (!id) return;
+    const link = recordingText.trim();
+    const result = await send({ op: 'meeting_set', id, patch: { recording: link === '' ? null : link }, ...guard() });
+    if (result?.results.every((r) => r.ok)) recordingDirty = false;
+  }
+
+  /** Tasks of the follow-ups (line `n`, or every one without a task): the engine writes each id behind its line. */
+  async function makeTasks(n?: number): Promise<void> {
+    if (!id) return;
+    await send({ op: 'meeting_followups', id, ...(n === undefined ? {} : { n }) });
+  }
 </script>
 
 <dialog
@@ -384,6 +424,7 @@
         </section>
       {:else if tab === 'during'}
         {@render joinButton(true)}
+        <MeetingMinutes {app} id={m.id} body={doc.body} {etag} cut={doc.body_truncated} {canWrite} {busy} read={doc} />
         {@render people()}
         {@render agenda()}
       {:else}
@@ -398,9 +439,17 @@
           {#if doc.followups.length > 0}
             <ul>
               {#each doc.followups as f (f.n)}
-                <li class:ticked={f.ticked}>{markHidden(f.text)}{#if f.task}<span class="muted"> → {markHidden(f.task)}</span>{/if}</li>
+                <li class:ticked={f.ticked}>
+                  {markHidden(f.text)}{#if f.task}<span class="muted"> → {markHidden(f.task)}</span>{/if}
+                  {#if canWrite && !f.task && !f.ticked}
+                    <button type="button" class="small" disabled={busy} onclick={() => makeTasks(f.n)}>{t('meeting.followups.make')}</button>
+                  {/if}
+                </li>
               {/each}
             </ul>
+            {#if canWrite && untasked.length > 1}
+              <button type="button" disabled={busy} onclick={() => makeTasks()}>{t('meeting.followups.make_all')}</button>
+            {/if}
           {:else}
             <p class="muted">{t('meeting.empty')}</p>
           {/if}
@@ -412,6 +461,24 @@
           >{:else if section('Ergebnis', 'Result') !== ''}<pre>{markHidden(section('Ergebnis', 'Result'))}</pre>{:else}<p class="muted">{t('meeting.empty')}</p>{/if}
           {#if m.recording && joinLink(m.recording)}
             <p><a href={joinLink(m.recording)} target="_blank" rel="noopener noreferrer">{t('meeting.recording')}</a></p>
+          {/if}
+          {#if canWrite && !doc.body_truncated}
+            <form class="stack" onsubmit={saveResult}>
+              <label data-hint={t('hint.form.meeting.result')}>
+                <span>{t('meeting.result')}</span>
+                <textarea rows="4" maxlength="20000" bind:value={resultText} oninput={() => (resultDirty = true)}></textarea>
+              </label>
+              <button type="submit" disabled={busy || !resultDirty}>{t('meeting.result.save')}</button>
+            </form>
+          {/if}
+          {#if canWrite}
+            <form class="row" onsubmit={saveRecording}>
+              <label data-hint={t('hint.form.meeting.recording')}>
+                <span>{t('meeting.recording.link')}</span>
+                <input type="url" bind:value={recordingText} maxlength="2000" oninput={() => (recordingDirty = true)} />
+              </label>
+              <button type="submit" disabled={busy || !recordingDirty}>{t('meeting.recording.save')}</button>
+            </form>
           {/if}
         </section>
         {#if canWrite && m.status === 'planned'}
@@ -527,6 +594,24 @@
     gap: 0.2rem;
     flex: 1;
   }
+  .stack {
+    display: grid;
+    gap: 0.4rem;
+    margin-top: 0.5rem;
+    justify-items: start;
+  }
+  .stack label {
+    display: grid;
+    gap: 0.2rem;
+    width: 100%;
+  }
+  button.small {
+    padding: 0 0.4rem;
+    font-size: 0.85rem;
+    margin-left: 0.4rem;
+  }
+  textarea,
+  input[type='url'],
   input[type='text'] {
     background: var(--surface-2);
     color: var(--text);

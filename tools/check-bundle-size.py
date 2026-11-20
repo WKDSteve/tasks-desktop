@@ -31,14 +31,19 @@ Raised on 2026-11-20 to 1110 kB with the images of the texts (tasks-desktop/inli
 icon, the cover and the larger view (8 kB in a shared chunk) and their words in both languages; loading the larger view
 on demand would save less than the 9 kB over the budget.
 
-usage: check-bundle-size.py [--dist ui/dist] [--budget-kb 1110]
+Raised on 2026-11-20 to 1116 kB with the minutes of meetings (tasks-desktop/meetings-mitschrift): the start is 1111 kB.
+The minutes are a component of the meeting page, which is loaded on demand; what grew the start is their words and
+hints in both languages (about 4 kB of i18n) and the shortcuts and drafts of `App`. The language on demand
+(tasks-desktop/i18n-zweite-sprache-bei-bedarf-laden, about 190 kB) is overdue: the next raise should be that instead.
+
+usage: check-bundle-size.py [--dist ui/dist] [--budget-kb 1116]
 """
 import argparse
 import pathlib
 import re
 import sys
 
-BUDGET_KB = 1110
+BUDGET_KB = 1116
 
 # `from"./x.js"` and `import"./x.js"` of a built chunk: a static import. A dynamic `import("./x.js")` has a bracket.
 STATIC_IMPORT = re.compile(r'(?:from|import)\s*"\./([^"]+\.js)"')

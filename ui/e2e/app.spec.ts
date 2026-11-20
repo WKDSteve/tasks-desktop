@@ -11150,3 +11150,95 @@ test('a meeting: made from the detail of a task, opened on its page, and seen in
     if (existsSync(meetings)) for (const f of readdirSync(meetings)) if (!before.has(f)) removeFile(join(meetings, f));
   }
 });
+
+test('the minutes of a meeting: every kind of entry, a line turned into a decision, a follow-up made a task, seen from the task', async ({
+  page,
+}) => {
+  const meetings = join(state().vault, 'lib.nvim', 'MEETINGS');
+  mkdirSync(meetings, { recursive: true });
+  const before = new Set(readdirSync(meetings));
+  const slug = 'minutes-e2e-m003';
+  const id = `lib.nvim/${slug}`;
+  const file = join(meetings, `${slug}.md`);
+  // On now, whatever the clock of the run says: the page opens on the tab "In the meeting".
+  const now = new Date();
+  const two = (n: number) => String(n).padStart(2, '0');
+  const day = `${now.getFullYear()}-${two(now.getMonth() + 1)}-${two(now.getDate())}`;
+  const begins = new Date(Math.max(now.getTime() - 30 * 60_000, new Date(day + 'T00:00:00').getTime()));
+  writeFileSync(
+    file,
+    `---\ntitle: Minutes e2e m003\nstatus: planned\ndate: ${day}\ntime: "${two(begins.getHours())}:${two(begins.getMinutes())}"\nduration: 3h\ntasks: [lib.nvim/alpha]\n---\n\nA meeting of one browser test.\n`,
+  );
+  const text = (): string => {
+    const folder = join(meetings, slug, `${slug}.md`);
+    return readFileSync(existsSync(folder) ? folder : file, 'utf8');
+  };
+  try {
+    await watchViolations(page);
+    await pair(page);
+    await showList(page);
+    await open(page, 'lib.nvim/alpha');
+    const detail = page.locator('aside.detail');
+    await detail.getByRole('button', { name: 'Minutes e2e m003' }).click();
+    const meetingPage = page.getByRole('dialog', { name: /Minutes e2e m003/ });
+    await expect(meetingPage.getByRole('tab', { name: 'In the meeting' })).toHaveAttribute('aria-selected', 'true');
+    const field = meetingPage.getByPlaceholder('Write a line, Enter adds it');
+    await expect(meetingPage.getByText(/A: task · B: decision/)).toBeVisible();
+
+    // Each typed line is one capture: the engine writes it into the minutes with its time, and into its section.
+    const lines: [string, RegExp][] = [
+      ['Erste Notiz e2e m003', /- \d\d:\d\d Erste Notiz e2e m003/],
+      ['A: Folgetask e2e m003', /- \[ \] Folgetask e2e m003/],
+      ['B: Beschluss e2e m003', /\n- Beschluss e2e m003/],
+      ['Frage e2e m003?', /### Frage e2e m003\?/],
+      ['[] Raum e2e m003; Beamer e2e m003', /- \[ \] Raum e2e m003\r?\n- \[ \] Beamer e2e m003/],
+      ['! Wichtig e2e m003', /- \d\d:\d\d ! Wichtig e2e m003/],
+    ];
+    for (const [typed, written] of lines) {
+      await field.fill(typed);
+      await field.press('Enter');
+      await expect.poll(text, { timeout: 15_000 }).toMatch(written);
+      await expect(field).toHaveValue('');
+    }
+    await expect(meetingPage.locator('.lines li.marked')).toContainText('Wichtig e2e m003');
+
+    // A photo and a recording: attached to the meeting (it takes the folder form), then a line of the minutes each.
+    const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
+    await meetingPage.locator('input[type="file"][accept="image/*"]').setInputFiles({ name: 'tafel-e2e.png', mimeType: 'image/png', buffer: png });
+    await expect.poll(text, { timeout: 15_000 }).toMatch(/!\[[^\]]*\]\(assets\/images\/tafel-e2e\.png\)/);
+    await meetingPage.locator('input[type="file"][accept="audio/*"]').setInputFiles({ name: 'note-e2e.m4a', mimeType: 'audio/mp4', buffer: Buffer.from('m4a') });
+    await expect.poll(text, { timeout: 15_000 }).toMatch(/\[Audio: [^\]]*\]\(assets\/audio\/note-e2e\.m4a\)/);
+    await expectAccessible(page, 'the minutes of a meeting');
+
+    // A plain line becomes a decision afterwards, with its time.
+    await meetingPage.getByRole('button', { name: 'Make "Erste Notiz e2e m003" a Decision' }).click();
+    await expect.poll(text, { timeout: 15_000 }).toMatch(/Beschluss: Erste Notiz e2e m003/);
+    await expect.poll(text).toMatch(/## Beschlüsse[\s\S]*- Erste Notiz e2e m003/);
+
+    // The tab Result: a follow-up made a task; the engine writes its id behind the line.
+    await meetingPage.getByRole('tab', { name: 'Result' }).click();
+    const followups = meetingPage.locator('section[aria-labelledby="meeting-followups"]');
+    await expect(followups.getByRole('button', { name: 'Make a task' })).toHaveCount(3);
+    await followups.locator('li', { hasText: 'Folgetask e2e m003' }).getByRole('button', { name: 'Make a task' }).click();
+    await expect.poll(text, { timeout: 15_000 }).toMatch(/- \[ \] Folgetask e2e m003 -> lib\.nvim\/[a-z0-9-]+/);
+    const made = /Folgetask e2e m003 -> (lib\.nvim\/[a-z0-9-]+)/.exec(text())?.[1] ?? '';
+    await expect(followups.locator('li', { hasText: 'Folgetask e2e m003' })).toContainText(made);
+    await expect(followups.getByRole('button', { name: 'Make a task' })).toHaveCount(2);
+    await expectAccessible(page, 'the result of a meeting');
+    await meetingPage.getByRole('button', { name: 'Close', exact: true }).last().click();
+    await expect(meetingPage).toHaveCount(0);
+
+    // The follow-up is a task of the list, and the task of the meeting still names it.
+    await closeFloat(page);
+    await expect(page.locator('button.row', { hasText: made })).toBeVisible({ timeout: 15_000 });
+    await open(page, 'lib.nvim/alpha');
+    await expect(page.locator('aside.detail').getByRole('button', { name: 'Minutes e2e m003' })).toBeVisible();
+
+    expect(await violations(page)).toEqual([]);
+    expect(consoleProblems.get(page)).toEqual([]);
+  } finally {
+    rmSync(join(meetings, slug), { recursive: true, force: true });
+    rmSync(file, { force: true });
+    for (const f of readdirSync(meetings)) if (!before.has(f)) rmSync(join(meetings, f), { recursive: true, force: true });
+  }
+});
