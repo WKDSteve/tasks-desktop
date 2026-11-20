@@ -793,7 +793,8 @@ their file and folder (`file`, `folder`, `assets`, `cover`, `image`, an icon tha
 (`notify_to`) or the faults of the file; no count over the vault (`total`, `next_offset`; the list says `partial`). The
 address to join, the recording and the address of a document leave only for a `public` area, or for an `internal` one
 with the settings' `meetings.internal_links`, and only as `http(s)`; a document that is a path or a file of the folder
-is given as text. The people of a meeting (the list, its count, the section `## Teilnehmer` / `## Participants` of the
+is given as text, and where the addresses may not leave, the section `## Unterlagen` / `## Documents` is left out of
+the body too. The people of a meeting (the list, its count, the section `## Teilnehmer` / `## Participants` of the
 body) reach a phone of a `public` area only. The writes are operations of `ops`; a phone may only write a line of the
 minutes (`meeting_capture` at `change`, with `kind` `text`, `task`, `decision` or `question`, `text` and `at`, no file and
 no `if_match`: `device_op_shape`), every other meeting operation is refused to it (`device_op_level`).

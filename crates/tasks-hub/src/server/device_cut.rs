@@ -782,14 +782,17 @@ pub(crate) fn meetings(classes: &AreaPolicy, doc: &Value, internal_links: bool) 
 }
 
 /// The body of a meeting without its section of participants (`## Teilnehmer` / `## Participants`), for a phone of an
-/// area that is not public.
-fn without_participants(body: &str) -> String {
+/// area that is not public, and without its documents (`## Unterlagen` / `## Documents`) unless its addresses may leave.
+fn without_participants(body: &str, links: bool) -> String {
     let mut out = Vec::new();
     let mut skipping = false;
     for line in body.lines() {
         let heading = line.trim_end();
         if heading.starts_with("## ") {
-            skipping = heading == "## Teilnehmer" || heading == "## Participants";
+            // The documents are addresses: their section stays where the addresses of the meeting may not leave.
+            skipping = heading == "## Teilnehmer"
+                || heading == "## Participants"
+                || (!links && (heading == "## Unterlagen" || heading == "## Documents"));
         }
         if !skipping {
             out.push(line);
@@ -823,7 +826,7 @@ pub(crate) fn meeting(classes: &AreaPolicy, doc: &Value, internal_links: bool) -
         json_str(&if public {
             body.to_owned()
         } else {
-            without_participants(body)
+            without_participants(body, links)
         }),
     );
     if public {
@@ -1181,7 +1184,7 @@ mod tests {
         let area = id.split_once('/').map_or("", |(a, _)| a);
         json!({
             "kind": "tasks.meeting", "rev": "r", "digest": "d", "body_truncated": false,
-            "body": "Kurz.\n\n## Teilnehmer\n\n- [ ] Rick <rick@example.org>\n\n## Protokoll\n\n- 10:00 Start\n",
+            "body": "Kurz.\n\n## Teilnehmer\n\n- [ ] Rick <rick@example.org>\n\n## Unterlagen\n\n- https://example.org/slides\n\n## Protokoll\n\n- 10:00 Start\n",
             "meeting": {
                 "id": id, "area": area, "slug": "m", "title": "Sync", "status": "planned", "date": "2026-11-24",
                 "time": "10:00", "starts_at": "2026-11-24T10:00", "location": "Raum 3",
