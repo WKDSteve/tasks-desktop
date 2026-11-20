@@ -170,3 +170,40 @@ test('a drawing over its limit is refused, and readFileAt finds a file only by i
     assert.equal(await readFileAt(disk.root, path, 1e9), 'missing', path);
   }
 });
+
+test('a file with a space or a letter of any language comes percent-encoded and is read; an escape for a separator, a way up or a control character is refused', async () => {
+  const disk = fakeDisk({
+    'a/ROADMAP/tasks/t/t.md': '---\ntitle: t\n---\n',
+    'a/ROADMAP/tasks/t/assets/mein bild.png': 'png',
+    'a/ROADMAP/tasks/t/assets/übersicht.svg': '<svg xmlns="http://www.w3.org/2000/svg"/>',
+  });
+  const h = hub(disk, { task: entry('task', 'a/t', 'a/ROADMAP/tasks/t/t.md') });
+  for (const [query, type] of [
+    ['kind=task&id=a/t&file=assets/mein%20bild.png', 'image/png'],
+    ['kind=task&id=a/t&file=assets/%C3%BCbersicht.svg', 'image/svg+xml'],
+  ]) {
+    const r = await h.get(`asset?${query}`);
+    assert.equal(r.status, 200, query);
+    assert.equal(r.headers.get('content-type'), type, query);
+  }
+  assert.deepEqual(h.reads, ['a/ROADMAP/tasks/t/assets/mein bild.png', 'a/ROADMAP/tasks/t/assets/übersicht.svg']);
+  for (const query of [
+    'kind=task&id=a/t&file=assets/%2e%2e/t.png',
+    'kind=task&id=a/t&file=assets%2fx.png',
+    'kind=task&id=a/t&file=assets/x%5c..%5ct.png',
+    'kind=task&id=a/t&file=assets/x%0a.png',
+    'kind=task&id=a/t&file=assets/x%7f.png',
+    'kind=task&id=a/t&file=assets/x%c2%85.png',
+    'kind=task&id=a/t&file=assets/x%zz.png',
+    'kind=task&id=a/t&file=assets/x%+5.png',
+    'kind=task&id=a/t&file=assets/x%ff.png',
+    'kind=task&id=a/t&file=assets/x%3a.png',
+    'kind=task&id=a/t&file=assets/x.png&file=assets/y.png',
+    'kind=task&id=a%2ft&file=assets/x.png',
+  ]) {
+    const r = await h.get(`asset?${query}`);
+    assert.equal(r.status, 400, query);
+    assert.equal((await r.json()).error.code, 'bad_query', query);
+  }
+  assert.equal(h.reads.length, 2);
+});

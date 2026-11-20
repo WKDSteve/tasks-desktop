@@ -26,9 +26,56 @@ fn missing() -> Response {
     )
 }
 
-/// The query of `asset`: the owner, its id and the path below `assets/`; `Err`: why it is refused.
+/// The value of `file` as the page sends it: percent-encoded, since a name may have a space or a letter of any
+/// language. Strict: every byte that is not escaped is plain (letters, digits, `. _ - /`), every `%` is followed by two
+/// hex digits, the result is UTF-8, and no escape stands for `/`, `\` or a control character (a separator only as it is
+/// written). The path is judged afterwards like any other (`valid_asset_path`: no `..`, no root, no drive).
+fn decoded_file(raw: &str) -> Option<String> {
+    if raw.is_empty() || raw.len() > 3 * 512 {
+        return None;
+    }
+    let bytes = raw.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        let b = bytes[i];
+        if b == b'%' {
+            let hex = raw
+                .get(i + 1..i + 3)
+                .filter(|h| h.bytes().all(|c| c.is_ascii_hexdigit()))?;
+            let byte = u8::from_str_radix(hex, 16).ok()?;
+            if byte == b'/' || byte == b'\\' || byte < 0x20 || byte == 0x7f {
+                return None;
+            }
+            out.push(byte);
+            i += 3;
+        } else if b.is_ascii_alphanumeric() || matches!(b, b'.' | b'_' | b'-' | b'/') {
+            out.push(b);
+            i += 1;
+        } else {
+            return None;
+        }
+    }
+    String::from_utf8(out).ok()
+}
+
+/// The query of `asset`: the owner, its id and the path below `assets/`; `Err`: why it is refused. `file` alone is
+/// percent-decoded (`decoded_file`); `kind` and `id` stay plain text (`parse_query`).
 pub(super) fn asset_request(query: Option<&str>) -> Result<(Owner, String, String), &'static str> {
-    let params = parse_query(query, &["kind", "id", "file"])?;
+    let mut file_raw = None;
+    let mut rest = Vec::new();
+    for pair in query.unwrap_or("").split('&').filter(|p| !p.is_empty()) {
+        match pair.split_once('=') {
+            Some(("file", value)) => {
+                if file_raw.replace(value).is_some() {
+                    return Err("a query parameter is given twice");
+                }
+            }
+            _ => rest.push(pair),
+        }
+    }
+    let rest = rest.join("&");
+    let params = parse_query(Some(&rest), &["kind", "id"])?;
     let owner = params
         .get("kind")
         .and_then(|k| Owner::from_word(k))
@@ -38,10 +85,9 @@ pub(super) fn asset_request(query: Option<&str>) -> Result<(Owner, String, Strin
         .filter(|id| valid_task_id(id))
         .cloned()
         .ok_or("id must be <area>/<slug>")?;
-    let file = params
-        .get("file")
+    let file = file_raw
+        .and_then(decoded_file)
         .filter(|f| assets::valid_asset_path(f))
-        .cloned()
         .ok_or("file is an image below assets/")?;
     Ok((owner, id, file))
 }
@@ -166,6 +212,46 @@ mod tests {
             "kind=task&id=a/t&file=assets%2F..%2Fx.png",
             "kind=task&id=a/t&file=assets/x.png&file=assets/y.png",
             "kind=task&id=a/t&file=assets/x.png&url=https://x",
+        ] {
+            assert!(asset_request(Some(bad)).is_err(), "{bad}");
+        }
+    }
+
+    /// A name with a space or a letter of any language comes percent-encoded, as the page sends it, and is read; an
+    /// escape for a separator, a way up, a control character or one that does not decode stays refused.
+    #[test]
+    fn the_file_of_asset_may_be_percent_encoded_and_is_still_a_plain_path_below_assets() {
+        for (query, file) in [
+            (
+                "kind=task&id=a/t&file=assets/mein%20bild.png",
+                "assets/mein bild.png",
+            ),
+            (
+                "kind=path&id=a/p&file=assets/%C3%BCbersicht.svg",
+                "assets/übersicht.svg",
+            ),
+            ("kind=task&id=a/t&file=assets/a%2eb.png", "assets/a.b.png"),
+        ] {
+            assert_eq!(
+                asset_request(Some(query)).map(|(_, _, f)| f),
+                Ok(file.to_owned()),
+                "{query}"
+            );
+        }
+        for bad in [
+            "kind=task&id=a/t&file=assets/%2e%2e/t.png",
+            "kind=task&id=a/t&file=assets%2fx.png",
+            "kind=task&id=a/t&file=assets/x%5c..%5ct.png",
+            "kind=task&id=a/t&file=assets/x%0a.png",
+            "kind=task&id=a/t&file=assets/x%7f.png",
+            "kind=task&id=a/t&file=assets/x%c2%85.png",
+            "kind=task&id=a/t&file=assets/x%zz.png",
+            "kind=task&id=a/t&file=assets/x%+5.png",
+            "kind=task&id=a/t&file=assets/x%ff.png",
+            "kind=task&id=a/t&file=assets/x%3a.png",
+            "kind=task&id=a/t&file=assets/a b.png",
+            "kind=task&id=a/t&file=assets/x.png&file=assets/y.png",
+            "kind=task&id=a%2ft&file=assets/x.png",
         ] {
             assert!(asset_request(Some(bad)).is_err(), "{bad}");
         }

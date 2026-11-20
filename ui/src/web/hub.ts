@@ -77,7 +77,7 @@ export function assetContentType(file: string): string | null {
 export function validAssetPath(file: string): boolean {
   if (!file.startsWith('assets/') || file.length > 512) return false;
   // eslint-disable-next-line no-control-regex
-  if (/[\\:\u0000-\u001f\u007f]/.test(file)) return false;
+  if (/[\\:\u0000-\u001f\u007f-\u009f]/.test(file)) return false;
   if (file.split('/').some((part) => part === '' || part === '.' || part === '..')) return false;
   return assetContentType(file) !== null;
 }
@@ -95,6 +95,55 @@ export function assetRequest(q: Map<string, string>): { kind: AssetOwner; id: st
   const file = q.get('file');
   if (file === undefined || !validAssetPath(file)) return 'file is an image below assets/';
   return { kind: kind as AssetOwner, id, file };
+}
+
+/**
+ * The value of `file` as the page sends it, percent-decoded strictly (`decoded_file` of the hub): every character that
+ * is not escaped is plain (letters, digits, `. _ - /`), every `%` is followed by two hex digits, the bytes are UTF-8, and
+ * no escape stands for `/`, `\` or a control character. Null otherwise. The path is judged afterwards like any other.
+ */
+export function decodedFile(raw: string): string | null {
+  if (raw === '' || raw.length > 3 * 512) return null;
+  const bytes: number[] = [];
+  for (let i = 0; i < raw.length; ) {
+    const ch = raw[i] ?? '';
+    if (ch === '%') {
+      const hex = raw.slice(i + 1, i + 3);
+      if (!/^[0-9A-Fa-f]{2}$/.test(hex)) return null;
+      const byte = parseInt(hex, 16);
+      if (byte === 0x2f || byte === 0x5c || byte < 0x20 || byte === 0x7f) return null;
+      bytes.push(byte);
+      i += 3;
+    } else if (/^[A-Za-z0-9._/-]$/.test(ch)) {
+      bytes.push(ch.charCodeAt(0));
+      i += 1;
+    } else {
+      return null;
+    }
+  }
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(new Uint8Array(bytes));
+  } catch {
+    return null;
+  }
+}
+
+/** The query of `asset` as the hub reads it (`asset_request`): `file` alone percent-decoded, the rest plain. */
+export function assetQuery(query: string): { kind: AssetOwner; id: string; file: string } | string {
+  let fileRaw: string | undefined;
+  const rest: string[] = [];
+  for (const pair of query.split('&').filter((p) => p !== '')) {
+    const cut = pair.indexOf('=');
+    if (cut >= 0 && pair.slice(0, cut) === 'file') {
+      if (fileRaw !== undefined) return 'a query parameter is given twice';
+      fileRaw = pair.slice(cut + 1);
+    } else rest.push(pair);
+  }
+  const q = parseQuery(rest.join('&'), ['kind', 'id']);
+  if (typeof q === 'string') return q;
+  const file = fileRaw === undefined ? null : decodedFile(fileRaw);
+  if (file !== null) q.set('file', file);
+  return assetRequest(q);
 }
 
 /** The answer headers of an asset: its type, sealed like a meeting's preview (`sealed` of the hub). */
@@ -581,9 +630,7 @@ export function createWebHub(deps: HubDeps): WebHub {
       case 'asset': {
         // An image below `assets/` of a container's folder (`GET /api/tasks/asset` of the hub): the folder comes from
         // the engine's `file` (task, path, meeting) or the layout (plan, project), never from the page.
-        const q = parseQuery(query, ['kind', 'id', 'file']);
-        if (typeof q === 'string') return errorBody(400, 'bad_query', q);
-        const request = assetRequest(q);
+        const request = assetQuery(query);
         if (typeof request === 'string') return errorBody(400, 'bad_query', request);
         const container = await containerFile(request.kind, request.id);
         if (container instanceof Response) return container;

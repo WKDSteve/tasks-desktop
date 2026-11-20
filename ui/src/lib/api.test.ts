@@ -70,3 +70,19 @@ describe('what the hub says about itself', () => {
     expect((await new Hub(answering({ version: '1', mode: 3 })).about()).mode).toBeNull();
   });
 });
+
+describe('the images of a container', () => {
+  it('asks for a file with a space or a letter of any language percent-encoded, its folders as they are', async () => {
+    const urls: string[] = [];
+    const hub = new Hub((async (url: unknown) => {
+      urls.push(String(url));
+      return new Response('png', { status: 200, headers: { 'Content-Type': 'image/png' } });
+    }) as typeof fetch);
+    expect(await hub.asset('task', 'a/t', 'assets/mein bild.png')).not.toBeNull();
+    await hub.asset('path', 'a/p', 'assets/images/übersicht.svg');
+    expect(urls.map((u) => u.slice(u.indexOf('/api/')))).toEqual([
+      '/api/tasks/asset?kind=task&id=a/t&file=assets/mein%20bild.png',
+      '/api/tasks/asset?kind=path&id=a/p&file=assets/images/%C3%BCbersicht.svg',
+    ]);
+  });
+});
