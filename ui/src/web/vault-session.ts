@@ -25,9 +25,10 @@
 import { classesOfVault, NO_CLASSES, type AreaClasses } from './classes.ts';
 import type { CallResult } from './engine.ts';
 import type { MountedVault } from './entry.ts';
-import type { DataClass, OpsOutcome } from './hub.ts';
+import type { AssetRead, DataClass, OpsOutcome } from './hub.ts';
 import {
   assertVault,
+  readFileAt,
   readVaultFolder,
   signatureOf,
   type DirHandleLike,
@@ -188,6 +189,18 @@ export class VaultSession {
   /** Resolves when nothing is being written or read again; reads of the engine wait for it. */
   async idle(): Promise<void> {
     while (this.busy > 0) await this.tail;
+  }
+
+  /**
+   * An image file of the folder (`path` relative to the vault, checked by the hub), read from the folder itself: the VM
+   * holds only the text files. `missing` when it is not there or cannot be read.
+   */
+  async asset(path: string, maxBytes: number): Promise<AssetRead> {
+    try {
+      return await readFileAt(this.deps.handle, path, maxBytes);
+    } catch {
+      return 'missing';
+    }
   }
 
   /** The signature of the folder now (sizes and times, no content), for the watcher. */

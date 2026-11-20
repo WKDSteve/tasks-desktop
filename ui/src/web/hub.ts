@@ -42,6 +42,72 @@ export interface HubDeps {
   rescan?: () => Promise<void>;
   /** The bytes of text the search reads at most (`MAX_INDEX_BYTES` of web/search.ts when left out); smaller in a test. */
   maxIndexBytes?: number;
+  /**
+   * The bytes of an image file of the folder (`path` relative to the vault, checked by the hub before), read from the
+   * folder itself (the VM holds only the text files); `missing` when there is no such file, `too_large` over
+   * `maxBytes`. Without it every asset is missing.
+   */
+  asset?(path: string, maxBytes: number): Promise<AssetRead>;
+}
+
+/** What reading an asset gave (`HubDeps.asset`). */
+export type AssetRead = { bytes: Uint8Array } | 'missing' | 'too_large';
+
+/** The largest picture and the largest drawing handed on (`crate::assets` of the hub). */
+export const MAX_ASSET_RASTER_BYTES = 20 * 1024 * 1024;
+export const MAX_ASSET_SVG_BYTES = 2 * 1024 * 1024;
+
+const ASSET_TYPES: Readonly<Record<string, string>> = {
+  png: 'image/png',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  webp: 'image/webp',
+  gif: 'image/gif',
+  svg: 'image/svg+xml',
+};
+
+/** The media type of an image asset by its kind (`assets::content_type`), or null. */
+export function assetContentType(file: string): string | null {
+  const dot = file.lastIndexOf('.');
+  if (dot < 0) return null;
+  return ASSET_TYPES[file.slice(dot + 1).toLowerCase()] ?? null;
+}
+
+/** A plain path below `assets/` of an image kind (`assets::valid_asset_path`): no `..`, no root, no drive. */
+export function validAssetPath(file: string): boolean {
+  if (!file.startsWith('assets/') || file.length > 512) return false;
+  // eslint-disable-next-line no-control-regex
+  if (/[\\:\u0000-\u001f\u007f]/.test(file)) return false;
+  if (file.split('/').some((part) => part === '' || part === '.' || part === '..')) return false;
+  return assetContentType(file) !== null;
+}
+
+/** The kinds of container whose assets the hub hands on (`assets::Owner`). */
+export const ASSET_OWNERS = ['task', 'plan', 'project', 'path', 'meeting'] as const;
+export type AssetOwner = (typeof ASSET_OWNERS)[number];
+
+/** The query of `asset`, as the hub reads it (`asset_request`), or why it is refused. */
+export function assetRequest(q: Map<string, string>): { kind: AssetOwner; id: string; file: string } | string {
+  const kind = q.get('kind');
+  if (!ASSET_OWNERS.includes(kind as AssetOwner)) return 'kind is task, plan, project, path or meeting';
+  const id = q.get('id');
+  if (!validTaskId(id)) return 'id must be <area>/<slug>';
+  const file = q.get('file');
+  if (file === undefined || !validAssetPath(file)) return 'file is an image below assets/';
+  return { kind: kind as AssetOwner, id, file };
+}
+
+/** The answer headers of an asset: its type, sealed like a meeting's preview (`sealed` of the hub). */
+function sealedAsset(bytes: Uint8Array, type: string): Response {
+  return new Response(bytes as BodyInit, {
+    status: 200,
+    headers: {
+      'Content-Type': type,
+      'X-Content-Type-Options': 'nosniff',
+      'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; sandbox",
+      'Cache-Control': 'no-store',
+    },
+  });
 }
 
 export type DataClass = 'public' | 'internal' | 'private' | 'unclassified';
@@ -287,6 +353,30 @@ export function createWebHub(deps: HubDeps): WebHub {
     return r instanceof Response ? r : respond(200, r.text);
   }
 
+  /**
+   * The file of a container in its folder form, relative to the vault (`container_file` of the hub); null when it has
+   * no folder or is not there; a Response when the engine failed.
+   */
+  async function containerFile(kind: AssetOwner, id: string): Promise<string | null | Response> {
+    const [area, slug] = id.split('/') as [string, string];
+    if (kind === 'plan') return `${area}/ROADMAP/plans/${slug}/${slug}.md`;
+    if (kind === 'project') return `${area}/ROADMAP/projects/${slug}/${slug}.md`;
+    const r = await engine(kind, { id });
+    if (r instanceof Response) return r.status === 404 ? null : r;
+    let entry: Record<string, unknown> | undefined;
+    try {
+      entry = (JSON.parse(r.text) as Record<string, Record<string, unknown> | undefined>)[kind];
+    } catch {
+      return null;
+    }
+    if (!entry || entry['id'] !== id || entry['folder'] !== true || typeof entry['file'] !== 'string') return null;
+    const file = entry['file'];
+    // The engine's path, held to plain parts like any other (`plain_relative` of the hub).
+    // eslint-disable-next-line no-control-regex
+    if (/[\\:\u0000-\u001f\u007f]/.test(file) || file.split('/').some((p) => p === '' || p === '.' || p === '..')) return null;
+    return file;
+  }
+
   const noQuery = (query: string): Response | null =>
     query === '' ? null : errorBody(400, 'bad_query', 'this route takes no query');
 
@@ -487,6 +577,25 @@ export function createWebHub(deps: HubDeps): WebHub {
         const area = q.get('area');
         if (area !== undefined && !validAreaName(area)) return errorBody(400, 'bad_query', 'area is not a name');
         return passOn('paths', area !== undefined ? { area } : {});
+      }
+      case 'asset': {
+        // An image below `assets/` of a container's folder (`GET /api/tasks/asset` of the hub): the folder comes from
+        // the engine's `file` (task, path, meeting) or the layout (plan, project), never from the page.
+        const q = parseQuery(query, ['kind', 'id', 'file']);
+        if (typeof q === 'string') return errorBody(400, 'bad_query', q);
+        const request = assetRequest(q);
+        if (typeof request === 'string') return errorBody(400, 'bad_query', request);
+        const container = await containerFile(request.kind, request.id);
+        if (container instanceof Response) return container;
+        const missing = errorBody(404, 'no_asset', 'the container has no such image');
+        if (container === null || !deps.asset) return missing;
+        const type = assetContentType(request.file) as string;
+        const limit = type === 'image/svg+xml' ? MAX_ASSET_SVG_BYTES : MAX_ASSET_RASTER_BYTES;
+        const folder = container.slice(0, container.lastIndexOf('/'));
+        const read = await deps.asset(`${folder}/${request.file}`, limit).catch(() => 'missing' as const);
+        if (read === 'too_large') return errorBody(413, 'too_large', 'the image is larger than the page is given');
+        if (read === 'missing') return missing;
+        return sealedAsset(read.bytes, type);
       }
       case 'path': {
         // One learning path with its tree (`tasks.path`).

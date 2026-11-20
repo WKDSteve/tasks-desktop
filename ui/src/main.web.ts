@@ -171,6 +171,8 @@ async function begin(folder: string | null, name: string, readOnly: boolean): Pr
     // A folder read through an input (Firefox, Safari) has no handle: the hub answers `read_only` to every change.
     ops: readOnly ? undefined : (request) => session.ops(request),
     idle: () => session.idle(),
+    // The images of a container are read from the folder, one at a time (the VM holds only the text files).
+    asset: (path, maxBytes) => session.asset(path, maxBytes),
   });
   hub = web;
   // A static copy of the files cannot be looked at again; to see changes the person chooses the folder again.

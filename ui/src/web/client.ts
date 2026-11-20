@@ -147,6 +147,8 @@ export interface BrowserHubOptions {
   ops?: HubDeps['ops'];
   /** Resolves when no write or re-read is under way (`VaultSession.idle`): a read waits for it. */
   idle?: HubDeps['idle'];
+  /** The image files of the folder (`VaultSession.asset`). Without it every asset is missing. */
+  asset?: HubDeps['asset'];
 }
 
 /** The hub of the page: the routes of the Rust hub over the engine in the worker. */
@@ -160,5 +162,6 @@ export function createBrowserHub(client: WorkerClient, opts: BrowserHubOptions):
     rescan: opts.rescan,
     ops: opts.ops,
     idle: opts.idle,
+    asset: opts.asset,
   });
 }

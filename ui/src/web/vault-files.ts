@@ -95,6 +95,42 @@ export function wantedFile(name: string, atRoot: boolean): boolean {
   return atRoot && ROOT_FILES.has(name);
 }
 
+/**
+ * The bytes of the file at `path` (relative to `root`, `/` separated) as the folder holds it now: each part is looked
+ * up by its exact name among the entries of its folder, a folder for every part but the last, a file for that one.
+ * `missing` when a part is not there or not of its kind (or a name is not one a path may hold), `too_large` over
+ * `maxBytes`. The page's image files are read this way, one at a time, never into the VM.
+ */
+export async function readFileAt(
+  root: DirHandleLike,
+  path: string,
+  maxBytes: number,
+): Promise<{ bytes: Uint8Array } | 'missing' | 'too_large'> {
+  const parts = path.split('/');
+  if (!parts.every(safeName)) return 'missing';
+  let dir: DirHandleLike = root;
+  for (const [i, part] of parts.entries()) {
+    let found: FileHandleLike | DirHandleLike | undefined;
+    for await (const entry of dir.values()) {
+      if (entry.name === part) {
+        found = entry;
+        break;
+      }
+    }
+    if (!found) return 'missing';
+    if (i < parts.length - 1) {
+      if (found.kind !== 'directory') return 'missing';
+      dir = found;
+      continue;
+    }
+    if (found.kind !== 'file') return 'missing';
+    const file = await found.getFile();
+    if (file.size > maxBytes) return 'too_large';
+    return { bytes: new Uint8Array(await file.arrayBuffer()) };
+  }
+  return 'missing';
+}
+
 /** Whether the reader enters this folder: hidden folders (`.git`, `.obsidian`, ...) and `node_modules` are left out. */
 export function wantedDir(name: string): boolean {
   return !name.startsWith('.') && !SKIPPED_DIRS.has(name);
