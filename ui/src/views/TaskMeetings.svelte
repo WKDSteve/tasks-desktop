@@ -7,6 +7,7 @@
   import type { MeetingEntry, TaskEntry } from '../lib/contract';
   import { translate, type Key } from '../lib/i18n';
   import { splitMeetings, whenText } from '../lib/meetings';
+  import { markHidden } from '../lib/text';
 
   let { app, task }: { app: App; task: TaskEntry } = $props();
   const t = (key: Key, params: Record<string, string | number> = {}) => translate(app.lang, key, params);
@@ -28,6 +29,7 @@
     if (readFor !== id) {
       readFor = id;
       items = null;
+      failed = false;
     }
     if (named.length === 0 || !app.canMeetings) {
       items = [];
@@ -69,7 +71,7 @@
           <ul>
             {#each list as m (m.id)}
               <li class:cancelled={m.status === 'cancelled'}>
-                <button type="button" class="link" onclick={() => app.openMeeting(m.id)}>{m.title}</button>
+                <button type="button" class="link" onclick={() => app.openMeeting(m.id)}>{markHidden(m.title)}</button>
                 <span class="when">{whenText(m, t('meeting.all_day'))}</span>
                 {#if m.online_service}<span class="chip">{t(`meeting.service.${m.online_service}` as Key)}</span>{/if}
                 {#if m.status && m.status !== 'planned'}<span class="chip">{t(`meeting.status.${m.status}` as Key)}</span>{/if}

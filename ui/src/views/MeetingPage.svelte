@@ -6,8 +6,9 @@
   // there, the agenda. Result: decisions, follow-ups, the result, "Mark as done". Every change is one operation of the
   // engine on the version read (`if_match`); the page reads the meeting again after it.
   import { closeOnBackdrop } from 'appkit-ui/backdrop';
+  import { hostOf } from 'appkit-ui/markdown';
   import type { App } from '../lib/app.svelte';
-  import type { MeetingDocument } from '../lib/contract';
+  import type { MeetingDocument, Result } from '../lib/contract';
   import { floating } from '../lib/floating';
   import { translate, type Key } from '../lib/i18n';
   import { joinLink } from '../lib/meetingLink';
@@ -23,6 +24,7 @@
     type MeetingTab,
   } from '../lib/meetings';
   import type { Op } from '../lib/api';
+  import { markHidden } from '../lib/text';
   import AttachBar from './AttachBar.svelte';
 
   let { app }: { app: App } = $props();
@@ -35,6 +37,8 @@
   let documentText = $state('');
   // The meeting the tab was chosen for: a new meeting opens on the tab of its time, a reread keeps the one chosen.
   let tabFor = '';
+  // The meeting is being read: a change now would go out on the version from before the last write.
+  let reading = $state(false);
   const tabs: Record<MeetingTab, HTMLButtonElement | undefined> = $state({ prep: undefined, during: undefined, result: undefined });
 
   const id = $derived(app.meetingOpen);
@@ -45,6 +49,7 @@
   const covers = $derived(m ? coverChoices(m) : []);
   const cover = $derived(m ? coverOf(m as typeof m & { cover?: string }) : undefined);
   const canWrite = $derived(app.can('meeting_ops') && !app.readOnly);
+  const busy = $derived(app.saving || reading);
 
   $effect(() => {
     if (!dialog) return;
@@ -61,13 +66,16 @@
       doc = null;
       failed = null;
       tabFor = '';
+      reading = false;
       return;
     }
     const abort = new AbortController();
+    reading = true;
     app
       .readMeeting(which, abort.signal)
       .then((read) => {
         if (abort.signal.aborted) return;
+        reading = false;
         doc = read;
         failed = null;
         if (tabFor !== which) {
@@ -77,15 +85,23 @@
       })
       .catch((error: unknown) => {
         if (abort.signal.aborted) return;
+        reading = false;
         failed = (error as { code?: string })?.code ?? 'offline';
       });
     return () => abort.abort();
   });
 
   /** One write on the version read; the page reads the meeting again after it (`app.writes`). */
-  async function send(op: Op): Promise<void> {
-    if (!canWrite || app.saving) return;
-    await app.write([op], { undoable: false });
+  async function send(op: Op): Promise<Result | null> {
+    if (!canWrite || refused()) return null;
+    return app.write([op]);
+  }
+
+  /** Whether a change must wait (a write on its way, or the meeting being read again): then it is said, not sent. */
+  function refused(): boolean {
+    if (!busy) return false;
+    app.tell('error', app.saving ? 'write.busy' : 'meeting.busy_reading');
+    return true;
   }
 
   function guard(): { if_match?: string } {
@@ -113,16 +129,20 @@
   async function addDocument(event: SubmitEvent): Promise<void> {
     event.preventDefault();
     const entry = documentText.trim();
-    if (!doc || !id || entry === '') return;
+    if (!doc || !id || entry === '' || doc.body_truncated) return;
     const heading = documentsHeading(doc.body);
-    await send({ op: 'set_section', id, heading: `## ${heading}`, text: withDocument(doc.body, heading, entry), ...guard() });
-    documentText = '';
+    const result = await send({ op: 'set_section', id, heading: `## ${heading}`, text: withDocument(doc.body, heading, entry), ...guard() });
+    // What was typed stays when nothing was written (a refusal, a conflict, a write on its way).
+    if (result?.results.every((r) => r.ok)) documentText = '';
   }
 
   async function close(): Promise<void> {
     if (!id) return;
-    const result = await app.write([{ op: 'meeting_close', id, ...guard() }], { undoable: false });
-    if (result?.results[0]?.without_result) app.tell('ok', 'meeting.closed_without_result');
+    if (refused()) return;
+    // Taken back by the toast (the engine's inverse opens the meeting again).
+    await app.write([{ op: 'meeting_close', id, ...guard() }], {
+      saidAs: (result) => (result.results[0]?.without_result ? 'meeting.closed_without_result' : undefined),
+    });
   }
 
   /** The text of a section of the body, as the engine wrote the headings (de or en). */
@@ -146,15 +166,15 @@
     <header>
       <h2 id="meeting-page-title">
         {#if m.icon?.kind === 'emoji'}<span aria-hidden="true">{m.icon.value}</span>{/if}
-        {m.title}
+        {markHidden(m.title)}
       </h2>
       <p class="when">
         <span>{whenText(m, t('meeting.all_day'))}</span>
         {#if m.status}<span class="chip status" data-status={m.status}>{t(`meeting.status.${m.status}` as Key)}</span>{/if}
         {#if m.online_service}<span class="chip">{t(`meeting.service.${m.online_service}` as Key)}</span>{/if}
       </p>
-      {#if m.location}<p class="muted">{t('meeting.where')}: {m.location}</p>{/if}
-      <p class="id muted">{m.id}</p>
+      {#if m.location}<p class="muted">{t('meeting.where')}: {markHidden(m.location)}</p>{/if}
+      <p class="id muted">{markHidden(m.id)}</p>
     </header>
 
     <div class="tablist" role="tablist" aria-label={t('meeting.tabs')} tabindex="-1" onkeydown={tabKey}>
@@ -183,11 +203,16 @@
                   <input
                     type="checkbox"
                     checked={item.ticked}
-                    disabled={!canWrite || app.saving}
+                    disabled={!canWrite}
+                    aria-disabled={busy ? 'true' : undefined}
                     aria-label={t('meeting.agenda.item', { n: item.n })}
-                    onchange={(e) => id && send({ op: 'tick_step', id, n: item.n, done: e.currentTarget.checked, section: 'agenda', ...guard() })}
+                    onclick={(e) => {
+                      // The box shows what the file says: a click asks the engine and the meeting is read again.
+                      e.preventDefault();
+                      if (id) void send({ op: 'tick_step', id, n: item.n, done: !item.ticked, section: 'agenda', ...guard() });
+                    }}
                   />
-                  <span>{item.text}</span>
+                  <span>{markHidden(item.text)}</span>
                 </label>
               </li>
             {/each}
@@ -212,11 +237,15 @@
                   <input
                     type="checkbox"
                     checked={p.present}
-                    disabled={!canWrite || app.saving}
-                    aria-label={t('meeting.participants.tick', { name: p.name })}
-                    onchange={(e) => id && send({ op: 'meeting_attend', id, n: p.n, present: e.currentTarget.checked, ...guard() })}
+                    disabled={!canWrite}
+                    aria-disabled={busy ? 'true' : undefined}
+                    aria-label={t('meeting.participants.tick', { name: markHidden(p.name) })}
+                    onclick={(e) => {
+                      e.preventDefault();
+                      if (id) void send({ op: 'meeting_attend', id, n: p.n, present: !p.present, ...guard() });
+                    }}
                   />
-                  <span>{p.name}{#if p.role}<span class="muted"> ({p.role})</span>{/if}{#if p.email}<span class="muted"> {p.email}</span>{/if}</span>
+                  <span>{markHidden(p.name)}{#if p.role}<span class="muted"> ({markHidden(p.role)})</span>{/if}{#if p.email}<span class="muted"> {markHidden(p.email)}</span>{/if}</span>
                 </label>
               </li>
             {/each}
@@ -246,9 +275,12 @@
               {#each doc.documents as d (d.n)}
                 <li>
                   {#if d.kind === 'web' && d.href && joinLink(d.href)}
-                    <a href={joinLink(d.href)} target="_blank" rel="noopener noreferrer">{d.text}</a>
+                    {@const link = joinLink(d.href)}
+                    {@const host = link ? hostOf(link) : null}
+                    <a href={link} target="_blank" rel="noopener noreferrer">{markHidden(d.text)}</a
+                    >{#if host}<span class="muted">{` (${markHidden(host)})`}</span>{/if}
                   {:else}
-                    <span>{d.text}</span>{#if d.kind === 'asset' && d.href}<span class="muted"> ({d.href})</span>{/if}
+                    <span>{markHidden(d.text)}</span>{#if d.kind === 'asset' && d.href}<span class="muted"> ({markHidden(d.href)})</span>{/if}
                   {/if}
                 </li>
               {/each}
@@ -256,13 +288,15 @@
           {:else}
             <p class="muted">{t('meeting.empty')}</p>
           {/if}
-          {#if canWrite}
+          {#if canWrite && doc.body_truncated}
+            <p class="muted" role="status">{t('meeting.documents.cut')}</p>
+          {:else if canWrite}
             <form class="row" onsubmit={addDocument}>
               <label data-hint={t('hint.form.meeting.document')}>
                 <span>{t('meeting.documents.add')}</span>
                 <input type="text" bind:value={documentText} maxlength="2000" />
               </label>
-              <button type="submit" disabled={documentText.trim() === '' || app.saving}>{t('meeting.documents.add_button')}</button>
+              <button type="submit" disabled={documentText.trim() === '' || busy}>{t('meeting.documents.add_button')}</button>
             </form>
           {/if}
         </section>
@@ -280,11 +314,11 @@
                       onclick={() => {
                         app.closeMeeting();
                         app.reveal(task);
-                      }}>{open.title}</button
+                      }}>{markHidden(open.title)}</button
                     >
-                    <span class="muted">{task}</span>
+                    <span class="muted">{markHidden(task)}</span>
                   {:else}
-                    <span>{task}</span>
+                    <span>{markHidden(task)}</span>
                   {/if}
                 </li>
               {/each}
@@ -302,14 +336,14 @@
         {/if}
         <section aria-labelledby="meeting-cover">
           <h3 id="meeting-cover">{t('meeting.cover')}</h3>
-          {#if cover}<p>{t('meeting.cover.current', { path: cover })}</p>{/if}
+          {#if cover}<p>{t('meeting.cover.current', { path: markHidden(cover) })}</p>{/if}
           {#if covers.length > 0}
             <ul>
               {#each covers as path (path)}
                 <li>
-                  <span>{path}</span>
+                  <span>{markHidden(path)}</span>
                   {#if canWrite && path !== cover}
-                    <button type="button" disabled={app.saving} onclick={() => id && send({ op: 'meeting_set', id, patch: { cover: path }, ...guard() })}
+                    <button type="button" disabled={busy} onclick={() => id && send({ op: 'meeting_set', id, patch: { cover: path }, ...guard() })}
                       >{t('meeting.cover.use')}</button
                     >
                   {/if}
@@ -327,14 +361,14 @@
       {:else}
         <section aria-labelledby="meeting-decisions">
           <h3 id="meeting-decisions">{t('meeting.decisions')}</h3>
-          {#if section('Beschlüsse', 'Decisions') !== ''}<pre>{section('Beschlüsse', 'Decisions')}</pre>{:else}<p class="muted">{t('meeting.empty')}</p>{/if}
+          {#if section('Beschlüsse', 'Decisions') !== ''}<pre>{markHidden(section('Beschlüsse', 'Decisions'))}</pre>{:else}<p class="muted">{t('meeting.empty')}</p>{/if}
         </section>
         <section aria-labelledby="meeting-followups">
           <h3 id="meeting-followups">{t('meeting.followups')}</h3>
           {#if doc.followups.length > 0}
             <ul>
               {#each doc.followups as f (f.n)}
-                <li class:ticked={f.ticked}>{f.text}{#if f.task}<span class="muted"> → {f.task}</span>{/if}</li>
+                <li class:ticked={f.ticked}>{markHidden(f.text)}{#if f.task}<span class="muted"> → {markHidden(f.task)}</span>{/if}</li>
               {/each}
             </ul>
           {:else}
@@ -343,13 +377,13 @@
         </section>
         <section aria-labelledby="meeting-result">
           <h3 id="meeting-result">{t('meeting.result')}</h3>
-          {#if section('Ergebnis', 'Result') !== ''}<pre>{section('Ergebnis', 'Result')}</pre>{:else}<p class="muted">{t('meeting.empty')}</p>{/if}
+          {#if section('Ergebnis', 'Result') !== ''}<pre>{markHidden(section('Ergebnis', 'Result'))}</pre>{:else}<p class="muted">{t('meeting.empty')}</p>{/if}
           {#if m.recording && joinLink(m.recording)}
             <p><a href={joinLink(m.recording)} target="_blank" rel="noopener noreferrer">{t('meeting.recording')}</a></p>
           {/if}
         </section>
         {#if canWrite && m.status === 'planned'}
-          <div class="actions"><button type="button" class="primary" disabled={app.saving} onclick={close}>{t('meeting.close')}</button></div>
+          <div class="actions"><button type="button" class="primary" disabled={busy} onclick={close}>{t('meeting.close')}</button></div>
         {/if}
       {/if}
     </div>

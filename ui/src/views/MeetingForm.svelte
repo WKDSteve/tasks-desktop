@@ -13,6 +13,7 @@
   import { translate, type Key } from '../lib/i18n';
   import { joinLink } from '../lib/meetingLink';
   import { MAX_NOTIFY, MAX_PARTICIPANTS, NOTIFY_PRESETS, type MeetingForm, type MeetingPreview } from '../lib/meetings';
+  import { markHidden } from '../lib/text';
   import PendingAttachments from './PendingAttachments.svelte';
 
   let { app }: { app: App } = $props();
@@ -37,7 +38,7 @@
       .sort((a, b) => a.label.localeCompare(b.label)),
   );
   const taskOptions = $derived.by(() => {
-    const open = app.tasks.map((x) => ({ value: x.id, label: `${x.title} (${x.id})`, title: x.id }));
+    const open = app.tasks.map((x) => ({ value: x.id, label: `${markHidden(x.title)} (${x.id})`, title: x.id }));
     // a task named by the quick line that is not open (finished, or not known) is still offered
     for (const id of form?.tasks ?? []) if (!open.some((o) => o.value === id)) open.push({ value: id, label: id, title: id });
     return open;

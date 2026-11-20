@@ -1889,6 +1889,8 @@ export class App {
        * does, and a busy machine makes it long). It returns true when it has said what came of the write itself.
        */
       onAnswer?: (result: Result) => boolean;
+      /** The words of a success that fit better than `write.saved` (the way back stays on the toast). */
+      saidAs?: (result: Result) => Key | undefined;
     } = {},
   ): Promise<Result | null> {
     // Every way to change a task ends here (keys, palette, menus, drops): refused with the reason, nothing is sent.
@@ -1923,7 +1925,7 @@ export class App {
         // A reorder numbers the neighbours where the spot needs it: more than one file is told.
         const files = result.results.reduce((n, r) => n + (r.writes ?? 0), 0);
         if (files > 1) this.say('ok', 'write.saved_many', { n: files }, undo);
-        else this.say('ok', 'write.saved', {}, undo);
+        else this.say('ok', opts.saidAs?.(result) ?? 'write.saved', {}, undo);
       }
       await this.readAfter(ops);
       return result;
@@ -2024,6 +2026,27 @@ export class App {
           id: inv.id,
           ...(inv.after ? { after: inv.after } : {}),
           ...(inv.before ? { before: inv.before } : {}),
+          ...(inv.if_match ? { if_match: inv.if_match } : {}),
+        });
+        continue;
+      }
+      // A meeting: its old frontmatter values back (`meeting_close` opens it again this way), a participant's old tick.
+      if (inv.op === 'meeting_set') {
+        inverses.push({
+          op: 'meeting_set',
+          id: inv.id,
+          patch: (inv.patch ?? {}) as Record<string, unknown>,
+          ...(inv.if_match ? { if_match: inv.if_match } : {}),
+        });
+        continue;
+      }
+      if (inv.op === 'meeting_attend') {
+        if (typeof inv.n !== 'number' && typeof inv.name !== 'string') return undefined;
+        inverses.push({
+          op: 'meeting_attend',
+          id: inv.id,
+          ...(typeof inv.n === 'number' ? { n: inv.n } : { name: inv.name as string }),
+          present: inv.present === true,
           ...(inv.if_match ? { if_match: inv.if_match } : {}),
         });
         continue;

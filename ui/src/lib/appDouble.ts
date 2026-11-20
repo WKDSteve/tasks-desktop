@@ -447,9 +447,13 @@ export class FakeHub {
   parseAnswer: Partial<MeetingParse> | ApiError | null = null;
   /** Holds the answer of `meetings` back until it is settled (a reading on its way). */
   holdMeetings: Promise<void> | null = null;
+  /** Holds the answer of `meeting` (one meeting) back; and an error `meetings` throws instead of answering. */
+  holdMeeting: Promise<void> | null = null;
+  meetingsError: ApiError | null = null;
   async meetings(query: { task?: string; area?: string; since?: string; until?: string }): Promise<Meetings> {
     this.meetingQueries.push({ ...query });
     if (this.holdMeetings) await this.holdMeetings;
+    if (this.meetingsError) throw this.meetingsError;
     // as the engine: the meetings whose days touch the window (default: 30 days back, 90 ahead of 2026-11-19 here)
     const since = query.since ?? '2026-10-20';
     const until = query.until ?? '2027-02-17';
@@ -463,6 +467,7 @@ export class FakeHub {
   }
   async meeting(id: string): Promise<MeetingDocument> {
     this.meetingReads.push(id);
+    if (this.holdMeeting) await this.holdMeeting;
     const meeting = this.meetingItems.find((m) => m.id === id);
     if (!meeting) throw new ApiError(404, 'not_found', 'no such meeting');
     return {

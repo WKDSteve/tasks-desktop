@@ -217,3 +217,115 @@ describe('the documents of a meeting', () => {
     });
   });
 });
+
+describe('the page of a meeting: review findings', () => {
+  const rlo = String.fromCodePoint(0x202e);
+  const answer = (op: string, id: string, inverse: Record<string, unknown>) =>
+    ({
+      kind: 'tasks.result',
+      ok: true,
+      dry_run: false,
+      results: [{ n: 1, op, id, ok: true, outcome: 'changed', changed_ids: [], inverse }],
+    }) as never;
+
+  async function open(m: Made, id: string, more: Record<string, unknown> = {}) {
+    m.hub.meetingItems.push(meeting(id, '2026-11-24T14:00', '2026-11-24T15:00'));
+    m.hub.meetingBodies.set(id, more as never);
+    const target = showPage(m.app);
+    m.app.openMeeting(id);
+    await vi.waitFor(() => expect(target.querySelector('[role="tabpanel"]')).not.toBeNull());
+    return target;
+  }
+
+  it('refuses a second tick while the meeting is read again, and shows what the file says', async () => {
+    const m = await ready();
+    const target = await open(m, 'pub/t1', { agenda: [{ n: 1, text: 'Stand', ticked: false }] });
+    const box = target.querySelector('input[type="checkbox"]') as HTMLInputElement;
+    let release: () => void = () => undefined;
+    m.hub.holdMeeting = new Promise<void>((resolve) => (release = resolve));
+    box.click();
+    await vi.waitFor(() => expect(m.hub.sent).toHaveLength(1));
+    // not optimistic: the box still shows the file until the meeting is read again
+    expect(box.checked).toBe(false);
+    await vi.waitFor(() => expect(m.app.saving).toBe(false));
+    await settle();
+    // the write is done, the reading is on its way: a click is said, not sent with the version from before
+    box.click();
+    await settle();
+    expect(m.hub.sent).toHaveLength(1);
+    expect(m.app.toast).toMatchObject({ kind: 'error', text: 'Das Meeting wird noch gelesen - gleich noch einmal versuchen.' });
+    expect(box.checked).toBe(false);
+    release();
+    m.hub.holdMeeting = null;
+    await vi.waitFor(() => expect(box.getAttribute('aria-disabled')).toBeNull());
+  });
+
+  it('puts a refused tick back: the box keeps what the file says', async () => {
+    const m = await ready();
+    const target = await open(m, 'pub/t2', { participants: [{ n: 1, name: 'Ann', present: false }] });
+    const box = target.querySelector('input[type="checkbox"]') as HTMLInputElement;
+    m.hub.next_ops = { kind: 'tasks.result', ok: false, dry_run: false, results: [{ n: 1, op: 'meeting_attend', ok: false, error: { code: 'conflict', message: 'x' } }] } as never;
+    box.click();
+    await vi.waitFor(() => expect(m.hub.sent).toHaveLength(1));
+    await settle();
+    expect(m.hub.sent[0]?.ops[0]).toMatchObject({ op: 'meeting_attend', n: 1, present: true });
+    expect(box.checked).toBe(false);
+  });
+
+  it('marks hidden characters in the text of the vault and names the host of a link', async () => {
+    const m = await ready();
+    const target = await open(m, 'pub/t3', {
+      agenda: [{ n: 1, text: `Plan${rlo}fdp`, ticked: false }],
+      participants: [{ n: 1, name: `Ann${rlo}`, present: false }],
+      documents: [{ n: 1, text: 'Spec', kind: 'web', href: 'https://example.org/spec' }],
+    });
+    expect(target.textContent).not.toContain(rlo);
+    expect(target.textContent).toContain('Plan⟦U+202E⟧fdp');
+    expect(target.textContent).toContain('Ann⟦U+202E⟧');
+    expect(target.textContent).toContain('Spec (example.org)');
+    expect(target.querySelector('input[type="checkbox"]')?.getAttribute('aria-label') ?? '').not.toContain(rlo);
+  });
+
+  it('offers the way back after an attendance and after "Mark as done"', async () => {
+    const m = await ready();
+    const target = await open(m, 'pub/t4', { participants: [{ n: 1, name: 'Ann', present: false }] });
+    m.hub.next_ops = answer('meeting_attend', 'pub/t4', { op: 'meeting_attend', id: 'pub/t4', n: 1, present: false, if_match: 'e5' });
+    (target.querySelector('input[type="checkbox"]') as HTMLInputElement).click();
+    await vi.waitFor(() => expect(m.app.toast?.undo).toBeDefined());
+    expect(m.app.toast?.undo).toEqual([{ op: 'meeting_attend', id: 'pub/t4', n: 1, present: false, if_match: 'e5' }]);
+    await settle();
+    m.app.dismissToast();
+
+    (target.querySelector('#meeting-tab-result') as HTMLButtonElement).click();
+    flushSync();
+    m.hub.next_ops = answer('meeting_close', 'pub/t4', { op: 'meeting_set', id: 'pub/t4', patch: { status: 'planned' }, if_match: 'e6' });
+    const close = [...target.querySelectorAll('button')].find((b) => b.textContent === 'Als erledigt markieren') as HTMLButtonElement;
+    close.click();
+    await vi.waitFor(() => expect(m.app.toast?.undo).toBeDefined());
+    expect(m.app.toast?.undo).toEqual([{ op: 'meeting_set', id: 'pub/t4', patch: { status: 'planned' }, if_match: 'e6' }]);
+  });
+
+  it('keeps what was typed as a document when the write was refused, and offers no form on a cut text', async () => {
+    const m = await ready();
+    const target = await open(m, 'pub/t5', { body: 'Kurz.\n' });
+    const input = target.querySelector('form.row input') as HTMLInputElement;
+    input.value = 'https://example.org/b';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    flushSync();
+    m.hub.next_ops = { kind: 'tasks.result', ok: false, dry_run: false, results: [{ n: 1, op: 'set_section', ok: false, error: { code: 'conflict', message: 'x' } }] } as never;
+    (target.querySelector('form.row') as HTMLFormElement).requestSubmit();
+    await vi.waitFor(() => expect(m.hub.sent).toHaveLength(1));
+    await settle();
+    expect(input.value).toBe('https://example.org/b');
+
+    m.app.closeMeeting();
+    await settle();
+    m.hub.meetingItems.push(meeting('pub/t6', '2026-11-24T14:00', '2026-11-24T15:00'));
+    m.hub.meetingBodies.set('pub/t6', { body: 'Cut', body_truncated: true } as never);
+    m.app.openMeeting('pub/t6');
+    await vi.waitFor(() => expect(m.hub.meetingReads).toContain('pub/t6'));
+    await settle();
+    expect(target.querySelector('form.row')).toBeNull();
+    expect(target.textContent).toContain('abgeschnitten');
+  });
+});
