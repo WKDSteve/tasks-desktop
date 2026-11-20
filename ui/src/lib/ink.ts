@@ -360,7 +360,7 @@ const attr = (text: string): string => text.replace(/&/g, '&amp;').replace(/"/g,
  * The SVG of the whole board: its pages one below the other, each with its paper, its rules, its picture and its
  * strokes in the colours of `palette` (the preview is a file, it knows no tokens). `title` names it for a reader.
  */
-export function boardSvg(doc: InkDoc, palette: InkPalette, title: string): string {
+export function boardSvg(doc: InkDoc, palette: InkPalette, title: string, images = true): string {
   const parts: string[] = [];
   let top = 0;
   let left = 0;
@@ -374,7 +374,7 @@ export function boardSvg(doc: InkDoc, palette: InkPalette, title: string): strin
     parts.push(`<rect x="${f(b.x)}" y="${f(b.y)}" width="${f(b.w)}" height="${f(b.h)}" fill="${safe(palette.paper, 'white')}"/>`);
     const rules = rulesPath(page.background, 0);
     if (rules) parts.push(`<path d="${rules}" stroke="${safe(palette.rule, 'silver')}" stroke-width="1" fill="none"/>`);
-    if (page.image && DATA_IMAGE.test(page.image.href)) {
+    if (images && page.image && DATA_IMAGE.test(page.image.href)) {
       const i = page.image;
       parts.push(`<image href="${attr(i.href)}" x="${f(i.x)}" y="${f(i.y)}" width="${f(i.w)}" height="${f(i.h)}"/>`);
     }
@@ -393,6 +393,22 @@ export function boardSvg(doc: InkDoc, palette: InkPalette, title: string): strin
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${f(left)} 0 ${f(right - left)} ${f(height)}" width="${f(right - left)}" height="${f(height)}">` +
     `<title>${attr(title)}</title>${parts.join('')}</svg>`
   );
+}
+
+/**
+ * The largest preview the hub hands on (`MAX_SVG_BYTES` of its asset route and of `meeting/thumb`), with room to spare.
+ * The text of a preview is ASCII (numbers, the escaped title as entities aside, base64), so its length is its bytes
+ * closely enough; a title with letters of another language counts once more below.
+ */
+export const MAX_PREVIEW_BYTES = 2 * 1024 * 1024 - 64 * 1024;
+
+/**
+ * The preview to save: the whole board, or, when the pictures behind would make it larger than the hub hands on, the
+ * board without them (the strokes stay; the pictures are in the board file all the same).
+ */
+export function previewSvg(doc: InkDoc, palette: InkPalette, title: string): string {
+  const full = boardSvg(doc, palette, title);
+  return new TextEncoder().encode(full).length <= MAX_PREVIEW_BYTES ? full : boardSvg(doc, palette, title, false);
 }
 
 /** The name of a new board: `board-YYYY-MM-DD-HHMM` of the wall clock. */

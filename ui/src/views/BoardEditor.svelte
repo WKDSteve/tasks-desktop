@@ -17,7 +17,7 @@
     PAGE_H,
     PAGE_W,
     boardName,
-    boardSvg,
+    previewSvg,
     drawsWith,
     emptyDoc,
     eraseAt,
@@ -388,7 +388,7 @@
       dirty = false;
       status = 'saving';
       const ink = serializeInk(doc);
-      const result = await app.saveBoard({ id, name, ink, svg: boardSvg(doc, palette(), name), ...(etag ? { if_match: etag } : {}) });
+      const result = await app.saveBoard({ id, name, ink, svg: previewSvg(doc, palette(), name), ...(etag ? { if_match: etag } : {}) });
       if (result?.ok) {
         const created = etag === undefined;
         etag = result.etag;
@@ -446,10 +446,11 @@
       }
       return;
     }
-    if (e.key === ' ' && !typing && e.target === surface) {
-      e.preventDefault();
-      spaceDown = e.type === 'keydown';
-    }
+    if (e.key !== ' ') return;
+    // Moving the view starts only on the surface; it ends wherever the key is let go (the focus may have moved).
+    if (e.type === 'keyup') spaceDown = false;
+    else if (!typing && e.target === surface) spaceDown = true;
+    if (e.target === surface) e.preventDefault();
   }
 
   const statusText = $derived(
@@ -550,6 +551,7 @@
       onpointerup={onUp}
       onpointercancel={onUp}
       onlostpointercapture={onUp}
+      onblur={() => (spaceDown = false)}
     >
       {#if page}
         <rect class="paper" x="0" y="0" width={PAGE_W} height={PAGE_H} />

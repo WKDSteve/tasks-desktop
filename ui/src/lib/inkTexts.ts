@@ -35,7 +35,7 @@ const EN = {
   saved: 'Saved',
   unsaved: 'Not saved yet',
   failed: 'Not saved: {code}. It is tried again with the next stroke.',
-  renamed: 'Another device changed this board: yours is saved as {name}.',
+  renamed: 'A board of this name was saved elsewhere meanwhile: this one is saved as {name}.',
   unreadable: 'This board cannot be read; a new one is started.',
   help: 'Pen draws with pressure; its eraser end erases. Space + drag or two fingers move, Ctrl + wheel zooms.',
 } as const;
@@ -75,7 +75,7 @@ const DE: Record<InkKey, string> = {
   saved: 'Gespeichert',
   unsaved: 'Noch nicht gespeichert',
   failed: 'Nicht gespeichert: {code}. Mit dem nächsten Strich wird es wieder versucht.',
-  renamed: 'Ein anderes Gerät hat dieses Board geändert: deins ist als {name} gespeichert.',
+  renamed: 'Ein Board dieses Namens wurde inzwischen anderswo gespeichert: dieses ist als {name} gespeichert.',
   unreadable: 'Dieses Board lässt sich nicht lesen; ein neues wird angefangen.',
   help: 'Der Stift zeichnet mit Druck, sein Radier-Ende radiert. Leertaste + Ziehen oder zwei Finger verschieben, Strg + Rad zoomt.',
 };

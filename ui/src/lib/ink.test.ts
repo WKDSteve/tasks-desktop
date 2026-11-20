@@ -7,6 +7,8 @@ import {
   boardName,
   boardOfAsset,
   boardSvg,
+  MAX_PREVIEW_BYTES,
+  previewSvg,
   drawsWith,
   emptyDoc,
   eraseAt,
@@ -235,5 +237,22 @@ describe('names', () => {
   it('the etag is the one the engine gives', async () => {
     // sha256("abc") = ba7816bf8f01cfea414140de5dae2223...
     expect(await inkEtag('abc')).toBe('sha256:ba7816bf8f01cfea');
+  });
+});
+
+describe('the preview that is saved', () => {
+  it('keeps its pictures while it stays below what the hub hands on, and leaves them out above', () => {
+    const page = (n: number) => ({
+      background: 'none' as const,
+      image: { href: `data:image/jpeg;base64,${'A'.repeat(n)}`, x: 0, y: 0, w: 10, h: 10 },
+      strokes: [pen(line(100, 100, 200, 100))],
+    });
+    const small: InkDoc = { schema: INK_SCHEMA, pages: [page(1000)] };
+    expect(previewSvg(small, palette, 'x')).toContain('<image');
+    const large: InkDoc = { schema: INK_SCHEMA, pages: [page(MAX_PREVIEW_BYTES / 2), page(MAX_PREVIEW_BYTES / 2)] };
+    const svg = previewSvg(large, palette, 'x');
+    expect(svg).not.toContain('<image');
+    expect(svg).toContain('<path d="M');
+    expect(svg.length).toBeLessThan(MAX_PREVIEW_BYTES);
   });
 });

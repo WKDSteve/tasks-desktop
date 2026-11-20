@@ -216,4 +216,18 @@ describe('the drawing surface', () => {
     expect(hub.boards).toHaveLength(1);
     expect(closed).toEqual([1]);
   });
+
+  it('ends moving the view with the space key let go, wherever the focus went meanwhile', () => {
+    const { svg, host } = open();
+    svg.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true }));
+    flushSync();
+    expect(svg.classList.contains('panning')).toBe(true);
+    const elsewhere = host.querySelector('dialog button') as HTMLButtonElement;
+    elsewhere.dispatchEvent(new KeyboardEvent('keyup', { key: ' ', bubbles: true }));
+    flushSync();
+    expect(svg.classList.contains('panning')).toBe(false);
+    // and a finger of the pen is a stroke again, not a move
+    stroke(svg, [100, 100], [300, 200]);
+    expect(strokes(svg)).toBe(1);
+  });
 });
