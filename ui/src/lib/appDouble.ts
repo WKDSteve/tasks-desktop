@@ -465,6 +465,13 @@ export class FakeHub {
     );
     return { kind: 'tasks.meetings', items, total: items.length, offset: 0, limit: 100, undated: 0, incomplete: [] } as unknown as Meetings;
   }
+  /** The ids whose picture was asked, and what `meetingThumb` answers (null: no picture). */
+  thumbReads: string[] = [];
+  thumbAnswer: Blob | null = null;
+  async meetingThumb(id: string): Promise<Blob | null> {
+    this.thumbReads.push(id);
+    return this.thumbAnswer;
+  }
   async meeting(id: string): Promise<MeetingDocument> {
     this.meetingReads.push(id);
     if (this.holdMeeting) await this.holdMeeting;

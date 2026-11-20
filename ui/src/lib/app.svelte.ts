@@ -37,6 +37,7 @@ import type {
   History,
   Links,
   MeetingDocument,
+  MeetingEntry,
   Meetings,
   MovePlan,
   Next,
@@ -1665,12 +1666,17 @@ export class App {
   }
 
   /** Open the form of a new meeting, for the tasks named (the task of a detail is filled in). */
-  openMeetingForm(opts: { tasks?: string[]; area?: string } = {}): void {
+  openMeetingForm(opts: { tasks?: string[]; area?: string; date?: string; time?: string; duration?: string } = {}): void {
     if (this.refusedReadOnly()) return;
     if (this.phase !== 'ready' || !this.canMakeMeetings) return;
     const tasks = opts.tasks ?? [];
     this.meetingNotes = { problems: [], assumedDay: false };
-    this.meetingDraft = emptyMeetingForm(this.meetingArea(tasks, opts.area), this.wallNow(), tasks);
+    const form = emptyMeetingForm(this.meetingArea(tasks, opts.area), this.wallNow(), tasks);
+    // The calendar opens it on the day (and the time, the length) the person pointed at.
+    if (opts.date !== undefined) form.date = opts.date;
+    if (opts.time !== undefined) form.time = opts.time;
+    if (opts.duration !== undefined) form.duration = opts.duration;
+    this.meetingDraft = form;
   }
 
   /**
@@ -1772,6 +1778,36 @@ export class App {
    */
   meetingsOfTask(id: string, signal?: AbortSignal): Promise<Meetings> {
     return this.env.hub.meetings({ task: id, since: MEETINGS_EVER.since, until: MEETINGS_EVER.until, limit: 100 }, signal);
+  }
+
+  /**
+   * The meetings whose days touch the window `since`..`until` (days), the engine's order, all pages (100 each, at most
+   * 5: a window of the calendar holds far fewer).
+   */
+  async meetingsIn(since: string, until: string, signal?: AbortSignal): Promise<MeetingEntry[]> {
+    const items: MeetingEntry[] = [];
+    let offset: number | undefined = 0;
+    for (let page = 0; page < 5 && offset !== undefined; page += 1) {
+      const answer: Meetings = await this.env.hub.meetings({ since, until, limit: 100, offset }, signal);
+      items.push(...answer.items);
+      offset = answer.next_offset;
+    }
+    return items;
+  }
+
+  /**
+   * Put a meeting on another time (`meeting_set` on the version the calendar showed: another change in between is
+   * refused by the engine and said). `patch` is the one of `movePatch`. True when it was written.
+   */
+  async moveMeeting(m: Pick<MeetingEntry, 'id' | 'etag'>, patch: Record<string, unknown>): Promise<boolean> {
+    if (!this.can('meeting_ops')) return false;
+    const result = await this.write([{ op: 'meeting_set', id: m.id, patch, ...(m.etag ? { if_match: m.etag } : {}) }], { undoable: false });
+    return result?.results.every((r) => r.ok) === true;
+  }
+
+  /** The small picture of a meeting, read with the session. */
+  meetingThumb(id: string): Promise<Blob | null> {
+    return this.env.hub.meetingThumb(id);
   }
 
   /** One meeting with its body and its sections. */

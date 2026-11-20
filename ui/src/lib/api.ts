@@ -651,6 +651,19 @@ export class Hub extends HubClient<Snapshot> {
     return this.json<Meetings>(`/api/tasks/meetings${parts.length > 0 ? `?${parts.join('&')}` : ''}`, signal ? { signal } : undefined);
   }
 
+  /**
+   * The small picture of a meeting (`meeting/thumb`: 96 px PNG or the SVG of a board), read with the session (an
+   * `<img src>` would not send it); `null` for a meeting without a picture (`404 no_image`) or one that cannot be read.
+   */
+  async meetingThumb(id: string): Promise<Blob | null> {
+    try {
+      const response = await this.request(`/api/tasks/meeting/thumb?id=${encodeURIComponent(id).replace(/%2F/gi, '/')}`);
+      return response.ok ? await response.blob() : null;
+    } catch {
+      return null;
+    }
+  }
+
   /** One meeting with its body and the sections the engine reads (`tasks.meeting`). */
   meeting(id: string, signal?: AbortSignal): Promise<MeetingDocument> {
     const path = `/api/tasks/meeting?id=${encodeURIComponent(id).replace(/%2F/gi, '/')}`;
