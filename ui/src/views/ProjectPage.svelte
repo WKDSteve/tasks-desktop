@@ -101,7 +101,8 @@
 {:else}
   <section class="card head" aria-label={t('project.page')} data-project={project.id}>
     <div class="title-row">
-      <h2 class="title"><ItemIcon {app} shown={shownIcon({ kind: 'project', id: project.id, icon: project.icon })} size={20} />{markHidden(project.title)}</h2>
+      <ItemIcon {app} shown={shownIcon({ kind: 'project', id: project.id, icon: project.icon })} size={20} />
+      <h2 class="title">{markHidden(project.title)}</h2>
       {#if project.status}<span class="tag">{t(`plan.status.${project.status}` as Key)}</span>{/if}
       <span class="leave">
         {#if app.projects.length > 1}

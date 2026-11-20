@@ -118,12 +118,15 @@ describe('the images of a task text', () => {
       { icon: { kind: 'emoji', value: '🦀' }, cover: 'assets/cover.png' },
       { 'assets/cover.png': 'png' },
     );
-    expect(root.querySelector('.task-title [data-icon="own"]')?.textContent).toBe('🦀');
+    expect(root.querySelector('.title-line [data-icon="own"]')?.textContent).toBe('🦀');
+    // The heading is the title alone: the icon stands beside it.
+    expect(root.querySelector('.task-title')?.textContent).toBe('A task');
     expect(root.querySelector('.cover img')?.getAttribute('src')).toMatch(/^blob:/);
   });
 
   it('takes the category icon for a task without one of its own', async () => {
     const { root } = await show('text', { category: ['learning'] });
-    expect(root.querySelector('.task-title [data-icon="category"]')?.textContent).toBe('📚');
+    expect(root.querySelector('.title-line [data-icon="category"]')?.textContent).toBe('📚');
+    expect(root.querySelector('.task-title')?.textContent).toBe('A task');
   });
 });

@@ -26,14 +26,19 @@ hour grid is a chunk of its own (`TimeGrid`, loaded when the week or the day is 
 words of the calendar and the timeline in both languages (about 5 kB of i18n) and three small methods of `App`. The
 language on demand is still the next step.
 
-usage: check-bundle-size.py [--dist ui/dist] [--budget-kb 1095]
+Raised on 2026-11-20 to 1110 kB with the images of the texts (tasks-desktop/inline-bilder-svg-und-icons): the start is
+1104 kB. The images stand in the rows and in the detail, which the start draws: the store of the blob addresses, the
+icon, the cover and the larger view (8 kB in a shared chunk) and their words in both languages; loading the larger view
+on demand would save less than the 9 kB over the budget.
+
+usage: check-bundle-size.py [--dist ui/dist] [--budget-kb 1110]
 """
 import argparse
 import pathlib
 import re
 import sys
 
-BUDGET_KB = 1095
+BUDGET_KB = 1110
 
 # `from"./x.js"` and `import"./x.js"` of a built chunk: a static import. A dynamic `import("./x.js")` has a bracket.
 STATIC_IMPORT = re.compile(r'(?:from|import)\s*"\./([^"]+\.js)"')

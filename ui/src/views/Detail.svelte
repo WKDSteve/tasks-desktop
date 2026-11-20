@@ -406,7 +406,8 @@
   {#if !task}
     <p class="muted">{t('detail.none')}</p>
   {:else}
-    <h2 class="task-title"><ItemIcon {app} shown={icon} size={20} />{markHidden(task.title)}</h2>
+    <!-- The icon stands beside the heading, not in it: the heading is the title alone (its name, the tests). -->
+    <div class="title-line"><ItemIcon {app} shown={icon} size={20} /><h2 class="task-title">{markHidden(task.title)}</h2></div>
     {#if task.cover && images}
       <div class="cover">
         <AssetImg
@@ -1550,6 +1551,8 @@
   }
   .task-title {
     font-size: 1.25rem;
+  }
+  .title-line {
     display: flex;
     align-items: center;
   }

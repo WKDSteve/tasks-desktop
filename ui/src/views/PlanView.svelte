@@ -137,11 +137,8 @@
     <nav class="trail" aria-label={t('project.trail')}>
       <button type="button" class="link" onclick={() => app.openProject(planProject.id)}>{markHidden(planProject.title)}</button>
       <span aria-hidden="true">›</span>
-      <span aria-current="page"
-        >{#if currentPlan}<ItemIcon {app} shown={shownIcon({ kind: 'plan', id: currentPlan.id, icon: currentPlan.icon })} />{/if}{markHidden(
-          currentPlan?.title ?? planId,
-        )}</span
-      >
+      {#if currentPlan}<ItemIcon {app} shown={shownIcon({ kind: 'plan', id: currentPlan.id, icon: currentPlan.icon })} />{/if}
+      <span aria-current="page">{markHidden(currentPlan?.title ?? planId)}</span>
     </nav>
   {/if}
   {#if currentPlan?.cover && currentPlan.folder}

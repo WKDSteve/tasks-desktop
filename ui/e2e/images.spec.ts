@@ -73,6 +73,12 @@ Foreign: ![Tracker](https://tracker.example/pixel.png)
 `,
   );
   try {
+    // The hub reads a new file when its watcher tells it: the page opens the task once the hub knows it.
+    await expect
+      .poll(async () => (await page.request.get(`/api/tasks/task?id=lib.nvim/${slug}`, { headers: { Authorization: `Bearer ${state().token}` } })).status(), {
+        timeout: 15_000,
+      })
+      .toBe(200);
     const { problems, foreign } = await pair(page, `/#task=lib.nvim%2F${slug}`);
     const detail = page.locator('aside.detail');
     const prose = detail.locator('.prose');
@@ -87,7 +93,8 @@ Foreign: ![Tracker](https://tracker.example/pixel.png)
     await expect(prose.locator('img[src*="tracker"]')).toHaveCount(0);
     await expect(page.locator('aside.detail svg foreignObject, aside.detail iframe')).toHaveCount(0);
     // The icon and the cover in the head.
-    await expect(detail.locator('.task-title [data-icon="own"] img')).toHaveAttribute('src', /^blob:/);
+    await expect(detail.locator('.title-line [data-icon="own"] img')).toHaveAttribute('src', /^blob:/);
+    await expect(detail.locator('.task-title')).toHaveText('Images e2e t01');
     await expect(detail.locator('.cover img')).toHaveAttribute('src', /^blob:/);
     await expectAccessible(page, 'a task with images');
 
