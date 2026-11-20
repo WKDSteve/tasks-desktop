@@ -251,6 +251,14 @@ async fn the_images_below_assets_of_a_container_are_handed_on_sealed_and_nothing
         &format!("{roadmap}/paths/lua-lernen.md"),
         &[("assets/badges/star.gif", b"GIF89a")],
     );
+    // A plain task's folder is the folder of all tasks: an `assets/` there is no asset of beta's (nor of any task's).
+    let shared = vault
+        .join("lib.nvim")
+        .join("ROADMAP")
+        .join("tasks")
+        .join("assets");
+    std::fs::create_dir_all(&shared).unwrap();
+    std::fs::write(shared.join("p.png"), png).unwrap();
     let Some(engine) = engine(&vault, &home).await else {
         return;
     };
@@ -377,8 +385,12 @@ async fn the_images_below_assets_of_a_container_are_handed_on_sealed_and_nothing
         ("kind=task&id=lib.nvim/alpha&file=assets%2Fp.png", 400),
         ("kind=task&id=../x&file=assets/p.png", 400),
     ] {
-        let r = hub.get(&format!("/api/tasks/asset?{query}")).await;
-        assert_eq!(r.status, code, "{query}: {}", r.body);
+        // Read as bytes: a wrong answer here may be a picture.
+        let (head, _) = hub.get_bytes(&format!("/api/tasks/asset?{query}")).await;
+        assert!(
+            head.starts_with(&format!("HTTP/1.1 {code}")),
+            "{query}: {head}"
+        );
     }
     let link = task.join("assets").join("out.png");
     #[cfg(windows)]
