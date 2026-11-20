@@ -21,8 +21,8 @@ python tools/check-control-chars.py
 python tools/check-process-starts.py    # no process is started by hand (appkit_core::child, appkit_hub::launch); tools/process-starts.allow
 python tools/check-color-literals.py --root ui/src --tokens ui/src/palette.css   # no colour outside tokens and palette (CI job hygiene)
 python tools/check-bundle-size.py   # after pnpm build: the start (main chunk and the chunks it imports) stays within its budget
-python tools/check-lock-age.py --min-days 7   # after cargo update: no crate younger than 7 days (CI job rust)
-testing sheets run --all                # test sheets (TESTS/sheets, .testing.lua): the first start in the page against the example setup-hub, a folder of the run; Chrome
+python tools/check-lock-age.py --min-days 7   # after cargo update: no crate younger than 7 days (CI job rust); in a fresh worktree copy target/lock-age-cache.json of the main checkout first
+testing sheets run --all                # test sheets (TESTS/sheets, .testing.lua): the first start in the page against the example setup-hub, a folder of the run; Chrome; without the LIB_NVIM_DIR of the engine pin (testing.nvim needs a newer lib.nvim)
 ```
 
 Die Web-Variante (eigene CI `web.yml`), bei jedem Sprung von `engine.lock` und jeder Änderung an `ui/src/web`:
@@ -67,8 +67,11 @@ pnpm web:build && PLAYWRIGHT_BROWSERS_PATH="$PWD/node_modules/.cache/ms-playwrig
   `cd ui && pnpm install`. Die Pin-Prüfung meldet einen Workflow auf einem anderen Commit. Nach einem Pull, der das
   Tag hebt, brechen `pnpm check/test/build` ab, bis `pnpm install` lief (`tools/check-installed-kit.mjs`): sonst
   prüfen sie still gegen das Kit von vorher.
-  Das alles in einem Befehl, für alle vier Apps: `python tools/bump-apps.py vX.Y.Z` in appkit (`--dry-run`
-  zeigt es nur, `--commit` committet je App, pusht nie; der Tag muss auf origin liegen).
+  Das alles in einem Befehl, für alle Apps des Kits (die Liste `APPS` des Skripts): `python tools/bump-apps.py vX.Y.Z` in appkit (`--dry-run`
+  zeigt es nur, `--commit` committet je App, pusht nie; der Tag muss auf origin liegen). Mit `--worktree` landet der
+  Commit im lokalen `main` des Haupt-Checkouts: ist der von `origin/main` abgezweigt (unveröffentlichte Commits einer
+  anderen Sitzung), den Bump-Commit in einem eigenen Worktree auf `origin/main` übernehmen (`git cherry-pick`) und von
+  dort pushen, nie das lokale `main` mit fremden Commits.
 - Install-Skripte der Releases kommen aus `release-kit` von appkit (gestempelt beim Hochladen), nicht aus
   `scripts/`; dort liegen nur `uninstall.*` und `test-install.*` (die das Kit-Skript des gepinnten appkit
   gegen den Build prüfen, Ordner per `tools/release-kit-dir.py`).
