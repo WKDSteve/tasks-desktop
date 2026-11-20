@@ -72,6 +72,8 @@ test('a meeting in the calendar: a chip in the month, a block in the week, moved
     await page.keyboard.press('Shift+ArrowDown');
     await answer;
     await expect.poll(() => readFileSync(file, 'utf8'), { timeout: WRITE_BUDGET }).toMatch(/10:15/);
+    // The grid reads the meeting again after the write: the block stands at 10:15 (492 px) before the next key is sent.
+    await expect(grid.locator(`.block[data-meeting="${id}"]`)).toHaveCSS('top', '492px', { timeout: WRITE_BUDGET });
     await expect(block).toBeFocused();
     answer = nextAnswer(page);
     await page.keyboard.press('Control+Shift+ArrowDown');

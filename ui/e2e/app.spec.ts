@@ -5468,13 +5468,14 @@ test('the calendar shows a task on its due day; dragging sets the date, dragging
   await expect(today.locator('.chip.due', { hasText: title })).toBeVisible();
   await expect(loose.locator('.chip', { hasText: title })).toHaveCount(0);
 
-  // The week shows the same day, and a click on the chip opens the task.
-  await page.locator('label.mode select').selectOption('week');
-  await expect(page.locator('td.today .chip.due', { hasText: title })).toBeVisible();
-  await page.locator('td.today .chip.due', { hasText: title }).click();
+  // The week is the hour grid: the task stands in its bar above the hours, and a click on it opens the task.
+  await page.locator('label.mode select').first().selectOption('week');
+  const barChip = page.locator('[data-timegrid="week"] [data-allday] .chip.task', { hasText: title });
+  await expect(barChip).toBeVisible();
+  await barChip.click();
   await expect(taskFloat(page)).toBeVisible();
   await closeFloat(page);
-  await page.locator('label.mode select').selectOption('month');
+  await page.locator('label.mode select').first().selectOption('month');
 
   // Dragged back to the list the date is gone.
   await answered(page, () => page.locator('td.today .chip.due', { hasText: title }).dragTo(loose));
@@ -5489,8 +5490,8 @@ test('the calendar is worked with the keys: m and Enter put a task on a day, Shi
   const title = `Calendar keys ${Date.now()}`;
   await capture(page, title);
   await chooseView(page, 'View', 'Calendar');
-  // A week shows every task of a day (a month hides those after the fourth, and the tests share the vault).
-  await page.locator('label.mode select').selectOption('week');
+  // The month has the day cells the keys walk over (the week is the hour grid).
+  await page.locator('label.mode select').first().selectOption('month');
   const today = page.locator('td.today');
   await expect(today).toHaveCount(1);
   const day = (await today.getAttribute('data-day')) ?? '';
@@ -7607,7 +7608,7 @@ test.describe('a finger', () => {
     await watchViolations(page);
     await pair(page);
     await chooseView(page, 'View', 'Calendar');
-    await page.locator('label.mode select').selectOption('week');
+    await page.locator('label.mode select').first().selectOption('month');
     const today = page.locator('td.today');
     const day = (await today.getAttribute('data-day')) ?? '';
     const loose = page.locator('aside.loose');
