@@ -5,7 +5,13 @@
   import type { MeetingEntry } from '../lib/contract';
   import { coverOf } from '../lib/meetings';
 
-  let { app, meeting, size = 16 }: { app: App; meeting: Pick<MeetingEntry, 'id' | 'image' | 'updated'>; size?: number } = $props();
+  let {
+    app,
+    meeting,
+    size = 16,
+  }: { app: App; meeting: Pick<MeetingEntry, 'id' | 'image' | 'updated' | 'series' | 'virtual'>; size?: number } = $props();
+  // An occurrence of a series without a file has no folder of its own: its picture is the series'.
+  const owner = $derived(meeting.virtual && meeting.series ? meeting.series : meeting.id);
 
   // One reading per meeting and picture, for as long as the page lives (the pictures are small).
   const known = new Map<string, Promise<string | null>>();
@@ -13,7 +19,7 @@
   const wanted = $derived(coverOf(meeting as typeof meeting & { cover?: string }));
 
   $effect(() => {
-    const id = meeting.id;
+    const id = owner;
     const key = `${id}|${String(wanted)}|${String(meeting.updated ?? '')}`;
     if (wanted === undefined) {
       src = null;
