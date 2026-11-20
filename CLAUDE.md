@@ -68,10 +68,11 @@ pnpm web:build && PLAYWRIGHT_BROWSERS_PATH="$PWD/node_modules/.cache/ms-playwrig
   Tag hebt, brechen `pnpm check/test/build` ab, bis `pnpm install` lief (`tools/check-installed-kit.mjs`): sonst
   prüfen sie still gegen das Kit von vorher.
   Das alles in einem Befehl, für alle Apps des Kits (die Liste `APPS` des Skripts): `python tools/bump-apps.py vX.Y.Z` in appkit (`--dry-run`
-  zeigt es nur, `--commit` committet je App, pusht nie; der Tag muss auf origin liegen). Mit `--worktree` landet der
-  Commit im lokalen `main` des Haupt-Checkouts: ist der von `origin/main` abgezweigt (unveröffentlichte Commits einer
-  anderen Sitzung), den Bump-Commit in einem eigenen Worktree auf `origin/main` übernehmen (`git cherry-pick`) und von
-  dort pushen, nie das lokale `main` mit fremden Commits.
+  zeigt es nur, `--commit` committet je App, pusht nie; der Tag muss auf origin liegen). Mit `--worktree` baut es
+  auf dem lokalen `main` des Haupt-Checkouts auf und spult nur dieses vor: hängt das hinter `origin/main` zurück, liegt
+  der Bump auf einem alten Stand. Vorher dort `git pull --rebase --autostash`, oder den Bump-Commit in einem eigenen
+  Worktree auf `origin/main` übernehmen (`git cherry-pick`); ein späteres `pull --rebase` verwirft den doppelten Commit
+  dann von selbst (gleicher Patch).
 - Install-Skripte der Releases kommen aus `release-kit` von appkit (gestempelt beim Hochladen), nicht aus
   `scripts/`; dort liegen nur `uninstall.*` und `test-install.*` (die das Kit-Skript des gepinnten appkit
   gegen den Build prüfen, Ordner per `tools/release-kit-dir.py`).
