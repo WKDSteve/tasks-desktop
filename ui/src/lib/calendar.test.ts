@@ -157,3 +157,13 @@ describe('where a task stands in the grid', () => {
     expect(list.map((t) => t.id)).toEqual(['a/none', 'a/bad']);
   });
 });
+
+describe('the day mode', () => {
+  it('shows the one day, steps by a day and pages by a day', () => {
+    expect(daysOf('day', '2026-11-20')).toEqual(['2026-11-20']);
+    expect(step('day', '2026-11-30', 1)).toBe('2026-12-01');
+    expect(step('day', '2026-12-01', -1)).toBe('2026-11-30');
+    expect(dayAfterKey('day', '2026-11-20', 'PageDown')).toBe('2026-11-21');
+    expect(dayAfterKey('day', '2026-11-20', 'PageUp')).toBe('2026-11-19');
+  });
+});

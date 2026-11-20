@@ -8,7 +8,9 @@
   import { tick, untrack } from 'svelte';
   import type { App } from '../lib/app.svelte';
   import { parseDate } from '../lib/calendar';
-  import type { TaskEntry } from '../lib/contract';
+  import type { MeetingEntry, TaskEntry } from '../lib/contract';
+  import { dayOfMeeting, diamondsByTask, fillOf, withMeetingRows } from '../lib/timelineMeetings';
+  import MeetingThumb from './MeetingThumb.svelte';
   import { isOverdue } from '../lib/remind';
   import { translate, type Key } from '../lib/i18n';
   import { chordWatch } from '../lib/keymap';
@@ -19,6 +21,7 @@
     DAY_WIDTH,
     daysBetween,
     edgesOf,
+    lastDay,
     movedBar,
     partsOf,
     patchOf,
@@ -66,7 +69,31 @@
     project: (id) => app.projects.find((p) => p.id === id)?.title ?? id,
     projectOf: (task) => (app.can('projects') ? app.projectOf(task) : undefined),
   };
-  const rows = $derived(rowsOf(bars, grouping, names, folded));
+  // The meetings of the days shown (concept 7.4): diamonds on the rows of their tasks, a row of their own in a group.
+  let meetings = $state<MeetingEntry[]>([]);
+  // The meeting under the pointer or the focus: its diamonds on every row light up together.
+  let hot = $state<string | null>(null);
+  const diamonds = $derived(diamondsByTask(meetings, bars));
+  const rows = $derived(withMeetingRows(rowsOf(bars, grouping, names, folded), meetings, bars, grouping));
+  $effect(() => {
+    void app.writes;
+    void app.snapshot?.rev;
+    if (!app.canMeetings || bars.length === 0) {
+      meetings = [];
+      return;
+    }
+    const abort = new AbortController();
+    app
+      .meetingsIn(range.from, lastDay(range), abort.signal)
+      .then((items) => {
+        if (!abort.signal.aborted) meetings = items;
+      })
+      .catch(() => {
+        if (!abort.signal.aborted) meetings = [];
+      });
+    return () => abort.abort();
+  });
+  const meetingLabel = (m: MeetingEntry): string => t('timeline.meeting', { title: m.title, date: say(dayOfMeeting(m) ?? ''), status: t(`timeline.fill.${fillOf(m, app.nowMs())}` as Key) });
   /** The row each task with a visible row is drawn in. */
   const rowOf = $derived(new Map(rows.flatMap((r, i) => (r.type === 'task' ? [[r.bar.task.id, i] as const] : []))));
   const taskRows = $derived(rows.flatMap((r) => (r.type === 'task' ? [r.bar] : [])));
@@ -353,6 +380,30 @@
 
 <svelte:window bind:innerWidth={pageWidth} />
 
+<!-- A meeting on its day: the picture inside, the status as the fill (hollow, half, full, struck through). -->
+{#snippet diamond(m: MeetingEntry)}
+  {@const day = dayOfMeeting(m)}
+  {@const at = day === null ? null : box({ from: day, to: day })}
+  {#if at}
+    <button
+      type="button"
+      class="diamond {fillOf(m, app.nowMs())}"
+      class:hot={hot === m.id}
+      style:left="{at.left + dayWidth / 2 - 9}px"
+      tabindex="-1"
+      data-meeting={m.id}
+      data-fill={fillOf(m, app.nowMs())}
+      title={meetingLabel(m)}
+      aria-label={meetingLabel(m)}
+      onmouseenter={() => (hot = m.id)}
+      onmouseleave={() => (hot = null)}
+      onclick={() => app.openMeeting(m.id)}
+    >
+      <span class="inner"><MeetingThumb {app} meeting={m} size={18} /></span>
+    </button>
+  {/if}
+{/snippet}
+
 {#snippet barOf(bar: Bar)}
   {@const task = bar.task}
   {@const at = box(placed(bar)) ?? (movingId === task.id ? box(bar) : null)}
@@ -469,7 +520,7 @@
             {/each}
             <span class="now" style:left="{todayX}px" data-timeline-today></span>
           </div>
-          {#each rows as row (row.type === 'group' ? row.key : row.bar.task.id)}
+          {#each rows as row (row.type === 'task' ? row.bar.task.id : row.key)}
             <div class="row" class:group={row.type === 'group'} style:height="{ROW}px">
               {#if row.type === 'group'}
                 {@const name = row.kind === 'none' ? t('timeline.no_plan') : row.label}
@@ -492,6 +543,13 @@
                   {#if at}
                     <span class="span {row.kind}" class:cut-left={at.cutLeft} class:cut-right={at.cutRight} style:left="{at.left}px" style:width="{at.width}px" data-span={row.key}></span>
                   {/if}
+                </div>
+              {:else if row.type === 'meetings'}
+                <div class="label" style:width="{labelWidth}px" style:padding-left="{0.3 + row.level * 0.8}rem">
+                  <span class="meetings-name" data-meetings-row={row.key}>{t('timeline.meetings_row')} <small>({row.meetings.length})</small></span>
+                </div>
+                <div class="track" style:width="{width}px">
+                  {#each row.meetings as m (m.id)}{@render diamond(m)}{/each}
                 </div>
               {:else}
                 {@const bar = row.bar}
@@ -517,7 +575,10 @@
                     onclick={() => app.peek(bar.task.id)}>{markHidden(bar.task.title)}</button
                   >
                 </div>
-                <div class="track" style:width="{width}px">{@render barOf(bar)}</div>
+                <div class="track" style:width="{width}px">
+                  {@render barOf(bar)}
+                  {#each diamonds.get(bar.task.id) ?? [] as m (m.id)}{@render diamond(m)}{/each}
+                </div>
               {/if}
             </div>
           {/each}
@@ -602,6 +663,17 @@
       </tbody>
     </table>
     {#if tasks.length > TABLE_LIMIT}<p class="note">{t('timeline.more', { n: tasks.length - TABLE_LIMIT })}</p>{/if}
+    {#if meetings.length > 0}
+      <h3 class="meetings-head">{t('timeline.meetings_row')}</h3>
+      <ul class="meeting-list" data-timeline-meetings>
+        {#each meetings.slice(0, TABLE_LIMIT) as m (m.id)}
+          <li>
+            <button type="button" class="link" onclick={() => app.openMeeting(m.id)}>{markHidden(m.title)}</button>
+            <span class="muted">{meetingLabel(m)}</span>
+          </li>
+        {/each}
+      </ul>
+    {/if}
   </details>
 </section>
 
@@ -742,6 +814,65 @@
   }
   .line.major {
     border-left-style: solid;
+  }
+  .diamond {
+    position: absolute;
+    top: 6px;
+    width: 18px;
+    height: 18px;
+    padding: 0;
+    transform: rotate(45deg) scale(0.8);
+    background: var(--surface);
+    border: 2px solid var(--accent);
+    overflow: hidden;
+    cursor: pointer;
+    z-index: 1;
+  }
+  .diamond .inner {
+    display: block;
+    width: 100%;
+    height: 100%;
+    transform: rotate(-45deg) scale(1.5);
+  }
+  .diamond.full {
+    background: var(--accent);
+  }
+  .diamond.half {
+    background: linear-gradient(135deg, var(--accent) 50%, var(--surface) 50%);
+  }
+  .diamond.cancelled {
+    border-style: dashed;
+    color: var(--muted);
+    border-color: var(--muted);
+  }
+  .diamond.cancelled::after {
+    content: '';
+    position: absolute;
+    left: -2px;
+    right: -2px;
+    top: 50%;
+    border-top: 2px solid var(--muted);
+  }
+  .diamond.hot,
+  .diamond:focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
+  }
+  .muted {
+    color: var(--muted);
+  }
+  .meeting-list {
+    list-style: none;
+    padding: 0;
+    margin: 0.3rem 0;
+  }
+  .meetings-head {
+    font-size: 0.95rem;
+    margin: 0.6rem 0 0;
+  }
+  .meetings-name {
+    color: var(--muted);
+    font-style: italic;
   }
   .now {
     position: absolute;

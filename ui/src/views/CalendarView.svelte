@@ -1,5 +1,7 @@
 <script lang="ts">
-  // The calendar: the open tasks on their days, a month or a week (see `lib/calendar.ts`). A task stands on its due
+  // The calendar: the open tasks and the meetings on their days, a month, a week or a day (see `lib/calendar.ts`). Week
+  // and day are the hour grid (`TimeGrid.svelte`, loaded when first shown); the month has the meetings as chips before
+  // the tasks. A task stands on its due
   // day; with a start date also on the days from start to due. Dragging a task onto a day sets its due date, dragging
   // it to the list of the tasks without a date takes the date away; both go through the engine (`App.dropOnDay`), which
   // judges them. A finger drags by the grip of a task, and the keys do the same without dragging (the arrows go over
@@ -27,6 +29,10 @@
   import Info from 'appkit-ui/Info.svelte';
   import { markHidden } from '../lib/text';
   import FilterNote from './FilterNote.svelte';
+  import Lazy from './Lazy.svelte';
+  import MeetingThumb from './MeetingThumb.svelte';
+  import type { MeetingEntry } from '../lib/contract';
+  import { filterMeetings, meetingsByDay, NO_FILTER, placeSign, type MeetingFilter } from '../lib/timeGrid';
 
   let { app }: { app: App } = $props();
   const t = (key: Key, params: Record<string, string | number> = {}) => translate(app.lang, key, params);
@@ -45,17 +51,47 @@
   const marks = $derived(marksByDay(tasks, days));
   const loose = $derived(undated(tasks));
 
+  // The meetings of the days on view, as the filters leave them (concept 7.3).
+  let showMeetings = $state(true);
+  let filter = $state<MeetingFilter>({ ...NO_FILTER });
+  let found = $state<MeetingEntry[]>([]);
+  $effect(() => {
+    void app.writes;
+    void app.snapshot?.rev;
+    const first = days[0];
+    const last = days[days.length - 1];
+    if (!app.canMeetings || !showMeetings || first === undefined || last === undefined) {
+      found = [];
+      return;
+    }
+    const abort = new AbortController();
+    app
+      .meetingsIn(first, last, abort.signal)
+      .then((items) => {
+        if (!abort.signal.aborted) found = items;
+      })
+      .catch(() => {
+        if (!abort.signal.aborted) found = [];
+      });
+    return () => abort.abort();
+  });
+  const shownMeetings = $derived(filterMeetings(found, filter));
+  const meetingDays = $derived(meetingsByDay(shownMeetings, days));
+  const hourly = $derived(mode !== 'month');
+  const canNew = $derived(app.canMakeMeetings && !app.locked);
+
   const format = $derived(new Intl.DateTimeFormat(app.lang, { month: 'long', year: 'numeric', timeZone: 'UTC' }));
   const weekday = $derived(new Intl.DateTimeFormat(app.lang, { weekday: 'short', timeZone: 'UTC' }));
   const dayFormat = $derived(new Intl.DateTimeFormat(app.lang, { day: 'numeric', month: 'short', timeZone: 'UTC' }));
   const heading = $derived.by(() => {
     if (mode === 'month') return format.format(parseDate(anchor) ?? new Date());
+    if (mode === 'day') return `${dayFormat.format(parseDate(anchor) ?? new Date())} ${anchor.slice(0, 4)}`;
     const first = days[0] ?? anchor;
     const last = days[days.length - 1] ?? anchor;
     return `${dayFormat.format(parseDate(first) ?? new Date())} – ${dayFormat.format(parseDate(last) ?? new Date())} ${last.slice(0, 4)}`;
   });
   const weekdays = $derived(days.slice(0, 7).map((d) => weekday.format(parseDate(d) ?? new Date())));
-  const weeks = $derived(Array.from({ length: days.length / 7 }, (_, i) => days.slice(i * 7, i * 7 + 7)));
+  const weeks = $derived(mode === 'month' ? Array.from({ length: days.length / 7 }, (_, i) => days.slice(i * 7, i * 7 + 7)) : []);
 
   let dragging = $state<string | null>(null);
   let overDay = $state<string | null>(null);
@@ -281,11 +317,28 @@
   function setMode(next: CalendarMode): void {
     // The week that holds the day on view; the month of the week's Monday when going back.
     mode = next;
-    picked = next === 'week' ? (days.includes(app.today) ? app.today : startOfWeek(anchor)) : anchor;
+    picked = next === 'month' ? anchor : days.includes(app.today) ? app.today : next === 'week' ? startOfWeek(anchor) : anchor;
     opened = null;
   }
+  /** m, w and d switch the view, n makes a meeting; not in a field, not on a task chip (there `m` picks the task up). */
+  const ofRootChord = chordWatch();
+  function onRootKey(event: KeyboardEvent): void {
+    if (ofRootChord(event) || event.defaultPrevented) return;
+    if (event.ctrlKey || event.metaKey || event.altKey || event.shiftKey || event.repeat || carried !== null) return;
+    const target = event.target instanceof HTMLElement ? event.target : null;
+    if (target === null || target.closest('input, select, textarea, [contenteditable="true"], .block, .chip[data-task]') !== null) return;
+    const key = keyOf(event);
+    const next = key === 'm' ? 'month' : key === 'w' ? 'week' : key === 'd' ? 'day' : null;
+    if (next !== null) {
+      event.preventDefault();
+      if (next !== mode) setMode(next);
+    } else if (key === 'n' && canNew) {
+      event.preventDefault();
+      app.openMeetingForm({ date: mode === 'month' ? (chosen ?? app.today) : anchor });
+    }
+  }
   function limitOf(day: string, count: number): number {
-    return mode === 'week' || opened === day ? count : CELL_LIMIT;
+    return opened === day ? count : CELL_LIMIT;
   }
 </script>
 
@@ -307,6 +360,7 @@
     onclick={() => app.peek(task.id)}
   >
     <span class="sr-only">{t(`calendar.kind.${m.kind}` as Key)}: </span>
+    <span aria-hidden="true">✓</span>
     <span class="chip-title">{markHidden(task.title)}</span>
   </button>
 {/snippet}
@@ -325,7 +379,8 @@
   >
 {/snippet}
 
-<section class="calendar" aria-label={t('nav.calendar')} bind:this={root}>
+<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+<section class="calendar" aria-label={t('nav.calendar')} bind:this={root} onkeydown={onRootKey}>
   <FilterNote {app} />
   <header class="intro">
     <div class="head">
@@ -346,7 +401,39 @@
         </select>
       </label>
     </div>
-    <p class="help">{t('calendar.help')}</p>
+    {#if app.canMeetings}
+      <div class="bar filters" role="group" aria-label={t('calendar.meetings')}>
+        <label class="mode" data-hint={t('hint.form.calendar.meetings')}>
+          <input type="checkbox" bind:checked={showMeetings} data-calendar-meetings />
+          <span>{t('calendar.meetings')}</span>
+        </label>
+        <label class="mode" data-hint={t('hint.form.calendar.place')}>
+          <span>{t('calendar.filter.place')}</span>
+          <select bind:value={filter.place} disabled={!showMeetings} data-calendar-place>
+            <option value="all">{t('calendar.filter.place.all')}</option>
+            <option value="online">{t('calendar.filter.place.online')}</option>
+            <option value="in_person">{t('calendar.filter.place.in_person')}</option>
+            {#each ['teams', 'zoom', 'meet', 'webex', 'jitsi'] as service (service)}
+              <option value={service}>{t(`meeting.service.${service}` as Key)}</option>
+            {/each}
+          </select>
+        </label>
+        <label class="mode" data-hint={t('hint.form.calendar.people')}>
+          <span>{t('calendar.filter.people')}</span>
+          <select bind:value={filter.people} disabled={!showMeetings} data-calendar-people>
+            <option value="any">{t('calendar.filter.people.any')}</option>
+            <option value="with">{t('calendar.filter.people.with')}</option>
+            <option value="without">{t('calendar.filter.people.without')}</option>
+          </select>
+        </label>
+        {#if canNew}
+          <button type="button" data-calendar-new onclick={() => app.openMeetingForm({ date: mode === 'month' ? (chosen ?? app.today) : anchor })}>
+            {t('calendar.new_meeting')}
+          </button>
+        {/if}
+      </div>
+    {/if}
+    <p class="help">{hourly ? t('calendar.grid_help') : t('calendar.help')}</p>
     <!-- Always in the page, so that a screen reader hears it fill. -->
     <p class="carry" role="status" data-calendar-carry>
       {#if carried !== null}
@@ -357,47 +444,73 @@
   </header>
 
   <div class="layout">
-    <!-- svelte-ignore a11y_no_noninteractive_element_to_interactive_role -->
-    <table class="grid" class:week={mode === 'week'} role="grid" aria-label={heading} onkeydown={onGridKey}>
-      <thead>
-        <tr>{#each weekdays as name, i (i)}<th scope="col">{name}</th>{/each}</tr>
-      </thead>
-      <tbody>
-        {#each weeks as week, w (w)}
-          <tr>
-            {#each week as day (day)}
-              {@const here = marks.get(day) ?? []}
-              <td
-                role="gridcell"
-                tabindex={day === cursor ? 0 : -1}
-                class:today={day === app.today}
-                class:dim={mode === 'month' && !sameMonth(day, anchor)}
-                class:over={(overDay === day && dragging !== null) || (carried !== null && day === cursor)}
-                data-day={day}
-                aria-label={t('calendar.day', { date: day, n: here.length })}
-                ondragover={(e) => onDayOver(e, day)}
-                ondrop={(e) => void onDayDrop(e, day)}
-              >
-                <span class="num" aria-hidden="true">{Number(day.slice(8))}</span>
-                <ul>
-                  {#each here.slice(0, limitOf(day, here.length)) as m (`${m.task.id}:${m.kind}`)}
-                    <li>
-                      {#if m.kind === 'due' && !app.locked}{@render handle(m.task.id)}{/if}
-                      {@render chip(m)}
-                    </li>
-                  {/each}
-                </ul>
-                {#if here.length > limitOf(day, here.length)}
-                  <button type="button" class="more" onclick={() => (opened = day)}>
-                    {t('calendar.more', { n: here.length - CELL_LIMIT })}
-                  </button>
-                {/if}
-              </td>
-            {/each}
-          </tr>
-        {/each}
-      </tbody>
-    </table>
+    {#if hourly}
+      <Lazy {app} load={() => import('./TimeGrid.svelte')} extra={{ days, meetings: shownMeetings, marks }} />
+    {:else}
+      <!-- svelte-ignore a11y_no_noninteractive_element_to_interactive_role -->
+      <table class="grid" class:week={mode === 'week'} role="grid" aria-label={heading} onkeydown={onGridKey}>
+        <thead>
+          <tr>{#each weekdays as name, i (i)}<th scope="col">{name}</th>{/each}</tr>
+        </thead>
+        <tbody>
+          {#each weeks as week, w (w)}
+            <tr>
+              {#each week as day (day)}
+                {@const here = marks.get(day) ?? []}
+                {@const ms = meetingDays.get(day) ?? []}
+                {@const cap = limitOf(day, ms.length + here.length)}
+                <td
+                  role="gridcell"
+                  tabindex={day === cursor ? 0 : -1}
+                  class:today={day === app.today}
+                  class:dim={mode === 'month' && !sameMonth(day, anchor)}
+                  class:over={(overDay === day && dragging !== null) || (carried !== null && day === cursor)}
+                  data-day={day}
+                  aria-label={t('calendar.day', { date: day, n: here.length })}
+                  ondblclick={(e) => canNew && e.target === e.currentTarget && app.openMeetingForm({ date: day })}
+                  ondragover={(e) => onDayOver(e, day)}
+                  ondrop={(e) => void onDayDrop(e, day)}
+                >
+                  <span class="num" aria-hidden="true">{Number(day.slice(8))}</span>
+                  <ul>
+                    {#each ms.slice(0, cap) as m (m.id)}
+                      <li>
+                        <button
+                          type="button"
+                          class="chip meeting"
+                          class:cancelled={m.status === 'cancelled'}
+                          data-meeting={m.id}
+                          title={m.title}
+                          onclick={() => app.openMeeting(m.id)}
+                        >
+                          <span class="sr-only">{t('calendar.kind.meeting')}: </span>
+                          <span aria-hidden="true">◷</span>
+                          {#if !m.all_day && m.time}<span class="at">{m.time}</span>{/if}
+                          {#if placeSign(m) !== ''}<span aria-hidden="true">{placeSign(m)}</span>{/if}
+                          <MeetingThumb {app} meeting={m} size={16} />
+                          <span class="chip-title">{markHidden(m.title)}</span>
+                        </button>
+                      </li>
+                    {/each}
+                    {#each here.slice(0, Math.max(0, cap - ms.length)) as m (`${m.task.id}:${m.kind}`)}
+                      <li>
+                        {#if m.kind === 'due' && !app.locked}{@render handle(m.task.id)}{/if}
+                        {@render chip(m)}
+                      </li>
+                    {/each}
+                  </ul>
+                  {#if ms.length + here.length > cap}
+                    <button type="button" class="more" onclick={() => (opened = day)}>
+                      {t('calendar.more', { n: ms.length + here.length - cap })}
+                    </button>
+                  {/if}
+                </td>
+              {/each}
+            </tr>
+          {/each}
+        </tbody>
+      </table>
+    {/if}
 
     <aside
       class="loose"
@@ -591,6 +704,26 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+  .chip.meeting {
+    border-color: var(--accent);
+    display: flex;
+    align-items: center;
+    gap: 0.2rem;
+  }
+  .chip.meeting .chip-title {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .chip.cancelled {
+    text-decoration: line-through;
+  }
+  .at {
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
+  .filters {
+    margin-top: 0.2rem;
   }
   .chip.due {
     border-color: var(--accent);

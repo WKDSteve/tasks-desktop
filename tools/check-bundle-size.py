@@ -21,14 +21,19 @@ Raised on 2026-11-19 to 1085 kB with the making of meetings (tasks-desktop/meeti
 meetings in both languages (12 kB of i18n) and the meetings of `App` (the form opened at once from the menu, the
 palette and a task). The language on demand is the next step (tasks-desktop/i18n-zweite-sprache-bei-bedarf-laden).
 
-usage: check-bundle-size.py [--dist ui/dist] [--budget-kb 1085]
+Raised on 2026-11-20 to 1095 kB with the meetings calendar (tasks-desktop/meetings-kalender): the start is 1088 kB. The
+hour grid is a chunk of its own (`TimeGrid`, loaded when the week or the day is first shown); what grew the start is the
+words of the calendar and the timeline in both languages (about 5 kB of i18n) and three small methods of `App`. The
+language on demand is still the next step.
+
+usage: check-bundle-size.py [--dist ui/dist] [--budget-kb 1095]
 """
 import argparse
 import pathlib
 import re
 import sys
 
-BUDGET_KB = 1085
+BUDGET_KB = 1095
 
 # `from"./x.js"` and `import"./x.js"` of a built chunk: a static import. A dynamic `import("./x.js")` has a bracket.
 STATIC_IMPORT = re.compile(r'(?:from|import)\s*"\./([^"]+\.js)"')
