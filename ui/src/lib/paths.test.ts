@@ -16,10 +16,40 @@ import {
   pointRef,
   progressParts,
   promoteOp,
+  parseXp,
   REASON_MAX,
+  rewardOp,
   stateOp,
   visiblePoints,
+  XP_MAX,
+  xpOp,
+  xpPercent,
 } from './paths';
+
+describe('paths: XP and rewards', () => {
+  it('reads the XP field: a whole number up to the most the engine takes, empty for none, nothing else', () => {
+    expect(parseXp(' 25 ')).toBe(25);
+    expect(parseXp('0')).toBe(0);
+    expect(parseXp(String(XP_MAX))).toBe(XP_MAX);
+    expect(parseXp('')).toBe('clear');
+    expect(parseXp('   ')).toBe('clear');
+    for (const bad of ['100001', '-1', '2.5', '1e3', 'abc', '1 2', '0x10', '1234567']) expect(parseXp(bad), bad).toBeNull();
+  });
+  it('writes the XP of a point, or takes them away, on the version read', () => {
+    expect(xpOp('lib/lua', 'e1', { key: 'meta', index: 3 }, 35)).toEqual({ op: 'node_set', id: 'lib/lua', point: 'meta', xp: 35, if_match: 'e1' });
+    expect(xpOp('lib/lua', undefined, { index: 4 }, 'clear')).toEqual({ op: 'node_set', id: 'lib/lua', point: '#4', xp_clear: true });
+  });
+  it('grants the reward of a level by its number or done', () => {
+    expect(rewardOp('lib/lua', 'e1', '2', true)).toEqual({ op: 'path_reward', id: 'lib/lua', level: '2', given: true, if_match: 'e1' });
+    expect(rewardOp('lib/lua', undefined, 'done', false)).toEqual({ op: 'path_reward', id: 'lib/lua', level: 'done', given: false });
+  });
+  it('fills the bar by the share earned, never past its ends', () => {
+    expect(xpPercent({ earned: 20, possible: 90 })).toBe(22);
+    expect(xpPercent({ earned: 0, possible: 0 })).toBe(0);
+    expect(xpPercent({ earned: 120, possible: 100 })).toBe(100);
+    expect(xpPercent(undefined)).toBe(0);
+  });
+});
 
 const tree = [
   { index: 1, children: 2 },

@@ -398,6 +398,15 @@ promoted point shows its task with the task's status, or how it ended once it is
 a new tab without a referrer. The view only shows what the engine counted and sends what was chosen, on the version
 it read; when the file changed meanwhile it says so and reads the path again.
 
+With an engine that counts XP (capability `xp`) the view also shows the XP of each point (`25 XP`; a promoted point
+the `xp:` of its task), the path's XP as a second bar (`120 / 300 XP`), the level reached with what is missing to the
+next (`Level 2 (Profi) · 30 XP to level 3`) and the open rewards of `## Level`, each with **Granted** (`path_reward`:
+`[x]` in its line). **XP …** in a point's menu sets its XP (`{xp=N}`), filled in with its own or the engine's
+suggestion; empty removes them. A level reached since the path was looked at last is said once, in one line, with its
+reward; the first look at a path only notes its level. Everything here is optional and quiet: **Options › Defaults ›
+XP, levels and rewards in learning paths** turns it off (kept per browser), the progress stays. Badges are named, not
+yet drawn: their pictures come with the safe display of images.
+
 **Making a meeting in the interface.** *New meeting ...* in the *Project* menu, *New meeting* in the command palette
 (`Ctrl+K`, for the task that is selected) and the button *New meeting* in the section *Meetings* of a task's detail (the
 task filled in) open one form: on the left title, area, date, all day, beginning, end or duration, the time zone

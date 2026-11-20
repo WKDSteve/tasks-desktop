@@ -106,8 +106,13 @@ export type Op =
       state?: 'open' | 'learned' | 'seen' | 'dropped' | 'blocked';
       reason?: string;
       note?: string;
+      /** The point's own XP `{xp=N}` (capability `xp`); `xp_clear` removes them. */
+      xp?: number;
+      xp_clear?: true;
       if_match?: string;
     }
+  /** The reward of a level of a path (`level`: its number or `done`) granted or not (capability `path_reward`). */
+  | { op: 'path_reward'; id: string; level: string; given: boolean; if_match?: string }
   /** A learning point of a path (or of a task's `## Lernpunkte`) made a task of its own, and taken back. */
   | { op: 'promote'; container: string; point: string; if_match?: string }
   | { op: 'unpromote'; container: string; point: string; id?: string; if_match?: string }

@@ -3146,6 +3146,48 @@ describe('writing', () => {
       expect(app.toast?.undo).toEqual([{ op: 'unpromote', container: 'lib/lua', point: 'cc', id: 'lib/c-compiler', if_match: 'e3' }]);
     });
 
+    it('takes back the XP of a point (the XP it had, or none) and a reward granted, by the engine inverse', async () => {
+      const { app, hub } = await ready();
+      const result = (inverse: Record<string, unknown>) =>
+        ({
+          kind: 'tasks.result',
+          ok: true,
+          dry_run: false,
+          results: [{ n: 1, op: 'node_set', id: 'lib/lua', ok: true, outcome: 'changed', changed_ids: [], inverse }],
+        }) as unknown as Result;
+      hub.next_ops = result({ op: 'node_set', id: 'lib/lua', point: 'meta', xp: 20, if_match: 'e2' });
+      await app.write([{ op: 'node_set', id: 'lib/lua', point: 'meta', xp: 35, if_match: 'e1' }]);
+      expect(app.toast?.undo).toEqual([{ op: 'node_set', id: 'lib/lua', point: 'meta', xp: 20, if_match: 'e2' }]);
+
+      hub.next_ops = result({ op: 'node_set', id: 'lib/lua', point: 'new', xp_clear: true, if_match: 'e3' });
+      await app.write([{ op: 'node_set', id: 'lib/lua', point: 'new', xp: 15, if_match: 'e2' }]);
+      expect(app.toast?.undo).toEqual([{ op: 'node_set', id: 'lib/lua', point: 'new', xp_clear: true, if_match: 'e3' }]);
+
+      hub.next_ops = result({ op: 'path_reward', id: 'lib/lua', level: '1', given: false, if_match: 'e4' });
+      await app.write([{ op: 'path_reward', id: 'lib/lua', level: '1', given: true, if_match: 'e3' }]);
+      expect(app.toast?.undo).toEqual([{ op: 'path_reward', id: 'lib/lua', level: '1', given: false, if_match: 'e4' }]);
+      await app.undo();
+      expect(hub.sent.at(-1)?.ops).toEqual([{ op: 'path_reward', id: 'lib/lua', level: '1', given: false, if_match: 'e4' }]);
+    });
+
+    it('keeps the switch of XP, levels and rewards, and says a level once: never on the first look at a path', async () => {
+      const { app, prefs } = await ready();
+      expect(app.gamification).toBe(true);
+      app.setGamification(false);
+      expect(app.gamification).toBe(false);
+      expect(prefs.get('tasks-desktop.gamification')).toBe('off');
+      expect(app.levelNews('lib/lua', 1)).toBe(false);
+      expect(app.levelNews('lib/lua', 1)).toBe(false);
+      expect(app.levelNews('lib/lua', 2)).toBe(true);
+      expect(app.levelNews('lib/lua', 2)).toBe(false);
+      expect(app.levelNews('lib/lua', 1)).toBe(false);
+      expect(app.levelNews('lib/rust', 0)).toBe(false);
+      expect(app.levelNews('lib/rust', 1)).toBe(true);
+      // a broken record is a first look again, never an error
+      prefs.set('tasks-desktop.levels-seen', '{oops');
+      expect(app.levelNews('lib/lua', 3)).toBe(false);
+    });
+
     it('sends plan_set and project_set on the version the snapshot shows, and says a conflict', async () => {
       const { app, hub } = await ready([], { capabilities: ['plan_set', 'project_set'] });
       app.snapshot = {

@@ -161,6 +161,37 @@ export function noteOp(id: string, etag: string | undefined, node: Pick<PathNode
   return { op: 'node_set', id, point: pointRef(node), note, ...match(etag) };
 }
 
+/** The largest XP of one point the engine takes (`lernbaum.MAX_XP`). */
+export const XP_MAX = 100000;
+
+/**
+ * What the XP field holds: a whole number from 0 to `XP_MAX` (digits, spaces around them allowed), `'clear'` for an empty
+ * field (the point has no XP then), or `null` for anything else (said, never sent).
+ */
+export function parseXp(text: string): number | 'clear' | null {
+  const t = text.trim();
+  if (t === '') return 'clear';
+  if (!/^\d{1,6}$/.test(t)) return null;
+  const n = Number(t);
+  return n <= XP_MAX ? n : null;
+}
+
+/** The operation that writes the XP of point `node` (`'clear'` removes them), on the version read (capability `xp`). */
+export function xpOp(id: string, etag: string | undefined, node: Pick<PathNode, 'key' | 'index'>, xp: number | 'clear'): Op {
+  return { op: 'node_set', id, point: pointRef(node), ...(xp === 'clear' ? { xp_clear: true as const } : { xp }), ...match(etag) };
+}
+
+/** The operation that marks the reward of level `ref` (its number or `done`) granted or not (capability `path_reward`). */
+export function rewardOp(id: string, etag: string | undefined, ref: string, given: boolean): Op {
+  return { op: 'path_reward', id, level: ref, given, ...match(etag) };
+}
+
+/** The share of the possible XP earned, 0..100, for a bar (none possible: 0). */
+export function xpPercent(xp: { earned: number; possible: number } | undefined): number {
+  if (!xp || xp.possible <= 0) return 0;
+  return Math.max(0, Math.min(100, Math.floor((xp.earned * 100) / xp.possible)));
+}
+
 /** The operation that makes point `node` of the path or task `container` a task of its own. */
 export function promoteOp(container: string, etag: string | undefined, node: Pick<PathNode, 'key' | 'index'>): Op {
   return { op: 'promote', container, point: pointRef(node), ...match(etag) };

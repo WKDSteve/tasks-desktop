@@ -119,6 +119,10 @@
         <input type="checkbox" data-pref="hide-learning" checked={app.learningHidden} onchange={(e) => app.setLearningHidden(e.currentTarget.checked)} />
         {t('menu.hide_learning')}
       </label>
+      <label class="check" data-hint={t('hint.item.menu.gamification')}>
+        <input type="checkbox" data-pref="gamification" checked={app.gamification} onchange={(e) => app.setGamification(e.currentTarget.checked)} />
+        {t('menu.gamification')}
+      </label>
       <label class="check" data-hint={t('hint.item.menu.bar_areas')}>
         <input type="checkbox" checked={app.barAreas} onchange={(e) => app.setBarAreas(e.currentTarget.checked)} />
         {t('menu.bar_areas')}

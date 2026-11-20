@@ -198,3 +198,66 @@ test('ticking down a list by keyboard: the mark keeps the focus, no tick runs in
     rmSync(file, { force: true });
   }
 });
+
+test('XP and levels: a level reached is said once with its reward, granted on disk, and the switch hides it all', async ({ page }) => {
+  const slug = 'paths-e2e-x01';
+  const dir = join(state().vault, 'lib.nvim', 'ROADMAP', 'paths');
+  mkdirSync(dir, { recursive: true });
+  const file = join(dir, `${slug}.md`);
+  const title = 'Path e2e x01';
+  writeFileSync(
+    file,
+    `---\ntitle: ${title}\nstatus: doing\n---\n\n## Lernpunkte\n\n- [ ] XP e2e {#root}\n  - [x] One e2e {xp=20} {#one}\n  - [ ] Two e2e {xp=40} {#two}\n\n## Level\n\n- [ ] 20 XP · Starter e2e · Belohnung: Ice e2e\n- [ ] 60 XP · Pro e2e · Belohnung: Movie e2e\n`,
+  );
+  try {
+    const problems = await pair(page, '/#view=paths');
+    await page.locator(`button[data-path="lib.nvim/${slug}"]`).click();
+    const tree = page.getByRole('list', { name: `Learning points of ${title}` });
+    await expect(tree).toBeVisible();
+    const point = (key: string) => tree.locator(`li[data-point="${key}"]`);
+    await expect(page.getByRole('img', { name: `XP of ${title}: 20 of 60` })).toBeVisible();
+    await expect(page.locator('p.level')).toHaveText('Level 1 (Starter e2e) · 40 XP to level 2');
+    await expect(point('one').locator('.xp-point')).toHaveText('20 XP');
+    // the level the path is first seen with is no news
+    await expect(page.getByText(/reached in Path e2e x01/)).toHaveCount(0);
+    await expectAccessible(page, 'a learning path with XP and levels');
+
+    // ticking the last point reaches level 2: said once, with its reward
+    let answer = nextAnswer(page);
+    await point('two').locator('button.mark').click();
+    await answer;
+    await expect(page.getByText(`Level 2 reached in ${title}. Treat yourself: Movie e2e`)).toBeVisible({ timeout: WRITE_BUDGET });
+    await expect(page.locator('p.level')).toHaveText('Level 2 (Pro e2e)');
+
+    // granted: the mark of its line in ## Level
+    answer = nextAnswer(page);
+    await page.getByRole('button', { name: 'Mark the reward "Movie e2e" as granted' }).click();
+    await answer;
+    await expect.poll(() => readFileSync(file, 'utf8'), { timeout: WRITE_BUDGET }).toContain('- [x] 60 XP · Pro e2e · Belohnung: Movie e2e');
+    await expect(page.locator('[data-reward="2"]')).toHaveCount(0, { timeout: WRITE_BUDGET });
+
+    // opened again: no second notice
+    await page.reload();
+    await expect(page.getByRole('menubar')).toBeVisible();
+    await page.locator(`button[data-path="lib.nvim/${slug}"]`).click();
+    await expect(tree).toBeVisible();
+    await expect(page.locator('p.level')).toHaveText('Level 2 (Pro e2e)');
+    await expect(page.getByText(/reached in Path e2e x01/)).toHaveCount(0);
+
+    // the switch of Options > Defaults hides XP, levels and rewards; the progress stays
+    const defaults = page.getByRole('dialog', { name: 'Defaults' });
+    await page.getByRole('menuitem', { name: 'Options', exact: true }).click();
+    await page.getByRole('menuitem', { name: 'Defaults ...' }).click();
+    await expect(defaults).toBeVisible();
+    await defaults.getByRole('checkbox', { name: 'XP, levels and rewards in learning paths' }).uncheck();
+    await defaults.getByRole('button', { name: 'Close' }).click();
+    await expect(page.locator('p.level')).toHaveCount(0);
+    await expect(page.locator('[data-xp]')).toHaveCount(0);
+    await expect(tree.locator('.xp-point')).toHaveCount(0);
+    await expect(page.getByRole('img', { name: /^Progress of Path e2e x01/ })).toBeVisible();
+    expect(problems).toEqual([]);
+    expect(await violations(page)).toEqual([]);
+  } finally {
+    rmSync(file, { force: true });
+  }
+});

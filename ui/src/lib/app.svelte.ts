@@ -469,6 +469,8 @@ export class App {
   zebra = $state(false);
   /** The saved views and the lists of tasks of the overview leave out the learning tasks (`lib/learning.ts`). */
   learningHidden = $state(false);
+  /** XP, levels and rewards in the learning paths (off: none of them, and no notice of a level reached). */
+  gamification = $state(true);
   /** The actions at the end of a row of a list, and whether every row shows them all the time (`lib/rowActions.ts`). */
   rowActions = $state.raw<RowActionPrefs>(DEFAULT_ROW_ACTIONS);
   /** The choice of the areas also stands in the bar at the top, for every view (a trial). */
@@ -925,6 +927,7 @@ export class App {
     this.areaSplit = safe(() => env.prefs.getItem('tasks-desktop.area-split')) !== 'off';
     this.zebra = safe(() => env.prefs.getItem('tasks-desktop.zebra')) === 'on';
     this.learningHidden = safe(() => env.prefs.getItem('tasks-desktop.hide-learning')) === 'on';
+    this.gamification = safe(() => env.prefs.getItem('tasks-desktop.gamification')) !== 'off';
     this.rowActions = parseRowActions(safe(() => env.prefs.getItem('tasks-desktop.row-actions')) ?? null);
     this.groupAreas = safe(() => env.prefs.getItem('tasks-desktop.group-areas')) === 'on';
     this.barAreas = safe(() => env.prefs.getItem('tasks-desktop.bar-areas')) === 'on';
@@ -2165,8 +2168,17 @@ export class App {
           ...(typeof inv.reason === 'string' ? { reason: inv.reason } : {}),
           // The note is no field of `Inverse` before the engine writes notes (capability `node_note`).
           ...noteOf(inv),
+          // XP written on a point: the XP it had, or none (capability `xp`)
+          ...(typeof inv.xp === 'number' ? { xp: inv.xp } : {}),
+          ...(inv.xp_clear === true ? { xp_clear: true as const } : {}),
           ...(inv.if_match ? { if_match: inv.if_match } : {}),
         });
+        continue;
+      }
+      // A reward of a level granted (or not): the mark it had (capability `path_reward`).
+      if (inv.op === 'path_reward') {
+        if (typeof inv.level !== 'string' || typeof inv.given !== 'boolean') return undefined;
+        inverses.push({ op: 'path_reward', id: inv.id, level: inv.level, given: inv.given, ...(inv.if_match ? { if_match: inv.if_match } : {}) });
         continue;
       }
       // A point made a task: taken back while the task holds no work of its own (the engine judges that).
@@ -3865,6 +3877,32 @@ export class App {
   setLearningHidden(on: boolean): void {
     this.learningHidden = on;
     safe(() => this.env.prefs.setItem('tasks-desktop.hide-learning', on ? 'on' : 'off'));
+  }
+
+  /** The switch "Show XP, levels and rewards" of the learning paths, kept in this browser. */
+  setGamification(on: boolean): void {
+    this.gamification = on;
+    safe(() => this.env.prefs.setItem('tasks-desktop.gamification', on ? 'on' : 'off'));
+  }
+
+  /**
+   * Whether a level reached in path `id` is news: the highest level said so far is kept in this browser. The first look
+   * at a path only notes its level (a path opened at level 2 is no news); a higher one later is said once.
+   */
+  levelNews(id: string, level: number): boolean {
+    const raw = safe(() => this.env.prefs.getItem('tasks-desktop.levels-seen')) ?? null;
+    let seen: Record<string, number> = {};
+    try {
+      const parsed: unknown = raw ? JSON.parse(raw) : {};
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) seen = parsed as Record<string, number>;
+    } catch {
+      seen = {};
+    }
+    const before = typeof seen[id] === 'number' ? seen[id] : undefined;
+    if (before !== undefined && level <= before) return false;
+    seen[id] = level;
+    safe(() => this.env.prefs.setItem('tasks-desktop.levels-seen', JSON.stringify(seen)));
+    return before !== undefined;
   }
 
   setBarAreas(on: boolean): void {

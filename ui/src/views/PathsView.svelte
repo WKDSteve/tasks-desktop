@@ -26,11 +26,15 @@
     openableLink,
     parentIndices,
     pointIds,
+    parseXp,
     progressParts,
     promoteOp,
     REASON_MAX,
+    rewardOp,
     stateOp,
     visiblePoints,
+    xpOp,
+    xpPercent,
     type PointState,
   } from '../lib/paths';
 
@@ -53,13 +57,15 @@
   let folded = $state<ReadonlySet<string>>(new Set());
   // The point whose reason or note is being written (by its name, so that a read after a change elsewhere keeps the
   // field and what is typed), with what is typed.
-  let editing = $state<{ id: string; kind: 'reason' | 'note'; state?: PointState; missing: boolean } | null>(null);
+  let editing = $state<{ id: string; kind: 'reason' | 'note' | 'xp'; state?: PointState; missing: boolean } | null>(null);
   // What is typed into the open field (apart from `editing`, so that closing the field never leaves a binding on nothing).
   let draft = $state('');
   let root: HTMLElement | undefined = $state();
 
   const usable = $derived(app.can('paths') && app.can('path'));
   const writesNotes = $derived(app.can('node_note'));
+  // XP, levels and rewards: an engine that counts them (capability `xp`), and the person did not turn them off.
+  const game = $derived(app.gamification && app.can('xp'));
   const chosen = $derived(app.pathChoice);
   const ids = $derived(doc ? pointIds(doc.nodes) : new Map<number, string>());
   const foldedIndices = $derived(indicesOf(ids, folded));
@@ -69,7 +75,9 @@
   // next tick would be refused as a conflict, or set a state the point already has).
   const busy = $derived(app.saving || reading);
   const idOf = (node: PathNode): string => ids.get(node.index) ?? `#${node.index}`;
-  const editingOf = (node: PathNode, kind: 'reason' | 'note'): boolean => editing?.kind === kind && editing.id === idOf(node);
+  const editingOf = (node: PathNode, kind: 'reason' | 'note' | 'xp'): boolean => editing?.kind === kind && editing.id === idOf(node);
+  /** A leaf whose XP are its own to set here (a point whose task carries `xp:` takes the task's). */
+  const ownsXp = (node: PathNode): boolean => node.children === 0 && node.xp_from !== 'task';
   /** The text of a label as shown: the link's text, with the characters that hide or reorder text made visible. */
   const shownLabel = (node: PathNode): string => markHidden(labelText(node));
 
@@ -103,6 +111,7 @@
       doc = answer;
       docProblem = false;
       keepEditing(answer);
+      sayLevel(answer);
     } catch {
       if (mine !== askedPath) return;
       doc = null;
@@ -136,7 +145,9 @@
     const id = editing.id;
     const names = pointIds(read.nodes);
     const node = read.nodes.find((n) => names.get(n.index) === id);
-    const fits = node !== undefined && (editing.kind === 'reason' ? isMarkable(node) : node.promoted === undefined);
+    const fits =
+      node !== undefined &&
+      (editing.kind === 'reason' ? isMarkable(node) : editing.kind === 'xp' ? ownsXp(node) : node.promoted === undefined);
     if (fits) return;
     editing = null;
     app.tell('error', 'paths.conflict');
@@ -237,6 +248,59 @@
     closeField(node);
     void send(noteOp(doc.path.id, doc.path.etag, node, note));
   }
+  function editXp(node: PathNode): void {
+    const own = node.xp_from === 'point' ? node.xp : undefined;
+    draft = String(own ?? node.xp_suggest ?? '');
+    editing = { id: idOf(node), kind: 'xp', missing: false };
+    void focusField(`xp-${node.index}`);
+  }
+  function saveXp(node: PathNode): void {
+    if (!doc || !editing || editing.kind !== 'xp') return;
+    const xp = parseXp(draft);
+    if (xp === null) {
+      editing = { ...editing, missing: true };
+      return;
+    }
+    const own = node.xp_from === 'point' ? node.xp : undefined;
+    // nothing changes: the field closes without a write
+    if ((xp === 'clear' && own === undefined) || xp === own) {
+      closeField(node);
+      return;
+    }
+    if (refused()) return;
+    closeField(node);
+    void send(xpOp(doc.path.id, doc.path.etag, node, xp));
+  }
+  function grant(ref: string): void {
+    if (!doc || refused()) return;
+    void send(rewardOp(doc.path.id, doc.path.etag, ref, true));
+  }
+  /**
+   * A level reached since the path was looked at last is said once, in one line, with its reward when it has one that
+   * is not granted yet. The first look only notes the level; with the switch off the level is noted, not said.
+   */
+  function sayLevel(read: PathDocument): void {
+    const state = read.path.level;
+    if (!state) return;
+    if (!app.levelNews(read.path.id, state.level) || !app.gamification || state.level <= 0) return;
+    const title = markHidden(read.path.title);
+    const reward = read.levels?.find((l) => l.ref === String(state.level) && l.reward && !l.given)?.reward;
+    if (reward) app.tell('ok', 'paths.level.news_reward', { n: state.level, title, reward: markHidden(reward) });
+    else app.tell('ok', 'paths.level.news', { n: state.level, title });
+  }
+  function levelText(state: NonNullable<PathEntry['level']>): string {
+    const head =
+      state.level > 0
+        ? state.name
+          ? t('paths.level_named', { n: state.level, name: markHidden(state.name) })
+          : t('paths.level', { n: state.level })
+        : t('paths.level.none');
+    const next = state.next;
+    if (!next) return head;
+    if (next.missing_xp !== undefined) return `${head} · ${t('paths.level.next_xp', { n: next.missing_xp, level: next.number })}`;
+    if (next.missing_percent !== undefined) return `${head} · ${t('paths.level.next_percent', { n: next.missing_percent, level: next.number })}`;
+    return head;
+  }
   async function promote(node: PathNode): Promise<void> {
     if (!doc || refused()) return;
     const result = await send(promoteOp(doc.path.id, doc.path.etag, node));
@@ -264,6 +328,7 @@
       });
       out.push({ id: 'promote', label: t('paths.promote_of', { label: shownLabel(node) }), onselect: () => void promote(node) });
     }
+    if (game && ownsXp(node)) out.push({ id: 'xp', label: t('paths.menu.xp'), onselect: () => editXp(node) });
     return out;
   }
 
@@ -318,7 +383,12 @@
                 onclick={() => choose(entry.id)}
               >
                 <span class="name">{#if entry.icon?.kind === 'emoji'}<span aria-hidden="true">{entry.icon.value} </span>{/if}{markHidden(entry.title)}</span>
-                <span class="sub">{markHidden(entry.area)} · {progressText(entry.progress)}</span>
+                <span class="sub"
+                  >{markHidden(entry.area)} · {progressText(entry.progress)}{#if game && entry.xp}{` · ${t('paths.xp', {
+                      earned: entry.xp.earned,
+                      possible: entry.xp.possible,
+                    })}`}{/if}{#if game && entry.level && entry.level.level > 0}{` · ${t('paths.level', { n: entry.level.level })}`}{/if}</span
+                >
               </button>
             </li>
           {/each}
@@ -341,6 +411,27 @@
             {/each}
           </div>
           <p class="figures" aria-hidden="true">{progressText(progress)}</p>
+          {#if game && doc.xp}
+            {@const xp = doc.xp}
+            <div class="xp" role="img" aria-label={t('paths.xp_of', { title, earned: xp.earned, possible: xp.possible })} data-xp>
+              <span class="fill" style:width="{xpPercent(xp)}%"></span>
+            </div>
+            <p class="figures" aria-hidden="true">
+              {t('paths.xp', { earned: xp.earned, possible: xp.possible })}{#if xp.missing > 0}{` · ${t('paths.xp.missing', { n: xp.missing })}`}{/if}
+            </p>
+          {/if}
+          {#if game && doc.path.level}
+            <p class="level" data-level={doc.path.level.level}>{levelText(doc.path.level)}</p>
+            {#each doc.path.level.open_rewards as reward (reward.ref)}
+              {@const text = markHidden(reward.reward)}
+              <p class="reward" data-reward={reward.ref}>
+                <span>{t('paths.reward.open', { reward: text })}</span>
+                <button type="button" aria-label={t('paths.reward.grant_of', { reward: text })} aria-disabled={busy ? 'true' : undefined} onclick={() => grant(reward.ref)}
+                  >{t('paths.reward.grant')}</button
+                >
+              </p>
+            {/each}
+          {/if}
           {#if doc.tree_problems.length > 0}
             <p class="problems" role="note">{t('paths.problems', { n: doc.tree_problems.length })}</p>
           {/if}
@@ -411,6 +502,9 @@
                     {/if}
                     {#if parent}<span class="count">{progressText(node.progress)}</span>{/if}
                   </span>
+                  {#if game && !parent && node.xp !== undefined}
+                    <span class="xp-point" data-xp={node.xp}>{t(node.xp_from === 'task' ? 'paths.xp.from_task' : 'paths.xp.point', { n: node.xp })}</span>
+                  {/if}
 
                   {#if node.promoted}
                     {@const task = promotedTask(node.promoted)}
@@ -497,6 +591,34 @@
                     <span class="buttons">
                       <button type="submit" class="primary">{t('paths.note.save')}</button>
                       <button type="button" onclick={() => closeField(node)}>{t('paths.note.cancel')}</button>
+                    </span>
+                  </form>
+                {:else if editing && editingOf(node, 'xp')}
+                  <form
+                    class="edit"
+                    data-hint={t('hint.form.paths.xp')}
+                    onsubmit={(e) => {
+                      e.preventDefault();
+                      saveXp(node);
+                    }}
+                  >
+                    <label for="xp-{node.index}">{t('paths.xp.label', { label })}</label>
+                    <input
+                      id="xp-{node.index}"
+                      type="text"
+                      inputmode="numeric"
+                      maxlength="6"
+                      bind:value={draft}
+                      aria-invalid={editing.missing ? 'true' : undefined}
+                      aria-describedby={editing.missing ? `xp-invalid-${node.index}` : undefined}
+                      onkeydown={(e) => {
+                        if (e.key === 'Escape') closeField(node);
+                      }}
+                    />
+                    {#if editing.missing}<span id="xp-invalid-{node.index}" class="missing" role="alert">{t('paths.xp.invalid')}</span>{/if}
+                    <span class="buttons">
+                      <button type="submit" class="primary">{t('paths.xp.save')}</button>
+                      <button type="button" onclick={() => closeField(node)}>{t('paths.xp.cancel')}</button>
                     </span>
                   </form>
                 {/if}
@@ -641,8 +763,36 @@
   .figures,
   .problems,
   .conflict,
-  .summary {
+  .summary,
+  .level,
+  .reward {
     margin: 0;
+  }
+  .xp {
+    height: 0.45rem;
+    border-radius: var(--radius-pill);
+    overflow: hidden;
+    background: var(--surface);
+    border: 1px solid var(--border);
+  }
+  .xp .fill {
+    display: block;
+    height: 100%;
+    background: var(--accent);
+  }
+  .level {
+    font-weight: 600;
+  }
+  .reward {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+  .xp-point {
+    flex: none;
+    color: var(--muted);
+    font-size: 0.85em;
   }
   .conflict {
     color: var(--bad);

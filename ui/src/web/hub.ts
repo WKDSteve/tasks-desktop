@@ -833,10 +833,11 @@ export const OPS_ALLOWED = [
   'view_save',
   'view_delete',
   'attach',
-  // the learning paths: the state of a point, a point made a task and taken back
+  // the learning paths: the state (and XP) of a point, a point made a task and taken back, a reward granted
   'node_set',
   'promote',
   'unpromote',
+  'path_reward',
   'history_record',
 ];
 const OPS_FIELDS = ['schema', 'client_op_id', 'dry_run', 'ops'];

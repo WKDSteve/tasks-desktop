@@ -4,8 +4,11 @@
 //   node --experimental-strip-types --test web/hub-ops.test.mjs        (from ui/)
 
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
 import { test as base } from 'node:test';
-import { checkOpsRequest, createWebHub } from '../src/web/hub.ts';
+import { fileURLToPath } from 'node:url';
+import { checkOpsRequest, createWebHub, OPS_ALLOWED } from '../src/web/hub.ts';
 
 // An event that never comes must fail the test, not hang the run.
 const test = (name, fn) => base(name, { timeout: 20_000 }, fn);
@@ -88,6 +91,21 @@ test('a plain request of ops goes to the write path as it is, and its answer is 
   assert.deepEqual(w.seen, [request]);
   const names = ['set', 'new', 'reorder', 'done', 'move_area', 'plan_new', 'tick_step', 'answer', 'append_note', 'reopen', 'set_body', 'view_save', 'view_delete'];
   for (const name of names) assert.equal((await w.post({ ops: [{ op: name }] })).status, 200, name);
+});
+
+// The page asks the same hub in both variants: an operation the Rust hub lets through and this one refuses (or the other
+// way round) works in the app and fails in the browser. The list of the Rust hub is read from its source.
+test('the browser hub lets through the operations the Rust hub does, the learning paths included', () => {
+  const routes = readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', 'crates', 'tasks-hub', 'src', 'server', 'routes.rs'), 'utf8');
+  const block = routes.match(/pub\(super\) const OPS_ALLOWED: \[&str; \d+\] = \[([\s\S]*?)\];/);
+  assert.ok(block, 'OPS_ALLOWED found in routes.rs');
+  const rust = [...block[1].matchAll(/^\s*"([a-z_]+)",/gm)].map((m) => m[1]);
+  // the meetings are written through the Rust hub only (the web variant has no meeting files yet)
+  const appOnly = new Set(['set_section', 'meeting_new', 'meeting_set', 'meeting_close', 'meeting_capture', 'meeting_attend', 'meeting_followups']);
+  assert.deepEqual([...OPS_ALLOWED].sort(), rust.filter((name) => !appOnly.has(name)).sort());
+  for (const op of ['node_set', 'promote', 'unpromote', 'path_reward']) {
+    assert.equal(typeof checkOpsRequest(JSON.stringify({ ops: [{ op }] })), 'object', op);
+  }
 });
 
 test('the clipboard of the machine is out of reach: an attach is refused, not tried', async () => {
