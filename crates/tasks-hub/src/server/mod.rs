@@ -57,6 +57,7 @@ use crate::watch::{self as fswatch, Hint};
 use appkit_hub::streams::StreamCounter;
 
 mod answer;
+mod assets;
 mod check;
 pub(crate) mod device_cut;
 mod events;
@@ -362,6 +363,8 @@ fn app_routes(core: &Arc<Shared>) -> Router<Arc<Shared>> {
         .route(&r("meeting"), get(self::meetings::meeting))
         .route(&r("meeting/ics"), get(self::meetings::meeting_ics))
         .route(&r("meeting/thumb"), get(self::meetings::meeting_thumb))
+        // The image files below `assets/` of a task, plan, project, path or meeting (concept "Lernplan" 11.3, E12).
+        .route(&r("asset"), get(self::assets::asset))
         // The learning paths (concept "Lernplan" 11.3): the open paths, one path with its tree; the writes are `ops`.
         .route(&r("paths"), get(self::paths::paths))
         .route(&r("path"), get(self::paths::path))

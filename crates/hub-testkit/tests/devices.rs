@@ -320,6 +320,10 @@ async fn a_phone_reaches_the_routes_of_the_phone_page_and_nothing_else() {
         ("GET", "/api/tasks/meeting?id=alpha.nvim/m1"),
         ("GET", "/api/tasks/meeting/ics?id=alpha.nvim/m1"),
         ("GET", "/api/tasks/meeting/thumb?id=alpha.nvim/m1"),
+        (
+            "GET",
+            "/api/tasks/asset?kind=task&id=alpha.nvim/t1&file=assets/x.png",
+        ),
         ("GET", "/api/tasks/paths"),
         ("GET", "/api/tasks/path?id=alpha.nvim/p1"),
         ("POST", "/api/tasks/meeting_parse"),

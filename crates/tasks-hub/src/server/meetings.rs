@@ -147,7 +147,7 @@ async fn meeting_document(st: &Shared, id: &str) -> Result<String, Response> {
 
 /// The document of `id` read, and its entry checked to be that meeting.
 #[allow(clippy::result_large_err)]
-async fn meeting_value(st: &Shared, id: &str) -> Result<serde_json::Value, Response> {
+pub(super) async fn meeting_value(st: &Shared, id: &str) -> Result<serde_json::Value, Response> {
     let text = meeting_document(st, id).await?;
     let doc: serde_json::Value = serde_json::from_str(&text).map_err(|_| engine_said_nothing())?;
     if doc["kind"] != "tasks.meeting" || doc["meeting"]["id"] != id {
@@ -312,7 +312,7 @@ fn download(body: String, content_type: &'static str, name: &str) -> Response {
 }
 
 /// The headers of an answer that is a file, not a page: no sniffing, no scripts, not kept.
-fn sealed(headers: &mut HeaderMap) {
+pub(super) fn sealed(headers: &mut HeaderMap) {
     headers.insert(
         "x-content-type-options",
         HeaderValue::from_static("nosniff"),

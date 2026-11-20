@@ -516,7 +516,7 @@ fn kind_of(path: &str) -> Option<Kind> {
 }
 
 /// A path relative to a folder, with plain parts only: no `..`, no root, no drive, no backslash.
-fn plain_relative(path: &str) -> bool {
+pub(crate) fn plain_relative(path: &str) -> bool {
     !path.is_empty()
         && path.len() <= 512
         && !path.starts_with('/')
@@ -529,7 +529,7 @@ fn plain_relative(path: &str) -> bool {
 
 /// `path` when it is a file below `folder`, and `folder` one below `vault`, once every link is followed; `None`
 /// otherwise. A meeting's folder that is a link out of the vault is no way to the files there.
-fn inside(vault: &Path, folder: &Path, path: &Path) -> Option<PathBuf> {
+pub(crate) fn inside(vault: &Path, folder: &Path, path: &Path) -> Option<PathBuf> {
     let vault = std::fs::canonicalize(vault).ok()?;
     let folder = std::fs::canonicalize(folder).ok()?;
     let path = std::fs::canonicalize(path).ok()?;

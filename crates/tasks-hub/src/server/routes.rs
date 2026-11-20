@@ -127,7 +127,7 @@ pub(super) async fn task(
 /// The document of `task?id=`, from the details the hub holds or from the engine; `Err`: the answer to send.
 // The error is the answer to send, as with `ask`: a response is large, and rare.
 #[allow(clippy::result_large_err)]
-async fn task_document(st: &Shared, query: Option<&str>) -> Result<String, Response> {
+pub(super) async fn task_document(st: &Shared, query: Option<&str>) -> Result<String, Response> {
     let query = query.map(str::to_owned);
     let params = match parse_query(query.as_deref(), &["id"]) {
         Ok(p) => p,
