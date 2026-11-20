@@ -92,7 +92,7 @@
   // A meeting is picked up by its body (move) or its lower edge (length).
   let origin = { x: 0, y: 0 };
   function down(event: PointerEvent, b: Block, kind: DragKind): void {
-    if (!canMove || event.button !== 0 || app.saving) return;
+    if (!canMove || b.clipped || event.button !== 0 || app.saving) return;
     if (kind === 'resize') event.stopPropagation();
     origin = { x: event.clientX, y: event.clientY };
     drag = { id: b.meeting.id, kind, day: b.day, start: b.start, end: b.end, moved: false };
@@ -131,7 +131,8 @@
   let root = $state<HTMLElement | null>(null);
   /** Shift with the arrows moves by a quarter hour or a day, Ctrl+Shift with up and down changes the length. */
   function key(event: KeyboardEvent, b: Block): void {
-    if (!canMove || !event.shiftKey || event.altKey || event.metaKey || app.saving) return;
+    // A meeting over midnight is moved on its page: the block holds only the part of this day (`Block.clipped`).
+    if (!canMove || b.clipped || !event.shiftKey || event.altKey || event.metaKey || app.saving) return;
     const k = event.key;
     if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(k)) return;
     event.preventDefault();
@@ -247,6 +248,7 @@
                 class="block"
                 class:conflict={b.conflict}
                 class:cancelled={b.meeting.status === 'cancelled'}
+                class:clipped={b.clipped}
                 class:dragging={drag?.id === b.meeting.id && drag.moved && drag.day !== day}
                 style:top="{top(at.start)}px"
                 style:height="{Math.max(top(at.end - at.start), 12)}px"
@@ -279,7 +281,7 @@
                   {/if}
                 </button>
                 {#if link}<a class="join" href={link} target="_blank" rel="noopener noreferrer">{t('calendar.join')}</a>{/if}
-                {#if canMove}
+                {#if canMove && !b.clipped}
                   <span
                     class="edge"
                     role="presentation"
@@ -439,6 +441,9 @@
     color: var(--text);
     cursor: grab;
     touch-action: none;
+  }
+  .block.clipped .open {
+    cursor: pointer;
   }
   .open:focus-visible {
     outline: 2px solid var(--focus);

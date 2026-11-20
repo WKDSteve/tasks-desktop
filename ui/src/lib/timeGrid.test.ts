@@ -42,8 +42,8 @@ function meeting(id: string, starts: string, ends: string | undefined, more: Par
 
 describe('spanOn', () => {
   it('gives the minutes of the day, and the default length for a meeting without an end', () => {
-    expect(spanOn(meeting('a', '2026-11-24T14:00', '2026-11-24T15:30'), '2026-11-24')).toEqual({ start: 840, end: 930 });
-    expect(spanOn(meeting('b', '2026-11-24T14:00', undefined), '2026-11-24')).toEqual({ start: 840, end: 870 });
+    expect(spanOn(meeting('a', '2026-11-24T14:00', '2026-11-24T15:30'), '2026-11-24')).toEqual({ start: 840, end: 930, clipped: false });
+    expect(spanOn(meeting('b', '2026-11-24T14:00', undefined), '2026-11-24')).toEqual({ start: 840, end: 870, clipped: false });
   });
   it('is nothing on another day and for an all-day meeting', () => {
     expect(spanOn(meeting('a', '2026-11-24T14:00', '2026-11-24T15:00'), '2026-11-25')).toBeNull();
@@ -51,8 +51,11 @@ describe('spanOn', () => {
   });
   it('cuts a meeting over midnight at both days', () => {
     const m = meeting('a', '2026-11-24T23:00', '2026-11-25T01:00');
-    expect(spanOn(m, '2026-11-24')).toEqual({ start: 1380, end: 1440 });
-    expect(spanOn(m, '2026-11-25')).toEqual({ start: 0, end: 60 });
+    expect(spanOn(m, '2026-11-24')).toEqual({ start: 1380, end: 1440, clipped: true });
+    expect(spanOn(m, '2026-11-25')).toEqual({ start: 0, end: 60, clipped: true });
+  });
+  it('does not call a meeting that ends at midnight cut', () => {
+    expect(spanOn(meeting('a', '2026-11-24T23:00', '2026-11-25T00:00'), '2026-11-24')).toEqual({ start: 1380, end: 1440, clipped: false });
   });
 });
 
@@ -78,8 +81,8 @@ describe('layoutColumns', () => {
   });
   it('does not count a cancelled meeting as a conflict, but still sets it beside the other', () => {
     const blocks = layoutColumns([
-      { meeting: meeting('a', '2026-11-24T10:00', '2026-11-24T11:00'), day: 'd', start: 600, end: 660, col: 0, cols: 1, conflict: false },
-      { meeting: meeting('b', '2026-11-24T10:00', '2026-11-24T11:00', { status: 'cancelled' }), day: 'd', start: 600, end: 660, col: 0, cols: 1, conflict: false },
+      { meeting: meeting('a', '2026-11-24T10:00', '2026-11-24T11:00'), day: 'd', start: 600, end: 660, clipped: false, col: 0, cols: 1, conflict: false },
+      { meeting: meeting('b', '2026-11-24T10:00', '2026-11-24T11:00', { status: 'cancelled' }), day: 'd', start: 600, end: 660, clipped: false, col: 0, cols: 1, conflict: false },
     ]);
     expect(conflictCount(blocks)).toBe(0);
     expect(blocks.map((b) => b.cols)).toEqual([2, 2]);
@@ -97,6 +100,15 @@ describe('the meetings of the days', () => {
     const by = blocksByDay(list, days);
     expect(by.get('2026-11-24')!.map((b) => b.meeting.id)).toEqual(['e', 't']);
     expect(by.get('2026-11-23')).toEqual([]);
+  });
+  it('marks both blocks of a meeting over midnight as cut, so the grid does not move them', () => {
+    const by = blocksByDay([meeting('n', '2026-11-24T23:00', '2026-11-25T01:00'), ...list], days);
+    expect(by.get('2026-11-24')!.map((b) => [b.meeting.id, b.start, b.end, b.clipped])).toEqual([
+      ['e', 540, 600, false],
+      ['t', 840, 900, false],
+      ['n', 1380, 1440, true],
+    ]);
+    expect(by.get('2026-11-25')!.map((b) => [b.meeting.id, b.start, b.end, b.clipped])).toEqual([['n', 0, 60, true]]);
   });
   it('spreads an all-day meeting over its days', () => {
     expect(allDayDays(list[2]!)).toEqual(days);

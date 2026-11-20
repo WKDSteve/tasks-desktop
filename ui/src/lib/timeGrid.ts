@@ -26,6 +26,11 @@ export interface Block {
   /** Minutes of the day (0..1440) of the part of the meeting on this day. */
   start: number;
   end: number;
+  /**
+   * The meeting leaves this day (over midnight): `start`/`end` are cut to the day, not its own beginning and length.
+   * Such a block is not moved in the grid: a move would write the cut time (`movePatch`) and lose the real one.
+   */
+  clipped: boolean;
   /** The column among the overlapping blocks, and how many columns that cluster has. */
   col: number;
   cols: number;
@@ -45,8 +50,11 @@ export function allDayDays(m: Pick<MeetingEntry, 'date' | 'ends_at' | 'starts_at
   return out.length > 0 ? out : [first];
 }
 
-/** The part of a timed meeting on `day` in minutes of that day, or null when it is all day or not on the day. */
-export function spanOn(m: Pick<MeetingEntry, 'starts_at' | 'ends_at' | 'all_day'>, day: string): { start: number; end: number } | null {
+/**
+ * The part of a timed meeting on `day` in minutes of that day, or null when it is all day or not on the day. `clipped`
+ * says the meeting begins before the day or ends after it.
+ */
+export function spanOn(m: Pick<MeetingEntry, 'starts_at' | 'ends_at' | 'all_day'>, day: string): { start: number; end: number; clipped: boolean } | null {
   if (m.all_day || !m.starts_at || m.starts_at.length < 16) return null;
   const begin = wallMinutes(m.starts_at);
   const dayStart = wallMinutes(day);
@@ -55,7 +63,8 @@ export function spanOn(m: Pick<MeetingEntry, 'starts_at' | 'ends_at' | 'all_day'
   const endAt = !Number.isNaN(finish) && finish > begin ? finish : begin + DEFAULT_LENGTH;
   const start = Math.max(begin - dayStart, 0);
   const end = Math.min(endAt - dayStart, DAY_MIN);
-  return end > start ? { start, end } : null;
+  const clipped = begin - dayStart < 0 || endAt - dayStart > DAY_MIN;
+  return end > start ? { start, end, clipped } : null;
 }
 
 /** Put overlapping blocks side by side: the column of each and the number of columns of its cluster. */

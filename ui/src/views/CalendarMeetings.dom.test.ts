@@ -202,6 +202,24 @@ describe('the hour grid', () => {
     ]);
   });
 
+  it('does not move a meeting over midnight: its blocks hold only the part of each day, a move would write that', async () => {
+    const night = meeting('pub/night', `${TODAY}T23:00`, '2026-11-21T01:00');
+    const { m, root } = await week([...two, night]);
+    const blocks = [...root.querySelectorAll<HTMLElement>('.block[data-meeting="pub/night"]')];
+    expect(blocks).toHaveLength(2);
+    for (const b of blocks) {
+      expect(b.querySelector('[data-resize]')).toBeNull();
+      const open = b.querySelector<HTMLElement>('.open')!;
+      press(open, 'ArrowDown', { shiftKey: true });
+      press(open, 'ArrowRight', { shiftKey: true });
+      press(open, 'ArrowDown', { shiftKey: true, ctrlKey: true });
+      await settle();
+    }
+    expect(sent(m)).toEqual([]);
+    // a meeting of one day keeps its grip
+    expect(root.querySelector('.block[data-meeting="pub/free"] [data-resize]')).not.toBeNull();
+  });
+
   it('writes nothing where the engine cannot write meetings, or the page is read only', async () => {
     const shown = await show(two, ['meetings', 'meeting']);
     press(cell(shown.root, TODAY), 'w');
