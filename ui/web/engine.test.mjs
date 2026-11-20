@@ -182,6 +182,26 @@ test('a folder whose names hold a tab or a newline is listed whole', async () =>
   assert.equal(await lua('local n = vim.fn.readdir("/names"); return #n .. "|" .. table.concat(n, "|")'), '2|a\tb.md|c\nd.md');
 });
 
+// The file system of wasmoon (emscripten's MEMFS) keeps the file a rename replaced in its table of names: after the new
+// file is removed, a stat and a read found the old one again. The engine writes every file through a rename over the
+// old one, so a task finished after a note stood in two places (open and in the Backlog).
+test('a file replaced by a rename is gone once the new one is removed', async () => {
+  const e = await engine();
+  e.mount({ '/swap/a.md': 'old' });
+  const lines = await lua(`
+    local f = io.open("/swap/a.md.tmp", "wb"); f:write("new"); f:close()
+    assert(vim.uv.fs_rename("/swap/a.md.tmp", "/swap/a.md"))
+    local r = io.open("/swap/a.md", "rb"); local now = r:read("a"); r:close()
+    assert(vim.uv.fs_unlink("/swap/a.md"))
+    local st = vim.uv.fs_stat("/swap/a.md")
+    local h = io.open("/swap/a.md", "rb")
+    local ghost = h and h:read("a") or "none"
+    if h then h:close() end
+    return now .. "|" .. tostring(st ~= nil) .. "|" .. ghost .. "|" .. #vim.fn.readdir("/swap")
+  `);
+  assert.equal(lines, 'new|false|none|0');
+});
+
 test('vim.fn.mkdir raises E739 as Neovim does, os.exit is refused', async () => {
   await engine();
   assert.match(String(await lua('return select(2, pcall(vim.fn.mkdir, "/vault"))')), /E739/);

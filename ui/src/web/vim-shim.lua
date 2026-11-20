@@ -750,6 +750,16 @@ function uv.fs_unlink(path)
 end
 
 function uv.fs_rename(from, to)
+  -- emscripten's MEMFS (wasmoon) keeps a file that a rename replaces in its table of names: once the new file is
+  -- removed, a stat and a read find the old one again (a task finished after a note stood in two places). So a file
+  -- in the way is removed first; the VM runs one call at a time, nothing sees the moment between.
+  local target = stat(to)
+  if target and target.type == "file" and fs.normalize(from) ~= fs.normalize(to) and stat(from) then
+    local removed, rerr = os.remove(to)
+    if not removed then
+      return nil, rerr
+    end
+  end
   local ok, err = os.rename(from, to)
   if not ok then
     return nil, err
