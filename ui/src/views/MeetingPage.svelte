@@ -413,7 +413,7 @@
         {#if app.canAttach && canWrite && id}
           <section aria-labelledby="meeting-attach">
             <h3 id="meeting-attach">{t('meeting.attachments')}</h3>
-            <AttachBar {app} {id} />
+            <AttachBar {app} {id} owner="meeting" />
           </section>
         {/if}
         <section aria-labelledby="meeting-cover">

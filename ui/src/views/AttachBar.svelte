@@ -32,7 +32,7 @@
   import Lazy from './Lazy.svelte';
   import type { BoardSaved } from '../lib/api';
 
-  let { app, id }: { app: App; id: string } = $props();
+  let { app, id, owner = 'task' }: { app: App; id: string; owner?: 'task' | 'plan' | 'project' | 'meeting' } = $props();
   /** The drawing surface is open for a new board of this item. */
   let drawing = $state(false);
 
@@ -328,14 +328,16 @@
   />
 </span>
 {#if drawing}
-  <!-- A new board on the drawing surface (its own chunk); its first save is linked in the notes. -->
+  <!-- A new board on the drawing surface (its own chunk); its first save is linked in the notes of a task or a meeting
+       (`append_note` takes no plan or project: there the board is an asset of the folder). -->
   <Lazy
     {app}
     load={() => import('./BoardEditor.svelte')}
     extra={{
-      owner: 'task' as const,
+      owner,
       id,
-      onsaved: (s: BoardSaved & { name: string }) => s.preview && void app.write([{ op: 'append_note', id, text: `![${s.name}](${s.preview})` }]),
+      onsaved: (s: BoardSaved & { name: string }) =>
+        s.preview && (owner === 'task' || owner === 'meeting') && void app.write([{ op: 'append_note', id, text: `![${s.name}](${s.preview})` }]),
       onclose: () => (drawing = false),
     }}
     onfailed={() => (drawing = false)}

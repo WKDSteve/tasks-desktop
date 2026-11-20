@@ -74,7 +74,7 @@
         <p class="muted">{t('plan.files.none')}</p>
       {/if}
       {#if canAttach}
-        <p class="attach"><AttachBar {app} {id} /></p>
+        <p class="attach"><AttachBar {app} {id} owner={kind} /></p>
       {/if}
     </details>
   </section>
