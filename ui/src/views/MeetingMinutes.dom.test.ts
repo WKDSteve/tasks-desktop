@@ -79,6 +79,13 @@ function showPage(app: Made['app']): HTMLElement {
   return target;
 }
 
+async function settle(): Promise<void> {
+  await tick();
+  flushSync();
+  await new Promise((r) => setTimeout(r, 0));
+  flushSync();
+}
+
 async function typeAndSend(target: HTMLElement, text: string): Promise<void> {
   const input = target.querySelector('form.entry input') as HTMLInputElement;
   input.value = text;
@@ -177,7 +184,58 @@ describe('the minutes of a meeting', () => {
   });
 });
 
+describe('the minutes, from one meeting to the next', () => {
+  it('start empty for another meeting: what was typed belongs to the meeting it was typed in', async () => {
+    const m = await ready();
+    m.hub.meetingItems.push(meeting('pub/other', '2026-11-20T09:45', '2026-11-20T10:45'));
+    const target = await openOn(m);
+    const field = () => target.querySelector('form.entry input') as HTMLInputElement;
+    field().value = 'halb getippt';
+    field().dispatchEvent(new Event('input', { bubbles: true }));
+    flushSync();
+    m.app.openMeeting('pub/other');
+    await vi.waitFor(() => expect(target.querySelector('#meeting-page-title')?.textContent).toContain('pub/other'));
+    await settle();
+    expect(field().value).toBe('');
+  });
+
+  it('do not ask a hub again at every read while it takes no write', async () => {
+    const prefs = new Map([[MINUTES_DRAFTS_KEY, JSON.stringify({ 'pub/now': [{ kind: 'text', text: 'Entwurf', at: '09:50' }] })]]);
+    const m = await ready(prefs);
+    // Every write: no engine behind the hub; the reads still answer.
+    m.hub.ops_queue = Array.from({ length: 8 }, () => new ApiError(503, 'engine_unavailable', 'no engine'));
+    const target = await openOn(m);
+    await vi.waitFor(() => expect(m.hub.sent).toHaveLength(1));
+    // the reads after the failed write come and go; no second try follows them
+    await vi.waitFor(() => expect(m.hub.meetingReads.length).toBeGreaterThan(1));
+    await settle();
+    await new Promise((r) => setTimeout(r, 100));
+    expect(m.hub.sent).toHaveLength(1);
+    expect(target.querySelector('.drafts')?.textContent).toContain('1 Einträge');
+  });
+});
+
 describe('the tab Result', () => {
+  it('shows the result of another meeting when the page goes to it, not what was typed for the one before', async () => {
+    const m = await ready();
+    m.hub.meetingItems.push(meeting('pub/other', '2026-11-19T09:00', '2026-11-19T10:00'));
+    m.hub.meetingBodies.set('pub/other', { body: '## Ergebnis\n\nB-Ergebnis\n' });
+    const target = showPage(m.app);
+    m.app.openMeeting('pub/now');
+    await vi.waitFor(() => expect(target.querySelector('#meeting-tab-result')).not.toBeNull());
+    (target.querySelector('#meeting-tab-result') as HTMLButtonElement).click();
+    flushSync();
+    const area = () => target.querySelector('textarea') as HTMLTextAreaElement;
+    area().value = 'für pub/now';
+    area().dispatchEvent(new Event('input', { bubbles: true }));
+    flushSync();
+    m.app.openMeeting('pub/other');
+    // pub/other is over: its page opens on the tab Result
+    await vi.waitFor(() => expect(area().value).toBe('B-Ergebnis'));
+    const save = [...target.querySelectorAll('button')].find((b) => b.textContent === 'Ergebnis speichern') as HTMLButtonElement;
+    expect(save.disabled).toBe(true);
+  });
+
   it('makes tasks of the follow-ups, one or all, and saves the result and the link to the recording', async () => {
     const m = await ready();
     m.hub.meetingBodies.set('pub/now', {

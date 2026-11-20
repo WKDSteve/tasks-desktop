@@ -105,6 +105,11 @@
       .then((read) => {
         if (abort.signal.aborted) return;
         reading = false;
+        // Another meeting: what was typed into the result or the link of the one before is not this one's.
+        if (tabFor !== which) {
+          resultDirty = false;
+          recordingDirty = false;
+        }
         doc = read;
         failed = null;
         if (tabFor !== which) {
@@ -424,7 +429,8 @@
         </section>
       {:else if tab === 'during'}
         {@render joinButton(true)}
-        <MeetingMinutes {app} id={m.id} body={doc.body} {etag} cut={doc.body_truncated} {canWrite} {busy} read={doc} />
+        <!-- One per meeting: what is typed and the drafts belong to the meeting they were made in. -->
+        {#key m.id}<MeetingMinutes {app} id={m.id} body={doc.body} {etag} cut={doc.body_truncated} {canWrite} {busy} read={doc} />{/key}
         {@render people()}
         {@render agenda()}
       {:else}

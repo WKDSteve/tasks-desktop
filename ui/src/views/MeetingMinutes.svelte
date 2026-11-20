@@ -52,10 +52,15 @@
   let text = $state('');
   let drafts = $state<MinutesDraft[]>(untrack(() => app.minutesDrafts(id)));
   let flushing = false;
+  /** After drafts reached no hub: not before this (wall ms), so a hub that answers reads but takes no write is not asked
+   * again at every read. */
+  let retryAfter = 0;
   let editing = $state<Shortcuts | null>(null);
   let photoInput: HTMLInputElement | undefined = $state();
   let audioInput: HTMLInputElement | undefined = $state();
 
+  /** How long drafts wait after they reached no hub before the next read tries them again. */
+  const RETRY_MS = 15_000;
   const SIGNS: Record<MinuteLine['kind'], string> = { text: '·', task: '☐', decision: '✓', question: '?', image: '▣', audio: '♪' };
 
   /** Whether a change must wait (a write on its way, or the meeting being read again): then it is said, not sent. */
@@ -127,13 +132,14 @@
   });
 
   async function flush(): Promise<void> {
-    if (flushing || busy || drafts.length === 0) return;
+    if (flushing || busy || drafts.length === 0 || Date.now() < retryAfter) return;
     flushing = true;
     const sent = drafts;
     try {
       const result = await app.write(sent.map((d) => captureOp(id, { kind: d.kind, text: d.text }, d.at)));
       // Written, or refused by the engine (it said why): either way not sent again. Unsent: kept for the next read.
       if (result !== null || !app.lastWriteUnsent) keepDrafts(drafts.slice(sent.length));
+      else retryAfter = Date.now() + RETRY_MS;
     } finally {
       flushing = false;
     }
