@@ -13,6 +13,7 @@
   import { countTarget } from '../lib/context';
   import CountPanel from './CountPanel.svelte';
   import DailyTile from './DailyTile.svelte';
+  import Lazy from './Lazy.svelte';
   import FilterNote from './FilterNote.svelte';
   import SizeToggle from './SizeToggle.svelte';
   import { sizeable } from '../lib/sizeable';
@@ -44,6 +45,15 @@
   // A finished task is not in the list, so no filter can match it.
   const reminders = $derived(dueItems(app.shown, filtered ? [] : snapshot?.reminders, app.today));
   const shown = (tile: Tile) => !app.hiddenTiles.includes(tile);
+  // The meetings to follow up: read when the vault changed or after a write of the page, while the tile is shown.
+  $effect(() => {
+    void app.snapshot?.rev;
+    void app.writes;
+    if (!shown('review') || !app.canMeetings) return;
+    const abort = new AbortController();
+    void app.loadReview(abort.signal);
+    return () => abort.abort();
+  });
   // What the parked tasks wait for is the engine's count of the vault, like the next task: the filter does not narrow it.
   const waits = $derived(app.waits);
   /** The reason whose Bring all back asks for its confirmation now. */
@@ -119,7 +129,8 @@
         shown(tile) &&
         (tile !== 'remind' || reminders.length > 0) &&
         (tile !== 'cdx' || cdx.length > 0) &&
-        (tile !== 'parked' || (waits?.parked ?? 0) > 0),
+        (tile !== 'parked' || (waits?.parked ?? 0) > 0) &&
+        (tile !== 'review' || app.review.length > 0),
     ),
   );
   const rank = (tile: OrderedTile) => app.tileOrder.indexOf(tile) + 1;
@@ -512,6 +523,17 @@
             </li>
           {/each}
         </ul>
+      </section>
+    {/if}
+
+    {#if shown('review') && app.review.length > 0}
+      <section use:sizeable={sizeParams('review')} data-tile="review" style:order={rank('review')} class:drop={over === 'review'} ondragover={(e) => dragOver(e, 'review')} ondragleave={() => (over = null)} ondrop={(e) => drop(e, 'review')} class="card" aria-label={t('today.review')}>
+        <header>
+          <h2 class="eyebrow" data-hint={t('hint.ui.today.review')}>{t('today.review')} ({app.review.length})</h2>
+          {@render handle('review')}
+          <button type="button" class="hide" aria-label={t('today.hide')} title={t('today.hide')} onclick={() => app.hideTile('review')}>×</button>
+        </header>
+        <Lazy {app} load={() => import('./MeetingReview.svelte')} />
       </section>
     {/if}
   </div>

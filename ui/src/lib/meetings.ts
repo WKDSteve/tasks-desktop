@@ -275,6 +275,23 @@ export function splitMeetings<T extends Pick<MeetingEntry, 'starts_at' | 'ends_a
   return { coming, past };
 }
 
+/** How far back the tile Follow-up looks for meetings to follow up, in days. */
+export const REVIEW_DAYS = 60;
+/** Most meetings the tile names. */
+export const REVIEW_MAX = 20;
+
+/**
+ * The meetings to follow up (concept 7.5): over and still planned, or done without a result; not the ones the person put
+ * away ("no result is fine"). The last first.
+ */
+export function toReview<
+  T extends Pick<MeetingEntry, 'starts_at' | 'ends_at' | 'all_day' | 'tz' | 'id' | 'status' | 'has_result'>,
+>(items: readonly T[], nowMs: number, dismissed: ReadonlySet<string>): T[] {
+  return splitMeetings(items, nowMs)
+    .past.filter((m) => !dismissed.has(m.id) && (m.status === 'planned' || (m.status === 'done' && !m.has_result)))
+    .slice(0, REVIEW_MAX);
+}
+
 /** The time of a meeting as a line: `2026-11-24 14:00–15:00`, `2026-11-24` (all day), the zone named when there is one. */
 export function whenText(m: Pick<MeetingEntry, 'date' | 'time' | 'ends_at' | 'all_day' | 'tz' | 'starts_at'>, allDay: string): string {
   if (!m.date) return '';

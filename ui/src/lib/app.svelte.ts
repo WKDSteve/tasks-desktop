@@ -163,6 +163,8 @@ import {
   meetingNewOp,
   participantsHeading,
   participantsText,
+  REVIEW_DAYS,
+  toReview,
   wallTime,
   type MeetingForm,
   type MeetingPreview,
@@ -348,6 +350,10 @@ function within<T>(work: Promise<T>, ms: number): Promise<T | null> {
     );
   });
 }
+
+/** Where this browser keeps the meetings put away from the tile Follow-up, and how many it keeps. */
+const REVIEW_DISMISSED_KEY = 'tasks-desktop.review-dismissed';
+const REVIEW_KEEP = 200;
 
 function safe<T>(work: () => T): T | null {
   try {
@@ -1857,6 +1863,44 @@ export class App {
   /** An image below `assets/` of a container, read with the session; null when there is none to draw. */
   asset(kind: AssetOwner, id: string, file: string): Promise<Blob | null> {
     return this.env.hub.asset(kind, id, file);
+  }
+
+  /** The meetings to follow up (the tile Follow-up): over and still planned, or done without a result. */
+  review = $state.raw<MeetingEntry[]>([]);
+
+  /** Read the meetings of the last `REVIEW_DAYS` days and keep those to follow up; nothing without the meetings. */
+  async loadReview(signal?: AbortSignal): Promise<void> {
+    if (!this.canMeetings) {
+      this.review = [];
+      return;
+    }
+    const until = this.today;
+    const back = new Date(`${until}T12:00:00Z`);
+    back.setUTCDate(back.getUTCDate() - REVIEW_DAYS);
+    try {
+      const window = await this.meetingsIn(back.toISOString().slice(0, 10), until, signal);
+      if (signal?.aborted) return;
+      this.review = toReview(window.items, this.nowMs(), new Set(this.reviewDismissed()));
+    } catch {
+      // A read that failed keeps what was shown: the tile is a hint, not a list to trust alone.
+    }
+  }
+
+  /** The meetings the person put away from the tile ("no result is fine"), kept in this browser. */
+  private reviewDismissed(): string[] {
+    try {
+      const parsed: unknown = JSON.parse(safe(() => this.env.prefs.getItem(REVIEW_DISMISSED_KEY)) ?? '[]');
+      return Array.isArray(parsed) ? parsed.filter((x): x is string => typeof x === 'string').slice(-REVIEW_KEEP) : [];
+    } catch {
+      return [];
+    }
+  }
+
+  /** Put a meeting away from the tile Follow-up; nothing is written to the vault. */
+  dismissReview(id: string): void {
+    const kept = [...this.reviewDismissed().filter((x) => x !== id), id].slice(-REVIEW_KEEP);
+    safe(() => this.env.prefs.setItem(REVIEW_DISMISSED_KEY, JSON.stringify(kept)));
+    this.review = this.review.filter((m) => m.id !== id);
   }
 
   /** One meeting with its body and its sections. */

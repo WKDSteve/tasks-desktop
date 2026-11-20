@@ -11,6 +11,7 @@ import {
   sectionText,
   splitMeetings,
   startTab,
+  toReview,
   wallTime,
   whenText,
   withDocument,
@@ -158,5 +159,28 @@ describe('the words of a meeting', () => {
       coverChoices({ assets: ['assets/images/a.png', 'assets/images/b.txt', 'assets/screenshots/s.JPG', 'assets/videos/v.mp4', 'meeting.png'] }),
     ).toEqual(['assets/images/a.png', 'assets/screenshots/s.JPG']);
     expect(coverChoices({})).toEqual([]);
+  });
+});
+
+describe('the meetings to follow up', () => {
+  const m = (id: string, ends: string, status: 'planned' | 'done' | 'cancelled', hasResult = false) => ({
+    id,
+    starts_at: `${ends.slice(0, 10)}T08:00`,
+    ends_at: ends,
+    all_day: false,
+    status,
+    has_result: hasResult,
+  });
+
+  it('names those over and still planned or done without a result, the last first, and not the ones put away', () => {
+    const items = [
+      m('a/over-planned', '2026-11-18T09:00', 'planned'),
+      m('a/done-empty', '2026-11-19T09:00', 'done'),
+      m('a/done-result', '2026-11-19T09:00', 'done', true),
+      m('a/cancelled', '2026-11-19T09:00', 'cancelled'),
+      m('a/coming', '2026-11-21T09:00', 'planned'),
+      m('a/put-away', '2026-11-17T09:00', 'planned'),
+    ];
+    expect(toReview(items, at('2026-11-20T10:00'), new Set(['a/put-away'])).map((x) => x.id)).toEqual(['a/done-empty', 'a/over-planned']);
   });
 });

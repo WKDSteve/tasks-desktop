@@ -5134,18 +5134,18 @@ describe('the order of the tiles of the overview', () => {
   it('is remembered, taken from a damaged memory as the standard, and reset', async () => {
     const { app, prefs } = make({ token: 't' });
     app.moveTile('cdx', 'next', false, ['next', 'waiting', 'remind', 'cdx']);
-    expect(app.tileOrder).toEqual(['cdx', 'next', 'waiting', 'parked', 'remind']);
+    expect(app.tileOrder).toEqual(['cdx', 'next', 'waiting', 'parked', 'remind', 'review']);
     expect(app.tileOrderChanged).toBe(true);
     expect(app.tileNote).toBe('Eine KI-Sitzung könnte übernehmen ist jetzt Nummer 1 von 4');
-    expect(prefs.get('tasks-desktop.tiles-order')).toBe('["cdx","next","waiting","parked","remind"]');
+    expect(prefs.get('tasks-desktop.tiles-order')).toBe('["cdx","next","waiting","parked","remind","review"]');
     app.resetTileOrder();
-    expect(app.tileOrder).toEqual(['next', 'waiting', 'parked', 'remind', 'cdx']);
+    expect(app.tileOrder).toEqual(['next', 'waiting', 'parked', 'remind', 'cdx', 'review']);
     expect(app.tileOrderChanged).toBe(false);
 
     const kept = make({ token: 't', prefs: new Map([['tasks-desktop.tiles-order', '["waiting","x","waiting"]']]) });
-    expect(kept.app.tileOrder).toEqual(['waiting', 'next', 'parked', 'remind', 'cdx']);
+    expect(kept.app.tileOrder).toEqual(['waiting', 'next', 'parked', 'remind', 'cdx', 'review']);
     const broken = make({ token: 't', prefs: new Map([['tasks-desktop.tiles-order', '{']]) });
-    expect(broken.app.tileOrder).toEqual(['next', 'waiting', 'parked', 'remind', 'cdx']);
+    expect(broken.app.tileOrder).toEqual(['next', 'waiting', 'parked', 'remind', 'cdx', 'review']);
   });
 });
 
