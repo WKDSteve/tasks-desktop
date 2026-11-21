@@ -164,3 +164,38 @@ describe('the details of a finished task', () => {
     expect(root.querySelector('dd[data-ci]')).toBeNull();
   });
 });
+
+describe('a change only in the Backlog (`event: finished`)', () => {
+  // `set ci=green` on a finished task moves no revision of the snapshot: the hub tells it as an event of its own.
+  const tell = (m: Made, event: string) =>
+    (m.app as unknown as { onMessage(message: { event: string; data: string }): void }).onMessage({ event, data: '{"seq":1}' });
+  const greened = (q: FinishedQuery) => {
+    const doc = finishedFor(q);
+    const items = doc.items.filter((i) => i.id !== 'pub/broke');
+    return { ...doc, items, total: q.ci ? items.length : doc.total };
+  };
+
+  it('makes the overview count again, without a focus or a new revision', async () => {
+    const m = await started(['finished', 'finished_ci']);
+    const root = show(Today, m);
+    await vi.waitFor(() => expect(root.querySelector('[data-ci-open]')?.textContent).toContain('2'));
+    const rev = m.app.snapshot?.rev;
+    m.hub.finishedDoc = greened;
+    tell(m, 'finished');
+    await vi.waitFor(() => expect(m.app.ciOpen).toBe(1));
+    flushSync();
+    expect(root.querySelector('[data-ci-open]')?.textContent).toContain('1');
+    expect(m.app.snapshot?.rev).toBe(rev);
+  });
+
+  it('makes Done read its page again', async () => {
+    const m = await started(['finished', 'finished_ci']);
+    m.app.showCiOpen();
+    const root = show(FinishedView, m);
+    await vi.waitFor(() => expect(root.textContent).toContain('Broke the CI'));
+    m.hub.finishedDoc = greened;
+    tell(m, 'finished');
+    await vi.waitFor(() => expect(root.textContent).not.toContain('Broke the CI'));
+    expect(root.textContent).toContain('Waits for its CI');
+  });
+});

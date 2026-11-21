@@ -68,10 +68,12 @@
   // What is asked: the area, the period and, from the overview, only the tasks whose CI is open or red.
   const query = $derived<FinishedQuery>({ ...(area ? { area } : {}), ...range, ...(ciOpen ? { ci: CI_OPEN } : {}) });
 
-  // Asks again when the period, the area, the CI filter or the vault changes (a task finished meanwhile shows up).
+  // Asks again when the period, the area, the CI filter, the vault or the finished tasks change (a task finished
+  // meanwhile shows up, a CI state set in the Backlog too).
   $effect(() => {
     const q = query;
     void app.snapshot?.rev;
+    void app.finishedTick;
     untrack(() => void load(q, 0));
   });
 

@@ -45,10 +45,11 @@
   // A finished task is not in the list, so no filter can match it.
   const reminders = $derived(dueItems(app.shown, filtered ? [] : snapshot?.reminders, app.today));
   const shown = (tile: Tile) => !app.hiddenTiles.includes(tile);
-  // How many finished tasks wait for their CI or have a red one (the engine counts): read when the vault changed or
-  // after a write of the page, while the overview is shown.
+  // How many finished tasks wait for their CI or have a red one (the engine counts): read when the vault or the finished
+  // tasks changed or after a write of the page, while the overview is shown.
   $effect(() => {
     void app.snapshot?.rev;
+    void app.finishedTick;
     void app.writes;
     if (!showOverview) return;
     untrack(() => void app.readCiOpen());

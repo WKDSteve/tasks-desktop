@@ -59,6 +59,9 @@ pub(super) struct VaultRuntime {
     // the timer must keep running even if the file watcher could not start.
     pub(super) _hints: Option<mpsc::UnboundedSender<Hint>>,
     pub(super) _watcher: Option<fswatch::Watcher>,
+    /// A change of the finished tasks (the Backlogs), which the snapshot does not hold: the count of them, for the event
+    /// streams (`event: finished`).
+    pub(super) finished: broadcast::Sender<u64>,
 }
 
 impl Runtime for VaultRuntime {
@@ -153,11 +156,19 @@ pub(super) fn build_runtime(
     if let Some(index) = &search {
         jobs.push(search::spawn_indexer(Arc::clone(index), &store));
     }
+    let (finished, _) = broadcast::channel(16);
     // The watcher only says "look again"; the refresher does the looking.
     let (mut hints, mut watcher) = (None, None);
     if let Some(vault) = vault {
         let (tx, rx) = mpsc::unbounded_channel();
-        match fswatch::start(&vault, tx.clone()) {
+        let (backlog_tx, backlog_rx) = mpsc::unbounded_channel();
+        jobs.push(fswatch::spawn_finished(
+            backlog_rx,
+            finished.clone(),
+            refresh.debounce,
+            refresh.max_wait,
+        ));
+        match fswatch::start(&vault, tx.clone(), Some(backlog_tx)) {
             Ok(started) => watcher = Some(started),
             // Not fatal: the timer and the rescan request still work.
             Err(e) => {
@@ -242,6 +253,7 @@ pub(super) fn build_runtime(
         jobs: StdMutex::new(jobs),
         _hints: hints,
         _watcher: watcher,
+        finished,
     }
 }
 

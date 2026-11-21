@@ -652,3 +652,59 @@ async fn a_claim_written_beside_the_hub_reaches_the_stream_through_the_watcher()
         .expect("the claimed task");
     assert_eq!(task["claim"]["by"], "someone-else", "{task}");
 }
+
+#[tokio::test]
+async fn a_change_only_in_the_backlog_reaches_the_stream_as_its_own_event() {
+    let _one_at_a_time = ONE_AT_A_TIME.lock().await;
+    // `tasks set <id> ci=green` on a finished task (or a CI watcher that sets it) writes only in the Backlog. The
+    // snapshot holds the open tasks and stays as it was, so the store tells nobody; the page's count of the finished
+    // tasks whose CI is open or red must still hear of it.
+    let Some(mut r) = rig("backlog", |_| {}).await else {
+        return;
+    };
+    let before = r.get("/api/tasks/snapshot", &[]).await;
+    let before_etag = before.header("etag").expect("an ETag").to_owned();
+
+    let path = r
+        .vault
+        .join("cascade.nvim")
+        .join("Backlog")
+        .join("TASKS")
+        .join("2026-01-02_no-effort.md");
+    let text = std::fs::read_to_string(&path).unwrap();
+    let edited = text.replacen("status: done\n", "status: done\nci: green\n", 1);
+    assert_ne!(text, edited, "the fixture task has no status: done");
+    let engine = r.engine_read().await;
+    let started = Instant::now();
+    std::fs::write(&path, edited).unwrap();
+
+    let deadline = Duration::from_secs(10);
+    let event = loop {
+        let left = deadline
+            .checked_sub(started.elapsed())
+            .expect("an event finished within ten seconds");
+        let message = r.sse.next(left).await.expect("the stream goes on");
+        if message.starts_with("event: finished\n") {
+            break message;
+        }
+    };
+    let took = started.elapsed();
+    let data: Value = serde_json::from_str(
+        event
+            .strip_prefix("event: finished\ndata: ")
+            .and_then(|m| m.strip_suffix("\n\n"))
+            .expect("one data line"),
+    )
+    .unwrap();
+    assert_eq!(data["seq"], 1, "{event}");
+    // No read of the engine stands between the change and this event: the bound of the concept, and what the machine is
+    // slower than idle.
+    let limit = r.bound(engine, Duration::ZERO).await;
+    assert!(took < limit, "took {took:?}, bound {limit:?}");
+
+    // The snapshot of the open tasks did not change: a client need not read it again.
+    let after = r
+        .get("/api/tasks/snapshot", &[("If-None-Match", &before_etag)])
+        .await;
+    assert_eq!(after.status, 304, "{:?}", after.status);
+}

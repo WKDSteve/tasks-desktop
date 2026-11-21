@@ -96,7 +96,9 @@ thing, the data class of an area.
 * `events` is a server-sent event stream: a `hello` with where the stream
   stands, then one `tasks` event per change with the ids that were changed,
   added or removed (ids only: no title, no path), a heartbeat every 15
-  seconds, and a `resync` for a client that was too slow. An event is a hint,
+  seconds, and a `resync` for a client that was too slow. A change of the
+  finished tasks only (the Backlogs, which the snapshot does not hold) is a
+  `finished` event with a count (no id, no path). An event is a hint,
   not a diff: the client reads the snapshot again. There is no replay. A
   session may hold four streams (`429` beyond that). The session is looked
   at again with every message: a stream ends with its session (the oldest

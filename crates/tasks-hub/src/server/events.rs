@@ -51,6 +51,8 @@ pub(super) async fn events(
         return engine_failure(error);
     }
     let (mut changes, seq, rev) = rt.store.subscribe();
+    // The finished tasks are not in the snapshot: a change only there is an event of its own.
+    let mut finished = rt.finished.subscribe();
     let (tx, rx) = mpsc::channel::<Bytes>(16);
     let heartbeat = st.limits.heartbeat;
     let instance = st.instance.clone();
@@ -77,6 +79,15 @@ pub(super) async fn events(
                     // This client was too slow for the buffer: it must read again.
                     Err(broadcast::error::RecvError::Lagged(_)) => {
                         "event: resync\ndata: {}\n\n".to_owned()
+                    }
+                    Err(broadcast::error::RecvError::Closed) => return,
+                },
+                // A hint like the others: the client reads what it shows of the finished tasks again. One it missed
+                // is told as one with no count.
+                count = finished.recv() => match count {
+                    Ok(n) => format!("event: finished\ndata: {}\n\n", json!({ "seq": n })),
+                    Err(broadcast::error::RecvError::Lagged(_)) => {
+                        "event: finished\ndata: {}\n\n".to_owned()
                     }
                     Err(broadcast::error::RecvError::Closed) => return,
                 },

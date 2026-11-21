@@ -83,3 +83,30 @@ test('finished tasks whose CI is open or red: counted in the overview, listed in
     for (const [path] of files) rmSync(path, { force: true });
   }
 });
+
+test('a CI state set in the Backlog beside the hub lowers the count of the overview without a new focus', async ({ page }) => {
+  // `tasks set <id> ci=green` on a finished task writes only in the Backlog: the snapshot of the open tasks stays as it
+  // was, and the hub tells it as an event of its own (`finished`). The page is not touched after the change.
+  const { vault } = state();
+  const now = new Date();
+  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  const text = (title: string, ci: string) =>
+    `---\ntitle: ${title}\nstatus: done\nkind: task\ncommits: [lib.nvim@abc1234]\nci: ${ci}\ncreated: ${today}\nupdated: ${today}\n---\n\nFinished.\n`;
+  const pending = join(vault, 'lib.nvim', 'Backlog', 'TASKS', `${today}_e2e-cievent-p001.md`);
+  const red = join(vault, 'lib.nvim', 'Backlog', 'TASKS', `${today}_e2e-cievent-r001.md`);
+  try {
+    mkdirSync(join(red, '..'), { recursive: true });
+    writeFileSync(pending, text('Cievent p001 waits', 'pending'));
+    writeFileSync(red, text('Cievent r001 broke', 'red'));
+    const problems = await pair(page, '/#view=today');
+    const open = page.locator('[data-ci-open]');
+    await expect(open).toHaveText('Finished, CI open or red: 2');
+
+    writeFileSync(red, text('Cievent r001 broke', 'green'));
+    await expect(open).toHaveText('Finished, CI open or red: 1');
+    expect(problems).toEqual([]);
+  } finally {
+    rmSync(pending, { force: true });
+    rmSync(red, { force: true });
+  }
+});

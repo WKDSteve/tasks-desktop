@@ -14,10 +14,14 @@
 
 use std::path::{Path, PathBuf};
 
-use notify::Event;
-use tokio::sync::mpsc::UnboundedSender;
+use std::time::Duration;
 
-pub use appkit_hub::fs_watch::{Entry, Hint, Watcher};
+use notify::Event;
+use tokio::sync::broadcast;
+use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
+use tokio::task::JoinHandle;
+
+pub use appkit_hub::fs_watch::{Entry, Hint};
 
 /// Names that are tools' leftovers, not tasks: temp files of the engine
 /// (`*.tasks-tmp.*`, `*.frontmatter.*`), lock files, editor backups and
@@ -128,13 +132,93 @@ pub fn hint_for(event: &Event, bases: &[PathBuf]) -> Option<Hint> {
     appkit_hub::fs_watch::hint_for(event, bases, filter)
 }
 
-/// Watch the vault and send a hint for every change that matters.
+/// Is a change at this path one of the finished tasks (`<area>/Backlog/FEATURES|TASKS/...`)? Those are not in the
+/// snapshot: a change only there (`set ci=green` or `remind=` on a finished task) leaves the snapshot as it was, and the
+/// store tells nobody. The hub tells it as an event of its own.
+#[must_use]
+pub fn backlog(relative: &Path, entry: impl FnOnce() -> Entry) -> bool {
+    // What sits in `Backlog/FEATURES|TASKS`, not those folders themselves; `relevant` decides the rest.
+    let mut parts = relative.components().skip(1);
+    parts.next().is_some_and(|c| c.as_os_str() == "Backlog")
+        && parts.nth(1).is_some()
+        && relevant(relative, entry)
+}
+
+/// [`backlog`] as the kit's filter.
+fn backlog_filter(relative: &Path, entry: &dyn Fn() -> Entry) -> bool {
+    backlog(relative, entry)
+}
+
+/// Does an event of the watcher touch the finished tasks? A lost event may have, so it counts.
+#[must_use]
+pub fn touches_backlog(event: &Event, bases: &[PathBuf]) -> bool {
+    appkit_hub::fs_watch::hint_for(event, bases, backlog_filter).is_some()
+}
+
+/// A running watcher; dropping it stops it.
+pub struct Watcher {
+    _inner: notify::RecommendedWatcher,
+}
+
+/// Watch the vault and send a hint for every change that matters, and a signal on `finished` for every change of the
+/// finished tasks (see [`backlog`]). The watcher of the kit with one more question per event: the kit's filter is a
+/// plain function and cannot send.
 ///
 /// # Errors
 ///
 /// The watcher could not be created or could not watch the folder.
-pub fn start(vault: &Path, hints: UnboundedSender<Hint>) -> notify::Result<Watcher> {
-    appkit_hub::fs_watch::start(vault, hints, filter)
+pub fn start(
+    vault: &Path,
+    hints: UnboundedSender<Hint>,
+    finished: Option<UnboundedSender<()>>,
+) -> notify::Result<Watcher> {
+    use notify::Watcher as _;
+    let root: PathBuf = vault.to_path_buf();
+    // The root as it was written, and as the system may report it (see the kit's `start`).
+    let mut bases = vec![root.clone()];
+    if let Some(real) = root.canonicalize().ok().filter(|real| *real != root) {
+        bases.push(real);
+    }
+    let mut watcher = notify::recommended_watcher(move |result: notify::Result<Event>| {
+        let (hint, backlog) = match result {
+            Ok(event) => (hint_for(&event, &bases), touches_backlog(&event, &bases)),
+            Err(_) => (Some(Hint::Lost), true),
+        };
+        if let Some(hint) = hint {
+            let _ = hints.send(hint);
+        }
+        if let (true, Some(finished)) = (backlog, &finished) {
+            let _ = finished.send(());
+        }
+    })?;
+    watcher.watch(&root, notify::RecursiveMode::Recursive)?;
+    Ok(Watcher { _inner: watcher })
+}
+
+/// Tell the streams that the finished tasks changed: once per burst of signals (a `git pull` of many files is one
+/// event), after the same quiet time as the scan. Each event carries a count that grows by one.
+pub fn spawn_finished(
+    mut signals: UnboundedReceiver<()>,
+    events: broadcast::Sender<u64>,
+    debounce: Duration,
+    max_wait: Duration,
+) -> JoinHandle<()> {
+    tokio::spawn(async move {
+        let mut count = 0_u64;
+        while signals.recv().await.is_some() {
+            let started = tokio::time::Instant::now();
+            loop {
+                let wake = (tokio::time::Instant::now() + debounce).min(started + max_wait);
+                tokio::select! {
+                    more = signals.recv() => if more.is_none() { break },
+                    () = tokio::time::sleep_until(wake) => break,
+                }
+            }
+            count += 1;
+            // Nobody listening is no error: the next stream reads the finished tasks when it needs them.
+            let _ = events.send(count);
+        }
+    })
 }
 
 #[cfg(test)]
@@ -460,5 +544,80 @@ mod tests {
             "lib.nvim/ROADMAP/tasks/folder-task",
         );
         assert_eq!(hint_for(&old, base), Some(Hint::Changed));
+    }
+
+    #[test]
+    fn only_the_finished_tasks_touch_the_backlog() {
+        for yes in [
+            "lib.nvim/Backlog/TASKS/2026-11-21_x.md",
+            "lib.nvim/Backlog/FEATURES/2026-11-21_y.md",
+            "lib.nvim/Backlog/TASKS/2026-11-21_folder/2026-11-21_folder.md",
+        ] {
+            assert!(backlog(Path::new(yes), || Entry::File), "{yes}");
+        }
+        // A finished folder task, moved or removed as a whole.
+        assert!(backlog(
+            Path::new("lib.nvim/Backlog/TASKS/2026-11-21_folder"),
+            || Entry::Gone
+        ));
+        for no in [
+            "lib.nvim/ROADMAP/tasks/alpha.md",
+            "lib.nvim/Backlog/README.md",
+            "lib.nvim/Backlog/TASKS/x.md~",
+            "lib.nvim/Backlog/TASKS/notes.txt",
+            "lib.nvim/Backlog/OTHER/x.md",
+            ".claims/lib.nvim/alpha.json",
+        ] {
+            assert!(!backlog(Path::new(no), || Entry::File), "{no}");
+        }
+        // The folder itself, whose content changed (Windows says so for the folder too): its files tell it.
+        assert!(!backlog(Path::new("lib.nvim/Backlog/TASKS"), || {
+            Entry::Folder
+        }));
+    }
+
+    #[test]
+    fn an_event_in_the_backlog_or_a_lost_one_touches_the_finished_tasks() {
+        let base = &bases();
+        let done = event(
+            EventKind::Modify(ModifyKind::Data(notify::event::DataChange::Any)),
+            "lib.nvim/Backlog/TASKS/2026-11-21_x.md",
+        );
+        assert!(touches_backlog(&done, base));
+        let open = event(
+            EventKind::Modify(ModifyKind::Data(notify::event::DataChange::Any)),
+            "lib.nvim/ROADMAP/tasks/alpha.md",
+        );
+        assert!(!touches_backlog(&open, base));
+        let read = event(
+            EventKind::Access(notify::event::AccessKind::Any),
+            "lib.nvim/Backlog/TASKS/2026-11-21_x.md",
+        );
+        assert!(!touches_backlog(&read, base));
+        let overflow = Event::new(EventKind::Other).set_flag(Flag::Rescan);
+        assert!(touches_backlog(&overflow, base));
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn a_burst_of_signals_is_one_event_with_a_growing_count() {
+        let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
+        let (events, mut heard) = broadcast::channel(8);
+        let job = spawn_finished(
+            rx,
+            events,
+            Duration::from_millis(300),
+            Duration::from_secs(2),
+        );
+        for _ in 0..5 {
+            tx.send(()).unwrap();
+        }
+        assert_eq!(heard.recv().await.unwrap(), 1);
+        tx.send(()).unwrap();
+        assert_eq!(heard.recv().await.unwrap(), 2);
+        // Nothing more than one event per burst.
+        tokio::time::sleep(Duration::from_secs(5)).await;
+        assert!(heard.try_recv().is_err());
+        drop(tx);
+        job.await.unwrap();
     }
 }

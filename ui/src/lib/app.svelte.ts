@@ -1519,6 +1519,12 @@ export class App {
   ciOpen = $state<number | null>(null);
   #ciReads = 0;
 
+  /**
+   * Grows by one with every `finished` event: the finished tasks (the Backlogs) changed, which the snapshot does not
+   * hold (`set ci=green` on a finished task moves no revision). What shows them asks again on it.
+   */
+  finishedTick = $state(0);
+
   /** Ask the engine again for `ciOpen`; an older answer that comes later is dropped. */
   async readCiOpen(): Promise<void> {
     if (!this.can('finished') || !this.can('finished_ci')) {
@@ -6071,6 +6077,10 @@ export class App {
   private onMessage(message: SseMessage): void {
     if (message.event === 'tasks' || message.event === 'resync') {
       void this.refresh();
+      return;
+    }
+    if (message.event === 'finished') {
+      this.finishedTick++;
       return;
     }
     if (message.event === 'classes') {
