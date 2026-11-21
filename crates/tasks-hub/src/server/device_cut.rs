@@ -809,8 +809,9 @@ pub(crate) fn meetings(classes: &AreaPolicy, doc: &Value, release: Release) -> V
     Value::Object(out)
 }
 
-/// The body of a meeting without its section of participants (`## Teilnehmer` / `## Participants`), for a phone of an
-/// area that is not public, and without its documents (`## Unterlagen` / `## Documents`) unless its addresses may leave.
+/// The body of a meeting without its section of participants (`## Teilnehmer` / `## Participants`, it holds their
+/// addresses), for a phone of any area, and without its documents (`## Unterlagen` / `## Documents`) unless its
+/// addresses may leave.
 fn without_participants(body: &str, links: bool) -> String {
     let mut out = Vec::new();
     let mut skipping = false;
@@ -833,7 +834,6 @@ fn without_participants(body: &str, links: bool) -> String {
 pub(crate) fn meeting(classes: &AreaPolicy, doc: &Value, release: Release) -> Option<Value> {
     let entry = meeting_entry(classes, &doc["meeting"], release)?;
     let area = area_of(entry["id"].as_str()?)?;
-    let public = matches!(classes.shown(area), Shown::Public);
     let links = meeting_links(classes, area, release);
     let people = meeting_people(classes, area, release);
     let mut out = copy(
@@ -852,19 +852,11 @@ pub(crate) fn meeting(classes: &AreaPolicy, doc: &Value, release: Release) -> Op
     let body = doc["body"].as_str().unwrap_or("");
     out.insert(
         "body".to_owned(),
-        json_str(&if public {
-            body.to_owned()
-        } else {
-            without_participants(body, links)
-        }),
+        json_str(&without_participants(body, links)),
     );
-    if public {
-        if let Some(people) = doc.get("participants") {
-            out.insert("participants".to_owned(), people.clone());
-        }
-    } else if people {
-        // An internal meeting whose people the settings release: each by number, name and tick, never an address or
-        // a role; the section of the body stays out (it holds the addresses).
+    if people {
+        // The people of a public meeting, or of an internal one the settings release: each by number, name and tick,
+        // never an address or a role (decided 2026-11-21); the section of the body stays out (it holds the addresses).
         let names: Vec<Value> = doc["participants"]
             .as_array()
             .map_or(&[][..], Vec::as_slice)
@@ -1234,7 +1226,7 @@ mod tests {
                 "icon": { "kind": "emoji", "value": "📅" }, "problems": ["secret"], "etag": "e1",
             },
             "agenda": [{ "n": 1, "text": "Stand", "ticked": false }],
-            "participants": [{ "n": 1, "name": "Rick", "email": "rick@example.org", "present": false }],
+            "participants": [{ "n": 1, "name": "Rick", "email": "rick@example.org", "role": "Organisator", "present": false }],
             "documents": [
                 { "n": 1, "text": "Folien", "kind": "web", "href": "https://example.org/slides" },
                 { "n": 2, "text": "Notiz", "kind": "path", "href": "E:/notes/n.md" },
@@ -1341,11 +1333,52 @@ mod tests {
         assert_eq!(cut["meeting"]["online"], "https://teams.microsoft.com/l/x");
         assert_eq!(cut["meeting"]["recording"], "https://example.org/rec");
         assert_eq!(cut["meeting"]["participants"]["total"], 1);
-        assert_eq!(cut["participants"][0]["name"], "Rick");
-        assert!(cut["body"].as_str().unwrap().contains("## Teilnehmer"));
+        // The people by number, name and tick: no address, no role, and the section of the body that holds them stays
+        // out; the documents of a public meeting stay in.
+        assert_eq!(
+            cut["participants"],
+            json!([{ "n": 1, "name": "Rick", "present": false }])
+        );
+        let body = cut["body"].as_str().unwrap();
+        assert!(!body.contains("## Teilnehmer"), "{body}");
+        assert!(
+            body.contains("## Unterlagen") && body.contains("## Protokoll"),
+            "{body}"
+        );
         let text = cut.to_string();
-        for word in ["notify_to", "E:/", "assets/", "problems", "secret"] {
+        for word in [
+            "notify_to",
+            "E:/",
+            "assets/",
+            "problems",
+            "secret",
+            "rick@",
+            "email",
+            "Organisator",
+            "role",
+        ] {
             assert!(!text.contains(word), "{word} in {text}");
+        }
+    }
+
+    #[test]
+    fn no_meeting_gives_a_phone_an_address_or_a_role_of_its_people_whatever_its_class() {
+        let c = classes();
+        for (id, release) in [
+            ("pub/m", Release::default()),
+            ("pub/m", Release::new(true, true)),
+            ("open/m", Release::new(true, true)),
+            ("open/m", Release::default()),
+        ] {
+            let cut = meeting(&c, &meeting_doc(id), release).unwrap();
+            let text = cut.to_string();
+            for word in ["rick@", "email", "Organisator", "role", "Teilnehmer"] {
+                assert!(!text.contains(word), "{id} {release:?}: {word} in {text}");
+            }
+            for p in cut["participants"].as_array().unwrap() {
+                let keys: Vec<&String> = p.as_object().unwrap().keys().collect();
+                assert_eq!(keys, ["n", "name", "present"], "{id} {release:?}");
+            }
         }
     }
 

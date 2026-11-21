@@ -794,9 +794,10 @@ their file and folder (`file`, `folder`, `assets`, `cover`, `image`, an icon tha
 address to join, the recording and the address of a document leave only for a `public` area, or for an `internal` one
 with the settings' `meetings.internal_links`, and only as `http(s)`; a document that is a path or a file of the folder
 is given as text, and where the addresses may not leave, the section `## Unterlagen` / `## Documents` is left out of
-the body too. The people of a meeting (the list, its count, the section `## Teilnehmer` / `## Participants` of the
-body) reach a phone of a `public` area; of an `internal` one only with the settings' `meetings.internal_people`, and
-then as number, name and tick only (no address, no role, the section of the body still left out). The writes are
+the body too. The people of a meeting (the list and its count) reach a phone of a `public` area, of an `internal` one
+only with the settings' `meetings.internal_people`; in either case as number, name and tick only, never an address or a
+role, and the section `## Teilnehmer` / `## Participants` of the body (it holds the addresses) is left out for every
+class. The writes are
 operations of `ops`; a phone may write a line of the minutes (`meeting_capture` at `change`, with `kind` `text`,
 `task`, `decision` or `question`, `text` and `at`; or `photo` / `audio` with `asset` naming one plain file name in
 `assets/images/` / `assets/audio/` of the meeting, as its upload put it there; no other folder, no `..`, no

@@ -1066,6 +1066,20 @@ async fn a_phone_ticks_the_people_of_a_meeting_only_where_they_are_released() {
         .send("GET", "/api/tasks/meeting?id=alpha.nvim/m1", &phone, "")
         .await;
     assert_eq!(read["participants"], json!([]), "{read}");
+    // A public meeting gives its people by number, name and tick: no address, no role, no section of the body.
+    r.merge("meeting", &doc("gamma.nvim/m1", "gamma.nvim"));
+    let (status, read) = r
+        .send("GET", "/api/tasks/meeting?id=gamma.nvim/m1", &phone, "")
+        .await;
+    assert_eq!(status, 200, "{read}");
+    assert_eq!(
+        read["participants"],
+        json!([{ "n": 1, "name": "Rick", "present": false }]),
+        "{read}"
+    );
+    for word in ["rick@", "Chair", "Teilnehmer"] {
+        assert!(!read.to_string().contains(word), "{word} in {read}");
+    }
     // A private area is not there at all.
     let (status, doc_out) = r.op(&phone, &attend("secret-area/m1")).await;
     assert_eq!(status, 404, "{doc_out}");
