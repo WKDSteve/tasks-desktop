@@ -8,6 +8,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { withoutMachineVars } from '../web/nvim-env.mjs';
 import { removeTree, tempDir, tempRoot } from '../web/tmp.mjs';
+import { interfaceProblem } from './fresh.ts';
 import { e2ePort } from './port.ts';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -230,12 +231,11 @@ const MIXED_TASK = [
 
 /** Is the binary the one of the current build of the interface? */
 export async function assertFreshBinary(): Promise<void> {
-  const dist = join(repo, 'ui', 'dist', 'index.html');
-  if (!existsSync(dist)) throw new Error('ui/dist is not built: run `pnpm build` and `cargo build`');
-  const served = await (await fetch(`${origin()}/`)).text();
-  if (served.trim() !== readFileSync(dist, 'utf8').trim()) {
-    throw new Error('the hub binary holds an older interface: run `cargo build` after `pnpm build`');
-  }
+  const problem = await interfaceProblem(repo, async (path) => {
+    const res = await fetch(`${origin()}${path}`);
+    return res.ok ? res.text() : null;
+  });
+  if (problem) throw new Error(problem);
 }
 
 export interface Running {
