@@ -102,56 +102,16 @@ export function categoryIconRows(prefs: CategoryIconPrefs, known: readonly strin
   return rows;
 }
 
-// Code points that never begin a character of their own in the fallback below: marks (also the variation selectors
-// and the keycap), the joiner, the modifiers of the skin tone and the tags of a flag of a region.
-const EXTENDS = /^[\p{M}\u{200D}\p{Emoji_Modifier}\u{E0020}-\u{E007F}]$/u;
-const REGIONAL = /^[\u{1F1E6}-\u{1F1FF}]$/u;
+const graphemes = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
 
 /**
  * Whether `text` is exactly one character as a person sees it (one grapheme): an emoji with its variants and joins
- * counts as one. `Intl.Segmenter` where the browser has it (not Chrome 86, the oldest of the matrix), else an
- * approximation that knows the joins of emoji, marks, skin tones, flags and keycaps.
+ * counts as one.
  */
-export function isOneGrapheme(text: string, segmenter: Intl.Segmenter | null = defaultSegmenter()): boolean {
+export function isOneGrapheme(text: string): boolean {
   if (text === '' || text.trim() !== text) return false;
-  if (segmenter) {
-    const parts = segmenter.segment(text)[Symbol.iterator]();
-    return !parts.next().done && parts.next().done === true;
-  }
-  let bases = 0;
-  let afterJoin = false;
-  let regional = 0;
-  for (const cp of text) {
-    if (cp === '\u{200D}') {
-      afterJoin = true;
-      continue;
-    }
-    if (EXTENDS.test(cp)) continue;
-    if (afterJoin) {
-      afterJoin = false;
-      continue;
-    }
-    if (REGIONAL.test(cp)) {
-      regional += 1;
-      if (regional % 2 === 0) continue;
-    } else regional = 0;
-    bases += 1;
-    if (bases > 1) return false;
-  }
-  return bases === 1;
-}
-
-let segmenterMade: Intl.Segmenter | null | undefined;
-
-function defaultSegmenter(): Intl.Segmenter | null {
-  if (segmenterMade === undefined) {
-    try {
-      segmenterMade = typeof Intl !== 'undefined' && 'Segmenter' in Intl ? new Intl.Segmenter(undefined, { granularity: 'grapheme' }) : null;
-    } catch {
-      segmenterMade = null;
-    }
-  }
-  return segmenterMade;
+  const parts = graphemes.segment(text)[Symbol.iterator]();
+  return !parts.next().done && parts.next().done === true;
 }
 
 /** An icon to draw and the container whose folder an asset of it lies in. */

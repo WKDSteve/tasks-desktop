@@ -107,9 +107,14 @@ Which browser does what (the page checks the browser itself and says so on the f
 
 | Browser | Folder | Reading | Writing | Remembers the folder | Sees changes on disk |
 | --- | --- | --- | --- | --- | --- |
-| Chrome, Edge (86+) | picker (`showDirectoryPicker`) | yes | yes | yes, "Allow access" after a restart | yes, on focus and every 30 s |
-| Firefox (50+), Safari (11.1+) | folder input (`webkitdirectory`) | yes | **no**: the page is a view, a banner says so, a change is refused with the reason | no, choose the folder at every start | no, choose the folder again |
+| Chrome, Edge (Baseline widely available) | picker (`showDirectoryPicker`) | yes | yes | yes, "Allow access" after a restart | yes, on focus and every 30 s |
+| Firefox, Safari (Baseline widely available) | folder input (`webkitdirectory`) | yes | **no**: the page is a view, a banner says so, a change is refused with the reason | no, choose the folder at every start | no, choose the folder again |
 | any other | none | no, the page names Chrome and Edge | no | no | no |
+
+The oldest browser is the one of Baseline "widely available" (`.mwgrc`, `browserslist` in `ui/package.json`; today Chrome and
+Edge 125, Firefox 126, Safari 17.5, and the line moves up with the Baseline), no longer a version named here. That
+Firefox and Safari only read has nothing to do with their version: they have no API for a folder to write to
+(`showDirectoryPicker`), and that does not change with a newer one.
 
 The table is what CI finds: `ui/e2e-web/engines.spec.ts` asks the page in each engine for the APIs it needs and the
 read only way in (`ui/e2e-web/readonly.spec.ts`) runs in Playwright's Firefox and WebKit as they are. Last record

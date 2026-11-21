@@ -240,11 +240,11 @@ export async function writeBack(input: WriteBackInput): Promise<WriteBackResult>
 async function run(input: WriteBackInput): Promise<WriteBackResult> {
   const { root, baseline, changes, files } = input;
   const hash = input.hash ?? sha256Hex;
-  const added = [...changes.added].sort();
-  const modified = [...changes.modified].sort();
-  const removed = [...changes.removed].sort();
+  const added = changes.added.toSorted();
+  const modified = changes.modified.toSorted();
+  const removed = changes.removed.toSorted();
   // The deepest first: a folder is empty only after the folders in it are gone.
-  const removedDirs = [...changes.removedDirs].sort((a, b) => b.split('/').length - a.split('/').length || (a < b ? -1 : 1));
+  const removedDirs = changes.removedDirs.toSorted((a, b) => b.split('/').length - a.split('/').length || (a < b ? -1 : 1));
   const all = [...added, ...modified, ...removed];
   if (new Set(all).size !== all.length) {
     return { status: 'refused', message: 'a file is named twice in the list of changes', internal: true };
@@ -381,14 +381,14 @@ async function run(input: WriteBackInput): Promise<WriteBackResult> {
 
   async function undoAll(cause: unknown, at: string): Promise<WriteBackResult> {
     const leftover: string[] = [];
-    for (const step of [...steps].reverse()) {
+    for (const step of steps.toReversed()) {
       try {
         await step.undo();
       } catch {
         leftover.push(step.path);
       }
     }
-    for (const made of [...madeDirs].reverse()) {
+    for (const made of madeDirs.toReversed()) {
       try {
         await made.parent.removeEntry(made.name);
       } catch {

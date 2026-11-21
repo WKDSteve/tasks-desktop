@@ -4,10 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "browserslist": [
-    "chrome >= 86",
-    "edge >= 86",
-    "firefox >= 50",
-    "safari >= 11.1"
+    "baseline widely available"
   ],
   "scripts": {
     "dev": "vite build --watch",

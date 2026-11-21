@@ -111,7 +111,7 @@ const URGENCY: readonly CiState[] = ['red', 'approval', 'queued', 'running', 'un
 export function byUrgency<T extends { name: string; status: RepoStatus | null }>(rows: readonly T[]): T[] {
   const rank = (row: T): number => (row.status === null ? URGENCY.length : URGENCY.indexOf(row.status.ci.state));
   const dirty = (row: T): number => (row.status === null || row.status.local.state === 'clean' ? 1 : 0);
-  return [...rows].sort((a, b) => rank(a) - rank(b) || dirty(a) - dirty(b) || a.name.localeCompare(b.name));
+  return rows.toSorted((a, b) => rank(a) - rank(b) || dirty(a) - dirty(b) || a.name.localeCompare(b.name));
 }
 
 /**

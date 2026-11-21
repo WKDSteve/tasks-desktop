@@ -10,7 +10,7 @@ export interface Piece {
 export function pieces(text: string, marks: readonly (readonly [number, number])[]): Piece[] {
   const out: Piece[] = [];
   let at = 0;
-  const ordered = [...marks].sort((a, b) => a[0] - b[0]);
+  const ordered = marks.toSorted((a, b) => a[0] - b[0]);
   for (const [start, end] of ordered) {
     if (!Number.isInteger(start) || !Number.isInteger(end)) continue;
     if (start < at || end <= start || end > text.length) continue;

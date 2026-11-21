@@ -195,13 +195,23 @@ pnpm web:build && PLAYWRIGHT_BROWSERS_PATH="$PWD/node_modules/.cache/ms-playwrig
 - Ziel: Baseline `widely` (`.mwgrc`). Vor neuem HTML/CSS/JS der Seite (`ui/src`, `ui/web`) die Leitlinie fragen:
   `DISABLE_TELEMETRY=1 npx -y modern-web-guidance@latest search "<Frage>"` (dann `retrieve <id>`); Regelwerk:
   `rules-vault/rulesets/web`.
-- **Browser Support** (geht vor `widely`): Chrome/Edge 86+ voll, Firefox 50+ und Safari 11.1+ nur lesend (README,
-  Tabelle "Which browser does what"; geprüft von `ui/e2e-web/engines.spec.ts` und `readonly.spec.ts`). `browserslist`
-  in `ui/package.json` nennt genau diese Matrix. Ein neueres Feature nur mit Feature-Erkennung und Rückfall, der die
-  Matrix weiter trägt; kein Feature, das sie bricht, auch wenn es `widely` ist. Polyfills, wo noch genutzte Browser sie brauchen (lieber einer zu viel), laufen nur nach der Prüfung: dynamisch per `import()`, in einer `file://`-Seite mitgebündelt (rules-vault `BASE-02`).
-- Bewusst behalten (keepWhen: Matrix mit Chrome 86): `[...xs].sort()` / `slice().sort()` statt `toSorted()`
-  (Chrome 110) und `new Promise` statt `Promise.withResolvers()` (Chrome 119). `legacy-scan` meldet sie (CI-Job `ui`,
-  nur Information); erst umstellen, wenn die Matrix angehoben ist.
+- **Browser Support** (entschieden 2026-11-21: die Untergrenze Chrome/Edge 86 entfällt, es gilt Baseline `widely`
+  überall; `.mwgrc`, `browserslist` in `ui/package.json` als `baseline widely available`, heute Chrome/Edge 125,
+  Firefox 126, Safari 17.5): Chrome und Edge voll, Firefox und Safari nur lesend (README, Tabelle "Which browser does
+  what"; geprüft von `ui/e2e-web/engines.spec.ts` und `readonly.spec.ts`). "Nur lesend" hängt an der File System Access
+  API (Ordner-Handle, `showDirectoryPicker`), die Firefox und Safari nicht haben, nicht an der Version. Ein Feature, das
+  nicht `widely` ist, nur mit Feature-Erkennung und Rückfall, der die Matrix weiter trägt: `requestIdleCallback`
+  (`ui/src/views/loader.ts`, Safari hat es nicht) und `getCoalescedEvents` (`BoardEditor.svelte`, Safari erst ab 18.2).
+  Prüfen gegen `web-features` / `@mdn/browser-compat-data`, nicht aus dem Gedächtnis (ein Feature von web-features
+  gilt als `widely`, auch wenn ein Teil davon später kam). Polyfills, wo noch genutzte Browser sie brauchen (lieber einer zu viel), laufen nur nach der Prüfung: dynamisch per `import()`, in einer `file://`-Seite mitgebündelt (rules-vault `BASE-02`).
+- Bewusst behalten (Stand 2026-11-21, alles andere der Funde ist auf `toSorted()`, `toReversed()`, `findLast()`,
+  `Promise.withResolvers()` und `Intl.Segmenter` ohne Rückfall umgestellt): `[...set].sort()` in `crossAreas`
+  (`app.svelte.ts`), dort ist `[...x]` die Umwandlung eines `Set` in ein Array, keine Kopie, `toSorted` gibt es auf
+  `Set` nicht. `legacy-scan` meldet das (CI-Job `ui`, nur Information).
+  `build.target: 'es2022'` (`vite.config.ts`, `tsconfig.json` `target`) liegt unter `widely` und ändert nichts an der
+  Ausgabe, die neuer wäre: es ist die Untergrenze der Syntax, nicht der APIs; die APIs (`.at()`, `toSorted`, `lib: ES2024`)
+  stehen oben. Neue Syntax (ES2023+) kommt in die Ausgabe, wenn `widely` sie deckt und `target` zusammen mit
+  `tsconfig.json` angehoben wird.
 - `legacy-scan` lokal: `cd ui && DISABLE_TELEMETRY=1 pnpm exec modern-web-guidance legacy-scan src --json` (exakte
   devDependency, es gilt die Lieferketten-Regel aus `ui/pnpm-workspace.yaml`). `.claude/settings.json` schaltet die
   Telemetrie ab und erlaubt nur `npx -y modern-web-guidance@latest *` (für die Suche des Skills).

@@ -69,7 +69,7 @@ export function spanOn(m: Pick<MeetingEntry, 'starts_at' | 'ends_at' | 'all_day'
 
 /** Put overlapping blocks side by side: the column of each and the number of columns of its cluster. */
 export function layoutColumns(blocks: Block[]): Block[] {
-  const sorted = [...blocks].sort((a, b) => a.start - b.start || b.end - a.end || a.meeting.id.localeCompare(b.meeting.id));
+  const sorted = blocks.toSorted((a, b) => a.start - b.start || b.end - a.end || a.meeting.id.localeCompare(b.meeting.id));
   let cluster: Block[] = [];
   let clusterEnd = -1;
   let columnEnds: number[] = [];

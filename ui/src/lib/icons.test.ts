@@ -135,7 +135,6 @@ describe('the setting "Icons of the categories"', () => {
 });
 
 describe('isOneGrapheme', () => {
-  const segmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
   const cases: [string, boolean][] = [
     ['🐞', true],
     ['A', true],
@@ -156,8 +155,7 @@ describe('isOneGrapheme', () => {
     ['🇩🇪🇫🇷', false],
     ['🇩🇪🇫', false],
   ];
-  it.each(cases)('%s: %s, with Intl.Segmenter and without', (text, one) => {
-    expect(isOneGrapheme(text, segmenter)).toBe(one);
-    expect(isOneGrapheme(text, null)).toBe(one);
+  it.each(cases)('%s: %s', (text, one) => {
+    expect(isOneGrapheme(text)).toBe(one);
   });
 });

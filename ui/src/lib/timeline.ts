@@ -271,7 +271,7 @@ export function rowsOf(bars: readonly Bar[], grouping: TimelineGrouping, names: 
     rows.push({ type: 'group', key: n.key, kind: n.kind, label: n.label, level, span: spanOf(inside), count: inside.length, folded: isFolded });
     if (isFolded) return;
     for (const group of ordered(n.groups)) emit(group, level + 1);
-    for (const bar of [...n.bars].sort(byTime)) rows.push({ type: 'task', bar, level: level + 1 });
+    for (const bar of n.bars.toSorted(byTime)) rows.push({ type: 'task', bar, level: level + 1 });
   };
   for (const n of ordered(top.values())) emit(n, 0);
   return rows;

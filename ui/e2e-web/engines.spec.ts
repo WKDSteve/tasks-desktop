@@ -15,6 +15,8 @@ interface Apis {
   decompressionStream: boolean;
   fromBase64: boolean;
   indexedDb: boolean;
+  /** What the page uses without a fallback because Baseline widely available has it (`.mwgrc`). */
+  widely: { segmenter: boolean; toSorted: boolean; withResolvers: boolean; supportedValuesOf: boolean; at: boolean };
   /** A classic worker made from a blob URL that instantiates a tiny WebAssembly module. */
   blobWorkerWasm: string;
 }
@@ -54,6 +56,13 @@ test('the browser APIs of the page, as this engine has them', async ({ page }, t
       decompressionStream: typeof DecompressionStream === 'function',
       fromBase64: typeof (Uint8Array as unknown as { fromBase64?: unknown }).fromBase64 === 'function',
       indexedDb: typeof indexedDB === 'object' && indexedDB !== null,
+      widely: {
+        segmenter: typeof Intl.Segmenter === 'function',
+        toSorted: typeof [].toSorted === 'function' && typeof [].toReversed === 'function' && typeof [].findLast === 'function',
+        withResolvers: typeof Promise.withResolvers === 'function',
+        supportedValuesOf: typeof Intl.supportedValuesOf === 'function',
+        at: typeof [].at === 'function',
+      },
       blobWorkerWasm,
     };
   });
@@ -65,6 +74,8 @@ test('the browser APIs of the page, as this engine has them', async ({ page }, t
   expect(apis.decompressionStream).toBe(true);
   expect(apis.indexedDb).toBe(true);
   expect(apis.webkitdirectory).toBe(true);
+  // The code of the page has no fallback for these: an engine that lacks one is below the line of the matrix.
+  expect(apis.widely).toEqual({ segmenter: true, toSorted: true, withResolvers: true, supportedValuesOf: true, at: true });
   // The picker is Chromium's alone; the read only way in is for the others (readonly.spec.ts).
   expect(apis.showDirectoryPicker).toBe(testInfo.project.name === 'chrome');
   expect(seen.requests).toEqual([]);

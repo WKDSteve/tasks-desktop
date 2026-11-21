@@ -163,7 +163,7 @@ export const AREAS_MAX = 8;
 export function askFor(areas: readonly string[]): { areas: (string | undefined)[]; whole: boolean } {
   if (areas.length === 0) return { areas: [undefined], whole: false };
   if (areas.length > AREAS_MAX) return { areas: [undefined], whole: true };
-  return { areas: [...areas].sort(), whole: false };
+  return { areas: areas.toSorted(), whole: false };
 }
 
 const addMaps = (a: Record<string, number> | undefined, b: Record<string, number> | undefined): Record<string, number> => {

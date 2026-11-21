@@ -45,13 +45,7 @@
     for (const id of form?.tasks ?? []) if (!open.some((o) => o.value === id)) open.push({ value: id, label: id, title: id });
     return open;
   });
-  const zones = $derived.by(() => {
-    try {
-      return (Intl as unknown as { supportedValuesOf?: (k: string) => string[] }).supportedValuesOf?.('timeZone') ?? [];
-    } catch {
-      return [];
-    }
-  });
+  const zones = $derived(Intl.supportedValuesOf('timeZone'));
   const link = $derived(form ? joinLink(form.online) : null);
   const serviceName = $derived(form && service && service.online === form.online.trim() ? service.name : null);
   const hasImage = $derived(files.some((f) => f.type.startsWith('image/')));

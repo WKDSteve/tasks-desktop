@@ -250,7 +250,7 @@ export function levelRows(levels: readonly PathLevel[] | undefined): { rows: Lev
 
 /** A new level for the form: the next threshold above the last one of XP (or 50 XP for the first). */
 export function nextRow(rows: readonly LevelRow[]): LevelRow {
-  const last = [...rows].reverse().find((r) => r.unit === 'xp' && /^\d+$/.test(r.threshold.trim()));
+  const last = rows.findLast((r) => r.unit === 'xp' && /^\d+$/.test(r.threshold.trim()));
   const threshold = last ? String(Number(last.threshold.trim()) + 50) : '50';
   return { threshold, unit: 'xp', name: '', badge: '', reward: '', given: false };
 }

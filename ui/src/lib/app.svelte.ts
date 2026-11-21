@@ -2141,8 +2141,8 @@ export class App {
     }
     this.saving = true;
     this.answering = true;
-    let settle!: () => void;
-    this.settling = new Promise<void>((resolve) => (settle = resolve));
+    const { promise, resolve: settle } = Promise.withResolvers<void>();
+    this.settling = promise;
     try {
       const result = await this.env.hub.ops({ client_op_id: this.opId(), ops });
       this.answering = false;

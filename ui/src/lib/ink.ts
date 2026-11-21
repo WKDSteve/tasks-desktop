@@ -234,7 +234,7 @@ export function strokePath(stroke: InkStroke): string {
   const l0 = left[0] as { x: number; y: number };
   const rEnd = right[right.length - 1] as { x: number; y: number };
   const r0 = right[0] as { x: number; y: number };
-  const back = [...right].reverse();
+  const back = right.toReversed();
   return (
     `M${f(l0.x)} ${f(l0.y)}` +
     through(left) +

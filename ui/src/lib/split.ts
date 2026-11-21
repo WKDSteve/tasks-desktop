@@ -152,7 +152,7 @@ export function parseSplit(block: string): Split | { error: string } {
 /** The phases of the ticked drafts that the plan does not have, each once, in the order of the drafts. */
 export function newPhases(drafts: readonly SplitDraft[], ticked: readonly number[], phaseOrder: readonly string[]): string[] {
   const out: string[] = [];
-  for (const n of [...ticked].sort((a, b) => a - b)) {
+  for (const n of ticked.toSorted((a, b) => a - b)) {
     const d = drafts[n - 1];
     if (d && !d.invalid && d.phase && !phaseOrder.includes(d.phase) && !out.includes(d.phase)) out.push(d.phase);
   }
@@ -193,7 +193,7 @@ export async function createDrafts(
 ): Promise<DraftResult[]> {
   const made = new Map<number, string>();
   const results: DraftResult[] = [];
-  for (const n of [...ticked].sort((a, b) => a - b)) {
+  for (const n of ticked.toSorted((a, b) => a - b)) {
     const d = split.drafts[n - 1];
     if (!d) {
       results.push({ n, refused: 'there is no such draft' });

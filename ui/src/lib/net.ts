@@ -38,7 +38,7 @@ const SPOTS = [0.5, 0.35, 0.65, 0.25, 0.75, 0.2, 0.8];
  * top, then clockwise; one line per pair. One area is the middle; two face each other left and right.
  */
 export function netLayout(areas: readonly string[], pairs: readonly Pair[], size: number, margin: number): { nodes: NetNode[]; edges: NetEdge[] } {
-  const sorted = [...areas].sort((x, y) => x.localeCompare(y));
+  const sorted = areas.toSorted((x, y) => x.localeCompare(y));
   const c = size / 2;
   const r = Math.max(0, c - margin);
   const nodes: NetNode[] = sorted.map((area, i) => {
