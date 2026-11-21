@@ -775,12 +775,19 @@ pub async fn serve(opts: ServeOptions) -> Result<(), String> {
     let attach_dirs = file.app.attach_dirs.clone();
     let send_at = file.app.send_at().to_owned();
     let scheduler = scheduler_of(&file, &env, dir.join("schedule.json"));
+    // The people of an `internal` meeting reach a paired phone only when the settings release them.
+    let internal_people = file
+        .app
+        .meetings
+        .as_ref()
+        .and_then(|m| m.internal_people)
+        .unwrap_or(false);
     // The previews of meetings and the sequences of their invitations, beside the settings (never in a vault); the
     // address to join of an `internal` meeting leaves the hub in an invitation under the same switch as in a mail.
-    let meeting_files = Arc::new(crate::meetings::MeetingFiles::in_dir(
-        &dir,
-        scheduler.internal_links,
-    ));
+    let meeting_files = Arc::new(
+        crate::meetings::MeetingFiles::in_dir(&dir, scheduler.internal_links)
+            .with_internal_people(internal_people),
+    );
     let config_vaults = Arc::new(ConfigVaults::new(dir.clone(), env.clone(), file));
     let all_vaults = Arc::new(crate::allvaults::AllVaultsCheck::new(
         Arc::clone(&config_vaults) as Arc<dyn crate::allvaults::VaultEngines>,

@@ -4,6 +4,9 @@
 //! `kind`); without it the asset lies in `assets/` itself. Another word is refused here: the folder is never the
 //! page's to name.
 //!
+//! A paired phone attaches to an open task of a released area, and a photo or a voice note (`kind=image|audio`, nothing
+//! else) to a meeting of a released area (`device_target`); a plan, a project or a learning path stays the PC's.
+//!
 //! The body is the file as it is, streamed to disk under a name the hub gives it, in a folder of the hub's own below its
 //! configuration; the engine takes it from there (`from: upload`) and the hub removes it afterwards, whatever came of
 //! it. There is no limit on the size and none on the type: what guards the machine is the disk, asked for the room up
@@ -260,9 +263,9 @@ fn attach_op(
 }
 
 /// For a phone: is there no open task under `id`? The engine's `attach` takes a plan, a project, a learning path or a
-/// meeting of that name when no open task has it, and none of them is released for devices (their routes answer
-/// `403 not_for_devices`). The engine's `not_found` for the task is `true`; any other failure is the answer to send
-/// (fail closed).
+/// meeting of that name when no open task has it; of those only a meeting is released for devices, and only for a photo
+/// or a voice note (`device_target`). The engine's `not_found` for the task is `true`; any other failure is the answer
+/// to send (fail closed).
 // The error is the answer to send, as everywhere in this file: a response is large, and rare.
 #[allow(clippy::result_large_err)]
 async fn no_open_task(st: &Shared, id: &str) -> Result<bool, Response> {
@@ -271,6 +274,40 @@ async fn no_open_task(st: &Shared, id: &str) -> Result<bool, Response> {
         Err(response) if response.status() == StatusCode::NOT_FOUND => Ok(true),
         Err(response) => Err(response),
     }
+}
+
+/// What a phone attaches to under `id`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum DeviceTarget {
+    /// An open task: any kind.
+    Task,
+    /// A meeting, with a photo or a voice note (`kind=image|audio`).
+    Meeting,
+    /// Anything else the engine's `attach` would take (a plan, a project, a learning path, a meeting with another kind),
+    /// or nothing: refused, or left to the engine's own `not_found`.
+    Other,
+}
+
+/// The kinds a phone may attach to a meeting: a photo and a voice note of the minutes.
+fn kind_for_meeting(kind: Option<&str>) -> bool {
+    matches!(kind, Some("image" | "audio"))
+}
+
+/// For a phone: what `id` names, asked of the engine (fail closed: a failure is the answer to send). A meeting counts
+/// only for a photo or a voice note; the meeting is not asked of for another kind.
+#[allow(clippy::result_large_err)]
+async fn device_target(
+    st: &Shared,
+    id: &str,
+    kind: Option<&str>,
+) -> Result<DeviceTarget, Response> {
+    if !no_open_task(st, id).await? {
+        return Ok(DeviceTarget::Task);
+    }
+    if kind_for_meeting(kind) && super::meetings::is_meeting(st, id).await? {
+        return Ok(DeviceTarget::Meeting);
+    }
+    Ok(DeviceTarget::Other)
 }
 
 pub(super) async fn upload(
@@ -333,16 +370,17 @@ pub(super) async fn upload(
     if !st.post_limit.allow() {
         return too_many();
     }
-    // A phone attaches to a task, nothing else (`no_open_task`): when there is none, the dry run below tells "nothing
-    // there" (its refusal, as before) from "there, but not for a phone" (`not_for_devices`), before any byte of the file
-    // is taken. Asked behind the limit of writes, so a flood of uploads costs the engine nothing.
-    let not_a_task = if device {
-        match no_open_task(&st, &id).await {
-            Ok(missing) => missing,
+    // A phone attaches to a task, or a photo or a voice note to a meeting, nothing else (`device_target`): for anything
+    // else the dry run below tells "nothing there" (its refusal, as before) from "there, but not for a phone"
+    // (`not_for_devices`), before any byte of the file is taken. Asked behind the limit of writes, so a flood of uploads
+    // costs the engine nothing.
+    let target = if device {
+        match device_target(&st, &id, kind).await {
+            Ok(target) => Some(target),
             Err(response) => return response,
         }
     } else {
-        false
+        None
     };
     // Asked before the transfer: a task that is gone or read-only should not cost the whole file first. Nothing is read
     // in a dry run, so the file need not be there yet.
@@ -365,11 +403,11 @@ pub(super) async fn upload(
         }
         return json_response(StatusCode::OK, text, None);
     }
-    if not_a_task {
+    if target == Some(DeviceTarget::Other) {
         return error_body(
             StatusCode::FORBIDDEN,
             "not_for_devices",
-            "a phone attaches only to a task",
+            "a phone attaches only to a task, and a photo or a voice note to a meeting",
         );
     }
     let (incoming, written) = match receive(dir.clone(), size, body).await {
@@ -384,11 +422,12 @@ pub(super) async fn upload(
             "another vault was chosen while the file was on its way: nothing was attached",
         );
     }
-    // The transfer may have taken minutes: a task finished meanwhile leaves its id to a plan or meeting of that name.
-    if device {
-        match no_open_task(&st, &id).await {
-            Ok(false) => {}
-            Ok(true) => {
+    // The transfer may have taken minutes: a task finished meanwhile leaves its id to a plan or meeting of that name, a
+    // meeting gone meanwhile to a plan or a task. What the phone attaches to must be what it was asked for.
+    if let Some(asked) = target {
+        match device_target(&st, &id, kind).await {
+            Ok(now) if now == asked => {}
+            Ok(_) => {
                 return error_body(
                     StatusCode::NOT_FOUND,
                     "not_found",
@@ -462,7 +501,22 @@ static UPLOAD_NAME: header::HeaderName = header::HeaderName::from_static("x-uplo
 
 #[cfg(test)]
 mod tests {
-    use super::{asked_kind, attach_op, clean_name, percent_decoded};
+    use super::{asked_kind, attach_op, clean_name, kind_for_meeting, percent_decoded};
+
+    #[test]
+    fn a_meeting_takes_from_a_phone_a_photo_and_a_voice_note_only() {
+        assert!(kind_for_meeting(Some("image")));
+        assert!(kind_for_meeting(Some("audio")));
+        for other in [
+            None,
+            Some("video"),
+            Some("screenshot"),
+            Some("board"),
+            Some(""),
+        ] {
+            assert!(!kind_for_meeting(other), "{other:?}");
+        }
+    }
 
     #[test]
     fn a_kind_is_one_of_the_engines_or_refused() {

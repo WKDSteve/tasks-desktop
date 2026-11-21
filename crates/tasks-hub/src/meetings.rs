@@ -43,6 +43,9 @@ pub struct MeetingFiles {
     /// The address to join of an `internal` meeting may leave the hub (the settings' `meetings.internal_links`, the
     /// same switch as the one of the scheduler's mails).
     pub internal_links: bool,
+    /// The participants of an `internal` meeting (names only) may reach a paired phone, which may tick them present (the
+    /// settings' `meetings.internal_people`); off: only those of a `public` one.
+    pub internal_people: bool,
     /// The zone of the hub: the one of a meeting that names none (the system's; a test sets its own).
     pub zone: TimeZone,
 }
@@ -60,8 +63,16 @@ impl MeetingFiles {
             thumbs: Some(dir.join("cache").join("thumbs")),
             sequences: Mutex::new(Sequences::open(Some(dir.join("ics-sequence.json")))),
             internal_links,
+            internal_people: false,
             zone: system_zone(),
         }
+    }
+
+    /// The same with the participants of an `internal` meeting released for a phone (`meetings.internal_people`).
+    #[must_use]
+    pub fn with_internal_people(mut self, internal_people: bool) -> Self {
+        self.internal_people = internal_people;
+        self
     }
 
     /// Nothing kept (a test, a hub without a settings folder).
@@ -71,6 +82,7 @@ impl MeetingFiles {
             thumbs: None,
             sequences: Mutex::new(Sequences::open(None)),
             internal_links,
+            internal_people: false,
             zone: system_zone(),
         }
     }

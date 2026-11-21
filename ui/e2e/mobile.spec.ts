@@ -105,7 +105,7 @@ test('the phone page pairs, shows only the classified areas and creates a task t
   expect(problems).toEqual([]);
 });
 
-test('the phone page names a coming meeting of an internal area without its address to join, and writes a line of its minutes', async ({
+test('the phone page names a coming meeting of an internal area without its address to join, writes a line of its minutes, and puts a tick, a photo and a voice note into a public one', async ({
   page,
 }) => {
   const problems = watchConsole(page);
@@ -114,11 +114,21 @@ test('the phone page names a coming meeting of an internal area without its addr
   mkdirSync(dir, { recursive: true });
   const slug = 'phone-meeting-m003';
   const file = join(dir, `${slug}.md`);
+  // A meeting of a public area (cascade.nvim): its people reach the phone, which ticks one; a photo and a voice note
+  // go into its minutes through the upload of the hub.
+  const pubDir = join(vault, 'cascade.nvim', 'MEETINGS');
+  mkdirSync(pubDir, { recursive: true });
+  const pubSlug = 'phone-meeting-m004';
+  const pubFile = join(pubDir, `${pubSlug}.md`);
   const now = new Date();
   const day = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
   writeFileSync(
     file,
     `---\ntitle: Phone meeting m003\nstatus: planned\ndate: ${day}\ntime: "23:30"\nduration: 15m\nonline: https://teams.microsoft.com/l/meetup-join/m003\n---\n\nA meeting of one phone test.\n\n## Teilnehmer\n\n- [ ] Rick <rick@example.org>\n\n## Protokoll\n`,
+  );
+  writeFileSync(
+    pubFile,
+    `---\ntitle: Phone meeting m004\nstatus: planned\ndate: ${day}\ntime: "23:40"\nduration: 15m\n---\n\nA public meeting of one phone test.\n\n## Teilnehmer\n\n- [ ] Rita <rita@example.org>\n\n## Protokoll\n`,
   );
   try {
     // The hub holds the meetings for the state of the vault it last read: the phone is paired once the hub sees the file
@@ -135,7 +145,8 @@ test('the phone page names a coming meeting of an internal area without its addr
           const r = await page.request.get(`${origin()}/api/tasks/meetings?since=${day}&until=${until}&limit=100`, {
             headers: { Authorization: `Bearer ${token}` },
           });
-          return r.ok() ? (await r.text()).includes(`lib.nvim/${slug}`) : false;
+          const text = r.ok() ? await r.text() : '';
+          return text.includes(`lib.nvim/${slug}`) && text.includes(`cascade.nvim/${pubSlug}`);
         },
         { timeout: 20_000 },
       )
@@ -153,10 +164,48 @@ test('the phone page names a coming meeting of an internal area without its addr
     await page.getByRole('button', { name: 'Note', exact: true }).click();
     await expect(page.getByTestId('minutes')).toContainText('Notiz vom Handy m003');
     expect(readFileSync(file, 'utf8')).toMatch(/## Protokoll\s+- \d\d:\d\d Notiz vom Handy m003/);
+
+    // The public meeting, opened inside the page (no second start: that would be another sign-in of the device).
+    await page.getByRole('button', { name: '← Meetings' }).click();
+    await page.locator(`[data-meeting="cascade.nvim/${pubSlug}"]`).first().click();
+    await expect(page.getByTestId('meeting-title')).toContainText('Phone meeting m004');
+    const rita = page.getByRole('checkbox', { name: 'Rita present' });
+    await expect(rita).not.toBeChecked();
+    expect(await page.content()).not.toContain('rita@example.org');
+    await rita.click();
+    await expect(rita).toBeChecked();
+    // A photo from the camera: to the meeting as an image, then its line of the minutes.
+    const png = Buffer.from(
+      '89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d4944415478da63f8cfc0f01f0005000201a5ad6f0b0000000049454e44ae426082',
+      'hex',
+    );
+    await page.getByTestId('meeting-photo-input').setInputFiles({ name: 'IMG_0001.png', mimeType: 'image/png', buffer: png });
+    await expect(page.getByTestId('minutes')).toContainText(/Photo: photo-\d{4}-\d{2}-\d{2}-\d{4}-[A-Za-z0-9]{6}\.png/, { timeout: 15_000 });
+    // A voice note from the (fake) microphone, granted without a prompt (else the question of Chrome may stay open):
+    // as an audio file.
+    await page.context().grantPermissions(['microphone'], { origin: origin() });
+    await page.getByTestId('meeting-voice').click();
+    await expect(page.getByTestId('meeting-voice-stop')).toBeVisible();
+    await page.waitForTimeout(1200);
+    await page.getByTestId('meeting-voice-stop').click();
+    await expect(page.getByTestId('minutes')).toContainText(/Voice note: voice-.*\.webm/, { timeout: 15_000 });
+    // The meeting took the folder form: the files lie in the folders of their kinds, the minutes link them.
+    const folder = join(pubDir, pubSlug);
+    const text = readFileSync(join(folder, `${pubSlug}.md`), 'utf8');
+    expect(text).toMatch(/^- \[x\] Rita/m);
+    const photo = /\]\((assets\/images\/photo-[^)]+\.png)\)/.exec(text)?.[1];
+    const voice = /\]\((assets\/audio\/voice-[^)]+\.webm)\)/.exec(text)?.[1];
+    expect(photo, text).toBeTruthy();
+    expect(voice, text).toBeTruthy();
+    expect(readFileSync(join(folder, photo!))).toEqual(png);
+    expect(existsSync(join(folder, voice!))).toBe(true);
+    await expect(page.getByTestId('queue')).toHaveCount(0);
     expect(problems).toEqual([]);
   } finally {
     rmSync(join(dir, slug), { recursive: true, force: true });
     rmSync(file, { force: true });
+    rmSync(join(pubDir, pubSlug), { recursive: true, force: true });
+    rmSync(pubFile, { force: true });
   }
 });
 

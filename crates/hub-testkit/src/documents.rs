@@ -28,6 +28,7 @@
 //! * `.fake-not-tasks`: lines `<id>`, files of the vault that are no task (a meeting, a plan, a learning path): `task`
 //!   answers `not_found` for them, while `ops` (`attach`) takes them, as the engine's `attach` takes such a file when
 //!   no open task has the id; `alpha.nvim/missing` names nothing at all, and `ops` refuses it with `not_found`;
+//! * `.fake-meetings`: lines `<id>`, the meetings of the vault: `meeting` answers one of them, `not_found` for others;
 //! * `.fake-attach-dirs`: written by an `ops` request that carries `attach_dirs` (the folders the hub
 //!   named), as JSON: what reached the engine;
 //! * `.fake-upload`: written by an `ops` request that carries `upload_dir`: the name of the asset, and the bytes of the
@@ -334,6 +335,24 @@ fn tasks_fill(call: &Call<'_>, doc: &mut Value) {
                 { "name": "beta.nvim", "open": 0 },
                 { "name": "secret-area", "open": 2 },
             ]);
+        }
+        // `.fake-meetings`: lines `<id>`, the meetings of the vault. With the file, `meeting` answers one of them as that
+        // meeting and anything else `not_found`; without it, the plain document (a test merges its own).
+        "meeting" if vault.join(".fake-meetings").exists() => {
+            let id = params.get("id").and_then(Value::as_str).unwrap_or("");
+            let known = std::fs::read_to_string(vault.join(".fake-meetings"))
+                .is_ok_and(|text| text.lines().any(|line| line.trim() == id));
+            if known {
+                let area = id.split_once('/').map_or("", |(a, _)| a);
+                doc["meeting"] = json!({ "id": id, "area": area, "title": "Meeting", "status": "planned",
+                                         "date": "2026-11-24", "etag": "e1" });
+                doc["body"] = json!("");
+            } else {
+                doc["kind"] = json!(call.dialect.error_kind);
+                doc["code"] = json!("not_found");
+                doc["message"] = json!("no such meeting");
+                doc["retryable"] = json!(false);
+            }
         }
         "task" => {
             let id = params.get("id").and_then(Value::as_str).unwrap_or("");

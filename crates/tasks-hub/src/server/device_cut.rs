@@ -709,12 +709,40 @@ const MEETING_FIELDS: &[&str] = &[
     "virtual",
 ];
 
+/// What the settings release of an `internal` meeting for a phone, beyond what every released meeting gives: its
+/// addresses (`meetings.internal_links`) and its people (`meetings.internal_people`). A `public` one gives both, a
+/// private or unclassified one nothing.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) struct Release {
+    /// The addresses to join, of the recording and of the documents (`meetings.internal_links`).
+    pub links: bool,
+    /// The participants by name, and ticking them present (`meetings.internal_people`).
+    pub people: bool,
+}
+
+impl Release {
+    pub(crate) const fn new(links: bool, people: bool) -> Self {
+        Self { links, people }
+    }
+}
+
 /// Whether the addresses of a meeting of `area` (to join, of the recording, of its documents) may reach a phone: those
 /// of a `public` area, those of an `internal` one only with the settings' `meetings.internal_links` (as for the mails).
-fn meeting_links(classes: &AreaPolicy, area: &str, internal_links: bool) -> bool {
+fn meeting_links(classes: &AreaPolicy, area: &str, release: Release) -> bool {
     match classes.shown(area) {
         Shown::Public => true,
-        Shown::Internal => internal_links,
+        Shown::Internal => release.links,
+        Shown::Private | Shown::Unclassified => false,
+    }
+}
+
+/// Whether the people of a meeting of `area` (their names, their count, whether they were there) may reach a phone, and
+/// the phone may tick them present (`meeting_attend`): those of a `public` area, those of an `internal` one only with
+/// the settings' `meetings.internal_people`. Fail closed: a private or unclassified area never.
+pub(crate) fn meeting_people(classes: &AreaPolicy, area: &str, release: Release) -> bool {
+    match classes.shown(area) {
+        Shown::Public => true,
+        Shown::Internal => release.people,
         Shown::Private | Shown::Unclassified => false,
     }
 }
@@ -731,7 +759,7 @@ fn web_address(value: &Value) -> Option<Value> {
 pub(crate) fn meeting_entry(
     classes: &AreaPolicy,
     entry: &Value,
-    internal_links: bool,
+    release: Release,
 ) -> Option<Value> {
     let id = entry["id"].as_str()?;
     let area = area_of(id)?;
@@ -739,7 +767,7 @@ pub(crate) fn meeting_entry(
         return None;
     }
     let mut out = copy(entry, MEETING_FIELDS);
-    if meeting_links(classes, area, internal_links) {
+    if meeting_links(classes, area, release) {
         for field in ["online", "recording"] {
             if let Some(link) = web_address(&entry[field]) {
                 out.insert(field.to_owned(), link);
@@ -749,8 +777,8 @@ pub(crate) fn meeting_entry(
             out.insert("online_service".to_owned(), service.clone());
         }
     }
-    // Who comes is the people of the meeting: a count of them is given for a public area only.
-    if matches!(classes.shown(area), Shown::Public)
+    // Who comes is the people of the meeting: a count of them is given only where the people may leave.
+    if meeting_people(classes, area, release)
         && let Some(count) = entry.get("participants")
     {
         out.insert("participants".to_owned(), count.clone());
@@ -764,13 +792,13 @@ pub(crate) fn meeting_entry(
 
 /// `tasks.meetings` for a phone: the meetings of released areas. No count over the vault (`total`, `next_offset` tell
 /// of the others too); `partial` says that the window held more than this page, or that an area could not be read.
-pub(crate) fn meetings(classes: &AreaPolicy, doc: &Value, internal_links: bool) -> Value {
+pub(crate) fn meetings(classes: &AreaPolicy, doc: &Value, release: Release) -> Value {
     let mut out = copy(doc, &["kind", "schema", "plugin", "engine", "generated_at"]);
     let items: Vec<Value> = doc["items"]
         .as_array()
         .map_or(&[][..], Vec::as_slice)
         .iter()
-        .filter_map(|entry| meeting_entry(classes, entry, internal_links))
+        .filter_map(|entry| meeting_entry(classes, entry, release))
         .collect();
     out.insert("items".to_owned(), Value::Array(items));
     let partial = doc.get("next_offset").is_some_and(|n| !n.is_null())
@@ -802,11 +830,12 @@ fn without_participants(body: &str, links: bool) -> String {
 }
 
 /// `tasks.meeting` for a phone, or `None` (the hub answers `not_found`) when the meeting is not of a released area.
-pub(crate) fn meeting(classes: &AreaPolicy, doc: &Value, internal_links: bool) -> Option<Value> {
-    let entry = meeting_entry(classes, &doc["meeting"], internal_links)?;
+pub(crate) fn meeting(classes: &AreaPolicy, doc: &Value, release: Release) -> Option<Value> {
+    let entry = meeting_entry(classes, &doc["meeting"], release)?;
     let area = area_of(entry["id"].as_str()?)?;
     let public = matches!(classes.shown(area), Shown::Public);
-    let links = meeting_links(classes, area, internal_links);
+    let links = meeting_links(classes, area, release);
+    let people = meeting_people(classes, area, release);
     let mut out = copy(
         doc,
         &[
@@ -833,6 +862,16 @@ pub(crate) fn meeting(classes: &AreaPolicy, doc: &Value, internal_links: bool) -
         if let Some(people) = doc.get("participants") {
             out.insert("participants".to_owned(), people.clone());
         }
+    } else if people {
+        // An internal meeting whose people the settings release: each by number, name and tick, never an address or
+        // a role; the section of the body stays out (it holds the addresses).
+        let names: Vec<Value> = doc["participants"]
+            .as_array()
+            .map_or(&[][..], Vec::as_slice)
+            .iter()
+            .map(|p| Value::Object(copy(p, &["n", "name", "present"])))
+            .collect();
+        out.insert("participants".to_owned(), Value::Array(names));
     } else {
         out.insert("participants".to_owned(), Value::Array(Vec::new()));
     }
@@ -1211,8 +1250,9 @@ mod tests {
     #[test]
     fn a_meeting_of_an_internal_area_reaches_a_phone_without_its_people_and_without_its_links() {
         let c = classes();
-        assert!(meeting(&c, &meeting_doc("secret/m"), true).is_none());
-        let cut = meeting(&c, &meeting_doc("open/m"), false).expect("internal is released");
+        assert!(meeting(&c, &meeting_doc("secret/m"), Release::new(true, true)).is_none());
+        let cut =
+            meeting(&c, &meeting_doc("open/m"), Release::default()).expect("internal is released");
         let text = cut.to_string();
         for word in [
             "rick",
@@ -1244,19 +1284,60 @@ mod tests {
         assert_eq!(cut["followups"][0]["task"], "open/t3");
         assert!(cut["followups"][1].get("task").is_none());
         // With `meetings.internal_links` the addresses of an internal meeting may leave, its people still not.
-        let linked = meeting(&c, &meeting_doc("open/m"), true).unwrap();
+        let linked = meeting(&c, &meeting_doc("open/m"), Release::new(true, false)).unwrap();
         assert_eq!(
             linked["meeting"]["online"],
             "https://teams.microsoft.com/l/x"
         );
         assert_eq!(linked["documents"][0]["href"], "https://example.org/slides");
         assert!(!linked.to_string().contains("rick"), "{linked}");
+        assert!(linked["meeting"].get("participants").is_none(), "{linked}");
+    }
+
+    #[test]
+    fn with_internal_people_an_internal_meeting_gives_its_people_by_name_only() {
+        let c = classes();
+        let cut = meeting(&c, &meeting_doc("open/m"), Release::new(false, true)).unwrap();
+        assert_eq!(
+            cut["participants"],
+            json!([{ "n": 1, "name": "Rick", "present": false }])
+        );
+        assert_eq!(cut["meeting"]["participants"]["total"], 1);
+        let text = cut.to_string();
+        // No address of a person, and the section of the body (it holds the addresses) stays out; no link either.
+        for word in ["rick@", "example.org", "Teilnehmer", "teams"] {
+            assert!(!text.contains(word), "{word} in {text}");
+        }
+        // The people of a private area never, whatever the settings say.
+        assert!(meeting(&c, &meeting_doc("secret/m"), Release::new(true, true)).is_none());
+        // Off (the default): as before, no people.
+        let off = meeting(&c, &meeting_doc("open/m"), Release::default()).unwrap();
+        assert_eq!(off["participants"], json!([]));
+        assert!(off["meeting"].get("participants").is_none(), "{off}");
+    }
+
+    #[test]
+    fn the_people_of_a_meeting_are_released_by_class_and_setting() {
+        let c = classes();
+        for (area, off, on) in [
+            ("pub", true, true),
+            ("open", false, true),
+            ("secret", false, false),
+            ("nope", false, false),
+        ] {
+            assert_eq!(meeting_people(&c, area, Release::default()), off, "{area}");
+            assert_eq!(
+                meeting_people(&c, area, Release::new(true, true)),
+                on,
+                "{area}"
+            );
+        }
     }
 
     #[test]
     fn a_meeting_of_a_public_area_reaches_a_phone_with_its_people_and_links_but_no_file() {
         let c = classes();
-        let cut = meeting(&c, &meeting_doc("pub/m"), false).unwrap();
+        let cut = meeting(&c, &meeting_doc("pub/m"), Release::default()).unwrap();
         assert_eq!(cut["meeting"]["online"], "https://teams.microsoft.com/l/x");
         assert_eq!(cut["meeting"]["recording"], "https://example.org/rec");
         assert_eq!(cut["meeting"]["participants"]["total"], 1);
@@ -1275,7 +1356,7 @@ mod tests {
             "kind": "tasks.meetings", "total": 3, "next_offset": 100,
             "items": [meeting_doc("open/m")["meeting"], meeting_doc("secret/m")["meeting"], meeting_doc("pub/m")["meeting"]],
         });
-        let cut = meetings(&c, &doc, false);
+        let cut = meetings(&c, &doc, Release::default());
         let ids: Vec<&str> = cut["items"]
             .as_array()
             .unwrap()

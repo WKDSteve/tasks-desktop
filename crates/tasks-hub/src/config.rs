@@ -52,6 +52,10 @@ pub struct MeetingsSettings {
     /// The address to join of a meeting of an `internal` area may go into a mail; unset: no (only `public` ones).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub internal_links: Option<bool>,
+    /// The participants of a meeting of an `internal` area (their names, never an address) may reach a paired phone, and
+    /// a phone may tick them present (`meeting_attend`); unset: no (only `public` ones).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub internal_people: Option<bool>,
     /// `en` (unset) or `de`: the language of the mails of the scheduler.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub lang: Option<String>,

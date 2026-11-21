@@ -344,17 +344,21 @@ a `public` area, for an `internal` one only when the settings release it; partic
   "notify_by_vault": { "main": ["-10m", "-1d@18:00"] },
   "after_end": true,
   "internal_links": false,
+  "internal_people": false,
   "lang": "de"
 }
 ```
 
 `notify` is the default of every vault (`[]`: none), `notify_by_vault` that of a vault by its name (read at the start
 of the hub), `after_end` switches the question after the end, `internal_links` releases the address to join of
-`internal` areas for mails, `lang` (`en` or `de`) is the language of the mails. A value that is not one of these stops
+`internal` areas for mails (and for a paired phone), `internal_people` lets the participants of a meeting of an
+`internal` area (their names, never an address) reach a paired phone, which may then tick them present (unset: only
+those of a `public` area), `lang` (`en` or `de`) is the language of the mails. A value that is not one of these stops
 the start, said plainly.
 
-**Meetings through the hub.** The engine's meetings are routes of the hub (a session needed, not for a paired phone
-yet):
+**Meetings through the hub.** The engine's meetings are routes of the hub (a session needed; a paired phone gets
+`meetings` and `meeting` cut by the class of the area, writes lines, photos and voice notes into the minutes and ticks
+participants where they are released, see `docs/SECURITY.md`):
 
 - `GET /api/tasks/meetings?since=&until=&area=&status=&task=&limit=&offset=`: the meetings whose days touch the window
   (days `YYYY-MM-DD`; without them the engine's default, 30 days back and 90 ahead), one page of at most 100.

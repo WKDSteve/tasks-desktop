@@ -549,11 +549,14 @@ b"}"#,
 /// The public key a paired phone names (any valid P-256 point; the tests of the guard take the same).
 const DEVICE_KEY: &str = "046b17d1f2e12c4247f8bce6e563a440f277037d812deb33a0f4a13945d898c2964fe342e2fe1a7f9b8ee7eb4a7c0f9e162bce33576b315ececbb6406837bf51f5";
 
-/// A paired phone attaches to a task only: the real engine's `attach` would take a meeting, a plan or a learning path
-/// of a released area under its id, and the hub refuses that with `not_for_devices` before any byte is taken; the
-/// meeting stays without assets. A task of the same area is still attached to.
+/// A paired phone attaches to a task, and a photo or a voice note to a meeting: the real engine's `attach` would take a
+/// meeting (with any kind), a plan or a learning path of a released area under its id, and the hub refuses all of that
+/// but `image` and `audio` to a meeting with `not_for_devices` before any byte is taken (the plan and the path stay
+/// without assets). The photo and the voice note then go into the minutes (`meeting_capture` with the asset), and the
+/// phone ticks a participant of the public meeting present (`meeting_attend`).
 #[tokio::test]
-async fn a_paired_phone_cannot_attach_to_a_meeting_a_plan_or_a_path() {
+async fn a_paired_phone_puts_a_photo_and_a_voice_note_into_a_meeting_but_nothing_into_a_plan_or_path(
+) {
     let dir = Scratch::new("real-meetings-phone");
     let vault = dir.join("vault");
     copy_dir(&fixture(), &vault);
@@ -602,8 +605,9 @@ async fn a_paired_phone_cannot_attach_to_a_meeting_a_plan_or_a_path() {
     };
     let made = hub
         .ops(json!([{
-            "op": "meeting_new", "area": "lib.nvim", "title": "Phone stays out",
+            "op": "meeting_new", "area": "lib.nvim", "title": "Phone takes part",
             "fields": { "date": "2026-11-26", "time": "11:00" },
+            "body": "## Teilnehmer\n\n- [ ] Rick <rick@example.org>\n",
         }]))
         .await;
     let meeting = made["results"][0]["id"].as_str().unwrap().to_owned();
@@ -645,19 +649,24 @@ async fn a_paired_phone_cannot_attach_to_a_meeting_a_plan_or_a_path() {
             .as_str()
             .unwrap()
     );
-    let upload = |id: String, kind: &'static str| {
+    let upload = |id: String, kind: &'static str, name: &'static str| {
         let phone = phone.clone();
         let origin = hub.origin.clone();
         async move {
+            let kind = if kind.is_empty() {
+                String::new()
+            } else {
+                format!("&kind={kind}")
+            };
             let reply = patient::request(
                 port,
                 "POST",
-                &format!("/api/tasks/upload?id={id}&kind={kind}"),
+                &format!("/api/tasks/upload?id={id}&exact=1{kind}"),
                 &[
                     ("Authorization", &phone),
                     ("Origin", &origin),
                     ("Content-Type", "application/octet-stream"),
-                    ("X-Upload-Name", "note.m4a"),
+                    ("X-Upload-Name", name),
                 ],
                 "bytes",
             )
@@ -667,13 +676,35 @@ async fn a_paired_phone_cannot_attach_to_a_meeting_a_plan_or_a_path() {
             (reply.status, doc)
         }
     };
-    for id in [
-        meeting.clone(),
-        "lib.nvim/the-plan".to_owned(),
-        "lib.nvim/lua-lernen".to_owned(),
-    ] {
-        for kind in ["audio", "image"] {
-            let (status, doc) = upload(id.clone(), kind).await;
+    let phone_op = |op: Value| {
+        let phone = phone.clone();
+        let origin = hub.origin.clone();
+        async move {
+            let reply = patient::request(
+                port,
+                "POST",
+                "/api/tasks/ops",
+                &[
+                    ("Authorization", &phone),
+                    ("Origin", &origin),
+                    ("Content-Type", "application/json"),
+                ],
+                &json!({ "client_op_id": "c-1", "ops": [op] }).to_string(),
+            )
+            .await
+            .unwrap();
+            let doc: Value = serde_json::from_str(&reply.body).unwrap_or(Value::Null);
+            (reply.status, doc)
+        }
+    };
+    let refused = [
+        (meeting.clone(), &["", "video", "screenshot"][..]),
+        ("lib.nvim/the-plan".to_owned(), &["audio", "image"][..]),
+        ("lib.nvim/lua-lernen".to_owned(), &["audio", "image"][..]),
+    ];
+    for (id, kinds) in refused {
+        for kind in kinds {
+            let (status, doc) = upload(id.clone(), kind, "note.m4a").await;
             assert_eq!(
                 (status, doc["error"]["code"].clone()),
                 (403, json!("not_for_devices")),
@@ -687,6 +718,70 @@ async fn a_paired_phone_cannot_attach_to_a_meeting_a_plan_or_a_path() {
         !meetings.join(slug).exists(),
         "the meeting took the folder form: an asset arrived"
     );
+    // A photo and a voice note: into the folders of their kinds, then into the minutes.
+    for (kind, name, entry_kind, asset) in [
+        (
+            "image",
+            "photo-2026-11-26-1100.png",
+            "photo",
+            "assets/images/photo-2026-11-26-1100.png",
+        ),
+        (
+            "audio",
+            "voice-2026-11-26-1101.webm",
+            "audio",
+            "assets/audio/voice-2026-11-26-1101.webm",
+        ),
+    ] {
+        let (status, doc) = upload(meeting.clone(), kind, name).await;
+        assert_eq!(status, 200, "{kind}: {doc}");
+        assert_eq!(doc["results"][0]["ok"], true, "{kind}: {doc}");
+        assert!(
+            meetings.join(slug).join(asset).is_file(),
+            "{asset} is not in the folder of the meeting"
+        );
+        // Sent again (its answer was lost): `exists`, nothing attached twice.
+        let (status, doc) = upload(meeting.clone(), kind, name).await;
+        assert_eq!(
+            doc["results"][0]["error"]["code"], "exists",
+            "{status} {doc}"
+        );
+        let line = json!({ "op": "meeting_capture", "id": meeting, "entry": { "kind": entry_kind, "asset": asset, "at": "11:00" } });
+        let (status, doc) = phone_op(line).await;
+        assert_eq!(status, 200, "{doc}");
+        assert_eq!(doc["results"][0]["ok"], true, "{doc}");
+    }
+    // A line naming a file the meeting does not have is the engine's to refuse.
+    let missing = json!({ "op": "meeting_capture", "id": meeting, "entry": { "kind": "photo", "asset": "assets/images/none.png" } });
+    let (_, doc) = phone_op(missing).await;
+    assert_eq!(doc["results"][0]["ok"], false, "{doc}");
+    // The participant of the public meeting, ticked by the phone.
+    let tick = json!({ "op": "meeting_attend", "id": meeting, "name": "Rick", "present": true });
+    let (status, doc) = phone_op(tick).await;
+    assert_eq!(status, 200, "{doc}");
+    assert_eq!(doc["results"][0]["ok"], true, "{doc}");
+    let read = patient::request(
+        port,
+        "GET",
+        &format!("/api/tasks/meeting?id={meeting}"),
+        &[("Authorization", &phone), ("Origin", &hub.origin)],
+        "",
+    )
+    .await
+    .unwrap();
+    assert_eq!(read.status, 200, "{}", read.body);
+    let doc: Value = serde_json::from_str(&read.body).unwrap();
+    let body = doc["body"].as_str().unwrap();
+    assert!(
+        body.contains("](assets/images/photo-2026-11-26-1100.png)"),
+        "{body}"
+    );
+    assert!(
+        body.contains("](assets/audio/voice-2026-11-26-1101.webm)"),
+        "{body}"
+    );
+    assert_eq!(doc["participants"][0]["name"], "Rick", "{doc}");
+    assert_eq!(doc["participants"][0]["present"], true, "{doc}");
     for folder in [
         vault
             .join("lib.nvim")
@@ -706,7 +801,7 @@ async fn a_paired_phone_cannot_attach_to_a_meeting_a_plan_or_a_path() {
         );
     }
     // A task of the same area: attached.
-    let (status, doc) = upload("lib.nvim/alpha".to_owned(), "audio").await;
+    let (status, doc) = upload("lib.nvim/alpha".to_owned(), "audio", "note.m4a").await;
     assert_eq!(status, 200, "{doc}");
     assert_eq!(doc["results"][0]["ok"], true, "{doc}");
     drop(server);

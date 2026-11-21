@@ -795,16 +795,23 @@ address to join, the recording and the address of a document leave only for a `p
 with the settings' `meetings.internal_links`, and only as `http(s)`; a document that is a path or a file of the folder
 is given as text, and where the addresses may not leave, the section `## Unterlagen` / `## Documents` is left out of
 the body too. The people of a meeting (the list, its count, the section `## Teilnehmer` / `## Participants` of the
-body) reach a phone of a `public` area only. The writes are operations of `ops`; a phone may only write a line of the
-minutes (`meeting_capture` at `change`, with `kind` `text`, `task`, `decision` or `question`, `text` and `at`, no file and
-no `if_match`: `device_op_shape`), every other meeting operation is refused to it (`device_op_level`).
+body) reach a phone of a `public` area; of an `internal` one only with the settings' `meetings.internal_people`, and
+then as number, name and tick only (no address, no role, the section of the body still left out). The writes are
+operations of `ops`; a phone may write a line of the minutes (`meeting_capture` at `change`, with `kind` `text`,
+`task`, `decision` or `question`, `text` and `at`; or `photo` / `audio` with `asset` naming one plain file name in
+`assets/images/` / `assets/audio/` of the meeting, as its upload put it there; no other folder, no `..`, no
+`if_match`: `device_op_shape`), and tick a participant (`meeting_attend` at `change`, by `n` or `name`, `present`)
+only where the people may reach it (a `public` area, an `internal` one with `meetings.internal_people`; otherwise
+`403 not_for_devices`). Every other meeting operation is refused to it (`device_op_level`).
 
-The upload is no way around this. A paired phone attaches to a task, nothing else: the engine's `attach` takes a
-plan, a project, a learning path or a meeting under the same id when no open task has it, so for a device the upload
-first asks the engine for the task (`task`). When there is none and the dry run of `attach` would still find a file,
-the answer is `403 not_for_devices`, before any byte of the file is taken; when the dry run finds nothing, the phone
-gets the engine's refusal as before (`not_found`). The transfer may take minutes, so the hub asks for the task again
-right before the real `attach`: a task finished meanwhile gives `404 not_found` and nothing is attached. Tested in the
+The upload is no way around this. A paired phone attaches to a task, and a photo or a voice note (`kind=image` or
+`kind=audio`, nothing else) to a meeting of a released area: the engine's `attach` takes a plan, a project, a learning
+path or a meeting under the same id when no open task has it, so for a device the upload first asks the engine for the
+task (`task`) and, for those two kinds only, for the meeting (`meeting` of that very id). When it is neither and the
+dry run of `attach` would still find a file, the answer is `403 not_for_devices`, before any byte of the file is
+taken; when the dry run finds nothing, the phone gets the engine's refusal as before (`not_found`). The transfer may
+take minutes, so the hub asks again right before the real `attach`: a task finished or a meeting gone meanwhile (what
+the id names is no longer what was asked for) gives `404 not_found` and nothing is attached. Tested in the
 guard matrix (`crates/hub-testkit/tests/devices.rs`)
 and against the real engine (`real_meetings.rs`).
 

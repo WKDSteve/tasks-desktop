@@ -19,11 +19,12 @@ use tasks_hub::server::{start_with, Extras, HubStatus, Limits, RunningServer, Se
 /// curve to pair; this test never signs a login.
 const DEVICE_KEY: &str = "046b17d1f2e12c4247f8bce6e563a440f277037d812deb33a0f4a13945d898c2964fe342e2fe1a7f9b8ee7eb4a7c0f9e162bce33576b315ececbb6406837bf51f5";
 
-/// `alpha.nvim` is internal, `secret-area` private, `beta.nvim` has no class (unclassified).
+/// `alpha.nvim` is internal, `gamma.nvim` public, `secret-area` private, `beta.nvim` has no class (unclassified).
 fn policy() -> AreaPolicy {
     let entry = |class| Entry { class, repo: None };
     AreaPolicy::new(std::collections::BTreeMap::from([
         ("alpha.nvim".to_owned(), entry(Class::Internal)),
+        ("gamma.nvim".to_owned(), entry(Class::Public)),
         ("secret-area".to_owned(), entry(Class::Private)),
     ]))
     .unwrap()
@@ -47,15 +48,26 @@ impl Rig {
     }
 
     async fn with_tailnet(name: &str, tailnet: Option<&str>) -> Self {
-        Self::build(name, tailnet, Vec::new()).await
+        Self::build(name, tailnet, Vec::new(), None).await
     }
 
     /// A hub whose guard lets a device through to `routes`: what answers it there is the handler's own refusal.
     async fn past_the_guard(name: &str, routes: Vec<&'static str>) -> Self {
-        Self::build(name, None, routes).await
+        Self::build(name, None, routes, None).await
     }
 
-    async fn build(name: &str, tailnet: Option<&str>, past_the_guard: Vec<&'static str>) -> Self {
+    /// A hub whose settings release the people of an `internal` meeting for a phone (`meetings.internal_people`).
+    async fn with_internal_people(name: &str) -> Self {
+        let files = tasks_hub::meetings::MeetingFiles::none(false).with_internal_people(true);
+        Self::build(name, None, Vec::new(), Some(Arc::new(files))).await
+    }
+
+    async fn build(
+        name: &str,
+        tailnet: Option<&str>,
+        past_the_guard: Vec<&'static str>,
+        meetings: Option<Arc<tasks_hub::meetings::MeetingFiles>>,
+    ) -> Self {
         let dir = Scratch::new(&format!("devices-{name}"));
         let vault = dir.join("vault");
         std::fs::create_dir_all(vault.join("alpha.nvim").join("ROADMAP").join("tasks")).unwrap();
@@ -108,6 +120,7 @@ beta.nvim/loose
                 upload_dir: Some(dir.join("uploads")),
                 tailnet: tailnet.map(str::to_owned),
                 past_the_guard,
+                meetings,
                 ..Extras::default()
             },
         )
@@ -579,17 +592,24 @@ async fn a_phone_is_told_nothing_of_an_area_that_is_not_released() {
     );
 }
 
-/// A phone attaches to a task, nothing else: a meeting, a plan or a learning path of a released area (which the
-/// engine's `attach` would take under that id) is refused before a byte of the file is taken, for every kind; a task
-/// that is gone still answers as before (`not_found`), and a task is still attached to.
+/// A phone attaches to a task, and a photo or a voice note to a meeting, nothing else: a meeting with another kind (or
+/// none), a plan or a learning path of a released area (which the engine's `attach` would take under that id) is
+/// refused before a byte of the file is taken; a task that is gone still answers as before (`not_found`), a task is
+/// still attached to, and a meeting takes `image` and `audio`.
 #[tokio::test]
-async fn a_phone_uploads_to_a_task_only_not_to_a_meeting_plan_or_path() {
+async fn a_phone_uploads_to_a_task_and_only_a_photo_or_voice_note_to_a_meeting() {
     let _one = ONE_AT_A_TIME.lock().await;
     let r = Rig::new("not-a-task").await;
     let vault = r._dir.join("vault");
     std::fs::write(
         vault.join(".fake-not-tasks"),
-        "alpha.nvim/standup\nalpha.nvim/roadmap-plan\nalpha.nvim/learn-path\n",
+        "alpha.nvim/standup\nalpha.nvim/roadmap-plan\nalpha.nvim/learn-path\nsecret-area/standup\n",
+    )
+    .unwrap();
+    // `standup` is a meeting; the plan and the path are not.
+    std::fs::write(
+        vault.join(".fake-meetings"),
+        "alpha.nvim/standup\nsecret-area/standup\n",
     )
     .unwrap();
     let (_, phone) = r.phone().await;
@@ -621,12 +641,18 @@ async fn a_phone_uploads_to_a_task_only_not_to_a_meeting_plan_or_path() {
             (reply.status, doc)
         }
     };
-    for id in [
-        "alpha.nvim/standup",
-        "alpha.nvim/roadmap-plan",
-        "alpha.nvim/learn-path",
+    for (id, kinds) in [
+        ("alpha.nvim/standup", &["", "video", "screenshot"][..]),
+        (
+            "alpha.nvim/roadmap-plan",
+            &["", "audio", "video", "image", "screenshot"][..],
+        ),
+        (
+            "alpha.nvim/learn-path",
+            &["", "audio", "video", "image", "screenshot"][..],
+        ),
     ] {
-        for kind in ["", "audio", "video", "image", "screenshot"] {
+        for kind in kinds {
             let (status, doc) = upload(id.to_owned(), kind).await;
             assert_eq!(
                 (status, doc["error"]["code"].clone()),
@@ -635,6 +661,13 @@ async fn a_phone_uploads_to_a_task_only_not_to_a_meeting_plan_or_path() {
             );
         }
     }
+    // A meeting of an area the phone may not see is not there for it, whatever the kind.
+    let (status, doc) = upload("secret-area/standup".to_owned(), "image").await;
+    assert_eq!(
+        (status, doc["error"]["code"].clone()),
+        (404, json!("not_found")),
+        "{doc}"
+    );
     // Nothing reached the engine but dry runs, and no file was taken into the upload folder.
     let asked = std::fs::read_to_string(vault.join(".fake-exact")).unwrap_or_default();
     assert!(
@@ -656,6 +689,69 @@ async fn a_phone_uploads_to_a_task_only_not_to_a_meeting_plan_or_path() {
         doc["results"][0]["changed_ids"],
         json!(["alpha.nvim/t1"]),
         "{doc}"
+    );
+    // A meeting takes a photo and a voice note: each attached for real.
+    for kind in ["image", "audio"] {
+        std::fs::remove_file(vault.join(".fake-exact")).unwrap();
+        let (status, doc) = upload("alpha.nvim/standup".to_owned(), kind).await;
+        assert_eq!(status, 200, "{kind}: {doc}");
+        assert_eq!(
+            doc["results"][0]["changed_ids"],
+            json!(["alpha.nvim/standup"]),
+            "{kind}: {doc}"
+        );
+        let asked = std::fs::read_to_string(vault.join(".fake-exact")).unwrap();
+        assert!(
+            asked.lines().any(|line| line.starts_with("false ")),
+            "{kind}: no real attach: {asked}"
+        );
+    }
+}
+
+/// A photo of a meeting is on its way, and meanwhile the meeting is gone (its id now names a plan): the hub asks again
+/// right before the real `attach`, and nothing is attached.
+#[tokio::test]
+async fn a_phone_upload_whose_meeting_is_gone_during_the_transfer_attaches_nothing() {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let _one = ONE_AT_A_TIME.lock().await;
+    let r = Rig::new("meeting-gone").await;
+    let vault = r._dir.join("vault");
+    std::fs::write(vault.join(".fake-not-tasks"), "alpha.nvim/standup\n").unwrap();
+    std::fs::write(vault.join(".fake-meetings"), "alpha.nvim/standup\n").unwrap();
+    let (_, phone) = r.phone().await;
+    let body = "x".repeat(4096);
+    let head = format!(
+        "POST /api/tasks/upload?id=alpha.nvim/standup&kind=image HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nAuthorization: Bearer {phone}\r\nOrigin: {origin}\r\nContent-Type: application/octet-stream\r\nX-Upload-Name: photo.jpg\r\nContent-Length: {len}\r\nConnection: close\r\n\r\n",
+        port = r.server.addr().port(),
+        origin = r.origin(),
+        len = body.len(),
+    );
+    let mut stream = tokio::net::TcpStream::connect(r.server.addr())
+        .await
+        .unwrap();
+    stream.write_all(head.as_bytes()).await.unwrap();
+    stream.write_all(&body.as_bytes()[..2048]).await.unwrap();
+    let asked = vault.join(".fake-exact");
+    let deadline = std::time::Instant::now() + Duration::from_secs(10);
+    while !std::fs::read_to_string(&asked).is_ok_and(|t| t.lines().any(|l| l.starts_with("true ")))
+    {
+        assert!(std::time::Instant::now() < deadline, "no dry run");
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    // The meeting is gone; a plan of that name is there now.
+    std::fs::write(vault.join(".fake-meetings"), "").unwrap();
+    stream.write_all(&body.as_bytes()[2048..]).await.unwrap();
+    let mut reply = Vec::new();
+    tokio::time::timeout(Duration::from_secs(10), stream.read_to_end(&mut reply))
+        .await
+        .unwrap()
+        .unwrap();
+    let reply = String::from_utf8_lossy(&reply);
+    assert!(reply.starts_with("HTTP/1.1 404"), "{reply}");
+    let attached = std::fs::read_to_string(&asked).unwrap_or_default();
+    assert!(
+        attached.lines().all(|line| line.starts_with("true ")),
+        "a real attach reached the engine: {attached}"
     );
 }
 
@@ -892,12 +988,34 @@ async fn a_phone_reads_the_meetings_of_released_areas_and_writes_a_line_of_the_m
     let line = json!({ "op": "meeting_capture", "id": "alpha.nvim/m1", "entry": { "kind": "task", "text": "Mail" } });
     let (status, doc) = r.op(&phone, &line).await;
     assert_eq!(status, 200, "{doc}");
+    // A photo or a voice note the phone uploaded: its line names the file in the folder of its kind.
+    for media in [
+        json!({ "op": "meeting_capture", "id": "alpha.nvim/m1", "entry": { "kind": "photo", "asset": "assets/images/photo-1.jpg", "at": "10:00" } }),
+        json!({ "op": "meeting_capture", "id": "alpha.nvim/m1", "entry": { "kind": "audio", "asset": "assets/audio/voice-1.webm" } }),
+        json!({ "op": "meeting_capture", "id": "alpha.nvim/m1", "entry": { "kind": "photo", "asset": "assets/images/a.png", "text": "Tafel" } }),
+    ] {
+        let (status, doc) = r.op(&phone, &media).await;
+        assert_eq!(status, 200, "{media}: {doc}");
+    }
     for refused_op in [
-        json!({ "op": "meeting_capture", "id": "alpha.nvim/m1", "entry": { "kind": "photo", "asset": "assets/images/a.png" } }),
+        json!({ "op": "meeting_capture", "id": "alpha.nvim/m1", "entry": { "kind": "photo" } }),
+        json!({ "op": "meeting_capture", "id": "alpha.nvim/m1", "entry": { "kind": "photo", "asset": "assets/audio/a.png" } }),
+        json!({ "op": "meeting_capture", "id": "alpha.nvim/m1", "entry": { "kind": "audio", "asset": "assets/images/a.webm" } }),
+        json!({ "op": "meeting_capture", "id": "alpha.nvim/m1", "entry": { "kind": "photo", "asset": "assets/images/../../x.md" } }),
+        json!({ "op": "meeting_capture", "id": "alpha.nvim/m1", "entry": { "kind": "photo", "asset": "assets/images/sub/a.png" } }),
+        json!({ "op": "meeting_capture", "id": "alpha.nvim/m1", "entry": { "kind": "photo", "asset": "assets/images/.hidden" } }),
+        json!({ "op": "meeting_capture", "id": "alpha.nvim/m1", "entry": { "kind": "photo", "asset": "assets/images/" } }),
+        json!({ "op": "meeting_capture", "id": "alpha.nvim/m1", "entry": { "kind": "photo", "asset": "assets/c.png" } }),
+        json!({ "op": "meeting_capture", "id": "alpha.nvim/m1", "entry": { "kind": "photo", "asset": "E:/x/a.png" } }),
+        json!({ "op": "meeting_capture", "id": "alpha.nvim/m1", "entry": { "kind": "board", "asset": "assets/boards/b.excalidraw" } }),
+        json!({ "op": "meeting_capture", "id": "alpha.nvim/m1", "entry": { "kind": "photo", "asset": "assets/images/a.png", "by": "x" } }),
         json!({ "op": "meeting_capture", "id": "alpha.nvim/m1", "entry": { "kind": "text", "text": "x", "asset": "a" } }),
+        json!({ "op": "meeting_capture", "id": "alpha.nvim/m1", "entry": { "kind": "text", "text": "x", "asset": "assets/images/a.png" } }),
         json!({ "op": "meeting_capture", "id": "alpha.nvim/m1", "entry": { "kind": "text", "text": "x" }, "if_match": "e1" }),
         json!({ "op": "meeting_capture", "id": "alpha.nvim/m1", "entry": "text" }),
+        // The people of an internal meeting are not released by these settings: no tick.
         json!({ "op": "meeting_attend", "id": "alpha.nvim/m1", "n": 1, "present": true }),
+        json!({ "op": "meeting_attend", "id": "alpha.nvim/m1", "name": "Rick", "present": true }),
     ] {
         let (status, doc) = r.op(&phone, &refused_op).await;
         assert!(
@@ -915,6 +1033,79 @@ async fn a_phone_reads_the_meetings_of_released_areas_and_writes_a_line_of_the_m
     r.set_level(&device, "create").await;
     let (status, doc) = r.op(&phone, &line).await;
     assert!(refused(status, &doc, "level_too_low"), "{status} {doc}");
+}
+
+/// The people of a meeting reach a phone, and are ticked by it, only by class and setting (fail closed): those of a
+/// `public` area always, those of an `internal` one only with `meetings.internal_people`, never those of a private one;
+/// a tick is a change (`change`), and holds only its own fields.
+#[tokio::test]
+async fn a_phone_ticks_the_people_of_a_meeting_only_where_they_are_released() {
+    let _one = ONE_AT_A_TIME.lock().await;
+    let attend =
+        |id: &str| json!({ "op": "meeting_attend", "id": id, "name": "Rick", "present": true });
+    let doc = |id: &str, area: &str| {
+        json!({ "meeting": { "id": id, "area": area, "slug": "m1", "title": "M", "status": "planned",
+                             "date": "2026-11-24", "participants": { "total": 1 }, "tasks": [], "etag": "e1" },
+                "body": "## Teilnehmer\n\n- [ ] Rick <rick@example.org>\n",
+                "participants": [{ "n": 1, "name": "Rick", "email": "rick@example.org", "role": "Chair", "present": false }],
+                "agenda": [], "documents": [], "followups": [] })
+    };
+
+    // Without the setting: the public meeting yes, the internal one no.
+    let r = Rig::new("people-off").await;
+    let (device, phone) = r.phone().await;
+    let (status, doc_out) = r.op(&phone, &attend("gamma.nvim/m1")).await;
+    assert_eq!(status, 200, "{doc_out}");
+    let (status, doc_out) = r.op(&phone, &attend("alpha.nvim/m1")).await;
+    assert!(
+        refused(status, &doc_out, "not_for_devices"),
+        "{status} {doc_out}"
+    );
+    r.merge("meeting", &doc("alpha.nvim/m1", "alpha.nvim"));
+    let (_, read) = r
+        .send("GET", "/api/tasks/meeting?id=alpha.nvim/m1", &phone, "")
+        .await;
+    assert_eq!(read["participants"], json!([]), "{read}");
+    // A private area is not there at all.
+    let (status, doc_out) = r.op(&phone, &attend("secret-area/m1")).await;
+    assert_eq!(status, 404, "{doc_out}");
+    // A tick is a change, and holds only its fields.
+    r.set_level(&device, "create").await;
+    let (status, doc_out) = r.op(&phone, &attend("gamma.nvim/m1")).await;
+    assert!(
+        refused(status, &doc_out, "level_too_low"),
+        "{status} {doc_out}"
+    );
+    r.set_level(&device, "change").await;
+    let extra = json!({ "op": "meeting_attend", "id": "gamma.nvim/m1", "name": "Rick", "present": true, "by": "x" });
+    let (status, doc_out) = r.op(&phone, &extra).await;
+    assert!(
+        refused(status, &doc_out, "not_for_devices"),
+        "{status} {doc_out}"
+    );
+    drop(r);
+
+    // With the setting: the internal meeting too, its people by name only; a private one still not.
+    let r = Rig::with_internal_people("people-on").await;
+    let (_, phone) = r.phone().await;
+    let (status, doc_out) = r.op(&phone, &attend("alpha.nvim/m1")).await;
+    assert_eq!(status, 200, "{doc_out}");
+    let (status, doc_out) = r.op(&phone, &attend("secret-area/m1")).await;
+    assert_eq!(status, 404, "{doc_out}");
+    r.merge("meeting", &doc("alpha.nvim/m1", "alpha.nvim"));
+    let (status, read) = r
+        .send("GET", "/api/tasks/meeting?id=alpha.nvim/m1", &phone, "")
+        .await;
+    assert_eq!(status, 200, "{read}");
+    assert_eq!(
+        read["participants"],
+        json!([{ "n": 1, "name": "Rick", "present": false }]),
+        "{read}"
+    );
+    let text = read.to_string();
+    for word in ["rick@", "Chair", "Teilnehmer"] {
+        assert!(!text.contains(word), "{word} in {read}");
+    }
 }
 
 #[tokio::test]

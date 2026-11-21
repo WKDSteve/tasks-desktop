@@ -111,7 +111,7 @@ pub(super) async fn meetings(
         // A phone gets the meetings of the released areas, cut (`device_cut::meetings`, MOB-02).
         Ok(text) if device => {
             let doc = serde_json::from_str::<serde_json::Value>(&text).unwrap_or_default();
-            let cut = device_cut::meetings(&st.rt().classes, &doc, files_of(&st).internal_links);
+            let cut = device_cut::meetings(&st.rt().classes, &doc, release_of(&st));
             json_response(StatusCode::OK, cut.to_string(), None)
         }
         Ok(text) => json_response(StatusCode::OK, text, None),
@@ -188,9 +188,7 @@ pub(super) async fn meeting(
         Ok(text) if device => {
             let cut = serde_json::from_str::<serde_json::Value>(&text)
                 .ok()
-                .and_then(|doc| {
-                    device_cut::meeting(&rt.classes, &doc, files_of(&st).internal_links)
-                });
+                .and_then(|doc| device_cut::meeting(&rt.classes, &doc, release_of(&st)));
             match cut {
                 Some(doc) => json_response(StatusCode::OK, doc.to_string(), None),
                 None => not_found(),
@@ -237,6 +235,24 @@ pub(super) async fn meeting_parse(
     match ask(&st, Calls::MeetingParse, Some(&json!({ "text": text }))).await {
         Ok(reply) => json_response(StatusCode::OK, reply.text, None),
         Err(response) => response,
+    }
+}
+
+/// What the settings release of an `internal` meeting for a phone (`meetings.internal_links`, `internal_people`).
+pub(super) fn release_of(st: &Shared) -> device_cut::Release {
+    let files = files_of(st);
+    device_cut::Release::new(files.internal_links, files.internal_people)
+}
+
+/// Whether `id` names a meeting the engine reads (`tasks.meeting` of that very id); `Err`: the answer to send when the
+/// engine could not say. A plan, a project, a learning path or nothing at all of that name is `false`.
+#[allow(clippy::result_large_err)]
+pub(super) async fn is_meeting(st: &Shared, id: &str) -> Result<bool, Response> {
+    match meeting_document(st, id).await {
+        Ok(text) => Ok(serde_json::from_str::<serde_json::Value>(&text)
+            .is_ok_and(|doc| doc["kind"] == "tasks.meeting" && doc["meeting"]["id"] == id)),
+        Err(response) if response.status() == StatusCode::NOT_FOUND => Ok(false),
+        Err(response) => Err(response),
     }
 }
 

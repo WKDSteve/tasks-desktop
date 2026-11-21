@@ -2369,7 +2369,8 @@ pub(super) fn guard_rules() -> GuardRules {
 pub(super) fn device_op_level(op: &str) -> Option<Level> {
     match op {
         "new" | "answer" => Some(Level::Create),
-        "set" | "done" | "node_set" | "meeting_capture" => Some(Level::Change),
+        // A participant ticked present: only where the people of the meeting may reach the phone (`device_refusal`).
+        "set" | "done" | "node_set" | "meeting_capture" | "meeting_attend" => Some(Level::Change),
         _ => None,
     }
 }
@@ -2385,8 +2386,11 @@ pub(super) fn device_op_fields(op: &str) -> &'static [&'static str] {
         "done" => &["op", "id", "confirm"],
         // A learning point ticked: its state and the reason of `seen` or `dropped`; no note, no XP.
         "node_set" => &["op", "id", "point", "state", "reason", "if_match"],
-        // A line of the minutes written on the phone: text, a task, a decision or a question; no file (`device_op_shape`).
+        // A line of the minutes written on the phone: text, a task, a decision or a question, or a photo or a voice note
+        // the phone uploaded to the meeting before (`device_op_shape`).
         "meeting_capture" => &["op", "id", "entry"],
+        // A participant ticked present or not, by number or by name.
+        "meeting_attend" => &["op", "id", "n", "name", "present", "if_match"],
         _ => &[],
     }
 }
@@ -2408,19 +2412,10 @@ pub(super) fn device_op_shape(op: &serde_json::Value) -> bool {
         return false;
     }
     if name == "meeting_capture" {
-        // The entry of a phone names its kind and its text, and a time; never a file of the folder.
         return map
             .get("entry")
             .and_then(serde_json::Value::as_object)
-            .is_some_and(|entry| {
-                entry
-                    .keys()
-                    .all(|k| matches!(k.as_str(), "kind" | "text" | "at"))
-                    && matches!(
-                        entry.get("kind").and_then(serde_json::Value::as_str),
-                        Some("text" | "task" | "decision" | "question")
-                    )
-            });
+            .is_some_and(device_capture_entry);
     }
     if name != "set" {
         return true;
@@ -2433,6 +2428,50 @@ pub(super) fn device_op_shape(op: &serde_json::Value) -> bool {
                     .keys()
                     .all(|k| DEVICE_PATCH_FIELDS.contains(&k.as_str()))
         })
+}
+
+/// The entry of a `meeting_capture` of a phone: a line of text (`text`, `task`, `decision`, `question`; its text and a
+/// time, never a file), or a photo or a voice note (`photo`, `audio`) that names its file in the folder of its kind, as
+/// the upload of a phone puts it (`kind=image` into `assets/images/`, `kind=audio` into `assets/audio/`): one plain name,
+/// no folder below, no `..`. A board, a file elsewhere in the folder or anything else is not for a phone.
+fn device_capture_entry(entry: &serde_json::Map<String, serde_json::Value>) -> bool {
+    let kind = entry.get("kind").and_then(serde_json::Value::as_str);
+    match kind {
+        Some("text" | "task" | "decision" | "question") => entry
+            .keys()
+            .all(|k| matches!(k.as_str(), "kind" | "text" | "at")),
+        Some(media @ ("photo" | "audio")) => {
+            let folder = if media == "photo" {
+                "assets/images/"
+            } else {
+                "assets/audio/"
+            };
+            entry
+                .keys()
+                .all(|k| matches!(k.as_str(), "kind" | "text" | "asset" | "at"))
+                && entry
+                    .get("asset")
+                    .and_then(serde_json::Value::as_str)
+                    .and_then(|asset| asset.strip_prefix(folder))
+                    .is_some_and(plain_asset_name)
+        }
+        _ => false,
+    }
+}
+
+/// A file name as the upload of the hub makes it (`upload::clean_name`): letters, digits and `_ . -`, starting with a
+/// letter, a digit or `_`, no `..`, at most 120 bytes; nothing of a path.
+fn plain_asset_name(name: &str) -> bool {
+    !name.is_empty()
+        && name.len() <= 120
+        && !name.contains("..")
+        && name
+            .chars()
+            .next()
+            .is_some_and(|c| c.is_alphanumeric() || c == '_')
+        && name
+            .chars()
+            .all(|c| c.is_alphanumeric() || matches!(c, '_' | '.' | '-'))
 }
 
 /// For a request of a device: refuse it when one of its operations, or one of their fields, is not for devices, or
@@ -2470,9 +2509,22 @@ fn device_refusal(
             }
         }
         // A task, or a new task's area, the phone may not see is not there for it (MOB-02).
-        if !device_cut::op_area(op).is_some_and(|area| device_cut::released(&st.rt().classes, area))
-        {
+        let area = device_cut::op_area(op);
+        if !area.is_some_and(|area| device_cut::released(&st.rt().classes, area)) {
             return Some(not_found());
+        }
+        // The people of a meeting are ticked only where they may reach the phone: a public area, an internal one
+        // with the settings' `meetings.internal_people` (fail closed).
+        if op["op"] == "meeting_attend"
+            && !area.is_some_and(|area| {
+                device_cut::meeting_people(&st.rt().classes, area, super::meetings::release_of(st))
+            })
+        {
+            return Some(error_body(
+                StatusCode::FORBIDDEN,
+                "not_for_devices",
+                "the people of this meeting are not released for devices",
+            ));
         }
     }
     match has {

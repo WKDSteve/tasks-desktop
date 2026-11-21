@@ -30,6 +30,24 @@ return {
         .. " meetings.internal_people are off?",
     },
     {
+      ask = "Photo in a meeting: 'Photo' opens the real (back) camera; the picture arrives on the PC in the folder"
+        .. " of the meeting under assets/images/ and stands as a line in the minutes?",
+    },
+    {
+      ask = "Voice note in a meeting: Chrome asks for the microphone only on the button; the note of the real"
+        .. " microphone plays on the PC from assets/audio/ and stands in the minutes; sending the app to the"
+        .. " background ends the recording and sends it?",
+    },
+    {
+      ask = "Attendance: a participant of a public meeting (and, with meetings.internal_people, of an internal"
+        .. " one) ticked on the phone shows '- [x]' on the PC; without the setting an internal meeting shows no names?",
+    },
+    {
+      ask = "Notifications on: before a meeting begins and after it ended a notice without a title arrives;"
+        .. " tapping it opens exactly that meeting, with the app closed and with it open; a subscription made"
+        .. " before gets the new kinds without turning notices on again?",
+    },
+    {
       ask = "With TalkBack: points, states and buttons are read sensibly, and the focus stays on the point after"
         .. " ticking it?",
     },
