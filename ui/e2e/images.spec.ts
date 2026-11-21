@@ -178,3 +178,73 @@ A path with pictures.
     rmSync(folder, { recursive: true, force: true });
   }
 });
+
+test('the images among the documents of a meeting: a small picture, larger on a click, a missing one said, a PDF and a link as they were', async ({
+  page,
+}) => {
+  const slug = 'docimg-e2e-m01';
+  const folder = join(state().vault, 'lib.nvim', 'MEETINGS', slug);
+  mkdirSync(join(folder, 'assets'), { recursive: true });
+  writeFileSync(join(folder, 'assets', 'dot.png'), PNG);
+  writeFileSync(join(folder, 'assets', 'slides.pdf'), '%PDF-1.4\n');
+  writeFileSync(
+    join(folder, `${slug}.md`),
+    `---
+title: Docimg e2e m01
+status: planned
+date: 2030-11-11
+time: "10:00"
+duration: 1h
+tasks: [lib.nvim/alpha]
+---
+
+A meeting of one browser test.
+
+## Unterlagen
+
+- [Whiteboard docimg](assets/dot.png)
+- [Lost sketch docimg](assets/gone.jpg)
+- [Slides docimg](assets/slides.pdf)
+- [Tracker docimg](https://tracker.example/docimg)
+`,
+  );
+  try {
+    const { problems, foreign } = await pair(page, '/#task=lib.nvim%2Falpha');
+    const detail = page.locator('aside.detail');
+    // The hub reads the new meeting once its watcher tells it.
+    await expect(detail.getByRole('button', { name: 'Docimg e2e m01' })).toBeVisible({ timeout: 20_000 });
+    await detail.getByRole('button', { name: 'Docimg e2e m01' }).click();
+    const meetingPage = page.getByRole('dialog', { name: /Docimg e2e m01/ });
+    await expect(meetingPage).toBeVisible();
+    await expect(meetingPage.getByRole('tab', { name: 'Preparation' })).toHaveAttribute('aria-selected', 'true');
+    const docs = meetingPage.locator('section[aria-labelledby="meeting-documents"] li');
+    await expect(docs).toHaveCount(4);
+
+    const thumb = docs.nth(0).getByRole('img', { name: 'Whiteboard docimg' });
+    await expect(thumb).toHaveAttribute('src', /^blob:/);
+    // A small picture of a fixed size, whatever the size of the file.
+    expect(await thumb.boundingBox()).toMatchObject({ width: 96, height: 96 });
+    await expect(docs.nth(1)).toContainText('Image missing: Lost sketch docimg');
+    await expect(docs.nth(1).locator('img')).toHaveCount(0);
+    await expect(docs.nth(2)).toHaveText(/Slides docimg\s*\(assets\/slides\.pdf\)/);
+    await expect(docs.nth(2).locator('img, button')).toHaveCount(0);
+    await expect(docs.nth(3).getByRole('link', { name: 'Tracker docimg' })).toHaveAttribute('href', 'https://tracker.example/docimg');
+    await expectAccessible(page, 'the documents of a meeting with an image');
+
+    // Larger on a click, closed with Escape; the meeting stays open.
+    await docs.nth(0).getByRole('button', { name: 'Whiteboard docimg' }).click();
+    const viewer = page.getByRole('dialog', { name: 'Image: Whiteboard docimg' });
+    await expect(viewer).toBeVisible();
+    await expect(viewer.locator('[data-viewer-image]')).toHaveAttribute('src', /^blob:/);
+    await expectAccessible(page, 'an image of the documents shown larger');
+    await page.keyboard.press('Escape');
+    await expect(viewer).toBeHidden();
+    await expect(meetingPage).toBeVisible();
+
+    expect(foreign, 'no request to another host').toEqual([]);
+    expect(await violations(page)).toEqual([]);
+    expect(problems.filter((p) => !p.includes('404'))).toEqual([]);
+  } finally {
+    rmSync(folder, { recursive: true, force: true });
+  }
+});

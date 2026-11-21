@@ -13,7 +13,8 @@
   import ImageViewer from './ImageViewer.svelte';
   import ItemCover from './ItemCover.svelte';
   import ItemIcon from './ItemIcon.svelte';
-  import { hasAssetImage } from '../lib/images';
+  import { hasAssetImage, isAssetImage } from '../lib/images';
+  import AssetImg from './AssetImg.svelte';
   import type { App } from '../lib/app.svelte';
   import type { MeetingDocument, Result } from '../lib/contract';
   import { floating } from '../lib/floating';
@@ -74,6 +75,8 @@
     untrack(() => store?.refresh(etag, assets));
   });
   let viewing = $state<{ url: string; alt: string } | null>(null);
+  /** The side of the small picture of an image among the documents; a click shows it large. */
+  const THUMB_PX = 96;
   const imageSource = $derived(images?.source(t('image.missing'), (_src, url, alt) => (viewing = { url, alt })));
   /**
    * A section with an image of the meeting's folder, as Markdown with the image drawn. A section without one stays its
@@ -327,7 +330,7 @@
                       if (id) void send({ op: 'meeting_attend', id, n: p.n, present: !p.present, ...guard() });
                     }}
                   />
-                  <span>{markHidden(p.name)}{#if p.role}<span class="muted"> ({markHidden(p.role)})</span>{/if}{#if p.email}<span class="muted"> {markHidden(p.email)}</span>{/if}</span>
+                  <span>{markHidden(p.name)}{#if p.role}<span class="muted">{` (${markHidden(p.role)})`}</span>{/if}{#if p.email}<span class="muted">{` ${markHidden(p.email)}`}</span>{/if}</span>
                 </label>
               </li>
             {/each}
@@ -361,8 +364,20 @@
                     {@const host = link ? hostOf(link) : null}
                     <a href={link} target="_blank" rel="noopener noreferrer">{markHidden(d.text)}</a
                     >{#if host}<span class="muted">{` (${markHidden(host)})`}</span>{/if}
+                  {:else if d.kind === 'asset' && images && isAssetImage(d.href)}
+                    <span>{markHidden(d.text)}</span>
+                    <span class="thumb" data-document-image={d.href}
+                      ><AssetImg
+                        {images}
+                        file={d.href}
+                        alt={d.text}
+                        missing={t('image.missing')}
+                        size={THUMB_PX}
+                        onopen={(url, alt) => (viewing = { url, alt })}
+                      /></span
+                    >
                   {:else}
-                    <span>{markHidden(d.text)}</span>{#if d.kind === 'asset' && d.href}<span class="muted"> ({markHidden(d.href)})</span>{/if}
+                    <span>{markHidden(d.text)}</span>{#if d.kind === 'asset' && d.href}<span class="muted">{` (${markHidden(d.href)})`}</span>{/if}
                   {/if}
                 </li>
               {/each}
@@ -585,6 +600,10 @@
     display: flex;
     gap: 0.5rem;
     align-items: baseline;
+  }
+  .thumb {
+    display: block;
+    margin: 0.25rem 0;
   }
   li.ticked {
     text-decoration: line-through;
