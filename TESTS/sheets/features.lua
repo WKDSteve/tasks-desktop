@@ -23,4 +23,9 @@ return {
     title = "A learning path ticked and undone, a point set not applicable or blocked with its reason, a change of the file by another program kept, a point promoted to a task finished as seen",
     docs = "README.md",
   },
+  {
+    id = "tasks.pathmap",
+    title = "The competence map of the learning paths: boxes by stage, frames of projects, the arrows of requires, a circle and a ghost; finished ones hidden, the list, a box opens its path",
+    docs = "README.md",
+  },
 }

@@ -166,6 +166,35 @@ return {
         },
         ready = { stdout = "^http://127%.0%.0%.1:%d+/#pair=", as = "link" },
       },
+      -- The same hub with the learning paths of the competence map (tools/sheet-pathmap-vault.mjs): a finished root, two
+      -- projects where one needs the other, a soft requirement, a circle and an unknown id. The engine must know
+      -- `requires`.
+      ["pathmap-hub"] = {
+        build = {
+          { "pnpm", "--dir", "ui", "build" },
+          { "cargo", "build", "-p", "tasks-hub", "--example", "setup-hub", "--locked" },
+        },
+        prepare = { "node", "tools/sheet-pathmap-vault.mjs", "${temp}" },
+        run = { "target/debug/examples/setup-hub.exe" },
+        env = {
+          TASKS_DESKTOP_CONFIG_DIR = "${temp}/cfg",
+          TASKS_VAULT = "${temp}/vault",
+          TASKS_MARKER_DOCS = "",
+          TASKS_EXTRA_AREAS = "",
+          TASKS_LISTS_FILE = "${temp}/lists.json",
+          TASKS_FRECENCY_FILE = "${temp}/frecency.json",
+          TASKS_LINKS = "",
+          TASKS_TRUST_VAULT_LINT = "",
+          TASKS_DESKTOP_TAILNET = "",
+          NVIM_CONFIG_DIR = "",
+          TASKS_DESKTOP_NO_GH = "1",
+          TASKS_DESKTOP_EDITOR_LOG = "${temp}/editor.log",
+          TASKS_DESKTOP_PICK_RESULT = "${temp}/picked",
+          APPKIT_FAMILY_DIR = "${temp}/family",
+          AI_DESKTOP_CONFIG_DIR = "${temp}/ai-desktop",
+        },
+        ready = { stdout = "^http://127%.0%.0%.1:%d+/#pair=", as = "link" },
+      },
       -- The release build of tasks-hub (a window program) started the way a link starts it (testing.nvim `start =
       -- "link"`: no standard handles, no console of a parent), against a config.json it cannot use in a folder of the
       -- run. The hub in the background ends at once on the config; the start sees that within about 2 s (appkit
