@@ -74,6 +74,8 @@ test('a request the Rust hub refuses never reaches the engine', async () => {
     ['links?x=1', 400, 'bad_query'],
     ['areas?x=1', 400, 'bad_query'],
     ['snapshot?x=1', 400, 'bad_query'],
+    ['paths?include_done=true', 400, 'bad_query'],
+    ['paths?x=1', 400, 'bad_query'],
     ['nothing', 404, 'not_found'],
   ];
   for (const [path, status, code] of cases) {
@@ -86,7 +88,7 @@ test('a request the Rust hub refuses never reaches the engine', async () => {
 
 test('a valid read passes its parameters to the engine and the document back unchanged', async () => {
   const doc = '{"kind":"tasks.task","x":1}';
-  const h = hub({ task: doc, next: '{"n":1}', order: '{"o":1}', plan_for: '{"p":1}', finished: '{"f":1}', done_preview: '{"d":1}', waits: '{"w":1}' });
+  const h = hub({ task: doc, next: '{"n":1}', order: '{"o":1}', plan_for: '{"p":1}', finished: '{"f":1}', done_preview: '{"d":1}', waits: '{"w":1}', paths: '{"ps":1}' });
   const r = await h.get('task?id=lib.nvim/alpha');
   assert.equal(r.status, 200);
   assert.equal(r.headers.get('content-type'), 'application/json');
@@ -102,6 +104,9 @@ test('a valid read passes its parameters to the engine and the document back unc
   await h.get('done_preview?id=a/b');
   await h.get('waits');
   await h.get('waits?area=lib.nvim');
+  // the finished paths too (capability `requires`, the competence map)
+  await h.get('paths?include_done=1');
+  await h.get('paths?area=lib.nvim');
   assert.deepEqual(h.calls, [
     ['task', { params: { id: 'lib.nvim/alpha' } }],
     ['next', { params: { n: 3, actor: 'cdx', area: 'lib.nvim' } }],
@@ -113,6 +118,8 @@ test('a valid read passes its parameters to the engine and the document back unc
     ['done_preview', { params: { id: 'a/b' } }],
     ['waits', { params: {} }],
     ['waits', { params: { area: 'lib.nvim' } }],
+    ['paths', { params: { include_done: true } }],
+    ['paths', { params: { area: 'lib.nvim' } }],
   ]);
 });
 

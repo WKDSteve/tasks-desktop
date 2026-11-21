@@ -38,6 +38,8 @@ export function placeRoute(place: Place): Route {
     // The plan view of all plans and the plan's order are what a page shows without a word: no part of the address.
     ...(place.plan !== undefined && place.plan !== '' ? { plan: place.plan } : {}),
     ...(place.sort !== undefined && place.sort !== 'default' ? { sort: place.sort } : {}),
+    // The learning path shown: a link (a box of the competence map opened in a new tab) names it.
+    ...(place.view === 'paths' && place.path !== undefined && place.path !== '' ? { path: place.path } : {}),
   };
 }
 
@@ -51,6 +53,7 @@ export function routePlace(route: Record<string, string>): Place | null {
     ...(route.filter !== undefined ? { filter: route.filter } : {}),
     ...(route.plan !== undefined ? { plan: route.plan } : {}),
     ...(route.sort !== undefined ? { sort: route.sort } : {}),
+    ...(route.path !== undefined ? { path: route.path } : {}),
   };
 }
 
@@ -75,11 +78,13 @@ export interface Place {
   sort?: string;
   /** The field and the order of the statistics, `<dim>:<sort>`; missing or unknown: left as it is. */
   stats?: string;
+  /** The learning path shown in the view of the paths; missing: left as it is. */
+  path?: string;
 }
 
 /** What a place keeps besides where it is: the filter, the plan, the order, the statistics. */
-type Kept = Required<Pick<Place, 'filter' | 'plan' | 'sort' | 'stats'>>;
-const KEPT = ['filter', 'plan', 'sort', 'stats'] as const;
+type Kept = Required<Pick<Place, 'filter' | 'plan' | 'sort' | 'stats' | 'path'>>;
+const KEPT = ['filter', 'plan', 'sort', 'stats', 'path'] as const;
 
 function keptOf(app: HistoryApp): Kept {
   return {
@@ -87,6 +92,7 @@ function keptOf(app: HistoryApp): Kept {
     plan: app.planChoice,
     sort: app.sort,
     stats: `${app.statsDim}:${app.statsSort}`,
+    path: app.pathChoice,
   };
 }
 
@@ -119,6 +125,8 @@ export interface HistoryApp {
   filter: Filter;
   /** The plan chosen in the plan view, the order of the list, the field and order of the statistics: kept the same way. */
   planChoice: string;
+  /** The learning path chosen in the view of the paths: kept the same way. */
+  pathChoice: string;
   sort: SortWord;
   setSort(word: SortWord): void;
   statsDim: StatDim;
@@ -165,6 +173,7 @@ function sameKept(a: Place, b: Place): boolean {
 function applyKept(app: HistoryApp, place: Place): void {
   if (place.filter !== undefined && place.filter !== filterText(app.filter)) app.filter = filterOfText(place.filter);
   if (place.plan !== undefined && place.plan !== app.planChoice) app.planChoice = place.plan;
+  if (place.path !== undefined && place.path !== app.pathChoice) app.pathChoice = place.path;
   if (place.sort !== undefined) {
     const word = parseSort(place.sort);
     if ((word !== 'default' || place.sort === 'default') && word !== app.sort) app.setSort(word);

@@ -403,7 +403,8 @@ Zoom on; other schemes (`msteams:`, `zoommtg:`) are shown, never opened.
 the hub (a session needed, not for a paired phone yet), asked fresh each time (the state the hub holds answers by is
 over the tasks, not the paths):
 
-- `GET /api/tasks/paths?area=`: the open learning paths with their progress (learned, seen, dropped, open), no tree.
+- `GET /api/tasks/paths?area=&include_done=1`: the open learning paths with their progress (learned, seen, dropped,
+  open), no tree; with `include_done=1` (an engine with `requires`) the finished ones too.
 - `GET /api/tasks/path?id=<area>/<slug>`: one path with its body and its tree as a flat list in document order.
 
 A point is ticked, marked seen, dropped or blocked with `node_set`, made a task of its own with `promote` and taken
@@ -431,6 +432,21 @@ per level a threshold in XP or percent, a name, a badge (a picture of the path's
 reward for the whole path. The engine writes them into `## Level` as one change (`path_levels`, undone in the toast) and
 judges them; a refusal (thresholds that fall, a name too long) is said and the form stays open. **XP of the task …** in
 the menu of a promoted point sets the `xp:` of its task (`set`), which the point counts.
+
+The view **View › Competence map** (`#view=pathmap`, an engine with learning paths) draws the paths as a map: each
+path a box with its stage by colour, symbol and word (finished, in progress, waits for …, not started, paused), its
+progress and, with XP on, its level; each project a frame around its paths; each `requires` an arrow from the
+requirement to what builds on it, hard ones solid with a filled head, soft ones dashed with an open one, open ones in
+the warning colour. A path stands one stage to the right of the longest chain before it (a project's requirement
+counts for all its paths); a circle of requirements stands last in a red area of its own, a requirement that names
+nothing as a red ghost box. A soft requirement not met only puts a "!" on the box; a hard one makes the path wait.
+What is met, what waits and the circles are the engine's (capability `requires`; without it the boxes stand without
+arrows and a note says why). A click (or Enter) opens the path, a middle click or Ctrl in a new tab, the title of a
+frame opens its project. Pointing at a box (or the focus on it) brings its chain forward; Space holds it, `f` shows
+only that chain, Esc lets go. The arrow keys walk the chain (Alt: the next one of several), up and down the stage,
+`/` finds a path, `+`, `-` and `0` zoom (also Ctrl with the wheel, 50 to 150 %, **Fit** fits the width). **Hide
+finished** and **Map | List** are kept per browser; the list says the same as a table per project (stage, progress,
+what a path needs and what it is a requirement for) and is the start in a window narrower than about 600 px.
 
 **Images in the texts.** A Markdown image of a file below `assets/` of the item's own folder (`![Syntax](assets/images/
 lua.svg)`; `png`, `jpg`, `jpeg`, `webp`, `gif`, `svg`) is drawn as a picture in the text of a task, in the decisions and

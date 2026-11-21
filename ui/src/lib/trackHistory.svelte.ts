@@ -26,6 +26,7 @@ export function trackHistory(
       void app.statsCard;
       void app.filter;
       void app.planChoice;
+      void app.pathChoice;
       void app.sort;
       void app.statsDim;
       void app.statsSort;

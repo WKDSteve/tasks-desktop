@@ -11,6 +11,7 @@ import {
   type Place,
 } from './history';
 import type { View } from './app.svelte';
+import { pathRoute } from './route';
 import { filterText, freshFilter, type Filter } from './filter';
 
 /** A tab: a list of entries and a position, like the real history. */
@@ -52,6 +53,7 @@ function fakeApp(ids: string[]) {
     peeking: false,
     filter: freshFilter(),
     planChoice: '',
+    pathChoice: '',
     sort: 'default',
     setSort(word) {
       this.sort = word;
@@ -97,8 +99,8 @@ describe('isPlace', () => {
 
 describe('installAppHistory', () => {
   // The places as the tests before the filter wrote them: what a place keeps is left out while it is as it came (a
-  // filter with nothing on, every plan, the plan's order, the statistics by status and count).
-  const AS_CAME: Partial<Place> = { filter: '{}', plan: '', sort: 'default', stats: 'status:count' };
+  // filter with nothing on, every plan, the plan's order, the statistics by status and count, no learning path).
+  const AS_CAME: Partial<Place> = { filter: '{}', plan: '', sort: 'default', stats: 'status:count', path: '' };
   const places = (t: ReturnType<typeof tab>) =>
     t.entries.map((e) => {
       const state = (e as { state: Place } | null)?.state ?? null;
@@ -270,6 +272,14 @@ describe('the place in the address', () => {
     expect(routePlace(readRoute('#view=stats'))).toEqual({ view: 'stats', selectedId: null });
     expect(routePlace(readRoute('#task=pub%2Fx'))).toBeNull();
     expect(routePlace(readRoute('#view=nope&open=pub%2Fx'))).toBeNull();
+  });
+
+  it('names the learning path of the view of the paths, so that a box of the competence map opens it in a new tab', () => {
+    expect(routePlace(readRoute(pathRoute('lib.nvim/lua lernen')))).toEqual({ view: 'paths', selectedId: null, path: 'lib.nvim/lua lernen' });
+    expect(placeRoute({ view: 'paths', selectedId: null, path: 'a/p' })).toEqual({ view: 'paths', path: 'a/p' });
+    // another view, or no path chosen: no part of the address
+    expect(placeRoute({ view: 'list', selectedId: null, path: 'a/p' })).toEqual({ view: 'list' });
+    expect(placeRoute({ view: 'paths', selectedId: null, path: '' })).toEqual({ view: 'paths' });
   });
 
   it('leaves the address of a window of one task to it', () => {

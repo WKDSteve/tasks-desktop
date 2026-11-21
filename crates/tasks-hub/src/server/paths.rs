@@ -16,7 +16,7 @@ fn bad_query(why: &str) -> Response {
 
 /// The question of `paths` to the engine from the query of the route; `Err`: why it is refused.
 pub(super) fn paths_request(query: Option<&str>) -> Result<serde_json::Value, &'static str> {
-    let params = parse_query(query, &["area"])?;
+    let params = parse_query(query, &["area", "include_done"])?;
     let mut request = serde_json::Map::new();
     if let Some(area) = params.get("area") {
         if crate::config::valid_area_name(area).is_err() {
@@ -24,10 +24,19 @@ pub(super) fn paths_request(query: Option<&str>) -> Result<serde_json::Value, &'
         }
         request.insert("area".to_owned(), json!(area));
     }
+    // The finished paths too (capability `requires`): the competence map draws the roots of a chain.
+    match params.get("include_done").map(String::as_str) {
+        None => {}
+        Some("1") => {
+            request.insert("include_done".to_owned(), json!(true));
+        }
+        Some(_) => return Err("include_done is 1 or absent"),
+    }
     Ok(serde_json::Value::Object(request))
 }
 
-/// `GET /api/tasks/paths?area=`: the open learning paths with their progress, no tree (`tasks.paths`).
+/// `GET /api/tasks/paths?area=&include_done=1`: the open learning paths with their progress, no tree (`tasks.paths`);
+/// with `include_done` the finished ones too.
 pub(super) async fn paths(
     State(st): State<Arc<Shared>>,
     caller: Option<axum::Extension<Caller>>,
@@ -102,6 +111,14 @@ mod tests {
             Ok(json!({ "area": "learning" }))
         );
         assert_eq!(paths_request(Some("area=..")), Err("area is not a name"));
+        assert_eq!(
+            paths_request(Some("include_done=1&area=learning")),
+            Ok(json!({ "area": "learning", "include_done": true }))
+        );
+        assert_eq!(
+            paths_request(Some("include_done=yes")),
+            Err("include_done is 1 or absent")
+        );
         assert!(paths_request(Some("id=a/b")).is_err());
     }
 

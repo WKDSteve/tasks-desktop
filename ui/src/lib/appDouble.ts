@@ -429,8 +429,8 @@ export class FakeHub {
   pathCalls: string[] = [];
   /** Each answer of `path` waits for the next of these gates first (none: it answers at once). */
   pathGates: Promise<void>[] = [];
-  async paths() {
-    this.pathCalls.push('paths');
+  async paths(_signal?: AbortSignal, includeDone = false) {
+    this.pathCalls.push(includeDone ? 'paths include_done' : 'paths');
     return this.pathsDoc as never;
   }
   async path(id: string) {

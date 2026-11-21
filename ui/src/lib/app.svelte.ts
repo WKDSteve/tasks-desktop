@@ -192,7 +192,7 @@ import { tagTargets } from './tagging';
 import { COLUMN_KEYS, defaultColumns, parseColumns, serializeColumns, type ListColumns } from './columns';
 import { emptyFolds, foldOf, parseFolds, serializeFolds, type FoldMemory, type Folds, type FoldView } from './fold';
 import { parseSizes, serializeSizes, withSize, type Size, type Sizes } from './sizes';
-import { taskRoute, viewRoute } from './route';
+import { pathRoute, taskRoute, viewRoute } from './route';
 import { routinesStarted } from './routine';
 import { cardRoute, parseCardFolds, withCardFolded, type CardRoute, type StatsCard } from './statsCards';
 
@@ -207,7 +207,7 @@ const NOTE_MAX = 1000;
 
 export type Phase = 'starting' | 'needs_pairing' | 'offline' | 'unavailable' | 'ready';
 export type Connection = 'live' | 'reconnecting' | 'offline';
-export type View = 'today' | 'list' | 'board' | 'plan' | 'inbox' | 'abnahme' | 'cross' | 'calendar' | 'timeline' | 'reminders' | 'stats' | 'done' | 'views' | 'repos' | 'repostatus' | 'paths';
+export type View = 'today' | 'list' | 'board' | 'plan' | 'inbox' | 'abnahme' | 'cross' | 'calendar' | 'timeline' | 'reminders' | 'stats' | 'done' | 'views' | 'repos' | 'repostatus' | 'paths' | 'pathmap';
 export type Theme = 'auto' | 'light' | 'dark';
 /** The blocks of the Today view that a person may hide. */
 export { ORDERED_TILES, TILES, type OrderedTile, type Tile } from './tiles-list';
@@ -554,6 +554,10 @@ export class App {
   compareSort = $state<CompareSort>({ key: 'effort', desc: true });
   /** The rows of the plan graph: the stages of the engine, or the phases of the plan. */
   graphRows = $state<'stage' | 'phase'>('stage');
+  /** The competence map as a picture or as a table; null: not chosen, the width of the window decides. */
+  pathMapMode = $state<'map' | 'list' | null>(null);
+  /** The competence map without the finished paths and projects. */
+  pathMapHideDone = $state(false);
   /** The order of one's own inside the rows of the plan graph, per plan: shown only, kept in the prefs (D6). */
   graphOrder = $state.raw<GraphOrder>({});
   /** The sizes the person dragged the blocks of the page to (the tiles of today, the list). */
@@ -989,6 +993,9 @@ export class App {
     this.compareSort = parseCompareSort(safe(() => env.prefs.getItem('tasks-desktop.compare-sort')) ?? null);
     this.claimName = cleanClaimName(safe(() => env.prefs.getItem('tasks-desktop.claim-name')) ?? '');
     this.graphRows = safe(() => env.prefs.getItem('tasks-desktop.graph-rows')) === 'phase' ? 'phase' : 'stage';
+    const mapMode = safe(() => env.prefs.getItem('tasks-desktop.pathmap-mode'));
+    this.pathMapMode = mapMode === 'map' || mapMode === 'list' ? mapMode : null;
+    this.pathMapHideDone = safe(() => env.prefs.getItem('tasks-desktop.pathmap-hide-done')) === '1';
     this.graphOrder = parseGraphOrder(safe(() => env.prefs.getItem('tasks-desktop.graph-order')));
     this.tileSizes = parseSizes(safe(() => env.prefs.getItem('tasks-desktop.sizes')));
     this.defaults = parseDefaults(safe(() => env.prefs.getItem(DEFAULTS_KEY)));
@@ -1498,6 +1505,11 @@ export class App {
   /** The open learning paths with their progress (`tasks.paths`): every figure is the engine's. */
   paths(signal?: AbortSignal): Promise<Paths> {
     return this.env.hub.paths(signal);
+  }
+
+  /** Every learning path for the competence map: the open ones, and the finished ones where the engine has `requires`. */
+  pathsForMap(signal?: AbortSignal): Promise<Paths> {
+    return this.env.hub.paths(signal, this.can('requires'));
   }
 
   /**
@@ -3939,6 +3951,18 @@ export class App {
     safe(() => this.env.prefs.setItem('tasks-desktop.compare-sort', serializeCompareSort(sort)));
   }
 
+  /** Show the competence map as a picture or as a table, and remember the choice. */
+  setPathMapMode(mode: 'map' | 'list'): void {
+    this.pathMapMode = mode;
+    safe(() => this.env.prefs.setItem('tasks-desktop.pathmap-mode', mode));
+  }
+
+  /** Hide the finished paths and projects of the competence map (or show them again), and remember it. */
+  setPathMapHideDone(hide: boolean): void {
+    this.pathMapHideDone = hide;
+    safe(() => this.env.prefs.setItem('tasks-desktop.pathmap-hide-done', hide ? '1' : '0'));
+  }
+
   /** Lay the rows of the plan graph by stage or by phase, and remember the choice. */
   setGraphRows(rows: 'stage' | 'phase'): void {
     this.graphRows = rows;
@@ -4899,6 +4923,11 @@ export class App {
   /** Open the view in a new tab (a window of the same page), the way a link opens; a refused window is told. */
   openViewApart(view: View): void {
     if (!(this.env.openWindow?.(viewRoute(view)) ?? false)) this.say('error', 'peek.detach_failed');
+  }
+
+  /** Open learning path `id` in the view of the paths of a new tab (a middle click on a box of the competence map). */
+  openPathApart(id: string): void {
+    if (!(this.env.openWindow?.(pathRoute(id)) ?? false)) this.say('error', 'peek.detach_failed');
   }
 
   /** A task can be detached into a window of its own (the page can open one). */

@@ -871,9 +871,12 @@ export class Hub extends HubClient<Snapshot> {
     return this.json<PlanCompare>('/api/tasks/plan_compare', signal ? { signal } : undefined);
   }
 
-  /** The open learning paths with their progress, no tree (capability `paths`). */
-  paths(signal?: AbortSignal): Promise<Paths> {
-    return this.json<Paths>('/api/tasks/paths', signal ? { signal } : undefined);
+  /**
+   * The open learning paths with their progress, no tree (capability `paths`); with `includeDone` the finished ones
+   * too, and the finished projects a requirement names (capability `requires`).
+   */
+  paths(signal?: AbortSignal, includeDone = false): Promise<Paths> {
+    return this.json<Paths>(includeDone ? '/api/tasks/paths?include_done=1' : '/api/tasks/paths', signal ? { signal } : undefined);
   }
 
   /** One learning path with its tree, a flat list in document order (capability `path`). */

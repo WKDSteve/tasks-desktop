@@ -583,6 +583,15 @@
                   onselect: () => app.setView('paths'),
                   ...apart('paths'),
                 },
+                // The competence map of the paths (requires): beside the paths until learning plans get a menu of their own.
+                {
+                  kind: 'radio' as const,
+                  label: t('nav.pathmap'),
+                  hint: t('hint.item.nav.pathmap'),
+                  checked: app.view === 'pathmap',
+                  onselect: () => app.setView('pathmap'),
+                  ...apart('pathmap'),
+                },
               ]
             : []),
           // The export belongs to the view that is shown: it takes what that view draws.
@@ -951,7 +960,9 @@
                             ? t('nav.repostatus')
                             : app.view === 'paths'
                               ? t('nav.paths')
-                              : t('nav.list')}
+                              : app.view === 'pathmap'
+                                ? t('nav.pathmap')
+                                : t('nav.list')}
         </h1>
         {#if alone}
           <!-- A window of one task (detached from a float): its detail, alone, as wide as the window allows. -->
@@ -987,6 +998,8 @@
           <Lazy {app} load={() => import('./views/RepoStatusView.svelte')} />
         {:else if app.view === 'paths'}
           <Lazy {app} load={() => import('./views/PathsView.svelte')} />
+        {:else if app.view === 'pathmap'}
+          <Lazy {app} load={() => import('./views/PathMapView.svelte')} />
         {:else}
           <ListView {app} bind:searchBox />
         {/if}

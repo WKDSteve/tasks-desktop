@@ -48,7 +48,7 @@ export function routedTask(hash: string): string | null {
 // The page reads the place of the address at the start and keeps it there (history.ts).
 
 /** The views a fragment may name (the `View` of app.svelte.ts). */
-const VIEWS = ['today', 'list', 'board', 'plan', 'inbox', 'abnahme', 'cross', 'calendar', 'timeline', 'reminders', 'stats', 'done', 'views', 'repos', 'repostatus', 'paths'] as const;
+const VIEWS = ['today', 'list', 'board', 'plan', 'inbox', 'abnahme', 'cross', 'calendar', 'timeline', 'reminders', 'stats', 'done', 'views', 'repos', 'repostatus', 'paths', 'pathmap'] as const;
 export type RoutedView = (typeof VIEWS)[number];
 /** Every view of the page (the history takes its places from this list too). */
 export const ROUTED_VIEWS: readonly RoutedView[] = VIEWS;
@@ -56,4 +56,9 @@ export const ROUTED_VIEWS: readonly RoutedView[] = VIEWS;
 /** The fragment that opens the view `view`. */
 export function viewRoute(view: RoutedView): string {
   return `#view=${view}`;
+}
+
+/** The fragment that opens learning path `id` in the view of the paths (read back by history.ts, `routePlace`). */
+export function pathRoute(id: string): string {
+  return `#view=paths&path=${encodeURIComponent(id)}`;
 }

@@ -651,12 +651,15 @@ export function createWebHub(deps: HubDeps): WebHub {
         return passOn('order', params);
       }
       case 'paths': {
-        // The open learning paths with their progress (`tasks.paths`), asked each time as the hub does.
-        const q = parseQuery(query, ['area']);
+        // The open learning paths with their progress (`tasks.paths`), asked each time as the hub does; with
+        // `include_done=1` the finished ones too (capability `requires`, the competence map).
+        const q = parseQuery(query, ['area', 'include_done']);
         if (typeof q === 'string') return errorBody(400, 'bad_query', q);
         const area = q.get('area');
         if (area !== undefined && !validAreaName(area)) return errorBody(400, 'bad_query', 'area is not a name');
-        return passOn('paths', area !== undefined ? { area } : {});
+        const done = q.get('include_done');
+        if (done !== undefined && done !== '1') return errorBody(400, 'bad_query', 'include_done is 1 or absent');
+        return passOn('paths', { ...(area !== undefined ? { area } : {}), ...(done !== undefined ? { include_done: true } : {}) });
       }
       case 'asset': {
         // An image below `assets/` of a container's folder (`GET /api/tasks/asset` of the hub): the folder comes from
