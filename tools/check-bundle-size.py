@@ -42,17 +42,31 @@ start is the board button of the attach bar (with its lazy load), the save of a 
 words in both languages. Nothing of it could move out without leaving the button out of the detail. The language on
 demand is still the step that frees room for good.
 
-usage: check-bundle-size.py [--dist ui/dist] [--budget-kb 1118]
+Lowered on 2026-11-21 to 970 kB with the language on demand (tasks-desktop/i18n-zweite-sprache-bei-bedarf-laden): the
+words of each language are a chunk of their own (`i18n-en` 161 kB, `i18n-de` 175 kB), and the page loads only the one it
+shows, before it draws (`ui/src/main.ts`); the other comes when the person switches. The language is loaded by a dynamic
+import, but it is parsed before the page shows, so it counts: the start is the main chunk and its static imports (782
+kB) and the larger of the language chunks (175 kB), 957 kB, 160 kB less than the 1117 kB before. A page without a
+language chunk is an error rather than a smaller start: the tables went back into the start, or got another name, and
+the number would lie. The wait for the language is no top-level `await` in `main.ts`: with one, the bundler cut every
+module a lazy chunk shares with the start out of the main chunk (51 chunks at the start instead of 18, 9 kB more). The
+room of 13 kB is for the words and the logic of the next features; when it is used up, the candidates are the views
+that are still static in `App.svelte` (see above), not a higher budget.
+
+usage: check-bundle-size.py [--dist ui/dist] [--budget-kb 970]
 """
 import argparse
 import pathlib
 import re
 import sys
 
-BUDGET_KB = 1118
+BUDGET_KB = 970
 
 # `from"./x.js"` and `import"./x.js"` of a built chunk: a static import. A dynamic `import("./x.js")` has a bracket.
 STATIC_IMPORT = re.compile(r'(?:from|import)\s*"\./([^"]+\.js)"')
+# The words of one language (`ui/src/lib/i18n-de.ts`): loaded on demand, but one of them before the page shows. The
+# languages are named: the hash of the shared `i18n-<hash>.js` may itself start with two letters and a dash.
+LANGUAGE_CHUNK = re.compile(r'^i18n-(?:de|en)-[A-Za-z0-9_-]+\.js$')
 
 
 def main_chunk(dist: pathlib.Path) -> pathlib.Path:
@@ -77,11 +91,21 @@ def startup_chunks(dist: pathlib.Path) -> dict[str, int]:
     return found
 
 
+def language_chunk(dist: pathlib.Path) -> pathlib.Path:
+    """The largest of the language chunks: the page parses one of them before it shows, the larger is the worst case."""
+    found = [path for path in (dist / 'assets').iterdir() if LANGUAGE_CHUNK.match(path.name)]
+    if not found:
+        raise ValueError(f'{dist}/assets has no language chunk (i18n-<lang>-*.js): the start would be counted without its words')
+    return max(found, key=lambda path: path.stat().st_size)
+
+
 def check(dist: pathlib.Path, budget_kb: int) -> tuple[bool, str]:
     chunks = startup_chunks(dist)
+    language = language_chunk(dist)
+    chunks.setdefault(language.name, language.stat().st_size)
     main = main_chunk(dist)
     total = sum(chunks.values()) / 1000
-    words = f'{main.name}: {chunks[main.name] / 1000:.0f} kB, with {len(chunks) - 1} chunks it imports at the start {total:.0f} kB, budget {budget_kb} kB'
+    words = f'{main.name}: {chunks[main.name] / 1000:.0f} kB, with {len(chunks) - 1} chunks of the start (language {language.name}): start {total:.0f} kB, budget {budget_kb} kB'
     if total > budget_kb:
         biggest = sorted(chunks.items(), key=lambda item: -item[1])[:6]
         words += '; the start is made of ' + ', '.join(f'{name} {size / 1000:.0f} kB' for name, size in biggest)

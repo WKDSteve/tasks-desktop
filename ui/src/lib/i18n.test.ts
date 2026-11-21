@@ -1,12 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import { ago, detectLang, dictionaries, labelOf, translate, type Key } from './i18n';
+import { ago, detectLang, labelOf, translate, type Key, type PageKey } from './i18n';
+import de from './i18n-de';
+import en from './i18n-en';
+
+const dictionaries = { en, de };
 
 describe('i18n', () => {
   it('has the same keys and the same placeholders in both languages', () => {
     const keys = Object.keys(dictionaries.en).sort();
     expect(Object.keys(dictionaries.de).sort()).toEqual(keys);
     const holes = (s: string) => (s.match(/\{\w+\}/g) ?? []).sort();
-    for (const key of keys as Key[]) {
+    for (const key of keys as PageKey[]) {
       expect(holes(dictionaries.de[key]), key).toEqual(holes(dictionaries.en[key]));
       expect(dictionaries.de[key].length, key).toBeGreaterThan(0);
     }

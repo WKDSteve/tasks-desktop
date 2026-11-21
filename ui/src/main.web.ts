@@ -13,7 +13,7 @@ import { Hub } from './lib/api';
 import { App as AppState, type Env } from './lib/app.svelte';
 import { indexedDbStore } from './lib/cache';
 import { copyText, printSheet, saveText } from './lib/exportDom';
-import { detectLang, translate } from './lib/i18n';
+import { detectLang, loadLang, translate } from './lib/i18n';
 import { logo } from './lib/logo';
 import { trackHistory } from './lib/trackHistory.svelte';
 import { routedTask } from './lib/route';
@@ -139,6 +139,8 @@ const entry = new Entry({
 // A write is several calls on several files; closing the page in the middle of one cannot be taken back.
 guardUnload(window, () => vault?.isWriting ?? false);
 
+// The words of the way in come before it is drawn (in this single file the language is part of the script: no fetch).
+await loadLang(lang).catch(() => {});
 const entryUi = mount(WebEntry, { target, props: { entry, lang } });
 
 let began = false;
@@ -247,6 +249,8 @@ async function begin(folder: string | null, name: string, readOnly: boolean): Pr
     },
   };
   const state = new AppState(env);
+  // The language the person chose may not be the browser's one of the way in.
+  await loadLang(state.lang).catch(() => {});
   void state.loadFolderVaults();
   // What hangs on the vault besides its files (the calendars shown with it) is told here.
   vaultOpened({ folder, name });

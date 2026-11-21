@@ -2184,6 +2184,42 @@ for (const scheme of ['light', 'dark'] as const) {
   });
 }
 
+test('the page loads only the language it shows, and the other one when the person switches to it', async ({ page }) => {
+  const words: string[] = [];
+  page.on('request', (request) => {
+    const name = /\/assets\/(i18n-(?:de|en))-[^/]+\.js$/.exec(new URL(request.url()).pathname)?.[1];
+    if (name) words.push(name);
+  });
+  // The German words are held until the page has been looked at while they are on their way.
+  let release: () => void = () => {};
+  const held = new Promise<void>((resolve) => (release = resolve));
+  await page.route(/\/assets\/i18n-de-[^/]+\.js$/, async (route) => {
+    await held;
+    await route.continue().catch(() => undefined);
+  });
+  await pair(page);
+  const bar = page.getByRole('menubar').getByRole('menuitem');
+  await expect(bar).toHaveText(['Work', 'Project', 'View', 'Options', 'Help']);
+  expect(words).toEqual(['i18n-en']);
+  await page.getByRole('menuitem', { name: 'Options' }).click();
+  await page.getByRole('menuitemradio', { name: 'Deutsch' }).click();
+  await expect.poll(() => words).toEqual(['i18n-en', 'i18n-de']);
+  // While German loads, the page stays English: never a key in place of a word.
+  await expect(bar).toHaveText(['Work', 'Project', 'View', 'Options', 'Help']);
+  release();
+  await expect(bar).toHaveText(['Arbeit', 'Projekt', 'Ansicht', 'Optionen', 'Hilfe']);
+  // A reload starts in German, with the German words alone.
+  await page.unroute(/\/assets\/i18n-de-[^/]+\.js$/);
+  words.length = 0;
+  await page.reload();
+  await expect(bar).toHaveText(['Arbeit', 'Projekt', 'Ansicht', 'Optionen', 'Hilfe']);
+  expect(words).toEqual(['i18n-de']);
+  // Back to English for the tests after this one in the same profile.
+  await page.getByRole('menuitem', { name: 'Optionen' }).click();
+  await page.getByRole('menuitemradio', { name: 'English' }).click();
+  await expect(bar).toHaveText(['Work', 'Project', 'View', 'Options', 'Help']);
+});
+
 test('the German page has no violations either', async ({ page }) => {
   await pair(page);
   await page.getByRole('menuitem', { name: 'Options' }).click();

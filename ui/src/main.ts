@@ -5,7 +5,7 @@ import { Hub } from './lib/api';
 import { App as AppState, TOKEN_KEY, type Env } from './lib/app.svelte';
 import { indexedDbStore } from './lib/cache';
 import { copyText, printSheet, saveText } from './lib/exportDom';
-import { translate } from './lib/i18n';
+import { loadLang, translate } from './lib/i18n';
 import { trackHistory } from './lib/trackHistory.svelte';
 import { followTaskRoute } from './lib/followRoute.svelte';
 import { placeAddress } from './lib/history';
@@ -94,14 +94,24 @@ if (channel) {
     live: () => state.stream.open,
   });
 }
-// The popup is the kit's; the name of its region is this page's word, in the page's language.
-installTooltips(document, window, { regionLabel: () => translate(state.lang, 'hint.region') });
-mount(App, { target: document.getElementById('app') as HTMLElement, props: { app: state, code } });
+// The words of the page's language come before anything is drawn: no key stands in for a word. Only this language is
+// loaded; the other comes when the person switches (i18n.ts). Should even this fail, the page still starts, with keys.
+// Not a top-level await: the bundler would then keep every module that a lazy chunk shares with the start out of the
+// main chunk (a lazy chunk must not wait for the entry), and the start would be made of fifty small files.
+void loadLang(state.lang)
+  .catch(() => {
+    // drawn with the keys; a reload tries again
+  })
+  .then(() => {
+    // The popup is the kit's; the name of its region is this page's word, in the page's language.
+    installTooltips(document, window, { regionLabel: () => translate(state.lang, 'hint.region') });
+    mount(App, { target: document.getElementById('app') as HTMLElement, props: { app: state, code } });
 
-// Back and Forward of the browser walk through the views and the open tasks.
-trackHistory(state, window);
-// A window of one task lets go of its fragment when it lets go of the task.
-followTaskRoute(state, window);
+    // Back and Forward of the browser walk through the views and the open tasks.
+    trackHistory(state, window);
+    // A window of one task lets go of its fragment when it lets go of the task.
+    followTaskRoute(state, window);
+  });
 
 // A link from `tasks-hub open` pasted into a tab that is already open changes only the fragment: no reload.
 window.addEventListener('hashchange', () => {

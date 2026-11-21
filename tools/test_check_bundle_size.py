@@ -17,6 +17,8 @@ class BundleSize(unittest.TestCase):
         (dist / 'assets' / 'index-abc.js').write_bytes(b'x' * (kb * 1000))
         (dist / 'assets' / 'other.js').write_bytes(b'x' * 5_000_000)
         (dist / 'index.html').write_text('<script type="module" crossorigin src="./assets/index-abc.js"></script>')
+        # The words of the languages: empty here, the cases of the language chunk give them a size.
+        (dist / 'assets' / 'i18n-en-x1.js').write_bytes(b'')
         return dist
 
     def test_a_chunk_within_the_budget_passes(self) -> None:
@@ -42,7 +44,7 @@ class BundleSize(unittest.TestCase):
     def test_the_chunks_the_main_chunk_imports_count_with_it_down_the_chain(self) -> None:
         good, words = check.check(self.with_chunks(100, 200), 500)
         self.assertTrue(good)
-        self.assertIn('with 2 chunks', words)
+        self.assertIn('with 3 chunks', words)
         self.assertIn('310 kB', words)
         good, words = check.check(self.with_chunks(100, 200), 300)
         self.assertFalse(good)
@@ -54,6 +56,28 @@ class BundleSize(unittest.TestCase):
         merged = check.check(self.page(122), 800)[1]
         self.assertIn('start 122 kB', apart)
         self.assertIn('start 122 kB', merged)
+
+    def test_the_larger_language_counts_with_the_start_though_it_is_loaded_on_demand(self) -> None:
+        dist = self.page(100)
+        assets = dist / 'assets'
+        (assets / 'i18n-en-x1.js').write_bytes(b'x' * 150_000)
+        (assets / 'i18n-de-y2.js').write_bytes(b'x' * 170_000)
+        with (assets / 'index-abc.js').open('ab') as f:
+            f.write(b'const w=()=>import("./i18n-de-y2.js");')
+        good, words = check.check(dist, 260)
+        self.assertFalse(good)
+        self.assertIn('language i18n-de-y2.js', words)
+        self.assertIn('270 kB', words)
+        self.assertTrue(check.check(dist, 271)[0])
+
+    def test_a_page_without_a_language_chunk_is_an_error(self) -> None:
+        dist = self.page(100)
+        (dist / 'assets' / 'i18n-en-x1.js').unlink()
+        # The shared module of the language code is no table of words.
+        (dist / 'assets' / 'i18n-Dp4x.js').write_bytes(b'x' * 3000)
+        (dist / 'assets' / 'i18n-ab-c3Xy.js').write_bytes(b'x' * 3000)
+        with self.assertRaises(ValueError):
+            check.check(dist, 800)
 
     def test_a_page_without_a_script_is_an_error(self) -> None:
         dist = self.page(1)

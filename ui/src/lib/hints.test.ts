@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { dictionaries, hintOf } from './i18n';
+import { hintOf } from './i18n';
+import de from './i18n-de';
+import en from './i18n-en';
+
+const dictionaries = { en, de };
 
 // The explanations of the page (the popup itself is the kit's, tested there): every word the engine can say has one.
 describe('hintOf', () => {

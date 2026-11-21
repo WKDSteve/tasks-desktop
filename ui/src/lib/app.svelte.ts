@@ -116,7 +116,7 @@ import { defaultTilePrefs, isDefaultTiles, parseTilePrefs, type TilePrefs } from
 import { conflictsOf, conflictsOfRequest, retryOp, type Conflict } from './conflicts';
 import { browserStreamShare, Preferences, StreamSession } from 'appkit-ui/session';
 import type { SseMessage } from 'appkit-ui/sse';
-import { labelOf, LANGS, translate, type Key, type Lang } from './i18n';
+import { labelOf, langSwitcher, LANGS, translate, type Key, type Lang } from './i18n';
 import { csvSeparatorFor, EXPORT_FILES, exportFileName, rowsText, sheetOf, type ExportFormat, type ExportRow, type PrintSheet } from './export';
 import {
   AS_THEY_ARE,
@@ -1418,8 +1418,11 @@ export class App {
 
   // ── preferences ───────────────────────────────────────────────────────
 
-  setLang(lang: Lang): void {
-    this.prefs.setLang(lang);
+  /** Switches the language once its words are loaded (at once when they are there); a failed load keeps the language. */
+  private readonly switchLang = langSwitcher((lang) => this.prefs.setLang(lang));
+
+  setLang(lang: Lang): Promise<void> {
+    return this.switchLang(lang).catch(() => this.say('error', 'lang.failed'));
   }
 
   setShortcuts(on: boolean): void {

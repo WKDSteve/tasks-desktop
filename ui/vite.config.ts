@@ -19,6 +19,8 @@ const docIndex = JSON.stringify(
 const test = {
   environment: 'node' as const,
   include: ['src/**/*.test.ts', 'e2e-device/**/*.test.ts'],
+  // Both languages at once (the page loads one on demand, i18n.ts): a test switches the language synchronously.
+  setupFiles: ['src/test-setup.ts'],
   // Four workers, not one per core: on the busy runner eleven workers starting at once did not all answer within the
   // minute vitest gives a worker ("Timeout waiting for worker to respond", runs 41798163368 and 43630294438). Four
   // are no slower: 16 s against 18 s for the whole suite on twelve cores.

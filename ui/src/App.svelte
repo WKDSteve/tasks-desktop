@@ -5,7 +5,7 @@
   import { logo } from './lib/logo';
   import { matches } from 'appkit-ui/keymap';
   import { keymap, pressOf } from './lib/keymap';
-  import { ago, dictionaries, translate, type Key } from './lib/i18n';
+  import { ago, hasKey, translate, type Key } from './lib/i18n';
   import Today from './views/Today.svelte';
   import ListView from './views/ListView.svelte';
   import BoardView from './views/BoardView.svelte';
@@ -266,7 +266,7 @@
   // know gets the general words.
   const setupKey = $derived.by(() => {
     const code = app.problem ?? '';
-    return Object.hasOwn(dictionaries.en, `setup.${code}.title`) ? code : 'unknown';
+    return hasKey(app.lang, `setup.${code}.title`) ? code : 'unknown';
   });
 
   const age = $derived(app.cachedAt === null ? '' : ago(app.lang, Date.now() - app.cachedAt));
@@ -615,14 +615,14 @@
             label: 'Deutsch',
             hint: t('hint.item.lang.de'),
             checked: app.lang === 'de',
-            onselect: () => app.setLang('de'),
+            onselect: () => void app.setLang('de'),
           },
           {
             kind: 'radio',
             label: 'English',
             hint: t('hint.item.lang.en'),
             checked: app.lang === 'en',
-            onselect: () => app.setLang('en'),
+            onselect: () => void app.setLang('en'),
           },
           { kind: 'section', label: t('menu.sec.behaviour') },
           {
