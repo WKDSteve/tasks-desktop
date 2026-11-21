@@ -8848,7 +8848,8 @@ test('the statistics show what the engine counted as finished in the last 30 day
   const asked: string[] = [];
   await page.route('**/api/tasks/finished*', async (route) => {
     const url = new URL(route.request().url());
-    if (url.searchParams.get('limit') !== '1') return route.fallback();
+    // The figure of the statistics, not the overview's count of the finished tasks whose CI is open or red (`ci`).
+    if (url.searchParams.get('limit') !== '1' || url.searchParams.has('ci')) return route.fallback();
     asked.push(url.searchParams.get('since') ?? '');
     const body = JSON.stringify({
       kind: 'tasks.finished', total: 5, offset: 0, limit: 1, items: [], undated: 0, incomplete: [],
