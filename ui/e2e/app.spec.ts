@@ -8054,6 +8054,52 @@ test('the actions of a row: only on the row under the pointer or with the focus,
   removeFile(file);
 });
 
+test('a context menu opened in the task float lies in the float and takes the mouse (appkit v0.71.0)', async ({ page }) => {
+  // The float is a modal dialog: it lies in the top layer and makes the rest of the page inert. A menu drawn in the body
+  // was behind it and could not be clicked; the kit now puts the menu into the dialog of its target while it is open.
+  const dir = join(state().vault, 'lib.nvim', 'ROADMAP', 'tasks');
+  writeFileSync(join(dir, 'ctxdlg-r001.md'), '---\ntitle: Ctxdlg r001\nstatus: open\nkind: task\ntags: [ctxdlg-tag]\n---\n\nIn a float.\n');
+  await pair(page);
+  await showList(page);
+  await page.getByRole('searchbox', { name: /search/i }).first().fill('Ctxdlg r001');
+  await open(page, 'lib.nvim/ctxdlg-r001');
+  const chip = taskFloat(page).getByRole('button', { name: 'Show all with the tag ctxdlg-tag' });
+  await chip.click({ button: 'right' });
+  // Found inside the float: the menu lives in the dialog, so nothing of the page is in front of it.
+  const menu = taskFloat(page).getByRole('menu', { name: 'Context menu' });
+  await expect(menu).toBeVisible();
+  // A real click of the mouse (Playwright refuses one that another element would catch).
+  await menu.getByRole('menuitem', { name: 'Columns' }).click();
+  await expect(menu).toHaveCount(0);
+  const tried = page.getByRole('region', { name: 'ctxdlg-tag', exact: true });
+  await expect(tried).toBeVisible();
+  await expect(tried.locator('[data-view-item="lib.nvim/ctxdlg-r001"]')).toBeVisible();
+  await closeFloat(page);
+});
+
+test('in a narrow window the popup of the last menu of the bar stays inside it, anchored to its title (appkit v0.71.0)', async ({ page }) => {
+  // Narrower than about 410 px the popup of a menu reached past the right edge and gave the page a sideways scroll. The
+  // kit draws it as a popover anchored to its title where the browser can (the system's Chrome can), flipped to stay in.
+  await page.setViewportSize({ width: 380, height: 700 });
+  await pair(page);
+  const last = page.locator('.mb-trigger').last();
+  await last.click();
+  const popup = page.locator('.mb-popup');
+  await expect(popup).toBeVisible();
+  const box = await popup.evaluate((p) => {
+    const r = p.getBoundingClientRect();
+    return { left: r.left, right: r.right, width: document.documentElement.clientWidth, anchored: p.matches(':popover-open') };
+  });
+  expect(box.anchored, 'drawn as an anchored popover').toBe(true);
+  expect(box.left).toBeGreaterThanOrEqual(0);
+  expect(box.right).toBeLessThanOrEqual(box.width);
+  // No sideways scroll of the page.
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+  await page.keyboard.press('Escape');
+  await expect(popup).toHaveCount(0);
+  await expect(last).toBeFocused();
+});
+
 test('tags are given from the context menu: one that exists to three marked tasks at once, a new one typed, one taken away, and all with a tag are shown', async ({ page }) => {
   test.slow();
   const dir = join(state().vault, 'lib.nvim', 'ROADMAP', 'tasks');
