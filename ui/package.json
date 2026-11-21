@@ -3,6 +3,12 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "browserslist": [
+    "chrome >= 86",
+    "edge >= 86",
+    "firefox >= 50",
+    "safari >= 11.1"
+  ],
   "scripts": {
     "dev": "vite build --watch",
     "build": "node ../tools/check-installed-kit.mjs && vite build",

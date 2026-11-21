@@ -190,6 +190,19 @@ pnpm web:build && PLAYWRIGHT_BROWSERS_PATH="$PWD/node_modules/.cache/ms-playwrig
 - Logik muss nicht mehr nur deshalb in eine reine Funktion gezogen werden, weil sie in einem Effekt steht; eine reine
   Funktion bleibt trotzdem die erste Wahl, wo sie die Sache einfacher macht (`dropsChoice`).
 
+## Web-Plattform
+
+- Ziel: Baseline `widely` (`.mwgrc`). Vor neuem HTML/CSS/JS der Seite (`ui/src`, `ui/web`) die Leitlinie fragen:
+  `DISABLE_TELEMETRY=1 npx -y modern-web-guidance@latest search "<Frage>"` (dann `retrieve <id>`); Regelwerk:
+  `rules-vault/rulesets/web`.
+- **Browser Support** (geht vor `widely`): Chrome/Edge 86+ voll, Firefox 50+ und Safari 11.1+ nur lesend (README,
+  Tabelle "Which browser does what"; geprüft von `ui/e2e-web/engines.spec.ts` und `readonly.spec.ts`). `browserslist`
+  in `ui/package.json` nennt genau diese Matrix. Ein neueres Feature nur mit Feature-Erkennung und Rückfall, der die
+  Matrix weiter trägt; kein Feature, das sie bricht, auch wenn es `widely` ist.
+- Bewusst behalten (keepWhen: Matrix mit Chrome 86): `[...xs].sort()` / `slice().sort()` statt `toSorted()`
+  (Chrome 110) und `new Promise` statt `Promise.withResolvers()` (Chrome 119). `legacy-scan` meldet sie (CI-Job `ui`,
+  nur Information); erst umstellen, wenn die Matrix angehoben ist.
+
 ## Nie
 
 - Den Hub nicht aus einer Claude-Sitzung installieren oder starten
