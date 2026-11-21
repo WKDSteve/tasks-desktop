@@ -25,6 +25,9 @@ python tools/check-lock-age.py --min-days 7   # after cargo update: no crate you
 testing sheets run --all                # test sheets (TESTS/sheets, .testing.lua): the first start in the page against the example setup-hub, the levels form of a path against the same hub with a vault of the run (app levels-hub; the engine as the machine finds it), a folder of the run; Chrome; without the LIB_NVIM_DIR of the engine pin (testing.nvim needs a newer lib.nvim)
 ```
 
+`.testing.lua` hat einen `ci`-Abschnitt (nur Process-Steps, keine Lua-Specs): Profile `fast` (fmt, Wächter), `quick` (+ svelte-check, vitest), `full` (+ ui build, clippy, cargo test). Ein Commit prüfen, im Worktree des Commits, mit gesetztem `CARGO_TARGET_DIR` auf das `target` des Haupt-Checkouts:
+`nvim -n -i NONE --headless -u NONE -l $REPOS_DIR/testing.nvim/scripts/testing.lua ci commit <sha> --profile=quick --no-wsl` (es gibt kein `scripts/test.sh`). `--quick` selbst geht hier noch nicht: testing.nvim verlangt dafür einen Suite-Step (Task `tasks-desktop/testing-nvim-ci-commit-quick-ohne-suite-step-nur`). Browser-Tests, Web-Engine-Vergleich und die Handy-Seite laufen nicht darin, nur in der CI.
+
 Die Web-Variante (eigene CI `web.yml`), bei jedem Sprung von `engine.lock` und jeder Änderung an `ui/src/web`:
 
 ```

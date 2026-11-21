@@ -239,6 +239,70 @@ test('the phone page shows a learning path cut by the hub and ticks a point thro
   }
 });
 
+test('the phone page shows the round of a ladder, a routine that waits for a finish, and the routine a finish started', async ({ page }) => {
+  const problems = watchConsole(page);
+  const { vault, config } = state();
+  const day = (offset: number): string => {
+    const d = new Date();
+    d.setDate(d.getDate() + offset);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  };
+  const stem = `phone-ladder-${Date.now()}`;
+  const tasks = join(vault, 'lib.nvim', 'ROADMAP', 'tasks');
+  const cause = join(tasks, `${stem}-cause.md`);
+  const last = join(tasks, `${stem}-last.md`);
+  const waiting = join(tasks, `${stem}-waiting.md`);
+  const front = (title: string, more: string): string =>
+    `---
+title: ${title}
+status: open
+${more}created: ${day(-1)}
+updated: ${day(-1)}
+---
+
+A task of the tests.
+`;
+  writeFileSync(cause, front('Phone cause', ''));
+  // The last round of a two-step ladder, and a routine that waits for the cause to be finished.
+  writeFileSync(last, front('Phone last round', `repeat: 1w,4w
+repeat_step: 2
+due: ${day(3)}
+`));
+  writeFileSync(waiting, front('Phone waiting', `repeat: 2w
+repeat_after: lib.nvim/${stem}-cause
+`));
+  try {
+    await page.goto(pairingLink(config).replace('/#pair=', '/m/#pair='));
+    await expect(page.getByTestId('connection')).toHaveAttribute('data-state', 'live');
+    await page.getByRole('button', { name: 'List', exact: true }).click();
+    await page.locator(`[data-id="lib.nvim/${stem}-last"]`).click();
+    await expect(page.getByTestId('routine')).toHaveText('Round 2 of 2 (1w, 4w)');
+    // The engine says the finish ends the routine: the preview names no next round.
+    await page.getByRole('button', { name: 'Finish …' }).click();
+    await expect(page.getByTestId('done-ends-routine')).toContainText('The last round of the routine (1w, 4w)');
+    await expect(page.getByTestId('done-preview')).not.toContainText('Next round due on');
+    await page.getByRole('button', { name: 'Cancel' }).click();
+    await page.getByRole('button', { name: /Back/ }).click();
+
+    await page.locator(`[data-id="lib.nvim/${stem}-waiting"]`).click();
+    await expect(page.getByTestId('routine-waits')).toHaveText(`Routine waits for: lib.nvim/${stem}-cause`);
+    await page.getByRole('button', { name: /Back/ }).click();
+
+    // Finishing the cause starts the routine: the engine writes its first due date and the page says when.
+    await page.locator(`[data-id="lib.nvim/${stem}-cause"]`).click();
+    await page.getByRole('button', { name: 'Finish …' }).click();
+    await page.getByRole('button', { name: 'Yes, finish' }).click();
+    await expect(page.getByTestId('notice')).toContainText(`A routine starts: lib.nvim/${stem}-waiting, due ${day(14)}`);
+    expect(readFileSync(waiting, 'utf8')).toMatch(new RegExp(`^due: ${day(14)}$`, 'm'));
+    expect(problems).toEqual([]);
+  } finally {
+    for (const f of [cause, last, waiting]) rmSync(f, { force: true });
+    // The finished cause lies in the Backlog under a dated name: only that file goes.
+    const backlog = join(vault, 'lib.nvim', 'Backlog', 'TASKS');
+    if (existsSync(backlog)) for (const f of readdirSync(backlog)) if (f.endsWith(`_${stem}-cause.md`)) rmSync(join(backlog, f), { force: true });
+  }
+});
+
 test('the phone captures a task with a photo and a voice note, and both land in the vault as its assets', async ({ newContext }) => {
   const { vault, config } = state();
   // Chrome's fake microphone (a tone), granted without a prompt: the note is recorded for real, under the hub's policy.
