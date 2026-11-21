@@ -527,7 +527,7 @@
                 data-frame={frame.id}
               >
                 {#if openProjects.has(frame.id)}
-                  <button type="button" class="frame-title" tabindex="-1" onclick={() => app.openProject(frame.id)}>{markHidden(frame.title)}</button>
+                  <button type="button" class="frame-title" onclick={() => app.openProject(frame.id)}>{markHidden(frame.title)}</button>
                 {:else}
                   <span class="frame-title">{markHidden(frame.title)}{frame.project.done ? ` ✓` : ''}</span>
                 {/if}
@@ -835,7 +835,6 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    font-weight: 600;
     color: var(--text);
     background: none;
     border: none;

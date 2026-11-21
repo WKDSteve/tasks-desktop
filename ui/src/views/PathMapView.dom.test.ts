@@ -117,6 +117,11 @@ describe('PathMapView', () => {
     expect(box(page, 'lib/gatter')!.dataset.stage).toBe('waiting');
     // the frame of each project, and the project's requirement drawn from frame to frame
     expect(page.querySelector('[data-frame="lib/basis"]')).not.toBeNull();
+    // the title of an open project's frame opens the project, by the keyboard too (a stop of the Tab key)
+    const title = page.querySelector<HTMLButtonElement>('[data-frame="lib/basis"] button.frame-title')!;
+    expect(title.tabIndex).toBe(0);
+    title.click();
+    expect([m.app.view, m.app.projectChoice]).toEqual(['plan', 'lib/basis']);
     expect(page.querySelector('[data-edge="j:lib/basis>j:lib/oben"]')!.getAttribute('class')).toContain('hard');
     // a soft requirement not met: a hint on the box, a dashed arrow in the colour of an open one
     expect(box(page, 'lib/frei')!.querySelector('.hint')).not.toBeNull();
