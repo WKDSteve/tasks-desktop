@@ -14,7 +14,7 @@
   // The store of the item, given back when the item changes or the head goes (the cleanup of the effect).
   let images = $state<AssetImages | null>(null);
   $effect(() => {
-    const store = new AssetImages((k, i, f) => app.asset(k, i, f), kind, id);
+    const store = new AssetImages((k, i, f, held) => app.asset(k, i, f, held), kind, id, { recheckOnFront: true });
     images = store;
     return () => store.dispose();
   });

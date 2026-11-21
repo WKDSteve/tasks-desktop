@@ -207,3 +207,34 @@ test('a file with a space or a letter of any language comes percent-encoded and 
   }
   assert.equal(h.reads.length, 2);
 });
+
+test('an asset carries the tag of its bytes; the same tag answers 304, other bytes under the same name 200', async () => {
+  const files = { 'a/ROADMAP/tasks/t/assets/shot.png': 'old picture' };
+  const api = createWebHub({
+    version: '9.9.9',
+    build: null,
+    pinned: { engine: null, lib: null },
+    async call() {
+      return { text: entry('task', 'a/t', 'a/ROADMAP/tasks/t/t.md'), code: null };
+    },
+    async asset(path) {
+      const text = files[path];
+      return text === undefined ? 'missing' : { bytes: new TextEncoder().encode(text) };
+    },
+  });
+  const ask = (held) =>
+    api.fetch('/api/tasks/asset?kind=task&id=a/t&file=assets/shot.png', held ? { headers: { 'If-None-Match': held } } : undefined);
+  const first = await ask();
+  assert.equal(first.status, 200);
+  const tag = first.headers.get('etag');
+  assert.match(tag ?? '', /^"a11-[0-9a-f]{16}"$/);
+  const same = await ask(tag);
+  assert.equal(same.status, 304, 'the same bytes');
+  assert.equal(await same.text(), '');
+  // replaced by hand: the same length, other bytes
+  files['a/ROADMAP/tasks/t/assets/shot.png'] = 'new picture';
+  const other = await ask(tag);
+  assert.equal(other.status, 200, 'other bytes');
+  assert.equal(await other.text(), 'new picture');
+  assert.notEqual(other.headers.get('etag'), tag);
+});

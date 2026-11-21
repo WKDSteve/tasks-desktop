@@ -325,6 +325,12 @@ export interface SetupStep {
 }
 
 /** The kinds of container whose images the hub hands on (`GET /api/tasks/asset`). */
+/**
+ * What a read of an asset gave: the picture with the tag of its bytes (null when the hub names none), `'same'` when it
+ * is unchanged since the tag the page held, null when there is none to draw.
+ */
+export type AssetAnswer = { blob: Blob; tag: string | null } | 'same' | null;
+
 export type AssetOwner = 'task' | 'plan' | 'project' | 'path' | 'meeting';
 
 export class Hub extends HubClient<Snapshot> {
@@ -720,11 +726,14 @@ export class Hub extends HubClient<Snapshot> {
    * An image below `assets/` of a container (`asset`: a task, plan, project, path or meeting), read with the session
    * (an `<img src>` would not send it); `null` when it has no such image, it is too large, or it cannot be read.
    */
-  async asset(kind: AssetOwner, id: string, file: string): Promise<Blob | null> {
+  async asset(kind: AssetOwner, id: string, file: string, held?: string): Promise<AssetAnswer> {
     const plain = (text: string) => encodeURIComponent(text).replace(/%2F/gi, '/');
     try {
-      const response = await this.request(`/api/tasks/asset?kind=${kind}&id=${plain(id)}&file=${plain(file)}`);
-      return response.ok ? await response.blob() : null;
+      const path = `/api/tasks/asset?kind=${kind}&id=${plain(id)}&file=${plain(file)}`;
+      // `held`: the tag of the picture the page has; the same bytes answer 304 and the page keeps it.
+      const response = await this.request(path, held ? { headers: { 'If-None-Match': held } } : undefined);
+      if (response.status === 304) return 'same';
+      return response.ok ? { blob: await response.blob(), tag: response.headers.get('ETag') } : null;
     } catch {
       return null;
     }

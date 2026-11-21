@@ -2,7 +2,7 @@
 // that are maps, a clock that stands still. `make` builds an `App` on them; the tests of the state (app.test.ts) and
 // the tests that mount a component in a DOM (`*.dom.test.ts`) share it, so both test the app as it is, not a copy.
 import type { IntentAnswer } from './intent';
-import { ApiError, type BoardRequest, type BoardSaved, type FinishedQuery, type Hub, type HubArea, type OpsRequest, type SetupInfo, type SetupStep, type VaultList } from './api';
+import { ApiError, type AssetAnswer, type BoardRequest, type BoardSaved, type FinishedQuery, type Hub, type HubArea, type OpsRequest, type SetupInfo, type SetupStep, type VaultList } from './api';
 import { App, type Env } from './app.svelte';
 import type { CachedList, ListStore } from './cache';
 import type { DonePreview, Groupings, MeetingDocument, MeetingEntry, MeetingParse, Meetings, Result, Snapshot, TaskDocument, TaskEntry, View, Views } from './contract';
@@ -489,12 +489,20 @@ export class FakeHub {
     }
     return { kind: 'tasks.meetings', items, total: items.length, offset: 0, limit: 100, undated: 0, incomplete: [] } as unknown as Meetings;
   }
-  /** The images asked (`kind id file`), and what `asset` answers for a file (missing: null). */
+  /**
+   * The images asked (`kind id file`, with ` if <tag>` when the page held one), and what `asset` answers for a file
+   * (missing: null). The tag of an answer is the blob's size and type, and of `assetTags` where one is set; a read with
+   * that tag answers 'same'.
+   */
   assetReads: string[] = [];
   assetAnswers = new Map<string, Blob>();
-  async asset(kind: string, id: string, file: string): Promise<Blob | null> {
-    this.assetReads.push(`${kind} ${id} ${file}`);
-    return this.assetAnswers.get(file) ?? null;
+  assetTags = new Map<string, string>();
+  async asset(kind: string, id: string, file: string, held?: string): Promise<AssetAnswer> {
+    this.assetReads.push(`${kind} ${id} ${file}${held ? ` if ${held}` : ''}`);
+    const blob = this.assetAnswers.get(file);
+    if (!blob) return null;
+    const tag = this.assetTags.get(file) ?? `"${blob.size}-${blob.type}"`;
+    return held === tag ? 'same' : { blob, tag };
   }
   /** The boards saved, and what `board` answers next (none: saved as asked; an error: thrown). */
   boards: BoardRequest[] = [];

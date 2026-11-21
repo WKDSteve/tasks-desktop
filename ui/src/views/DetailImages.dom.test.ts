@@ -147,9 +147,32 @@ describe('the images of a task text', () => {
     await m.app.refresh();
     await settle();
     expect(reads()).toBe(2);
-    expect(m.hub.assetReads.filter((r) => r.endsWith('assets/here.png'))).toHaveLength(1);
+    // the drawn one is only asked with its tag: the same bytes, the same address
+    expect(m.hub.assetReads.filter((r) => r.includes('assets/here.png'))).toEqual([
+      'task pub/a assets/here.png',
+      'task pub/a assets/here.png if "4-image/svg+xml"',
+    ]);
     const srcs = [...root.querySelectorAll<HTMLImageElement>('.prose img')].map((img) => img.getAttribute('alt'));
     expect(srcs).toEqual(['Later', 'Here']);
+  });
+
+  it('shows an image replaced by hand under the same name once the window comes back to the front', async () => {
+    const { m, root } = await show('![Shot](assets/shot.png)', {}, { 'assets/shot.png': 'old' });
+    const src = () => root.querySelector<HTMLImageElement>('.prose img')?.getAttribute('src');
+    const first = src();
+    expect(first).toMatch(/^blob:/);
+    // Replaced in the folder: no new version of the task, no event of the vault. The window comes back to the front.
+    m.hub.assetAnswers.set('assets/shot.png', new Blob(['new picture'], { type: 'image/png' }));
+    window.dispatchEvent(new Event('focus'));
+    await settle();
+    expect(src()).toMatch(/^blob:/);
+    expect(src()).not.toBe(first);
+    expect(revoked).toContain(first);
+    // Back in front again at once: not asked again (focus and visibility come together)
+    const asked = m.hub.assetReads.length;
+    document.dispatchEvent(new Event('visibilitychange'));
+    await settle();
+    expect(m.hub.assetReads.length).toBe(asked);
   });
 
   it('takes the category icon for a task without one of its own', async () => {

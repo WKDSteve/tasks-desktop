@@ -62,7 +62,7 @@
       images = null;
       return;
     }
-    const store = new AssetImages((kind, of, file) => app.asset(kind, of, file), 'meeting', owner);
+    const store = new AssetImages((kind, of, file, held) => app.asset(kind, of, file, held), 'meeting', owner, { recheckOnFront: true });
     images = store;
     return () => store.dispose();
   });

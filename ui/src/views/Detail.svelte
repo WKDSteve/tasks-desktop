@@ -66,7 +66,7 @@
       images = null;
       return;
     }
-    const store = new AssetImages((kind, owner, file) => app.asset(kind, owner, file), 'task', id);
+    const store = new AssetImages((kind, owner, file, held) => app.asset(kind, owner, file, held), 'task', id, { recheckOnFront: true });
     images = store;
     return () => store.dispose();
   });

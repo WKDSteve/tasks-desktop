@@ -132,10 +132,21 @@ async fn container_file(st: &Shared, owner: Owner, id: &str) -> Result<Option<St
     }
 }
 
-/// `GET /api/tasks/asset`: the image, sealed; `400 bad_query`, `404 no_asset`, `413 too_large`.
+/// The tag of an asset's bytes: their length and a digest of them, so a file replaced by one of another content is
+/// told apart even when the copy kept the old time of the file.
+pub(super) fn content_tag(bytes: &[u8]) -> String {
+    use sha2::{Digest, Sha256};
+    let digest = Sha256::digest(bytes);
+    let short: String = digest[..12].iter().map(|b| format!("{b:02x}")).collect();
+    format!("a{}-{short}", bytes.len())
+}
+
+/// `GET /api/tasks/asset`: the image, sealed, with an `ETag` of its bytes; `304` when `If-None-Match` names them;
+/// `400 bad_query`, `404 no_asset`, `413 too_large`.
 pub(super) async fn asset(
     State(st): State<Arc<Shared>>,
     caller: Option<axum::Extension<Caller>>,
+    headers: HeaderMap,
     RawQuery(query): RawQuery,
 ) -> Response {
     if is_device(caller.as_deref()) {
@@ -153,6 +164,7 @@ pub(super) async fn asset(
         Ok(None) => return missing(),
         Err(response) => return response,
     };
+    let seen = single(&headers, &header::IF_NONE_MATCH).ok().flatten();
     let read = tokio::task::spawn_blocking(move || {
         let (path, kind) = assets::resolve(&vault, &container, &file)?;
         std::fs::read(path)
@@ -162,9 +174,18 @@ pub(super) async fn asset(
     .await;
     match read {
         Ok(Ok((bytes, kind))) => {
+            // The page asks again with the tag it holds (a file replaced by hand under the same name is no event of
+            // the vault): the same bytes answer 304 and the page keeps its picture.
+            let tag = content_tag(&bytes);
+            if seen.is_some_and(|h| etag_matches(&h, &tag)) {
+                return not_modified(&tag);
+            }
             let mut response = Response::new(Body::from(bytes));
             let headers = response.headers_mut();
             headers.insert(header::CONTENT_TYPE, HeaderValue::from_static(kind));
+            if let Ok(value) = HeaderValue::from_str(&format!("\"{tag}\"")) {
+                headers.insert(header::ETAG, value);
+            }
             self::meetings::sealed(headers);
             response
         }

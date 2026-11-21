@@ -143,8 +143,8 @@
   });
 
   async function load(board: string): Promise<void> {
-    const blob = await app.asset(owner, id, `assets/boards/${board}.ink.json`);
-    const text = blob ? await blob.text() : null;
+    const answer = await app.asset(owner, id, `assets/boards/${board}.ink.json`);
+    const text = answer && answer !== 'same' ? await answer.blob.text() : null;
     const read = text === null ? null : parseInk(text);
     if (text !== null && read) {
       doc = read;

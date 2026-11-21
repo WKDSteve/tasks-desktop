@@ -93,7 +93,7 @@
       images = null;
       return;
     }
-    const store = new AssetImages((kind, owner, file) => app.asset(kind, owner, file), 'path', id);
+    const store = new AssetImages((kind, owner, file, held) => app.asset(kind, owner, file, held), 'path', id, { recheckOnFront: true });
     images = store;
     return () => store.dispose();
   });

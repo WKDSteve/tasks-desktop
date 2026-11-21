@@ -54,7 +54,7 @@ import type {
   Waits,
 } from './contract';
 import { expandAreas, isAreaGroup, NO_AREA, type AreaGroupInfo } from './areaGroups';
-import type { AssetOwner, FinishedQuery, Op } from './api';
+import type { AssetAnswer, AssetOwner, FinishedQuery, Op } from './api';
 import { adoptOps, followUpOp, runAnswer, type Answer, type AnswerKind } from './agentAnswer';
 
 /** The note an inverse of `node_set` carries (capability `node_note`), as a part of the operation; none: `{}`. */
@@ -1902,9 +1902,12 @@ export class App {
     return this.env.hub.meetingThumb(id);
   }
 
-  /** An image below `assets/` of a container, read with the session; null when there is none to draw. */
-  asset(kind: AssetOwner, id: string, file: string): Promise<Blob | null> {
-    return this.env.hub.asset(kind, id, file);
+  /**
+   * An image below `assets/` of a container, read with the session; null when there is none to draw, `'same'` when it
+   * is unchanged since the tag `held` (the page keeps its picture).
+   */
+  asset(kind: AssetOwner, id: string, file: string, held?: string): Promise<AssetAnswer> {
+    return this.env.hub.asset(kind, id, file, held);
   }
 
   /** The meetings to follow up (the tile Follow-up): over and still planned, or done without a result. */

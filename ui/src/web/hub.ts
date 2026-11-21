@@ -147,10 +147,27 @@ export function assetQuery(query: string): { kind: AssetOwner; id: string; file:
 }
 
 /** The answer headers of an asset: its type, sealed like a meeting's preview (`sealed` of the hub). */
-function sealedAsset(bytes: Uint8Array, type: string): Response {
+/**
+ * The tag of an asset's bytes (`content_tag` of the hub, by another digest: a tag is only ever compared with one this
+ * page was given): the length and two FNV-1a sums, so a file replaced under the same name is told apart.
+ */
+export function assetTag(bytes: Uint8Array): string {
+  let a = 0x811c9dc5;
+  let b = 0x01000193 ^ bytes.length;
+  for (const byte of bytes) {
+    a = Math.imul(a ^ byte, 0x01000193) >>> 0;
+    b = Math.imul(b ^ byte, 0x5bd1e995) >>> 0;
+  }
+  return `a${bytes.length}-${a.toString(16).padStart(8, '0')}${b.toString(16).padStart(8, '0')}`;
+}
+
+function sealedAsset(bytes: Uint8Array, type: string, seen: string | null): Response {
+  const tag = assetTag(bytes);
+  if (seen && etagMatches(seen, tag)) return new Response(null, { status: 304, headers: { ETag: `"${tag}"` } });
   return new Response(bytes as BodyInit, {
     status: 200,
     headers: {
+      ETag: `"${tag}"`,
       'Content-Type': type,
       'X-Content-Type-Options': 'nosniff',
       'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; sandbox",
@@ -646,7 +663,7 @@ export function createWebHub(deps: HubDeps): WebHub {
         const read = await deps.asset(`${folder}/${request.file}`, limit).catch(() => 'missing' as const);
         if (read === 'too_large') return errorBody(413, 'too_large', 'the image is larger than the page is given');
         if (read === 'missing') return missing;
-        return sealedAsset(read.bytes, type);
+        return sealedAsset(read.bytes, type, headers.get('if-none-match'));
       }
       case 'path': {
         // One learning path with its tree (`tasks.path`).

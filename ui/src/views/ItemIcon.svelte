@@ -20,7 +20,7 @@
       return;
     }
     const cut = key.indexOf('|');
-    const store = new AssetImages((k, i, f) => app.asset(k, i, f), key.slice(0, cut) as AssetOwner, key.slice(cut + 1));
+    const store = new AssetImages((k, i, f, held) => app.asset(k, i, f, held), key.slice(0, cut) as AssetOwner, key.slice(cut + 1));
     images = store;
     return () => store.dispose();
   });

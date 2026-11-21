@@ -120,12 +120,18 @@ impl Hub {
 
     /// A GET whose answer is no text (a picture): its head and its body as bytes.
     async fn get_bytes(&self, path: &str) -> (String, Vec<u8>) {
+        self.get_bytes_if(path, None).await
+    }
+
+    /// `get_bytes`, with `If-None-Match: <tag>` when a tag is given.
+    async fn get_bytes_if(&self, path: &str, tag: Option<&str>) -> (String, Vec<u8>) {
         use tokio::io::{AsyncReadExt, AsyncWriteExt};
         let mut stream = tokio::net::TcpStream::connect(("127.0.0.1", self.port))
             .await
             .unwrap();
+        let condition = tag.map_or(String::new(), |t| format!("If-None-Match: {t}\r\n"));
         let request = format!(
-            "GET {path} HTTP/1.1\r\nHost: 127.0.0.1:{}\r\nAuthorization: {}\r\nOrigin: {}\r\nConnection: close\r\n\r\n",
+            "GET {path} HTTP/1.1\r\nHost: 127.0.0.1:{}\r\nAuthorization: {}\r\nOrigin: {}\r\n{condition}Connection: close\r\n\r\n",
             self.port, self.session, self.origin
         );
         stream.write_all(request.as_bytes()).await.unwrap();
@@ -339,6 +345,37 @@ async fn the_images_below_assets_of_a_container_are_handed_on_sealed_and_nothing
         assert!(lower.contains("cache-control: no-store"), "{head}");
         assert_eq!(body, bytes, "{query}");
     }
+
+    // A file replaced by hand under the same name is no event of the vault: the page asks again with the tag it holds.
+    // The same bytes answer 304 (no body); other bytes of the same length (a copy may keep the old time of the file)
+    // answer 200 with the new picture and a new tag.
+    let png_path = "/api/tasks/asset?kind=task&id=lib.nvim/alpha&file=assets/p.png";
+    let tag_of = |head: &str| -> String {
+        head.lines()
+            .find_map(|l| {
+                let (name, value) = l.split_once(':')?;
+                name.eq_ignore_ascii_case("etag")
+                    .then(|| value.trim().to_owned())
+            })
+            .unwrap_or_else(|| panic!("an ETag: {head}"))
+    };
+    let (head, _) = hub.get_bytes(png_path).await;
+    let first = tag_of(&head);
+    let (head, body) = hub.get_bytes_if(png_path, Some(&first)).await;
+    assert!(head.starts_with("HTTP/1.1 304"), "the same bytes: {head}");
+    assert!(body.is_empty(), "a 304 has no body");
+    let other: &[u8] = b"\x89PNG\r\n\x1a\nnot rEally";
+    assert_eq!(
+        other.len(),
+        png.len(),
+        "the same length: only the bytes tell"
+    );
+    std::fs::write(task.join("assets").join("p.png"), other).unwrap();
+    let (head, body) = hub.get_bytes_if(png_path, Some(&first)).await;
+    assert!(head.starts_with("HTTP/1.1 200"), "other bytes: {head}");
+    assert_eq!(body, other, "the new picture");
+    assert_ne!(tag_of(&head), first, "and a new tag");
+    std::fs::write(task.join("assets").join("p.png"), png).unwrap();
 
     // A meeting made through ops, then in its folder form with a cover.
     let made = hub
