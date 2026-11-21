@@ -198,7 +198,7 @@ pnpm web:build && PLAYWRIGHT_BROWSERS_PATH="$PWD/node_modules/.cache/ms-playwrig
 - **Browser Support** (geht vor `widely`): Chrome/Edge 86+ voll, Firefox 50+ und Safari 11.1+ nur lesend (README,
   Tabelle "Which browser does what"; geprüft von `ui/e2e-web/engines.spec.ts` und `readonly.spec.ts`). `browserslist`
   in `ui/package.json` nennt genau diese Matrix. Ein neueres Feature nur mit Feature-Erkennung und Rückfall, der die
-  Matrix weiter trägt; kein Feature, das sie bricht, auch wenn es `widely` ist.
+  Matrix weiter trägt; kein Feature, das sie bricht, auch wenn es `widely` ist. Polyfills, wo noch genutzte Browser sie brauchen (lieber einer zu viel), laufen nur nach der Prüfung: dynamisch per `import()`, in einer `file://`-Seite mitgebündelt (rules-vault `BASE-02`).
 - Bewusst behalten (keepWhen: Matrix mit Chrome 86): `[...xs].sort()` / `slice().sort()` statt `toSorted()`
   (Chrome 110) und `new Promise` statt `Promise.withResolvers()` (Chrome 119). `legacy-scan` meldet sie (CI-Job `ui`,
   nur Information); erst umstellen, wenn die Matrix angehoben ist.
