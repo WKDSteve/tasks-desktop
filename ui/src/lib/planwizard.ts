@@ -109,7 +109,10 @@ export function targetTitle(form: PlanForm, fallback: string): string {
 /**
  * The `new` operation of the target task made with the plan `planId`: in the area of the plan file, in the plan and
  * its last phase (a project: in the project). With `planId` empty it is the bare `new` of a dry run, which only asks
- * the id: the engine's dry run does not see the plan the same request would make, so it would refuse the plan field.
+ * the id. The two name each other (the plan's `target` is the task, the task's `plan` is the plan) and the engine
+ * gives both ids (slug of the title, `-2` on a clash): an operation cannot refer to the id an earlier one of the same
+ * request gets, so the dry run asks both ids first and the real run writes each into the other. (Since tasks.nvim
+ * 387204a the engine's dry run would accept the plan field; what keeps the two steps is the ids, not the engine.)
  */
 export function targetTaskOp(form: PlanForm, title: string, planId = ''): Op {
   const phases = parsePhases(form.phases);

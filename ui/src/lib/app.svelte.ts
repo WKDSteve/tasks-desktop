@@ -1970,7 +1970,8 @@ export class App {
    */
   async previewPlan(form: PlanForm, signal?: AbortSignal): Promise<PlanPreview> {
     if (form.title.trim() === '' || form.area === '' || this.readOnly) return { kind: 'unknown' };
-    // A target task made with the plan: the same dry run asks the id it would get (a bare `new`, see `targetTaskOp`).
+    // A target task made with the plan: the same dry run asks the id it would get (a bare `new`: the plan and the task
+    // name each other, and only the engine knows both ids; see `targetTaskOp`).
     const target = form.targetNew ? this.planTargetTitle(form) : '';
     if (form.targetNew && target === '') return { kind: 'unknown' };
     const ops = form.targetNew ? [planOp(form), targetTaskOp(form, target)] : [planOp(form)];
