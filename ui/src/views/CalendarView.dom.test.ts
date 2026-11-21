@@ -25,7 +25,8 @@ async function settle(): Promise<void> {
 
 /** The calendar on a vault with one task without a date and one due today. */
 async function show(overrides: Parameters<typeof make>[0] = {}): Promise<{ m: Made; root: HTMLElement; today: string }> {
-  const m = make({ token: 't', ...overrides });
+  // The page counts its day from its own clock: here the system time the cases set (2026-11-18).
+  const m = make({ token: 't', now: Date.now(), ...overrides });
   made = m;
   const today = m.app.today;
   m.hub.doc = snapshot([task('pub/loose', { title: 'Loose one', etag: 'e1' }), task('pub/dated', { title: 'Dated one', due: today, etag: 'e1' })]);
