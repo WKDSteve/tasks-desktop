@@ -20,6 +20,7 @@
     type LevelRow,
   } from '../lib/paths';
   import { markHidden } from '../lib/text';
+  import { levelWord, type LevelWord } from './pathLevelsWords';
 
   let {
     app,
@@ -36,6 +37,7 @@
     onclose: () => void;
   } = $props();
   const t = (key: Key, params: Record<string, string | number> = {}) => translate(app.lang, key, params);
+  const w = (key: LevelWord, params: Record<string, string | number> = {}) => levelWord(app.lang, key, params);
 
   // The form starts from the levels as the engine read them; it is not reset by a read of the path while it is open
   // (the person's typing stays), only by opening it again.
@@ -86,18 +88,18 @@
   }
 </script>
 
-<form class="levels-form" data-hint={t('hint.form.paths.levels')} aria-label={t('paths.levels.form')} data-levels-form onsubmit={(e) => void save(e)}>
-  <p class="hint">{t('paths.levels.hint')}</p>
+<form class="levels-form" data-hint={w('hint.form')} aria-label={t('paths.levels.form')} data-levels-form onsubmit={(e) => void save(e)}>
+  <p class="hint">{w('hint')}</p>
   {#if rows.length === 0}
-    <p class="none">{t('paths.levels.empty')}</p>
+    <p class="none">{w('empty')}</p>
   {/if}
   <ol class="rows">
     {#each rows as row, i (i)}
       <li class="row" data-level-row={i + 1}>
         <fieldset>
           <legend>{t('paths.level', { n: i + 1 })}</legend>
-          <span class="field threshold" data-hint={t('hint.form.paths.levels.threshold')}>
-            <label for="level-threshold-{i}">{t('paths.levels.threshold')}</label>
+          <span class="field threshold" data-hint={w('hint.threshold')}>
+            <label for="level-threshold-{i}">{w('threshold')}</label>
             <span class="pair">
               <input
                 id="level-threshold-{i}"
@@ -109,58 +111,58 @@
                 aria-invalid={invalid === i ? 'true' : undefined}
                 aria-describedby={invalid === i ? `level-invalid-${i}` : undefined}
               />
-              <select aria-label={t('paths.levels.unit')} bind:value={row.unit}>
+              <select aria-label={w('unit')} bind:value={row.unit}>
                 <option value="xp">XP</option>
                 <option value="percent">%</option>
               </select>
             </span>
-            {#if invalid === i}<span id="level-invalid-{i}" class="missing" role="alert">{t('paths.levels.threshold_invalid')}</span>{/if}
+            {#if invalid === i}<span id="level-invalid-{i}" class="missing" role="alert">{w('threshold_invalid')}</span>{/if}
           </span>
-          <span class="field" data-hint={t('hint.form.paths.levels.name')}>
-            <label for="level-name-{i}">{t('paths.levels.name')}</label>
+          <span class="field" data-hint={w('hint.name')}>
+            <label for="level-name-{i}">{w('name')}</label>
             <input id="level-name-{i}" type="text" maxlength={LEVEL_NAME_MAX} bind:value={row.name} />
           </span>
-          <span class="field" data-hint={t('hint.form.paths.levels.badge')}>
-            <label for="level-badge-{i}">{t('paths.levels.badge')}</label>
+          <span class="field" data-hint={w('hint.badge')}>
+            <label for="level-badge-{i}">{w('badge')}</label>
             <select id="level-badge-{i}" bind:value={row.badge}>
-              <option value="">{t('paths.levels.no_badge')}</option>
+              <option value="">{w('no_badge')}</option>
               {#each badgeChoices(row) as file (file)}
                 <option value={file}>{fileName(file)}</option>
               {/each}
             </select>
           </span>
-          <span class="field" data-hint={t('hint.form.paths.levels.reward')}>
-            <label for="level-reward-{i}">{t('paths.levels.reward')}</label>
+          <span class="field" data-hint={w('hint.reward')}>
+            <label for="level-reward-{i}">{w('reward')}</label>
             <input id="level-reward-{i}" type="text" maxlength={LEVEL_REWARD_MAX} bind:value={row.reward} />
           </span>
           <span class="actions">
-            <button type="button" aria-label={t('paths.levels.up', { n: i + 1 })} disabled={i === 0} onclick={() => move(i, -1)}>↑</button>
-            <button type="button" aria-label={t('paths.levels.down', { n: i + 1 })} disabled={i === rows.length - 1} onclick={() => move(i, 1)}>↓</button>
-            <button type="button" aria-label={t('paths.levels.remove', { n: i + 1 })} onclick={() => remove(i)}>{t('paths.levels.remove_short')}</button>
+            <button type="button" aria-label={w('up', { n: i + 1 })} disabled={i === 0} onclick={() => move(i, -1)}>↑</button>
+            <button type="button" aria-label={w('down', { n: i + 1 })} disabled={i === rows.length - 1} onclick={() => move(i, 1)}>↓</button>
+            <button type="button" aria-label={w('remove', { n: i + 1 })} onclick={() => remove(i)}>{w('remove_short')}</button>
           </span>
         </fieldset>
       </li>
     {/each}
   </ol>
   <p>
-    <button type="button" onclick={add} disabled={rows.length >= LEVELS_MAX}>{t('paths.levels.add')}</button>
+    <button type="button" onclick={add} disabled={rows.length >= LEVELS_MAX}>{w('add')}</button>
   </p>
   {#if badges.length === 0}
-    <p class="hint">{t('paths.levels.no_badges')}</p>
+    <p class="hint">{w('no_badges')}</p>
   {/if}
-  <fieldset class="done" data-hint={t('hint.form.paths.levels.done')}>
-    <legend>{t('paths.levels.done')}</legend>
-    <label class="check"><input type="checkbox" bind:checked={done.on} data-levels-done />{t('paths.levels.done_on')}</label>
+  <fieldset class="done" data-hint={w('hint.done')}>
+    <legend>{w('done')}</legend>
+    <label class="check"><input type="checkbox" bind:checked={done.on} data-levels-done />{w('done_on')}</label>
     {#if done.on}
       <span class="field">
-        <label for="level-done-reward">{t('paths.levels.reward')}</label>
+        <label for="level-done-reward">{w('reward')}</label>
         <input id="level-done-reward" type="text" maxlength={LEVEL_REWARD_MAX} bind:value={done.reward} />
       </span>
     {/if}
   </fieldset>
   <span class="buttons">
-    <button type="submit" class="primary" aria-disabled={busy ? 'true' : undefined}>{t('paths.levels.save')}</button>
-    <button type="button" onclick={onclose}>{t('paths.levels.cancel')}</button>
+    <button type="submit" class="primary" aria-disabled={busy ? 'true' : undefined}>{w('save')}</button>
+    <button type="button" onclick={onclose}>{w('cancel')}</button>
   </span>
 </form>
 
