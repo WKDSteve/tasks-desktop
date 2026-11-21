@@ -1,7 +1,7 @@
 <script lang="ts" generics="Extra extends Record<string, unknown> = Record<never, never>">
   // A view or dialog that most sessions never open, loaded when it is first wanted (`when`), and kept from then on: a
   // dialog that goes away with its element would not give the focus back.
-  import type { Component } from 'svelte';
+  import { untrack, type Component } from 'svelte';
   import type { App } from '../lib/app.svelte';
   import { translate } from '../lib/i18n';
 
@@ -13,7 +13,10 @@
     onfailed,
   }: {
     app: App;
-    load: () => Promise<{ default: Component<{ app: App } & Extra> }>;
+    /** A `loader` (`./loader.ts`) that has its module already is drawn at once, in the frame that wanted it. */
+    load: (() => Promise<{ default: Component<{ app: App } & Extra> }>) & {
+      loaded?: () => { default: Component<{ app: App } & Extra> } | undefined;
+    };
     when?: boolean;
     /** What the loaded component takes besides `app` (a dialog whose state the page holds: `open`, `onclose`). */
     extra?: Extra;
@@ -21,7 +24,10 @@
     onfailed?: () => void;
   } = $props();
 
-  let Loaded = $state.raw<Component<{ app: App } & Extra> | null>(null);
+  // A module that has come is drawn without the turn the promise would take, but only once it is wanted: a dialog is
+  // not drawn before it is opened.
+  const ready = () => (when ? (load.loaded?.()?.default ?? null) : null);
+  let Loaded = $state.raw<Component<{ app: App } & Extra> | null>(untrack(ready));
   // The hub may have been stopped or replaced since the page came (the name of a chunk is that of its build): only
   // loading the page anew helps, and the page says so instead of staying empty.
   let failed = $state(false);
@@ -29,6 +35,11 @@
     if (!when || Loaded) return;
     // Wanted (again): a notice of an earlier attempt goes, this one writes its own.
     failed = false;
+    const at = untrack(ready);
+    if (at) {
+      Loaded = at;
+      return;
+    }
     load().then(
       (module) => {
         Loaded = module.default;

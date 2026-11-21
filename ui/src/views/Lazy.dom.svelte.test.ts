@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { make } from '../lib/appDouble';
 import LazyProbe from '../lib/fixtures/LazyProbe.svelte';
 import Lazy from './Lazy.svelte';
+import { loader } from './loader';
 
 type Made = ReturnType<typeof make>;
 
@@ -95,5 +96,62 @@ describe('Lazy, a chunk that does not come', () => {
     d.page.open = true;
     await settle();
     expect(d.loads()).toBe(2);
+  });
+});
+
+describe('Lazy with a loader that has its module already', () => {
+  it('draws the part in the flush that wanted it, without waiting for a promise', async () => {
+    made = make({ token: 't' });
+    const load = loader(() => Promise.resolve({ default: LazyProbe }));
+    await load();
+    const target = document.createElement('div');
+    document.body.append(target);
+    mounted = mount(Lazy as never, {
+      target,
+      props: { app: made.app, load, extra: { open: true, onclose: () => undefined } },
+    });
+    flushSync();
+    // No `settle`: the frame that shows the heading of a view shows the view too.
+    expect(target.querySelector('[data-testid="probe"]')?.textContent).toContain('open');
+  });
+
+  it('draws a dialog whose module has come only once it is wanted, and then in the same flush', async () => {
+    made = make({ token: 't' });
+    const load = loader(() => Promise.resolve({ default: LazyProbe }));
+    await load();
+    const page = $state({ open: false });
+    const target = document.createElement('div');
+    document.body.append(target);
+    mounted = mount(Lazy as never, {
+      target,
+      props: {
+        app: made.app,
+        load,
+        get when() {
+          return page.open;
+        },
+        extra: { open: true, onclose: () => undefined },
+      },
+    });
+    flushSync();
+    expect(target.querySelector('[data-testid="probe"]')).toBeNull();
+    page.open = true;
+    flushSync();
+    expect(target.querySelector('[data-testid="probe"]')).not.toBeNull();
+  });
+
+  it('waits for a loader that has not loaded yet, as for any other', async () => {
+    made = make({ token: 't' });
+    const load = loader(() => Promise.resolve({ default: LazyProbe }));
+    const target = document.createElement('div');
+    document.body.append(target);
+    mounted = mount(Lazy as never, {
+      target,
+      props: { app: made.app, load, extra: { open: true, onclose: () => undefined } },
+    });
+    flushSync();
+    expect(target.querySelector('[data-testid="probe"]')).toBeNull();
+    await settle();
+    expect(target.querySelector('[data-testid="probe"]')).not.toBeNull();
   });
 });

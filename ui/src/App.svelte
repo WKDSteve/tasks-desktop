@@ -8,9 +8,7 @@
   import { ago, hasKey, translate, type Key } from './lib/i18n';
   import Today from './views/Today.svelte';
   import ListView from './views/ListView.svelte';
-  import BoardView from './views/BoardView.svelte';
   import InboxView from './views/InboxView.svelte';
-  import ViewsView from './views/ViewsView.svelte';
   import TaskDialog from './views/TaskDialog.svelte';
   import { floating } from './lib/floating';
   import ConflictsButton from './views/ConflictsButton.svelte';
@@ -41,6 +39,7 @@
   import HubNotice from './views/HubNotice.svelte';
   import Toast from './views/Toast.svelte';
   import Lazy from './views/Lazy.svelte';
+  import { loader, preload } from './views/loader';
 
   let { app, code }: { app: App; code: string | null } = $props();
 
@@ -61,6 +60,16 @@
   const apart = (view: View) => ({
     href: routeHref(location, { view }),
     ...(app.canDetach ? { onopennew: () => app.openViewApart(view) } : {}),
+  });
+  // The board and the views: opened often, but rarely at the start (Today and List are). Their chunk comes when the
+  // page is idle after its start, so that the first open draws them in the frame of their heading (`loader`).
+  const loadViews = loader(() => import('./views/ViewsView.svelte'));
+  const loadBoard = loader(() => import('./views/BoardView.svelte'));
+  let preloaded = false;
+  $effect(() => {
+    if (app.phase !== 'ready' || preloaded) return;
+    preloaded = true;
+    preload([loadViews, loadBoard]);
   });
   let chordTimer: ReturnType<typeof setTimeout> | undefined;
   let searchBox = $state<HTMLInputElement | null>(null);
@@ -953,7 +962,7 @@
           <Lazy {app} load={() => import('./views/PlanView.svelte')} />
         {:else if app.view === 'board'}
           <!-- The board is the built-in view of the views; an engine that keeps no views shows it alone. -->
-          {#if app.can('views')}<ViewsView {app} board />{:else}<BoardView {app} />{/if}
+          {#if app.can('views')}<Lazy {app} load={loadViews} extra={{ board: true }} />{:else}<Lazy {app} load={loadBoard} />{/if}
         {:else if app.view === 'inbox'}
           <InboxView {app} />
         {:else if app.view === 'abnahme'}
@@ -971,7 +980,7 @@
         {:else if app.view === 'done'}
           <Lazy {app} load={() => import('./views/FinishedView.svelte')} />
         {:else if app.view === 'views'}
-          <ViewsView {app} />
+          <Lazy {app} load={loadViews} />
         {:else if app.view === 'repos'}
           <Lazy {app} load={() => import('./views/ReposView.svelte')} />
         {:else if app.view === 'repostatus'}
