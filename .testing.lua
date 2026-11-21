@@ -11,32 +11,67 @@
 -- `pnpm web:e2e`, `testing sheets run --all`), the web engine against nvim and the phone page, which need Chrome, the
 -- pinned engine and the mobile lock; the CI workflows run them on the runner.
 
+-- On Windows pnpm is a shell script libuv cannot spawn, so the step starts the pnpm.cmd shim; elsewhere (a quick run in
+-- WSL2) it is `pnpm`. tools/check-testing-lua.lua holds this to both systems.
+local pnpm = package.config:sub(1, 1) == "\\" and "pnpm.cmd" or "pnpm"
+
 return {
   ci = {
     default = "full",
     profiles = {
-      fast = { "fmt", "control-chars", "process-starts", "color-literals" },
+      fast = { "fmt", "control-chars", "process-starts", "color-literals", "testing-lua" },
       quick = { "fast", "ui-install", "ui-check", "ui-test" },
       full = { "quick", "ui-build", "clippy", "rust-test" },
     },
     steps = {
       fmt = { run = { "cargo", "fmt", "--check" } },
+      -- this file itself: the pnpm steps name the right program on each system
+      ["testing-lua"] = {
+        run = {
+          "nvim",
+          "-n",
+          "-i",
+          "NONE",
+          "--headless",
+          "-u",
+          "NONE",
+          "-l",
+          "tools/check-testing-lua.lua",
+        },
+        timeout = "1m",
+      },
       ["control-chars"] = { run = { "python", "tools/check-control-chars.py" }, timeout = "2m" },
       ["process-starts"] = { run = { "python", "tools/check-process-starts.py" }, timeout = "2m" },
       ["color-literals"] = {
-        run = { "python", "tools/check-color-literals.py", "--root", "ui/src", "--tokens", "ui/src/palette.css" },
+        run = {
+          "python",
+          "tools/check-color-literals.py",
+          "--root",
+          "ui/src",
+          "--tokens",
+          "ui/src/palette.css",
+        },
         timeout = "2m",
       },
       ["ui-install"] = {
-        run = { "pnpm.cmd", "--dir", "ui", "install", "--frozen-lockfile", "--prefer-offline" },
+        run = { pnpm, "--dir", "ui", "install", "--frozen-lockfile", "--prefer-offline" },
         timeout = "10m",
       },
-      ["ui-check"] = { run = { "pnpm.cmd", "--dir", "ui", "check" }, timeout = "10m" },
-      ["ui-test"] = { run = { "pnpm.cmd", "--dir", "ui", "test" }, timeout = "15m" },
+      ["ui-check"] = { run = { pnpm, "--dir", "ui", "check" }, timeout = "10m" },
+      ["ui-test"] = { run = { pnpm, "--dir", "ui", "test" }, timeout = "15m" },
       -- the interface is part of the hub binary (crates/tasks-hub/build.rs), so it is built before cargo reads it
-      ["ui-build"] = { run = { "pnpm.cmd", "--dir", "ui", "build" }, timeout = "10m" },
+      ["ui-build"] = { run = { pnpm, "--dir", "ui", "build" }, timeout = "10m" },
       clippy = {
-        run = { "cargo", "clippy", "--workspace", "--all-targets", "--locked", "--", "-D", "warnings" },
+        run = {
+          "cargo",
+          "clippy",
+          "--workspace",
+          "--all-targets",
+          "--locked",
+          "--",
+          "-D",
+          "warnings",
+        },
         timeout = "40m",
       },
       ["rust-test"] = {
