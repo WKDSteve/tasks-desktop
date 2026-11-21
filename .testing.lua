@@ -1,8 +1,50 @@
 -- .testing.lua -- what the test sheets of this repository run against (testing.nvim, docs/SHEETS.md there). The sheets
 -- in TESTS/sheets only name an app; how it starts is here, under testing.nvim's trust gate. tasks-desktop has no Lua
 -- spec: `testing sheets run --all` runs the sheets.
+--
+-- `ci`: the pipeline of `testing ci` / `testing ci commit` (testing.nvim docs/CI.md, "Native apps") as process steps, so
+-- a commit is checked in a worktree of its own and never in the checkout other sessions work in. tasks-desktop has no
+-- Lua spec, so `--quick` has no spec selection to make: the quick profile is the part of the pipeline that is cheap and
+-- reaches every diff (format, the repository's own checks, svelte-check, vitest). The full profile adds clippy and the
+-- Rust tests. A worktree has no `target/` and no `node_modules`: start the run with CARGO_TARGET_DIR set to the target
+-- of the main checkout (cargo locks it), pnpm links from its store. Not in a profile: the browser tests (`pnpm e2e`,
+-- `pnpm web:e2e`, `testing sheets run --all`), the web engine against nvim and the phone page, which need Chrome, the
+-- pinned engine and the mobile lock; the CI workflows run them on the runner.
 
 return {
+  ci = {
+    default = "full",
+    profiles = {
+      fast = { "fmt", "control-chars", "process-starts", "color-literals" },
+      quick = { "fast", "ui-install", "ui-check", "ui-test" },
+      full = { "quick", "ui-build", "clippy", "rust-test" },
+    },
+    steps = {
+      fmt = { run = { "cargo", "fmt", "--check" } },
+      ["control-chars"] = { run = { "python", "tools/check-control-chars.py" }, timeout = "2m" },
+      ["process-starts"] = { run = { "python", "tools/check-process-starts.py" }, timeout = "2m" },
+      ["color-literals"] = {
+        run = { "python", "tools/check-color-literals.py", "--root", "ui/src", "--tokens", "ui/src/palette.css" },
+        timeout = "2m",
+      },
+      ["ui-install"] = {
+        run = { "pnpm", "--dir", "ui", "install", "--frozen-lockfile", "--prefer-offline" },
+        timeout = "10m",
+      },
+      ["ui-check"] = { run = { "pnpm", "--dir", "ui", "check" }, timeout = "10m" },
+      ["ui-test"] = { run = { "pnpm", "--dir", "ui", "test" }, timeout = "15m" },
+      -- the interface is part of the hub binary (crates/tasks-hub/build.rs), so it is built before cargo reads it
+      ["ui-build"] = { run = { "pnpm", "--dir", "ui", "build" }, timeout = "10m" },
+      clippy = {
+        run = { "cargo", "clippy", "--workspace", "--all-targets", "--locked", "--", "-D", "warnings" },
+        timeout = "40m",
+      },
+      ["rust-test"] = {
+        run = { "cargo", "test", "--workspace", "--locked", "--exclude", "hub-testkit" },
+        timeout = "40m",
+      },
+    },
+  },
   sheets = {
     -- playwright-core comes at the version of the e2e tests from ui/ (ui/package.json), the Chrome of the machine.
     browser = { playwright_dir = "ui", channel = "chrome" },
