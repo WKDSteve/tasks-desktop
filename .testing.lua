@@ -28,13 +28,13 @@ return {
         timeout = "2m",
       },
       ["ui-install"] = {
-        run = { "pnpm", "--dir", "ui", "install", "--frozen-lockfile", "--prefer-offline" },
+        run = { "pnpm.cmd", "--dir", "ui", "install", "--frozen-lockfile", "--prefer-offline" },
         timeout = "10m",
       },
-      ["ui-check"] = { run = { "pnpm", "--dir", "ui", "check" }, timeout = "10m" },
-      ["ui-test"] = { run = { "pnpm", "--dir", "ui", "test" }, timeout = "15m" },
+      ["ui-check"] = { run = { "pnpm.cmd", "--dir", "ui", "check" }, timeout = "10m" },
+      ["ui-test"] = { run = { "pnpm.cmd", "--dir", "ui", "test" }, timeout = "15m" },
       -- the interface is part of the hub binary (crates/tasks-hub/build.rs), so it is built before cargo reads it
-      ["ui-build"] = { run = { "pnpm", "--dir", "ui", "build" }, timeout = "10m" },
+      ["ui-build"] = { run = { "pnpm.cmd", "--dir", "ui", "build" }, timeout = "10m" },
       clippy = {
         run = { "cargo", "clippy", "--workspace", "--all-targets", "--locked", "--", "-D", "warnings" },
         timeout = "40m",
