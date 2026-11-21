@@ -2458,8 +2458,9 @@ const de: Record<PageKey, string> = {
   'mark.learning': 'Lernen',
   'hint.learning': 'Ein Lern-Task: Arbeit, um zu lernen und besser zu werden, nicht aus Bedarf (die Kategorie learning). Der Filter der Liste findet sie unter Weitere Filter > Kategorie.',
   'menu.hide_learning': 'Lern-Tasks in den Ansichten und im Überblick ausblenden',
-  'hint.item.menu.hide_learning': 'Die gespeicherten Ansichten und die nächsten Tasks des Überblicks (für einen Agenten, die Alternativen) lassen die Tasks der Kategorie learning weg. Die Liste, die Zahlen des Überblicks und was auf dich wartet behalten sie.',
+  'hint.item.menu.hide_learning': 'Die gespeicherten Ansichten und die nächsten Tasks des Überblicks (für einen Agenten, die Alternativen) lassen die Tasks der Kategorie learning weg; eine Engine, die sie auslassen kann, wählt auch den nächsten Task ohne sie. Die Liste, die Zahlen des Überblicks und was auf dich wartet behalten sie.',
   'today.next.learning': 'Der nächste Task der Engine ist ein Lern-Task. Lern-Tasks sind hier ausgeblendet (Optionen > Standard-Einstellungen): die anderen Tasks darunter nicht.',
+  'today.next.left_out': '{n} Lern-Task(s) ausgelassen.',
   // Meetings (lib/meetings.ts, views/MeetingForm.svelte, views/MeetingPage.svelte).
   'menu.meeting': 'Neues Meeting ...',
   'hint.item.menu.meeting': 'Ein eigenes Meeting (eine Datei in MEETINGS/ der Area): Datum, Uhrzeit, Ort oder Online-Link, Teilnehmer, Benachrichtigung; es kann zu mehreren Tasks gehören.',

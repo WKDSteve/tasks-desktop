@@ -8116,6 +8116,19 @@ test('a learning task carries its mark in the list and on the board, the filter 
   await openDefaults();
   await expect(hide).toBeChecked();
   await defaults.getByRole('button', { name: 'Close' }).click();
+  // The overview asks the engine for the next task without them (capability `next_not_category`): the hub passes the
+  // category on and the engine takes it, so no next task there is a learning one and no note says so.
+  const nextRead = page.waitForResponse(
+    (r) => new URL(r.url()).pathname === '/api/tasks/next' && new URL(r.url()).searchParams.get('not_category') === 'learning',
+  );
+  await chooseView(page, 'View', 'Today');
+  const answer = await nextRead;
+  expect(answer.status()).toBe(200);
+  const doc = (await answer.json()) as { task?: { id: string }; left_out?: number };
+  expect(doc.task?.id).not.toBe(`lib.nvim/${slug}`);
+  expect(doc.left_out ?? 0).toBeGreaterThan(0);
+  await expect(page.locator('[data-learning-note]')).toHaveCount(0);
+  await expect(page.locator('[data-left-out]')).toContainText('learning task(s) left out');
   removeFile(file);
 });
 

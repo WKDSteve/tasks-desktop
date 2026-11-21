@@ -60,6 +60,10 @@ test('a request the Rust hub refuses never reaches the engine', async () => {
     ['next?n=11', 400, 'bad_query'],
     ['next?n=x', 400, 'bad_query'],
     ['next?area=.hidden', 400, 'bad_query'],
+    ['next?not_category=', 400, 'bad_query'],
+    ['next?not_category=Learning', 400, 'bad_query'],
+    ['next?not_category=learning..docs', 400, 'bad_query'],
+    ['next?not_category=learn_ing', 400, 'bad_query'],
     ['order?sort=random', 400, 'bad_sort'],
     ['plan_for?id=a/b&direction=sideways', 400, 'bad_direction'],
     ['done_preview', 400, 'bad_id'],
@@ -88,6 +92,8 @@ test('a valid read passes its parameters to the engine and the document back unc
   assert.equal(r.headers.get('content-type'), 'application/json');
   assert.equal(await r.text(), doc, 'the bytes of the engine, not a re-encoding');
   await h.get('next?n=3&actor=cdx&area=lib.nvim');
+  // the categories to leave out, joined by dots, become a list (capability `next_not_category`)
+  await h.get('next?n=5&not_category=learning.docs');
   await h.get('order?sort=roi&area=lib.nvim');
   await h.get('plan_for?id=a/b');
   await h.get('finished?area=a&plan=a/p&since=2026-01-01&until=2026-02-01&limit=5&offset=10');
@@ -99,6 +105,7 @@ test('a valid read passes its parameters to the engine and the document back unc
   assert.deepEqual(h.calls, [
     ['task', { params: { id: 'lib.nvim/alpha' } }],
     ['next', { params: { n: 3, actor: 'cdx', area: 'lib.nvim' } }],
+    ['next', { params: { not_category: ['learning', 'docs'], n: 5 } }],
     ['order', { params: { sort: 'roi', area: 'lib.nvim' } }],
     ['plan_for', { params: { id: 'a/b', direction: 'needs' } }],
     ['finished', { params: { area: 'a', plan: 'a/p', since: '2026-01-01', until: '2026-02-01', limit: 5, offset: 10 } }],

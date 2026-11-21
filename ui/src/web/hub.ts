@@ -495,9 +495,19 @@ export function createWebHub(deps: HubDeps): WebHub {
         return typeof id === 'string' ? passOn('meeting', { id }) : id;
       }
       case 'next': {
-        const q = parseQuery(query, ['n', 'actor', 'area']);
+        const q = parseQuery(query, ['n', 'actor', 'area', 'not_category']);
         if (typeof q === 'string') return errorBody(400, 'bad_query', q);
         const params: Record<string, unknown> = {};
+        // Categories to leave out (capability `next_not_category`): words of small letters joined by dots, as the hub
+        // takes them; which words are categories is the engine's to say.
+        const without = q.get('not_category');
+        if (without !== undefined) {
+          const words = without.split('.');
+          if (words.length > 16 || !words.every((w) => /^[a-z]{1,32}$/.test(w))) {
+            return errorBody(400, 'bad_query', 'not_category is words of small letters, joined by dots');
+          }
+          params['not_category'] = words;
+        }
         const n = q.get('n');
         if (n !== undefined) {
           if (!/^[0-9]+$/.test(n) || Number(n) > 10) return errorBody(400, 'bad_query', 'n is 0 to 10');

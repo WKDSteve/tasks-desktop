@@ -2457,8 +2457,9 @@ const en = {
   'mark.learning': 'learning',
   'hint.learning': 'A learning task: work done to learn and get better, not out of need (the category learning). The filter of the list finds them under More filters > Category.',
   'menu.hide_learning': 'Hide learning tasks in the views and the overview',
-  'hint.item.menu.hide_learning': 'The saved views and the next tasks of the overview (for an agent, the alternatives) leave out the tasks of the category learning. The list, the numbers of the overview and what waits for you keep them.',
+  'hint.item.menu.hide_learning': 'The saved views and the next tasks of the overview (for an agent, the alternatives) leave out the tasks of the category learning; an engine that can leave them out picks the next task without them too. The list, the numbers of the overview and what waits for you keep them.',
   'today.next.learning': 'The next task of the engine is a learning task. Learning tasks are hidden here (Options > Defaults): the other tasks below are not.',
+  'today.next.left_out': '{n} learning task(s) left out.',
   // Meetings (lib/meetings.ts, views/MeetingForm.svelte, views/MeetingPage.svelte).
   'menu.meeting': 'New meeting ...',
   'hint.item.menu.meeting': 'A meeting of its own (a file in MEETINGS/ of the area): date, time, place or address to join, participants, notification; it can belong to several tasks.',

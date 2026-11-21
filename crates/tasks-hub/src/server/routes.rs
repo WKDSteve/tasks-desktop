@@ -191,11 +191,25 @@ pub(super) async fn next(
     caller: Option<axum::Extension<Caller>>,
     RawQuery(query): RawQuery,
 ) -> Response {
-    let params = match parse_query(query.as_deref(), &["n", "actor", "area"]) {
+    let params = match parse_query(query.as_deref(), &["n", "actor", "area", "not_category"]) {
         Ok(p) => p,
         Err(why) => return error_body(StatusCode::BAD_REQUEST, "bad_query", why),
     };
     let mut request = serde_json::Map::new();
+    if let Some(words) = params.get("not_category") {
+        match not_category(words) {
+            Some(list) => {
+                request.insert("not_category".to_owned(), json!(list));
+            }
+            None => {
+                return error_body(
+                    StatusCode::BAD_REQUEST,
+                    "bad_query",
+                    "not_category is words of small letters, joined by dots",
+                )
+            }
+        }
+    }
     let mut asked_n = None;
     if let Some(n) = params.get("n") {
         match n.parse::<u8>() {
@@ -240,6 +254,18 @@ pub(super) async fn next(
         Ok(text) => json_response(StatusCode::OK, text, None),
         Err(response) => response,
     }
+}
+
+/// The most categories `not_category` of `next` names (the engine knows eleven).
+const NOT_CATEGORY_MAX: usize = 16;
+
+/// `not_category` of `next` (`learning`, `learning.docs`) as the list the engine takes (capability
+/// `next_not_category`), or `None` when it is not plain words: which words are categories is the engine's to say.
+fn not_category(words: &str) -> Option<Vec<&str>> {
+    let list: Vec<&str> = words.split('.').collect();
+    let plain =
+        |w: &&str| !w.is_empty() && w.len() <= 32 && w.bytes().all(|b| b.is_ascii_lowercase());
+    (list.len() <= NOT_CATEGORY_MAX && list.iter().all(plain)).then_some(list)
 }
 
 /// How many alternatives the engine proposes when it is not told (`tasks.next`).

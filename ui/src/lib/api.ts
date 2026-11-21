@@ -379,8 +379,13 @@ export class Hub extends HubClient<Snapshot> {
     return this.json<NamedLists>('/api/tasks/lists');
   }
 
-  next(): Promise<Next> {
-    return this.json<Next>('/api/tasks/next?n=5');
+  /**
+   * What to start next, five alternatives. `notCategory`: categories whose ready tasks the engine leaves out (capability
+   * `next_not_category`; the hub takes them joined by dots); none: the engine's pick over all.
+   */
+  next(notCategory: readonly string[] = []): Promise<Next> {
+    const without = notCategory.length > 0 ? `&not_category=${notCategory.map(encodeURIComponent).join('.')}` : '';
+    return this.json<Next>(`/api/tasks/next?n=5${without}`);
   }
 
   areas(): Promise<HubAreas & Areas> {

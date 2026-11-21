@@ -108,7 +108,11 @@ thing, the data class of an area.
 * `task?id=<area>/<slug>`: the id is two plain names of letters, digits,
   `.`, `_` and `-`. Nothing else reaches the engine; whether the task exists
   is the engine's answer (404).
-* `next?n=&actor=&area=`: a number from 0 to 10 and plain names.
+* `next?n=&actor=&area=&not_category=`: a number from 0 to 10 and plain
+  names; `not_category` up to 16 words of small letters joined by dots
+  (`learning.docs`), passed on as a list (which words are categories, the
+  engine says). A phone is not told `left_out`: the engine counts it over
+  the whole vault.
 * A query that is not plain, repeated or unknown is `400`. A route that
   takes no query refuses one.
 * Engine refusals keep their code (`not_found` is 404, `conflict` 409, ...),

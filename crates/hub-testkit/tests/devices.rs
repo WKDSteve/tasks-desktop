@@ -1453,6 +1453,50 @@ async fn a_phone_is_proposed_tasks_of_released_areas_when_the_vault_picks_others
 }
 
 #[tokio::test]
+async fn a_phone_may_leave_out_a_category_but_is_not_told_the_count_of_the_vault() {
+    let _one = ONE_AT_A_TIME.lock().await;
+    let r = Rig::new("next-not-category").await;
+    r.merge("snapshot", &plans_of_the_vault());
+    let brief = |id: &str| json!({ "id": id, "title": format!("Title {id}"), "status": "open" });
+    // The engine counts what it left out over the whole vault: areas the phone may not see among them.
+    r.merge(
+        "next",
+        &json!({ "left_out": 3, "by_area": {
+            "": { "task": brief("secret-area/a"), "alternatives": [] },
+            "alpha.nvim": { "task": brief("alpha.nvim/t1"), "alternatives": [] },
+        }}),
+    );
+    let (_, phone) = r.phone().await;
+    let (status, _) = r.send("GET", "/api/tasks/snapshot", &phone, "").await;
+    assert_eq!(status, 200);
+    let calls = r._dir.join("vault").join(".fake-calls-next");
+    let _ = std::fs::remove_file(&calls);
+
+    let (status, doc) = r
+        .send(
+            "GET",
+            "/api/tasks/next?n=0&not_category=learning",
+            &phone,
+            "",
+        )
+        .await;
+    assert_eq!(status, 200, "{doc}");
+    assert_eq!(doc["task"]["id"], "alpha.nvim/t1", "{doc}");
+    assert!(doc.get("left_out").is_none(), "{doc}");
+    // Every question of the phone's answer (the vault, then an area) carried the category to leave out.
+    let asked = std::fs::read_to_string(&calls).unwrap();
+    assert!(asked.lines().count() >= 2, "{asked}");
+    for line in asked.lines() {
+        assert!(line.contains(r#""not_category":["learning"]"#), "{asked}");
+    }
+    // A query that is not plain words is refused for a phone as for the PC.
+    let (status, _) = r
+        .send("GET", "/api/tasks/next?not_category=Learning", &phone, "")
+        .await;
+    assert_eq!(status, 400);
+}
+
+#[tokio::test]
 async fn a_phone_is_told_its_level_as_it_is_now() {
     let _one = ONE_AT_A_TIME.lock().await;
     let r = Rig::new("level").await;

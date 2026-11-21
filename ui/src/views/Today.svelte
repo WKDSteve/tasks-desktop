@@ -9,6 +9,7 @@
   import { hintOf, labelOf, translate, type Key } from '../lib/i18n';
   import { effortWords, laterWords } from '../lib/next';
   import { markHidden } from '../lib/text';
+  import { LEARNING } from '../lib/learning';
   import { tasksOf, type CountKey } from '../lib/counts';
   import { contextTarget } from 'appkit-ui/contextmenu';
   import { countTarget } from '../lib/context';
@@ -36,9 +37,12 @@
   // The filter of the list narrows the blocks of tasks; the next task is the engine's answer and stays.
   const filtered = $derived(narrows(app.filter));
   const shownIds = $derived(new Set(app.shown.map((x) => x.id)));
-  // Learning tasks are left out of these lists when they are hidden (Options). The next task itself is the engine's
-  // answer and stays; a note says when it is one of them.
+  // Learning tasks are left out of these lists when they are hidden (Options). An engine that can leave them out was asked
+  // without them (`App.nextWithout`) and says how many it left out; with an older one the next task itself is the
+  // engine's answer and stays, and a note says when it is one of them.
   const learning = $derived(app.hiddenLearning);
+  const askedWithout = $derived(app.learningHidden && app.nextLeftOut.includes(LEARNING));
+  const leftOut = $derived(askedWithout ? (next?.left_out ?? 0) : 0);
   const cdx = $derived((next?.cdx ?? []).filter((b) => (!filtered || shownIds.has(b.id)) && !learning.has(b.id)));
   const alternatives = $derived((next?.alternatives ?? []).filter((b) => (!filtered || shownIds.has(b.id)) && !learning.has(b.id)));
   const waiting = $derived(waitingForMe(app.shown).slice(0, 8));
@@ -356,7 +360,7 @@
             <span data-hint={hintOf(app.lang, 'hint', 'effort')}>{effortWords(app.lang, next.task.effort)}</span>
             {#if why(next.task)} · {why(next.task)}{/if}
           </p>
-          {#if learning.has(next.task.id)}<p class="muted" data-learning-note role="note">{t('today.next.learning')}</p>{/if}
+          {#if !askedWithout && learning.has(next.task.id)}<p class="muted" data-learning-note role="note">{t('today.next.learning')}</p>{/if}
           {#if alternatives.length > 0}
             <h2 class="eyebrow" data-hint={t('hint.ui.today.alternatives')}>{t('today.alternatives')}</h2>
             <ul class="plain">
@@ -387,6 +391,10 @@
           </p>
         {:else}
           <p class="muted">{t('state.loading')}</p>
+        {/if}
+        <!-- The engine's count of the learning tasks it was asked to leave out (`not_category`). -->
+        {#if leftOut > 0}
+          <p class="muted" data-left-out>{t('today.next.left_out', { n: leftOut })}</p>
         {/if}
         <!-- The engine's count of what it left out for now (a start day ahead, the next round of a routine). -->
         {#if laterWords(app.lang, next?.later)}

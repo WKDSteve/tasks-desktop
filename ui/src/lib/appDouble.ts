@@ -5,7 +5,7 @@ import type { IntentAnswer } from './intent';
 import { ApiError, type AssetAnswer, type BoardRequest, type BoardSaved, type FinishedQuery, type Hub, type HubArea, type OpsRequest, type SetupInfo, type SetupStep, type VaultList } from './api';
 import { App, type Env } from './app.svelte';
 import type { CachedList, ListStore } from './cache';
-import type { DonePreview, Groupings, MeetingDocument, MeetingEntry, MeetingParse, Meetings, Result, Snapshot, TaskDocument, TaskEntry, View, Views } from './contract';
+import type { DonePreview, Groupings, MeetingDocument, MeetingEntry, MeetingParse, Meetings, Next, Result, Snapshot, TaskDocument, TaskEntry, View, Views } from './contract';
 import { task } from './fixtures';
 import type { PrintSheet } from './export';
 import type { RemindersMail } from './reminders';
@@ -441,9 +441,13 @@ export class FakeHub {
     if (doc === undefined) throw new ApiError(404, 'not_found', `no path ${id}`);
     return doc as never;
   }
-  async next() {
+  /** The categories each question of `next` left out, in order; and what it answers (none: no task). */
+  nextAsked: string[][] = [];
+  nextAnswer: ((notCategory: readonly string[]) => Partial<Next>) | null = null;
+  async next(notCategory: readonly string[] = []) {
     this.nextCalls += 1;
-    return { alternatives: [], cdx: [], incomplete: [] };
+    this.nextAsked.push([...notCategory]);
+    return { alternatives: [], cdx: [], incomplete: [], ...this.nextAnswer?.(notCategory) } as Next;
   }
   taskSignals: AbortSignal[] = [];
   /** The body every task's document has. */

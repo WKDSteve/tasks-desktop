@@ -19,8 +19,8 @@
 //!   `finished`) is in, which then says `status: done` and `finished: true` (without it: `not_found`);
 //! * `agent_answer`: one section `## Prüfung` whose text is the `output` it was given, and a follow-up when the output
 //!   says `follow-up`; an output `broken` is refused (`invalid_argument`);
-//! * `.fake-calls-areas`, `.fake-calls-next`: every `areas` and `next` question is counted (only in a
-//!   vault with `.fake-n`);
+//! * `.fake-calls-areas`, `.fake-calls-next`: every `areas` and `next` question is counted, one line each with what it
+//!   was asked (only in a vault with `.fake-n`);
 //! * `.fake-check-ms`, `.fake-check-done`, `.fake-check-fail`: a `check` takes that long, leaves a
 //!   note when it ran to its end, or fails;
 //! * `.fake-ops-conflict`: every operation of `ops` is refused with `conflict` (the file changed
@@ -78,7 +78,8 @@ fn tasks_before(call: &Call<'_>) {
             .append(true)
             .open(base.join(format!(".fake-calls-{}", call.method)))
     {
-        let _ = writeln!(calls, "{}", call.method);
+        // One line per question, the method and what it was asked (a test reads what reached the engine).
+        let _ = writeln!(calls, "{} {}", call.method, call.params);
     }
     if call.method == "check" {
         if let Ok(text) = std::fs::read_to_string(base.join(".fake-check-ms")) {

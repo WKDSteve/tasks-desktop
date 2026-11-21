@@ -277,6 +277,19 @@ async fn next_passes_only_what_was_asked_and_with_the_right_types() {
         serde_json::from_str::<Value>(&r.body).unwrap()["echoed"],
         serde_json::json!({})
     );
+    // `not_category` goes on as the list the engine takes (capability `next_not_category`), words joined by dots.
+    for (query, list) in [
+        ("not_category=learning", serde_json::json!(["learning"])),
+        (
+            "n=5&not_category=learning.docs",
+            serde_json::json!(["learning", "docs"]),
+        ),
+    ] {
+        let r = get(&h, &format!("/api/tasks/next?{query}"), &[]).await;
+        assert_eq!(r.status, 200, "{query}: {r:?}");
+        let doc: Value = serde_json::from_str(&r.body).unwrap();
+        assert_eq!(doc["echoed"]["not_category"], list, "{query}: {doc}");
+    }
 }
 
 #[tokio::test]
@@ -410,6 +423,14 @@ async fn queries_that_are_not_plain_are_refused_before_the_engine() {
         "/api/tasks/next?n",
         "/api/tasks/next?n=%31",
         "/api/tasks/next?actor=a+b",
+        "/api/tasks/next?not_category=",
+        "/api/tasks/next?not_category=Learning",
+        "/api/tasks/next?not_category=learning..docs",
+        "/api/tasks/next?not_category=learning.",
+        "/api/tasks/next?not_category=learn_ing",
+        "/api/tasks/next?not_category=learning/docs",
+        "/api/tasks/next?not_category=a.b.c.d.e.f.g.h.i.j.k.l.m.n.o.p.q",
+        "/api/tasks/next?not_category=learning&not_category=docs",
         "/api/tasks/task?id=",
         "/api/tasks/task?id=a/.hidden",
         "/api/tasks/task?id=a/b%2fc",

@@ -190,6 +190,9 @@ import { cardRoute, parseCardFolds, withCardFolded, type CardRoute, type StatsCa
 
 /** No task: the learning tasks that are hidden while none is. */
 const NO_IDS: ReadonlySet<string> = new Set();
+/** The categories the next task is asked without (`App.nextWithout`): one list each, so that they compare by identity. */
+const NO_CATEGORIES: readonly string[] = [];
+const WITHOUT_LEARNING: readonly string[] = [LEARNING];
 
 /** The longest line of the notes the engine takes (`append_note`), in characters. */
 const NOTE_MAX = 1000;
@@ -889,6 +892,8 @@ export class App {
   #order = $state.raw<Map<string, number> | null>(null);
   #orders = 0;
   next = $state.raw<Next | null>(null);
+  /** The categories `next` was asked without (`nextWithout` when it was read). */
+  nextLeftOut = $state.raw<readonly string[]>(NO_CATEGORIES);
   /** What the parked tasks wait for, as the engine counts it (`waits`); `null` until read, or for an engine without it. */
   waits = $state.raw<Waits | null>(null);
   hubAreas = $state.raw<HubArea[]>([]);
@@ -4047,6 +4052,10 @@ export class App {
   setLearningHidden(on: boolean): void {
     this.learningHidden = on;
     safe(() => this.env.prefs.setItem('tasks-desktop.hide-learning', on ? 'on' : 'off'));
+    // An engine that leaves them out is asked again; one that cannot gives the same answer, and is not.
+    if (this.view === 'today' && this.phase === 'ready' && this.capabilities?.includes('next_not_category')) {
+      void this.loadNext();
+    }
   }
 
   /** The switch "Show XP, levels and rewards" of the learning paths, kept in this browser. */
@@ -5391,6 +5400,7 @@ export class App {
     this.snapshot = null;
     this.#order = null;
     this.next = null;
+    this.nextLeftOut = NO_CATEGORIES;
     this.nextFor = null;
     this.waits = null;
     this.waitsFor = null;
@@ -5782,11 +5792,25 @@ export class App {
     await this.write(ops, { onAnswer: this.batchAnswer(ops) });
   }
 
+  /**
+   * The categories the next task is asked without: `learning` while learning tasks are hidden and the engine can leave
+   * them out (`next_not_category`); else none, and the overview narrows the engine's answer itself, as before.
+   */
+  get nextWithout(): readonly string[] {
+    return this.learningHidden && this.capabilities?.includes('next_not_category') ? WITHOUT_LEARNING : NO_CATEGORIES;
+  }
+
   async loadNext(): Promise<void> {
-    const key = this.snapshot?.digest ?? null;
+    const without = this.nextWithout;
+    const digest = this.snapshot?.digest ?? null;
+    const key = digest === null ? null : `${digest} ${without.join('.')}`;
     if (this.next !== null && key !== null && this.nextFor === key) return;
     try {
-      this.next = await this.env.hub.next();
+      const next = await this.env.hub.next(without);
+      // An answer for a question asked before the switch changed is not the one to show.
+      if (without !== this.nextWithout) return;
+      this.next = next;
+      this.nextLeftOut = without;
       this.nextFor = key;
     } catch {
       // The old one stays.
