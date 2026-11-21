@@ -39,6 +39,23 @@ describe('the hub client and a refusal', () => {
   });
 });
 
+describe('the finished tasks', () => {
+  it('asks for the CI states as words joined by dots: a query value of the hub is plain text, without a comma', async () => {
+    const urls: string[] = [];
+    const fetchFn = (async (url: unknown) => {
+      urls.push(String(url));
+      const doc = { kind: 'tasks.finished', total: 0, offset: 0, limit: 1, items: [], undated: 0 };
+      return new Response(JSON.stringify(doc), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }) as typeof fetch;
+    const hub = new Hub(fetchFn);
+    await hub.finished({ ci: ['pending', 'red'], limit: 1 });
+    await hub.finished({ area: 'lib.nvim', plan: 'a/p', since: '2026-01-01' });
+    expect(urls).toEqual(['/api/tasks/finished?ci=pending.red&limit=1', '/api/tasks/finished?area=lib.nvim&plan=a/p&since=2026-01-01']);
+    // what the hub refuses as not plain: no character outside letters, digits and . _ - /
+    expect(urls[0]).toMatch(/^[^?]*\?([A-Za-z0-9._/-]+=[A-Za-z0-9._/-]+&?)+$/);
+  });
+});
+
 describe('the order of the list', () => {
   it('asks the hub once and gives the ids in the order the engine named them', async () => {
     const urls: string[] = [];

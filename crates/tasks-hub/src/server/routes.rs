@@ -922,12 +922,14 @@ pub(super) async fn enums(State(st): State<Arc<Shared>>, RawQuery(query): RawQue
     }
 }
 
-/// `GET /api/tasks/finished?area=&plan=&since=&until=&limit=&offset=`: the finished tasks of the Backlogs, newest first, and
-/// what all that match add up to. A read; the counting is the engine's. The days are checked by the engine.
+/// `GET /api/tasks/finished?area=&plan=&since=&until=&limit=&offset=&ci=`: the finished tasks of the Backlogs, newest
+/// first, and what all that match add up to. A read; the counting is the engine's. The days are checked by the engine.
+/// `ci` is the CI states joined by dots (`pending.red`: a query value is plain text, `parse_query` takes no comma),
+/// handed on as a list; the engine checks the words.
 pub(super) async fn finished(State(st): State<Arc<Shared>>, RawQuery(query): RawQuery) -> Response {
     let params = match parse_query(
         query.as_deref(),
-        &["area", "plan", "since", "until", "limit", "offset"],
+        &["area", "plan", "since", "until", "limit", "offset", "ci"],
     ) {
         Ok(p) => p,
         Err(why) => return error_body(StatusCode::BAD_REQUEST, "bad_query", why),
@@ -937,6 +939,10 @@ pub(super) async fn finished(State(st): State<Arc<Shared>>, RawQuery(query): Raw
         if let Some(value) = params.get(key) {
             request.insert(key.to_owned(), json!(value));
         }
+    }
+    if let Some(value) = params.get("ci") {
+        let states: Vec<&str> = value.split('.').collect();
+        request.insert("ci".to_owned(), json!(states));
     }
     for key in ["limit", "offset"] {
         if let Some(value) = params.get(key) {

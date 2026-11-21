@@ -6,7 +6,8 @@
   import type { App } from '../lib/app.svelte';
   import type { Finished } from '../lib/contract';
   import { ApiError } from '../lib/api';
-  import { PRESETS, intersect, monthRange, percent, rangeOf, weekRange, type Preset, type Range } from '../lib/finished';
+  import { CI_OPEN, PRESETS, intersect, monthRange, percent, rangeOf, weekRange, type Preset, type Range } from '../lib/finished';
+  import type { FinishedQuery } from '../lib/api';
   import { areaLabel } from '../lib/filter';
   import { formatNumber, labelOf, translate, type Key } from '../lib/i18n';
   import { markHidden } from '../lib/text';
@@ -23,6 +24,8 @@
   /** A month or a week clicked in the table: it replaces the period until it is taken off. */
   let drill = $state<{ range: Range; label: string } | null>(null);
   let area = $state<string | undefined>(untrack(() => app.takeFinishedStartArea()));
+  /** Only the tasks whose CI is open or red (from the overview), until it is taken off. */
+  let ciOpen = $state<boolean>(untrack(() => app.takeFinishedStartCi()));
 
   let doc = $state<Finished | null>(null);
   let items = $state<Finished['items']>([]);
@@ -39,7 +42,7 @@
   const nameOf = (name: string): string => (app.shortAreas ? areaLabel(name, app.allAreaNames) : name);
   const days = (n: number): string => formatNumber(app.lang, n);
 
-  async function load(query: { area?: string } & Range, offset: number): Promise<void> {
+  async function load(query: FinishedQuery, offset: number): Promise<void> {
     seq += 1;
     const mine = seq;
     loading = true;
@@ -62,24 +65,28 @@
     }
   }
 
-  // Asks again when the period, the area or the vault changes (a task finished meanwhile shows up).
+  // What is asked: the area, the period and, from the overview, only the tasks whose CI is open or red.
+  const query = $derived<FinishedQuery>({ ...(area ? { area } : {}), ...range, ...(ciOpen ? { ci: CI_OPEN } : {}) });
+
+  // Asks again when the period, the area, the CI filter or the vault changes (a task finished meanwhile shows up).
   $effect(() => {
-    const query = { ...(area ? { area } : {}), ...range };
+    const q = query;
     void app.snapshot?.rev;
-    untrack(() => void load(query, 0));
+    untrack(() => void load(q, 0));
   });
 
   function more(): void {
     if (doc?.next_offset === undefined) return;
-    void load({ ...(area ? { area } : {}), ...range }, doc.next_offset);
+    void load(query, doc.next_offset);
   }
   function takeOff(): void {
     drill = null;
     area = undefined;
+    ciOpen = false;
   }
-  const narrowed = $derived(drill !== null || area !== undefined);
+  const narrowed = $derived(drill !== null || area !== undefined || ciOpen);
   const narrowedText = $derived(
-    [area ? nameOf(area) : '', drill?.label ?? ''].filter((s) => s !== '').join(' · '),
+    [area ? nameOf(area) : '', drill?.label ?? '', ciOpen ? t('done.ci_open') : ''].filter((s) => s !== '').join(' · '),
   );
 
   const maxOf = (rows: readonly { count: number }[]): number => rows.reduce((m, r) => Math.max(m, r.count), 1);
@@ -277,7 +284,11 @@
         {#each items as item (item.file)}
           <li>
             <span class="when">{item.done ?? t('done.undated_row')}</span>
-            <span class="title">{markHidden(item.title)}</span>
+            <button type="button" class="link title" onclick={() => (app.finishedPeek = item)}>{markHidden(item.title)}</button>
+            {#if item.ci}
+              <!-- The word is always written: the colour of the mark is no sign of its own. -->
+              <span class="ci ci-{item.ci}" data-ci={item.ci}>{t('done.read.ci')}: {t(`ci.state.${item.ci}` as Key)}</span>
+            {/if}
             <span class="muted">{markHidden(nameOf(item.area))}</span>
             {#if item.kind}<span class="muted">{labelOf(app.lang, 'kind', item.kind)}</span>{/if}
             {#if item.effort}<span class="muted">{item.effort}</span>{/if}
@@ -382,6 +393,21 @@
   }
   .title {
     overflow-wrap: anywhere;
+    text-align: start;
+  }
+  /* The CI state of the commits: the word carries it, the colour only repeats it (green, open, red). */
+  .ci {
+    font-size: 0.85em;
+    white-space: nowrap;
+  }
+  .ci-green {
+    color: var(--ok);
+  }
+  .ci-pending {
+    color: var(--warn);
+  }
+  .ci-red {
+    color: var(--bad);
   }
   .when {
     font-variant-numeric: tabular-nums;

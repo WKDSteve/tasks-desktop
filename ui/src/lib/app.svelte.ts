@@ -54,7 +54,7 @@ import type {
   Waits,
 } from './contract';
 import { expandAreas, isAreaGroup, NO_AREA, type AreaGroupInfo } from './areaGroups';
-import type { AssetOwner, Op } from './api';
+import type { AssetOwner, FinishedQuery, Op } from './api';
 import { adoptOps, followUpOp, runAnswer, type Answer, type AnswerKind } from './agentAnswer';
 
 /** The note an inverse of `node_set` carries (capability `node_note`), as a part of the operation; none: `{}`. */
@@ -83,7 +83,7 @@ import { cleanClaimName, agentNews, type AgentNews } from './claims';
 
 /** How the plan view draws: the stages or the graph of a plan, or the plans compared. */
 export type PlanDisplay = 'stages' | 'graph' | 'compare';
-import { parsePrefs, type Prefs as FinishedPrefs } from './finished';
+import { CI_OPEN, parsePrefs, type Prefs as FinishedPrefs } from './finished';
 import { groupedByArea } from './areaBands';
 import { kindOfFile, type AssetKind, type Taken } from './capture';
 import { activeFilters, applyFilter, areaCounts, filterOfText, filterText, filterVaultOf, freshFilter, moveSelection, NONE as NO_VALUE, parseFilter, serializeFilter, type Filter } from './filter';
@@ -1508,11 +1508,36 @@ export class App {
     return this.env.hub.path(id, signal);
   }
 
-  finished(
-    query: { area?: string; plan?: string; since?: string; until?: string; limit?: number; offset?: number },
-    signal?: AbortSignal,
-  ): Promise<Finished> {
+  finished(query: FinishedQuery, signal?: AbortSignal): Promise<Finished> {
     return this.env.hub.finished(query, signal);
+  }
+
+  /**
+   * How many finished tasks have commits whose CI has no verdict yet or a red one (`ci: pending|red`), as the engine
+   * counts them (capability `finished_ci`); null while not known or when the engine cannot say.
+   */
+  ciOpen = $state<number | null>(null);
+  #ciReads = 0;
+
+  /** Ask the engine again for `ciOpen`; an older answer that comes later is dropped. */
+  async readCiOpen(): Promise<void> {
+    if (!this.can('finished') || !this.can('finished_ci')) {
+      this.ciOpen = null;
+      return;
+    }
+    const mine = ++this.#ciReads;
+    try {
+      const doc = await this.env.hub.finished({ ci: CI_OPEN, limit: 1 });
+      if (mine === this.#ciReads) this.ciOpen = doc.total;
+    } catch {
+      if (mine === this.#ciReads) this.ciOpen = null;
+    }
+  }
+
+  /** The finished tasks whose CI is open or red, from the overview: the view Done opens with that filter. */
+  showCiOpen(): void {
+    this.finishedStartCi = true;
+    this.setView('done');
   }
 
   /** Whether the engine can do `capability`; true while it has not said (the cached list is shown first). */
@@ -4646,6 +4671,14 @@ export class App {
     return area;
   }
 
+  /** The finished tasks open with the filter "CI open or red" (from the overview): taken once by the view. */
+  finishedStartCi = false;
+  takeFinishedStartCi(): boolean {
+    const ci = this.finishedStartCi;
+    this.finishedStartCi = false;
+    return ci;
+  }
+
   /** The open tasks `filter` keeps, found the way the list finds its filter. */
   tasksKeptBy(filter: Filter): TaskEntry[] {
     return applyFilter(this.tasks, this.matchFilter(filter), this.today, this.crossIndex, this.quickWinSet, this.projectOf);
@@ -5949,6 +5982,8 @@ export class App {
   async focused(): Promise<void> {
     // A page that stood open over midnight: a reminder may be due since.
     this.today = localToday(new Date(this.env.now()));
+    // The CI state of a finished task changes in the Backlog, which moves no revision: asked again here, when shown.
+    if (this.ciOpen !== null) void this.readCiOpen();
     // A window the hub refused a stream (too many windows) tries again now, not at the end of its backoff: the window
     // that was closed to make room is often what gave this one the focus.
     if (this.streamsFull) this.#wakeStream?.();

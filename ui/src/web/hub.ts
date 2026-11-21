@@ -546,13 +546,17 @@ export function createWebHub(deps: HubDeps): WebHub {
         return typeof id === 'string' ? passOn('done_preview', { id }) : id;
       }
       case 'finished': {
-        const q = parseQuery(query, ['area', 'plan', 'since', 'until', 'limit', 'offset']);
+        const q = parseQuery(query, ['area', 'plan', 'since', 'until', 'limit', 'offset', 'ci']);
         if (typeof q === 'string') return errorBody(400, 'bad_query', q);
         const params: Record<string, unknown> = {};
         for (const key of ['area', 'plan', 'since', 'until']) {
           const v = q.get(key);
           if (v !== undefined) params[key] = v;
         }
+        // The CI states joined by dots (`ci=pending.red`: a query value is plain text, no comma), as the hub of the
+        // machine takes them; the engine checks the words.
+        const ci = q.get('ci');
+        if (ci !== undefined) params.ci = ci.split('.');
         for (const key of ['limit', 'offset']) {
           const v = q.get(key);
           if (v === undefined) continue;

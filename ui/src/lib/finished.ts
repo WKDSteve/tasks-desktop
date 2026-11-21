@@ -5,6 +5,9 @@ export type Preset = '30' | '90' | 'year' | 'all' | 'custom';
 
 export const PRESETS: readonly Preset[] = ['30', '90', 'year', 'all', 'custom'];
 
+/** The CI states of "CI open or red": the commits have no verdict yet, or a red one (capability `finished_ci`). */
+export const CI_OPEN = ['pending', 'red'] as const;
+
 /** The days the engine is asked for, both included; a missing end is open. */
 export interface Range {
   since?: string;

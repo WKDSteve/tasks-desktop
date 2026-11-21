@@ -3,6 +3,7 @@
 import type {
   Areas,
   Check,
+  Ci,
   DonePreview,
   Estimate,
   Finished,
@@ -36,6 +37,18 @@ import { ApiError, failure, HubClient, textOf, type Hello, type SnapshotResult a
 // The transport (the bearer token, the refusal, the pairing code, hello, the snapshot with its tag, rescan) is the
 // kit's; this file is the routes of the tasks.
 export { ApiError, type Hello };
+
+/** What `finished` is asked for: the days, an area or a plan, a page, and the CI states (capability `finished_ci`). */
+export interface FinishedQuery {
+  area?: string;
+  plan?: string;
+  since?: string;
+  until?: string;
+  limit?: number;
+  offset?: number;
+  /** The CI states of the commits to keep; `none` for a task without one. */
+  ci?: readonly (Ci | 'none')[];
+}
 
 /** One operation of a write. The engine checks the rules; the form is the page's. */
 export type Op =
@@ -801,14 +814,19 @@ export class Hub extends HubClient<Snapshot> {
     return this.json<PlanFor>(path, signal ? { signal } : undefined);
   }
 
-  /** The finished tasks of the Backlogs and what they add up to (the engine counts; `since` and `until` are days). */
-  finished(
-    query: { area?: string; plan?: string; since?: string; until?: string; limit?: number; offset?: number },
-    signal?: AbortSignal,
-  ): Promise<Finished> {
+  /**
+   * The finished tasks of the Backlogs and what they add up to (the engine counts; `since` and `until` are days). `ci`
+   * keeps those whose CI state is one of the words (`none`: no `ci` written; capability `finished_ci`).
+   */
+  finished(query: FinishedQuery, signal?: AbortSignal): Promise<Finished> {
     const parts = Object.entries(query)
       .filter(([, value]) => value !== undefined)
-      .map(([key, value]) => `${key}=${encodeURIComponent(String(value)).replace(/%2F/gi, '/')}`);
+      .map(([key, value]) =>
+        // a list goes as its words joined by dots (`ci=pending.red`): a query value of the hub is plain text, no comma
+        Array.isArray(value)
+          ? `${key}=${value.map((v) => encodeURIComponent(String(v))).join('.')}`
+          : `${key}=${encodeURIComponent(String(value)).replace(/%2F/gi, '/')}`,
+      );
     const path = `/api/tasks/finished${parts.length > 0 ? `?${parts.join('&')}` : ''}`;
     return this.json<Finished>(path, signal ? { signal } : undefined);
   }

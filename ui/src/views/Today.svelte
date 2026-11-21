@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { tick } from 'svelte';
+  import { tick, untrack } from 'svelte';
   import { metricOfTile } from '../lib/statsHistory';
   import { type App, type OrderedTile, type Tile } from '../lib/app.svelte';
   import type { TaskBrief } from '../lib/contract';
@@ -45,6 +45,14 @@
   // A finished task is not in the list, so no filter can match it.
   const reminders = $derived(dueItems(app.shown, filtered ? [] : snapshot?.reminders, app.today));
   const shown = (tile: Tile) => !app.hiddenTiles.includes(tile);
+  // How many finished tasks wait for their CI or have a red one (the engine counts): read when the vault changed or
+  // after a write of the page, while the overview is shown.
+  $effect(() => {
+    void app.snapshot?.rev;
+    void app.writes;
+    if (!showOverview) return;
+    untrack(() => void app.readCiOpen());
+  });
   // The meetings to follow up: read when the vault changed or after a write of the page, while the tile is shown.
   $effect(() => {
     void app.snapshot?.rev;
@@ -268,6 +276,16 @@
           </div>
         {/each}
       </div>
+      {#if app.ciOpen !== null && app.ciOpen > 0}
+        <!-- Finished, but the CI of the commits has no verdict yet or a red one: the list of them in Done. -->
+        <button
+          type="button"
+          class="link ci-open"
+          data-ci-open={app.ciOpen}
+          data-hint={t('hint.ui.today.ci_open')}
+          onclick={() => app.showCiOpen()}>{t('today.ci_open', { n: app.ciOpen })}</button
+        >
+      {/if}
     </aside>
   {/if}
 
@@ -718,6 +736,11 @@
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 0.75rem;
+  }
+  .ci-open {
+    display: block;
+    margin-top: 0.75rem;
+    text-align: start;
   }
   .tile {
     background: var(--surface-2);

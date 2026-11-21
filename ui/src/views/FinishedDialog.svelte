@@ -66,6 +66,11 @@
         <dt>{t('done.read.commits')}</dt>
         <dd class="id">{item.commits.map(markHidden).join(', ')}</dd>
       {/if}
+      {#if item.ci}
+        <!-- The CI state of those commits, beside them (the word carries it, the colour only repeats it). -->
+        <dt>{t('done.read.ci')}</dt>
+        <dd class="ci-{item.ci}" data-ci={item.ci}>{t(`ci.state.${item.ci}` as Key)}</dd>
+      {/if}
     </dl>
   {/if}
 </dialog>
@@ -130,5 +135,14 @@
   .id {
     font-family: var(--mono);
     font-size: 0.9rem;
+  }
+  .ci-green {
+    color: var(--ok);
+  }
+  .ci-pending {
+    color: var(--warn);
+  }
+  .ci-red {
+    color: var(--bad);
   }
 </style>

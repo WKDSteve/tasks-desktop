@@ -91,6 +91,8 @@ test('a valid read passes its parameters to the engine and the document back unc
   await h.get('order?sort=roi&area=lib.nvim');
   await h.get('plan_for?id=a/b');
   await h.get('finished?area=a&plan=a/p&since=2026-01-01&until=2026-02-01&limit=5&offset=10');
+  // the CI states joined by dots become a list (capability `finished_ci`); the engine checks the words
+  await h.get('finished?ci=pending.red&limit=1');
   await h.get('done_preview?id=a/b');
   await h.get('waits');
   await h.get('waits?area=lib.nvim');
@@ -100,6 +102,7 @@ test('a valid read passes its parameters to the engine and the document back unc
     ['order', { params: { sort: 'roi', area: 'lib.nvim' } }],
     ['plan_for', { params: { id: 'a/b', direction: 'needs' } }],
     ['finished', { params: { area: 'a', plan: 'a/p', since: '2026-01-01', until: '2026-02-01', limit: 5, offset: 10 } }],
+    ['finished', { params: { limit: 1, ci: ['pending', 'red'] } }],
     ['done_preview', { params: { id: 'a/b' } }],
     ['waits', { params: {} }],
     ['waits', { params: { area: 'lib.nvim' } }],

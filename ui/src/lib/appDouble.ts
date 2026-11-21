@@ -2,7 +2,7 @@
 // that are maps, a clock that stands still. `make` builds an `App` on them; the tests of the state (app.test.ts) and
 // the tests that mount a component in a DOM (`*.dom.test.ts`) share it, so both test the app as it is, not a copy.
 import type { IntentAnswer } from './intent';
-import { ApiError, type BoardRequest, type BoardSaved, type Hub, type HubArea, type OpsRequest, type SetupInfo, type SetupStep, type VaultList } from './api';
+import { ApiError, type BoardRequest, type BoardSaved, type FinishedQuery, type Hub, type HubArea, type OpsRequest, type SetupInfo, type SetupStep, type VaultList } from './api';
 import { App, type Env } from './app.svelte';
 import type { CachedList, ListStore } from './cache';
 import type { DonePreview, Groupings, MeetingDocument, MeetingEntry, MeetingParse, Meetings, Result, Snapshot, TaskDocument, TaskEntry, View, Views } from './contract';
@@ -410,6 +410,18 @@ export class FakeHub {
   async waits() {
     this.waitsCalls += 1;
     return this.waitsDoc as never;
+  }
+  /**
+   * The finished tasks (`tasks.finished`): a document, or one made from the question. Until a test sets one the call
+   * fails, as it did while the double had no `finished` (the views that ask treat that as "cannot say").
+   */
+  finishedDoc: unknown | ((query: FinishedQuery) => unknown) = null;
+  finishedQueries: FinishedQuery[] = [];
+  async finished(query: FinishedQuery) {
+    this.finishedQueries.push(query);
+    if (this.finishedDoc === null) throw new TypeError('finished is not faked here');
+    const doc = typeof this.finishedDoc === 'function' ? this.finishedDoc(query) : this.finishedDoc;
+    return doc as never;
   }
   /** The learning paths (`tasks.paths`) and each path by id (`tasks.path`); a path not in here is `not_found`. */
   pathsDoc: unknown = { kind: 'tasks.paths', rev: 'p1', digest: 'd', items: [], incomplete: [] };

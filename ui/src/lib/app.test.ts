@@ -36,6 +36,88 @@ describe('App', () => {
     expect(app.today).toBe('2031-03-05');
   });
 
+  describe('finished, but the CI is open or red', () => {
+    const finishedOf = (total: number) => ({ kind: 'tasks.finished', total, offset: 0, limit: 1, items: [], undated: 0 });
+
+    it('asks the engine how many there are, with the states pending and red and a page of one', async () => {
+      const { app, hub } = make({ token: 't' });
+      hub.capabilities = ['finished', 'finished_ci'];
+      hub.finishedDoc = finishedOf(3);
+      await app.start(null);
+      await vi.waitFor(() => expect(app.can('finished_ci')).toBe(true));
+      await app.readCiOpen();
+      expect(app.ciOpen).toBe(3);
+      expect(hub.finishedQueries.at(-1)).toEqual({ ci: ['pending', 'red'], limit: 1 });
+      app.stop();
+    });
+
+    it('says nothing when the engine cannot filter by the CI, or cannot answer', async () => {
+      const { app, hub } = make({ token: 't' });
+      hub.capabilities = ['finished'];
+      hub.finishedDoc = finishedOf(3);
+      await app.start(null);
+      await vi.waitFor(() => expect(app.can('finished')).toBe(true));
+      await app.readCiOpen();
+      expect(app.ciOpen).toBeNull();
+      expect(hub.finishedQueries).toEqual([]);
+      hub.capabilities = ['finished', 'finished_ci'];
+      await app.start(null);
+      await vi.waitFor(() => expect(app.can('finished_ci')).toBe(true));
+      hub.finishedDoc = null; // the call fails
+      await app.readCiOpen();
+      expect(app.ciOpen).toBeNull();
+      app.stop();
+    });
+
+    it('drops an older answer that comes after a newer one', async () => {
+      const { app, hub } = make({ token: 't' });
+      hub.capabilities = ['finished', 'finished_ci'];
+      await app.start(null);
+      await vi.waitFor(() => expect(app.can('finished_ci')).toBe(true));
+      let release: (() => void) | undefined;
+      const slow = new Promise<void>((resolve) => (release = resolve));
+      let calls = 0;
+      hub.finished = async (query) => {
+        hub.finishedQueries.push(query);
+        calls += 1;
+        // the first answer is the old one (9), the second the new one (1); the first comes last
+        const total = calls === 1 ? 9 : 1;
+        if (total === 9) await slow;
+        return finishedOf(total) as never;
+      };
+      const first = app.readCiOpen();
+      await app.readCiOpen();
+      expect(app.ciOpen).toBe(1);
+      release?.();
+      await first;
+      expect(app.ciOpen).toBe(1);
+      app.stop();
+    });
+
+    it('opens Done with that filter, taken once', () => {
+      const { app } = make({ token: 't' });
+      app.showCiOpen();
+      expect(app.view).toBe('done');
+      expect(app.takeFinishedStartCi()).toBe(true);
+      expect(app.takeFinishedStartCi()).toBe(false);
+    });
+
+    it('asks again when the window gets the focus back, once the number is known', async () => {
+      const { app, hub } = make({ token: 't' });
+      hub.capabilities = ['finished', 'finished_ci'];
+      hub.finishedDoc = finishedOf(2);
+      await app.start(null);
+      await vi.waitFor(() => expect(app.can('finished_ci')).toBe(true));
+      await app.focused();
+      expect(hub.finishedQueries).toEqual([]);
+      await app.readCiOpen();
+      hub.finishedDoc = finishedOf(0);
+      await app.focused();
+      await vi.waitFor(() => expect(app.ciOpen).toBe(0));
+      app.stop();
+    });
+  });
+
   it('asks for pairing when there is no code and no session', async () => {
     const { app } = make();
     await app.start(null);
