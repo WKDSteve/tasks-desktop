@@ -193,8 +193,8 @@ pnpm web:build && PLAYWRIGHT_BROWSERS_PATH="$PWD/node_modules/.cache/ms-playwrig
 ## Web-Plattform
 
 - Ziel: Baseline `widely` (`.mwgrc`). Vor neuem HTML/CSS/JS der Seite (`ui/src`, `ui/web`) die Leitlinie fragen:
-  `DISABLE_TELEMETRY=1 npx -y modern-web-guidance@latest search "<Frage>"` (dann `retrieve <id>`); Regelwerk:
-  `rules-vault/rulesets/web`.
+  `DISABLE_TELEMETRY=1 npx -y modern-web-guidance@latest search "<Frage>"` (dann `retrieve <id>`); das Regelwerk des Maintainers
+  für das Web ist privat und hier nicht mit Namen genannt.
 - **Browser Support** (entschieden 2026-11-21: die Untergrenze Chrome/Edge 86 entfällt, es gilt Baseline `widely`
   überall; `.mwgrc`, `browserslist` in `ui/package.json` als `baseline widely available`, heute Chrome/Edge 125,
   Firefox 126, Safari 17.5): Chrome und Edge voll, Firefox und Safari nur lesend (README, Tabelle "Which browser does
@@ -203,7 +203,7 @@ pnpm web:build && PLAYWRIGHT_BROWSERS_PATH="$PWD/node_modules/.cache/ms-playwrig
   nicht `widely` ist, nur mit Feature-Erkennung und Rückfall, der die Matrix weiter trägt: `requestIdleCallback`
   (`ui/src/views/loader.ts`, Safari hat es nicht) und `getCoalescedEvents` (`BoardEditor.svelte`, Safari erst ab 18.2).
   Prüfen gegen `web-features` / `@mdn/browser-compat-data`, nicht aus dem Gedächtnis (ein Feature von web-features
-  gilt als `widely`, auch wenn ein Teil davon später kam). Polyfills, wo noch genutzte Browser sie brauchen (lieber einer zu viel), laufen nur nach der Prüfung: dynamisch per `import()`, in einer `file://`-Seite mitgebündelt (rules-vault `BASE-02`).
+  gilt als `widely`, auch wenn ein Teil davon später kam). Polyfills, wo noch genutzte Browser sie brauchen (lieber einer zu viel), laufen nur nach der Prüfung: dynamisch per `import()`, in einer `file://`-Seite mitgebündelt.
 - Bewusst behalten (Stand 2026-11-21, alles andere der Funde ist auf `toSorted()`, `toReversed()`, `findLast()`,
   `Promise.withResolvers()` und `Intl.Segmenter` ohne Rückfall umgestellt): `[...set].sort()` in `crossAreas`
   (`app.svelte.ts`), dort ist `[...x]` die Umwandlung eines `Set` in ein Array, keine Kopie, `toSorted` gibt es auf
