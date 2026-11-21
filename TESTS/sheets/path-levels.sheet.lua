@@ -198,6 +198,42 @@ return {
       expect = read("path", PATH, "!d.body.includes('xp=25')"),
       note = "the path itself is not written",
     },
+
+    -- Undo in the toast: the levels as they were before the last save
+    {
+      expect = read("path", PATH, "(window.__levelsBefore = d.body, true)"),
+      note = "the levels as they are",
+    },
+    { click = "[data-levels-open]", note = "'Edit levels and rewards …'" },
+    {
+      wait = "document.getElementById('level-name-0')?.value === 'Starter sheet'",
+      timeout = 10000,
+    },
+    { expect = fill("#level-name-0", "Master sheet") },
+    { click = FORM .. " button[type=submit]", note = "'Save levels' with the new name" },
+    {
+      wait = read("path", PATH, "d.body.includes('50 XP · Master sheet ·')"),
+      timeout = 15000,
+      note = "the new name is in ## Level",
+    },
+    {
+      wait = "document.querySelector('.toast button:not(.close)') !== null && document.querySelector('"
+        .. FORM
+        .. "') === null",
+      timeout = 15000,
+      note = "the toast of the save offers Undo",
+    },
+    { click = ".toast button:not(.close)", note = "Undo" },
+    {
+      wait = read("path", PATH, "d.body === window.__levelsBefore"),
+      timeout = 15000,
+      note = "the file has the old levels again, byte for byte",
+    },
+    {
+      wait = "document.querySelector('p.level')?.textContent.includes('Starter sheet')",
+      timeout = 15000,
+      note = "and the view the old name of level 1",
+    },
   },
   judge = {
     "the form reads as one level per row: threshold, name, badge and reward side by side, and fits the window",
