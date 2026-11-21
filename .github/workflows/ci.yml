@@ -259,13 +259,14 @@ jobs:
       - run: pnpm build
       - run: python ../tools/check-bundle-size.py --dist dist
       - run: pnpm audit --audit-level high
-      # Informative only: older web patterns in the page (modern-web-guidance, pinned, no telemetry). The support
-      # matrix (README, CLAUDE.md "Web-Plattform") decides what may change; this step never fails the job.
+      # Informative only: older web patterns in the page (modern-web-guidance, no telemetry). The scanner is an exact
+      # devDependency, so the supply-chain policy of pnpm-workspace.yaml applies to it. The support matrix (README,
+      # CLAUDE.md "Web-Plattform") decides what may change; this step never fails the job.
       - name: Legacy web patterns (informative)
         continue-on-error: true
         env:
           DISABLE_TELEMETRY: "1"
-        run: npx -y modern-web-guidance@1.0.1 legacy-scan src --json
+        run: pnpm exec modern-web-guidance legacy-scan src --json
 
   # A control or invisible character in a tracked text file (a backspace in a
   # path, a bidirectional override in source) is refused; the tool tests itself.

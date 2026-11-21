@@ -14,7 +14,9 @@ dist/
 .DS_Store
 Thumbs.db
 *.swp
-.claude/
+# Local Claude files stay local; the shared .claude/settings.json is committed.
+.claude/*
+!.claude/settings.json
 # A local [patch] of appkit (see CLAUDE.md): never committed.
 /.cargo/config.toml
 __pycache__/

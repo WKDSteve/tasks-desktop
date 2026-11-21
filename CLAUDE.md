@@ -202,6 +202,9 @@ pnpm web:build && PLAYWRIGHT_BROWSERS_PATH="$PWD/node_modules/.cache/ms-playwrig
 - Bewusst behalten (keepWhen: Matrix mit Chrome 86): `[...xs].sort()` / `slice().sort()` statt `toSorted()`
   (Chrome 110) und `new Promise` statt `Promise.withResolvers()` (Chrome 119). `legacy-scan` meldet sie (CI-Job `ui`,
   nur Information); erst umstellen, wenn die Matrix angehoben ist.
+- `legacy-scan` lokal: `cd ui && DISABLE_TELEMETRY=1 pnpm exec modern-web-guidance legacy-scan src --json` (exakte
+  devDependency, es gilt die Lieferketten-Regel aus `ui/pnpm-workspace.yaml`). `.claude/settings.json` schaltet die
+  Telemetrie ab und erlaubt nur `npx -y modern-web-guidance@latest *` (für die Suche des Skills).
 
 ## Nie
 
