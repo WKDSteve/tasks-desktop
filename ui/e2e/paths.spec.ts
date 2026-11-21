@@ -261,3 +261,90 @@ test('XP and levels: a level reached is said once with its reward, granted on di
     rmSync(file, { force: true });
   }
 });
+
+test('levels set in a form: written into ## Level with a badge, refused when they fall, and the XP of a promoted task', async ({ page }) => {
+  const slug = 'paths-e2e-l01';
+  const area = join(state().vault, 'lib.nvim', 'ROADMAP');
+  const dir = join(area, 'paths', slug);
+  mkdirSync(join(dir, 'assets', 'badges'), { recursive: true });
+  writeFileSync(
+    join(dir, 'assets', 'badges', 'star.svg'),
+    '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"><circle cx="8" cy="8" r="7" fill="gold"/></svg>',
+  );
+  const file = join(dir, `${slug}.md`);
+  const taskSlug = 'paths-e2e-l01-task';
+  const taskFile = join(area, 'tasks', `${taskSlug}.md`);
+  const title = 'Path e2e l01';
+  mkdirSync(join(area, 'tasks'), { recursive: true });
+  writeFileSync(taskFile, `---\ntitle: Task e2e l01\nstatus: open\nxp: 10\n---\n\nPromoted from a point.\n`);
+  writeFileSync(
+    file,
+    `---\ntitle: ${title}\nstatus: doing\n---\n\n## Lernpunkte\n\n- [ ] Levels e2e {#root}\n  - [x] First e2e {xp=60} {#first}\n  - [ ] Task e2e → lib.nvim/${taskSlug} {#t}\n`,
+  );
+  try {
+    const problems = await pair(page, '/#view=paths');
+    await page.locator(`button[data-path="lib.nvim/${slug}"]`).click();
+    const tree = page.getByRole('list', { name: `Learning points of ${title}` });
+    await expect(tree).toBeVisible();
+
+    // the form: two levels, a badge of the path's assets/badges/, a reward for the whole path
+    await page.getByRole('button', { name: 'Set levels and rewards …' }).click();
+    const form = page.getByRole('form', { name: 'Levels and rewards of the path' });
+    await expect(form).toBeVisible();
+    await form.getByRole('button', { name: 'Add a level' }).click();
+    await expect(form.locator('#level-threshold-0')).toHaveValue('50');
+    await form.locator('#level-name-0').fill('Starter e2e');
+    await form.locator('#level-badge-0').selectOption('assets/badges/star.svg');
+    await form.locator('#level-reward-0').fill('Tea e2e');
+    await form.getByRole('button', { name: 'Add a level' }).click();
+    await expect(form.locator('#level-threshold-1')).toHaveValue('100');
+    await form.getByRole('checkbox', { name: 'A reward when the whole path is done' }).check();
+    await form.locator('#level-done-reward').fill('Trip e2e');
+    await expectAccessible(page, 'the form of the levels of a path');
+    let answer = nextAnswer(page);
+    await form.getByRole('button', { name: 'Save levels' }).click();
+    await answer;
+    await expect
+      .poll(() => readFileSync(file, 'utf8'), { timeout: WRITE_BUDGET })
+      .toContain('## Level\n\n- [ ] 50 XP · Starter e2e · Badge assets/badges/star.svg · Belohnung: Tea e2e\n- [ ] 100 XP\n- [ ] Pfad fertig · Belohnung: Trip e2e\n');
+    await expect(form).toHaveCount(0, { timeout: WRITE_BUDGET });
+    // level 1 reached (60 XP): its badge beside the level and in the gallery, as an image
+    await expect(page.locator('p.level')).toContainText('Level 1 (Starter e2e)', { timeout: WRITE_BUDGET });
+    await expect(page.locator('[data-badge="1"] img')).toBeVisible({ timeout: WRITE_BUDGET });
+    await expect(page.locator('p.level img.badge')).toBeVisible();
+
+    // thresholds that fall: the engine refuses, the file stays, the form stays open with what was typed
+    const before = readFileSync(file, 'utf8');
+    await page.getByRole('button', { name: 'Edit levels and rewards …' }).click();
+    await expect(form).toBeVisible();
+    await form.locator('#level-threshold-1').fill('40');
+    answer = nextAnswer(page);
+    await form.getByRole('button', { name: 'Save levels' }).click();
+    await answer;
+    await expect(page.getByRole('alert').filter({ hasText: /must rise/ })).toBeVisible({ timeout: WRITE_BUDGET });
+    await expect(form).toBeVisible();
+    await expect(form.locator('#level-threshold-1')).toHaveValue('40');
+    expect(readFileSync(file, 'utf8')).toBe(before);
+    await form.getByRole('button', { name: 'Cancel' }).click();
+    await expect(form).toHaveCount(0);
+
+    // the XP of the promoted task: xp: of the task, through set
+    const t = tree.locator('li[data-point="t"]');
+    await expect(t.locator('.xp-point')).toHaveText('10 XP, from the task');
+    await t.locator('[data-choice="point"] summary').click();
+    await page.getByRole('button', { name: 'XP of the task …' }).click();
+    const field = t.getByLabel(`XP of task lib.nvim/${taskSlug}`);
+    await expect(field).toHaveValue('10');
+    await field.fill('25');
+    answer = nextAnswer(page);
+    await field.press('Enter');
+    await answer;
+    await expect.poll(() => readFileSync(taskFile, 'utf8'), { timeout: WRITE_BUDGET }).toContain('xp: 25');
+    await expect(t.locator('.xp-point')).toHaveText('25 XP, from the task', { timeout: WRITE_BUDGET });
+    expect(problems).toEqual([]);
+    expect(await violations(page)).toEqual([]);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+    rmSync(taskFile, { force: true });
+  }
+});

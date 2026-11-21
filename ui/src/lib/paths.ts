@@ -7,7 +7,7 @@
 // enough, whether a parent is closed is the engine's.
 
 import type { Op } from './api';
-import type { PathNode, PathProgress } from './contract';
+import type { LevelsSpec, PathLevel, PathNode, PathProgress } from './contract';
 
 /** The state of a learning point that has a mark of its own (a leaf). */
 export type PointState = NonNullable<PathNode['state']>;
@@ -200,4 +200,99 @@ export function promoteOp(container: string, etag: string | undefined, node: Pic
 /** A note as the engine takes it: lines kept, the ends of lines as `\n`, trailing space of the whole trimmed. */
 export function cleanNote(text: string): string {
   return text.replace(/\r\n?/g, '\n').replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, '').trim();
+}
+
+// ── the levels of a path, as a form (capability `path_levels`) ──
+
+/** One level as the form holds it: what is typed, as text, before the engine judges it. */
+export interface LevelRow {
+  threshold: string;
+  unit: 'xp' | 'percent';
+  name: string;
+  badge: string;
+  reward: string;
+  given: boolean;
+}
+
+/** The line for the whole path in the form: whether there is one, its reward and whether that was granted. */
+export interface DoneRow {
+  on: boolean;
+  reward: string;
+  given: boolean;
+}
+
+/** The most levels the engine writes (`lernlevel.MAX_LEVELS`). */
+export const LEVELS_MAX = 20;
+/** The longest name and reward of a level the engine takes (`lernlevel.MAX_NAME`, `MAX_REWARD`). */
+export const LEVEL_NAME_MAX = 80;
+export const LEVEL_REWARD_MAX = 200;
+
+/** The form of the levels a path has (`tasks.path` `levels`, in file order), the line for the whole path apart. */
+export function levelRows(levels: readonly PathLevel[] | undefined): { rows: LevelRow[]; done: DoneRow } {
+  const rows: LevelRow[] = [];
+  let done: DoneRow = { on: false, reward: '', given: false };
+  for (const level of levels ?? []) {
+    if (level.kind === 'done') {
+      done = { on: true, reward: level.reward ?? '', given: level.given };
+      continue;
+    }
+    rows.push({
+      threshold: level.threshold !== undefined ? String(level.threshold) : '',
+      unit: level.kind,
+      name: level.name ?? '',
+      badge: level.badge ?? '',
+      reward: level.reward ?? '',
+      given: level.given,
+    });
+  }
+  return { rows, done };
+}
+
+/** A new level for the form: the next threshold above the last one of XP (or 50 XP for the first). */
+export function nextRow(rows: readonly LevelRow[]): LevelRow {
+  const last = [...rows].reverse().find((r) => r.unit === 'xp' && /^\d+$/.test(r.threshold.trim()));
+  const threshold = last ? String(Number(last.threshold.trim()) + 50) : '50';
+  return { threshold, unit: 'xp', name: '', badge: '', reward: '', given: false };
+}
+
+/** The pictures a badge may be: the files of the path below `assets/badges/` (png, jpg, jpeg, webp, svg), sorted. */
+export function badgeFiles(assets: readonly string[] | undefined): string[] {
+  return (assets ?? []).filter((file) => /^assets\/badges\/[^\s]+\.(png|jpe?g|webp|svg)$/i.test(file) && !file.includes('..')).sort();
+}
+
+/**
+ * The operation that writes the levels of path `id` as the form holds them, on the version read; or the row whose
+ * threshold is no whole number (said, never sent). Every other rule (thresholds that rise, the length of a name, a
+ * badge below `assets/badges/`) is the engine's, which refuses with its reason.
+ */
+export function levelsOp(id: string, etag: string | undefined, rows: readonly LevelRow[], done: DoneRow): Op | { invalid: number } {
+  const list: LevelsSpec['list'] = [];
+  for (const [i, row] of rows.entries()) {
+    const t = row.threshold.trim();
+    if (!/^\d{1,6}$/.test(t) || Number(t) < 1) return { invalid: i };
+    const name = row.name.trim();
+    const badge = row.badge.trim();
+    const reward = row.reward.trim();
+    list.push({
+      threshold: Number(t),
+      unit: row.unit,
+      ...(name ? { name } : {}),
+      ...(badge ? { badge } : {}),
+      ...(reward ? { reward, ...(row.given ? { given: true } : {}) } : {}),
+    });
+  }
+  const levels: LevelsSpec = { list };
+  if (done.on) {
+    const reward = done.reward.trim();
+    levels.done = reward ? { reward, ...(done.given ? { given: true } : {}) } : {};
+  }
+  return { op: 'path_levels', id, levels, ...match(etag) };
+}
+
+/**
+ * The operation that sets the XP of the task a point was promoted to (`xp:` in its frontmatter; `'clear'` removes it):
+ * a `set` on the task, not `node_set`, since the task owns the XP of its point (capability `xp`).
+ */
+export function taskXpOp(task: string, etag: string | undefined, xp: number | 'clear'): Op {
+  return { op: 'set', id: task, patch: { xp: xp === 'clear' ? null : xp }, ...match(etag) };
 }

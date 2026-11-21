@@ -15,6 +15,7 @@
   import AssetImg from './AssetImg.svelte';
   import ImageViewer from './ImageViewer.svelte';
   import ItemIcon from './ItemIcon.svelte';
+  import Lazy from './Lazy.svelte';
   import { AssetImages } from '../lib/assetImages.svelte';
   import { shownIcon } from '../lib/icons';
   import { markHidden } from '../lib/text';
@@ -37,12 +38,14 @@
     REASON_MAX,
     rewardOp,
     stateOp,
+    taskXpOp,
     visiblePoints,
     xpOp,
     xpPercent,
     type PointState,
   } from '../lib/paths';
 
+  type EditKind = 'reason' | 'note' | 'xp' | 'task_xp';
   let { app }: { app: App } = $props();
   const t = (key: Key, params: Record<string, string | number> = {}) => translate(app.lang, key, params);
 
@@ -62,7 +65,9 @@
   let folded = $state<ReadonlySet<string>>(new Set());
   // The point whose reason or note is being written (by its name, so that a read after a change elsewhere keeps the
   // field and what is typed), with what is typed.
-  let editing = $state<{ id: string; kind: 'reason' | 'note' | 'xp'; state?: PointState; missing: boolean } | null>(null);
+  let editing = $state<{ id: string; kind: EditKind; state?: PointState; missing: boolean } | null>(null);
+  // The form of the levels of the open path (loaded when first opened; PathLevels.svelte).
+  let editingLevels = $state(false);
   // What is typed into the open field (apart from `editing`, so that closing the field never leaves a binding on nothing).
   let draft = $state('');
   let root: HTMLElement | undefined = $state();
@@ -80,7 +85,7 @@
   // next tick would be refused as a conflict, or set a state the point already has).
   const busy = $derived(app.saving || reading);
   const idOf = (node: PathNode): string => ids.get(node.index) ?? `#${node.index}`;
-  const editingOf = (node: PathNode, kind: 'reason' | 'note' | 'xp'): boolean => editing?.kind === kind && editing.id === idOf(node);
+  const editingOf = (node: PathNode, kind: EditKind): boolean => editing?.kind === kind && editing.id === idOf(node);
   /** A leaf whose XP are its own to set here (a point whose task carries `xp:` takes the task's). */
   const ownsXp = (node: PathNode): boolean => node.children === 0 && node.xp_from !== 'task';
   // The images below `assets/` of the open path (its points, its cover, its badges): one store per path in its folder
@@ -139,6 +144,7 @@
       if (doc?.path.id !== answer.path.id) {
         folded = new Set();
         editing = null;
+        editingLevels = false;
       }
       doc = answer;
       docProblem = false;
@@ -179,7 +185,13 @@
     const node = read.nodes.find((n) => names.get(n.index) === id);
     const fits =
       node !== undefined &&
-      (editing.kind === 'reason' ? isMarkable(node) : editing.kind === 'xp' ? ownsXp(node) : node.promoted === undefined);
+      (editing.kind === 'reason'
+        ? isMarkable(node)
+        : editing.kind === 'xp'
+          ? ownsXp(node)
+          : editing.kind === 'task_xp'
+            ? node.promoted !== undefined && promotedTask(node.promoted) !== undefined
+            : node.promoted === undefined);
     if (fits) return;
     editing = null;
     app.tell('error', 'paths.conflict');
@@ -207,6 +219,7 @@
     if (id === app.pathChoice) return;
     conflict = false;
     editing = null;
+    editingLevels = false;
     app.pathChoice = id;
   }
 
@@ -303,6 +316,38 @@
     closeField(node);
     void send(xpOp(doc.path.id, doc.path.etag, node, xp));
   }
+  function editTaskXp(node: PathNode): void {
+    draft = String(node.xp ?? '');
+    editing = { id: idOf(node), kind: 'task_xp', missing: false };
+    void focusField(`task-xp-${node.index}`);
+  }
+  /** The XP of the task a point was promoted to: `xp:` of the task (`set`), which the point then counts. */
+  function saveTaskXp(node: PathNode): void {
+    if (!editing || editing.kind !== 'task_xp' || node.promoted === undefined) return;
+    const xp = parseXp(draft);
+    if (xp === null) {
+      editing = { ...editing, missing: true };
+      return;
+    }
+    const task = promotedTask(node.promoted);
+    if (!task) {
+      closeField(node);
+      app.tell('error', 'paths.conflict');
+      return;
+    }
+    if ((xp === 'clear' && task.xp === undefined) || xp === task.xp) {
+      closeField(node);
+      return;
+    }
+    if (refused()) return;
+    closeField(node);
+    void send(taskXpOp(task.id, task.etag, xp));
+  }
+  /** The levels as the form holds them: true when the engine wrote them (the form closes then). */
+  async function sendLevels(op: Parameters<App['write']>[0][number]): Promise<boolean> {
+    const result = await send(op);
+    return result !== null && result.results.every((r) => r.ok);
+  }
   function grant(ref: string): void {
     if (!doc || refused()) return;
     void send(rewardOp(doc.path.id, doc.path.etag, ref, true));
@@ -361,6 +406,8 @@
       out.push({ id: 'promote', label: t('paths.promote_of', { label: shownLabel(node) }), onselect: () => void promote(node) });
     }
     if (game && ownsXp(node)) out.push({ id: 'xp', label: t('paths.menu.xp'), onselect: () => editXp(node) });
+    if (game && node.promoted !== undefined && promotedTask(node.promoted))
+      out.push({ id: 'task_xp', label: t('paths.menu.task_xp'), onselect: () => editTaskXp(node) });
     return out;
   }
 
@@ -494,6 +541,25 @@
                 >
               </p>
             {/each}
+          {/if}
+          {#if game && app.can('path_levels')}
+            {#if editingLevels}
+              <section class="levels-edit" aria-label={t('paths.levels.form')}>
+                <h4>{t('paths.levels.title')}</h4>
+                <Lazy
+                  {app}
+                  load={() => import('./PathLevels.svelte')}
+                  extra={{ doc, busy, send: sendLevels, onclose: () => (editingLevels = false) }}
+                  onfailed={() => (editingLevels = false)}
+                />
+              </section>
+            {:else}
+              <p class="levels-open">
+                <button type="button" data-levels-open onclick={() => (editingLevels = true)}
+                  >{t(doc.levels && doc.levels.length > 0 ? 'paths.levels.edit' : 'paths.levels.add_first')}</button
+                >
+              </p>
+            {/if}
           {/if}
           {#if doc.tree_problems.length > 0}
             <p class="problems" role="note">{t('paths.problems', { n: doc.tree_problems.length })}</p>
@@ -661,6 +727,34 @@
                       <button type="button" onclick={() => closeField(node)}>{t('paths.note.cancel')}</button>
                     </span>
                   </form>
+                {:else if editing && editingOf(node, 'task_xp')}
+                  <form
+                    class="edit"
+                    data-hint={t('hint.form.paths.task_xp')}
+                    onsubmit={(e) => {
+                      e.preventDefault();
+                      saveTaskXp(node);
+                    }}
+                  >
+                    <label for="task-xp-{node.index}">{t('paths.task_xp.label', { id: node.promoted ?? '' })}</label>
+                    <input
+                      id="task-xp-{node.index}"
+                      type="text"
+                      inputmode="numeric"
+                      maxlength="6"
+                      bind:value={draft}
+                      aria-invalid={editing.missing ? 'true' : undefined}
+                      aria-describedby={editing.missing ? `task-xp-invalid-${node.index}` : undefined}
+                      onkeydown={(e) => {
+                        if (e.key === 'Escape') closeField(node);
+                      }}
+                    />
+                    {#if editing.missing}<span id="task-xp-invalid-{node.index}" class="missing" role="alert">{t('paths.xp.invalid')}</span>{/if}
+                    <span class="buttons">
+                      <button type="submit" class="primary">{t('paths.xp.save')}</button>
+                      <button type="button" onclick={() => closeField(node)}>{t('paths.xp.cancel')}</button>
+                    </span>
+                  </form>
                 {:else if editing && editingOf(node, 'xp')}
                   <form
                     class="edit"
@@ -732,6 +826,17 @@
     display: flex;
     align-items: center;
     gap: 0.4rem;
+  }
+  .levels-open,
+  .levels-edit h4 {
+    margin: 0;
+  }
+  .levels-edit {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    border-top: 1px solid var(--border);
+    padding-top: 0.4rem;
   }
   .badges {
     display: flex;

@@ -3262,6 +3262,14 @@ describe('writing', () => {
       expect(app.toast?.undo).toEqual([{ op: 'path_reward', id: 'lib/lua', level: '1', given: false, if_match: 'e4' }]);
       await app.undo();
       expect(hub.sent.at(-1)?.ops).toEqual([{ op: 'path_reward', id: 'lib/lua', level: '1', given: false, if_match: 'e4' }]);
+
+      // the levels written as a whole: the levels the path had come back (capability `path_levels`)
+      const had = { list: [{ threshold: 20, unit: 'xp' as const, reward: 'Eis', given: true }], done: { reward: 'See' } };
+      hub.next_ops = result({ op: 'path_levels', id: 'lib/lua', levels: had, if_match: 'e6' });
+      await app.write([{ op: 'path_levels', id: 'lib/lua', levels: { list: [] }, if_match: 'e5' }]);
+      expect(app.toast?.undo).toEqual([{ op: 'path_levels', id: 'lib/lua', levels: had, if_match: 'e6' }]);
+      await app.undo();
+      expect(hub.sent.at(-1)?.ops).toEqual([{ op: 'path_levels', id: 'lib/lua', levels: had, if_match: 'e6' }]);
     });
 
     it('keeps the switch of XP, levels and rewards, and says a level once: never on the first look at a path', async () => {

@@ -2387,6 +2387,12 @@ export class App {
         inverses.push({ op: 'path_reward', id: inv.id, level: inv.level, given: inv.given, ...(inv.if_match ? { if_match: inv.if_match } : {}) });
         continue;
       }
+      // The levels of a path written as a whole: the levels it had (capability `path_levels`).
+      if (inv.op === 'path_levels') {
+        if (typeof inv.levels !== 'object' || inv.levels === null || !Array.isArray(inv.levels.list)) return undefined;
+        inverses.push({ op: 'path_levels', id: inv.id, levels: inv.levels, ...(inv.if_match ? { if_match: inv.if_match } : {}) });
+        continue;
+      }
       // A point made a task: taken back while the task holds no work of its own (the engine judges that).
       if (inv.op === 'unpromote') {
         if (typeof inv.container !== 'string' || typeof inv.point !== 'string') return undefined;

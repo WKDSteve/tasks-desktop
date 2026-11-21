@@ -513,7 +513,7 @@ pub(super) async fn search_route(
 /// the path below the task and its link, never the image. `project_new`, `plan_set` and `project_set` make a project file
 /// and change the frontmatter of an open plan or project file (the project level); the engine judges the relation.
 /// `plan_close` and `project_close` finish a plan or a project by hand; the engine refuses while something holds it open.
-pub(super) const OPS_ALLOWED: [&str; 32] = [
+pub(super) const OPS_ALLOWED: [&str; 33] = [
     "set",
     "new",
     "reorder",
@@ -543,12 +543,13 @@ pub(super) const OPS_ALLOWED: [&str; 32] = [
     "meeting_capture",
     "meeting_attend",
     "meeting_followups",
-    // the learning paths (capabilities `node_set`, `promote`, `path_reward`): the state (and XP) of a point, a point
-    // made a task and taken back, a reward of a level granted; not for devices
+    // the learning paths (capabilities `node_set`, `promote`, `path_reward`, `path_levels`): the state (and XP) of a
+    // point, a point made a task and taken back, a reward of a level granted, the levels written; not for devices
     "node_set",
     "promote",
     "unpromote",
     "path_reward",
+    "path_levels",
     // no task changes: the engine writes down the figures of today in its series (`tasks.history`); not for devices
     "history_record",
 ];

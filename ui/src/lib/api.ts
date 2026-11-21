@@ -9,6 +9,7 @@ import type {
   Finished,
   Groupings,
   History,
+  LevelsSpec,
   Links,
   MeetingDocument,
   MeetingParse,
@@ -126,6 +127,8 @@ export type Op =
     }
   /** The reward of a level of a path (`level`: its number or `done`) granted or not (capability `path_reward`). */
   | { op: 'path_reward'; id: string; level: string; given: boolean; if_match?: string }
+  /** The levels of a path written as a whole, its `## Level` section (capability `path_levels`); the engine judges them. */
+  | { op: 'path_levels'; id: string; levels: LevelsSpec; if_match?: string }
   /** A learning point of a path (or of a task's `## Lernpunkte`) made a task of its own, and taken back. */
   | { op: 'promote'; container: string; point: string; if_match?: string }
   | { op: 'unpromote'; container: string; point: string; id?: string; if_match?: string }

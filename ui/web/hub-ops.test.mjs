@@ -103,7 +103,7 @@ test('the browser hub lets through the operations the Rust hub does, the learnin
   // the meetings are written through the Rust hub only (the web variant has no meeting files yet)
   const appOnly = new Set(['set_section', 'meeting_new', 'meeting_set', 'meeting_close', 'meeting_capture', 'meeting_attend', 'meeting_followups']);
   assert.deepEqual([...OPS_ALLOWED].sort(), rust.filter((name) => !appOnly.has(name)).sort());
-  for (const op of ['node_set', 'promote', 'unpromote', 'path_reward']) {
+  for (const op of ['node_set', 'promote', 'unpromote', 'path_reward', 'path_levels']) {
     assert.equal(typeof checkOpsRequest(JSON.stringify({ ops: [{ op }] })), 'object', op);
   }
 });

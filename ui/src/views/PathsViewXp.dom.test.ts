@@ -187,7 +187,9 @@ describe('PathsView: XP, levels and rewards', () => {
     if (cc) {
       cc.querySelector<HTMLElement>('summary')!.click();
       await settle();
-      expect(choice(cc, 'XP')).toBeUndefined();
+      // no XP of the point itself; the task's XP are set as the task's (PathsViewLevels.dom.test.ts)
+      expect([...cc.querySelectorAll('button')].map((b) => b.textContent)).not.toContain('XP …');
+      expect(choice(cc, 'XP der Task')).toBeDefined();
     }
   });
 
