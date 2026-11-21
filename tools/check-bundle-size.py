@@ -58,18 +58,20 @@ Room made on 2026-11-21 (tasks-desktop/start-budget-fast-voll-969-6-von-970-kb-e
 demand: they are opened often, but Today and the list are what the page starts with. The start is 931 kB (main 528).
 So that they do not flicker for it, their loader remembers its module (`ui/src/views/loader.ts`: a view opened again is
 drawn in the frame of its heading) and the page fetches them when it is idle after its start, so the first open draws
-at once too (`ui/e2e/lazy-views.spec.ts`). The budget stays at 970 kB: the 39 kB are the room of the next features.
+at once too (`ui/e2e/lazy-views.spec.ts`). Lowered after it to 945 kB (decision of 2026-11-21,
+`tasks-desktop/start-budget-nach-dem-nachladen-von-board-und-ansichten`): about 14 kB of room as before, so growth shows
+early; the next candidates to load on demand are named above.
 The candidates left in `App.svelte`: `Detail`, `ListView`, `Today`, `Capture` (all drawn at the start or from every
 view) and `InboxView` (10 kB source).
 
-usage: check-bundle-size.py [--dist ui/dist] [--budget-kb 970]
+usage: check-bundle-size.py [--dist ui/dist] [--budget-kb 945]
 """
 import argparse
 import pathlib
 import re
 import sys
 
-BUDGET_KB = 970
+BUDGET_KB = 945
 
 # `from"./x.js"` and `import"./x.js"` of a built chunk: a static import. A dynamic `import("./x.js")` has a bracket.
 STATIC_IMPORT = re.compile(r'(?:from|import)\s*"\./([^"]+\.js)"')
