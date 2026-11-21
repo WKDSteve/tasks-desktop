@@ -18,7 +18,7 @@
   } = $props();
 
   const shown = $derived(
-    shownIcon({ kind: 'task', id: task.id, icon: task.icon, point: task.point, category: task.category }, app.pathIcons),
+    shownIcon({ kind: 'task', id: task.id, icon: task.icon, point: task.point, category: task.category }, app.pathIcons, app.categoryIcons),
   );
   $effect(() => {
     if (task.point && !task.icon) app.wantPathIcons();

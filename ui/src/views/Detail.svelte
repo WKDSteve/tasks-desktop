@@ -82,7 +82,7 @@
   const imageSource = $derived(images?.source(t('image.missing'), openImage));
   const blocks = $derived(raw ? [] : parseMarkdown(body, { assets: images !== null }));
   const icon = $derived(
-    task ? shownIcon({ kind: 'task', id: task.id, icon: task.icon, point: task.point, category: task.category }, app.pathIcons) : null,
+    task ? shownIcon({ kind: 'task', id: task.id, icon: task.icon, point: task.point, category: task.category }, app.pathIcons, app.categoryIcons) : null,
   );
   // A task of a learning point takes the icon of its path when it has none of its own: the paths are read once.
   $effect(() => {

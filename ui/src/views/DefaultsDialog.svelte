@@ -10,6 +10,7 @@
   import { translate, type Key } from '../lib/i18n';
   import { SORT_GROUPS } from '../lib/sort';
   import { ROW_ACTIONS, toggleRowAction } from '../lib/rowActions';
+  import { categoryIconRows, categoryIconsOf, isOneGrapheme, ownIcon, withCategoryIcon } from '../lib/icons';
 
   let { app, open, onclose }: { app: App; open: boolean; onclose: () => void } = $props();
   const t = (key: Key, params: Record<string, string | number> = {}) => translate(app.lang, key, params);
@@ -27,6 +28,27 @@
   /** How many choices the filter shown now holds. */
   const shownChoices = $derived(activeFilters(app.filter).length);
   let confirmReset = $state(false);
+
+  /** The categories the setting "Icons of the categories" offers: those with an icon, then the vault's. */
+  const iconRows = $derived(categoryIconRows(app.categoryIconPrefs, app.ranges.categories));
+  /** What stands in a field of an icon that is not one character, by category: shown with a word, not taken. */
+  let wrongIcons = $state<Record<string, string>>({});
+  /** The icon each field shows: the one chosen, also while the step is off. */
+  const chosenIcons = $derived(categoryIconsOf(app.categoryIconPrefs, true));
+
+  /** One character or nothing is the icon of `category` at once; anything else waits in the field with a word. */
+  function takeIcon(category: string, text: string): void {
+    const icon = text.trim();
+    const rest: Record<string, string> = Object.create(null);
+    for (const [c, wrongText] of Object.entries(wrongIcons)) if (c !== category) rest[c] = wrongText;
+    if (icon === '' || isOneGrapheme(icon)) {
+      wrongIcons = rest;
+      app.setCategoryIcons(withCategoryIcon(app.categoryIconPrefs, category, icon));
+    } else {
+      rest[category] = text;
+      wrongIcons = rest;
+    }
+  }
 </script>
 
 <dialog
@@ -36,6 +58,7 @@
   aria-labelledby="defaults-title"
   onclose={() => {
     confirmReset = false;
+    wrongIcons = {};
     onclose();
   }}
   data-testid="defaults-dialog"
@@ -146,6 +169,60 @@
       />
     </fieldset>
 
+    <!-- The last step of the icons (lib/icons.ts): on or off, and one character per category or none. A text that is
+         not one character is said at the field and not taken; the icon before stays. -->
+    <fieldset data-testid="defaults-category-icons">
+      <legend>{t('defaults.sec.category_icons')}</legend>
+      <label class="check" data-hint={t('hint.defaults.category_icons.on')}>
+        <input
+          type="checkbox"
+          data-pref="category-icons"
+          checked={app.categoryIconPrefs.on}
+          onchange={(e) => app.setCategoryIcons({ ...app.categoryIconPrefs, on: e.currentTarget.checked })}
+        />
+        {t('defaults.category_icons.on')}
+      </label>
+      <p class="muted" id="defaults-category-icons-intro">{t('defaults.category_icons.intro')}</p>
+      <div class="icons">
+        {#each iconRows as category, i (category)}
+          {@const wrongText = ownIcon(wrongIcons, category)}
+          {@const wrong = wrongText !== undefined}
+          <label for={`defaults-category-icon-${i}`} data-hint={t('hint.defaults.category_icon')}>{category}</label>
+          <input
+            id={`defaults-category-icon-${i}`}
+            class="icon"
+            type="text"
+            data-category-icon={category}
+            data-hint={t('hint.defaults.category_icon')}
+            autocomplete="off"
+            spellcheck="false"
+            disabled={!app.categoryIconPrefs.on}
+            value={wrongText ?? ownIcon(chosenIcons, category) ?? ''}
+            aria-invalid={wrong ? 'true' : undefined}
+            aria-describedby={wrong ? `defaults-category-icon-${i}-wrong` : 'defaults-category-icons-intro'}
+            onfocus={(e) => e.currentTarget.select()}
+            oninput={(e) => takeIcon(category, e.currentTarget.value)}
+          />
+          {#if wrong}
+            <span class="wrong" id={`defaults-category-icon-${i}-wrong`} role="alert">{t('defaults.category_icons.invalid')}</span>
+          {:else}
+            <span></span>
+          {/if}
+        {/each}
+      </div>
+      <div class="row">
+        <button
+          type="button"
+          onclick={() => {
+            wrongIcons = {};
+            app.setCategoryIcons({ on: app.categoryIconPrefs.on, changed: {} });
+          }}
+          disabled={Object.keys(app.categoryIconPrefs.changed).length === 0 && Object.keys(wrongIcons).length === 0}
+          data-testid="defaults-category-icons-reset">{t('defaults.category_icons.reset')}</button
+        >
+      </div>
+    </fieldset>
+
     <!-- The actions at the end of a row of a list: each for itself, none forced (lib/rowActions.ts). -->
     <fieldset data-testid="defaults-row-actions">
       <legend>{t('menu.sec.row_actions')}</legend>
@@ -197,7 +274,7 @@
       {#if confirmReset}
         <span class="confirm" role="alert">
           {t('defaults.reset.confirm')}
-          <button type="button" class="primary" onclick={() => { app.resetToFactory(); confirmReset = false; }} data-testid="defaults-reset-yes">{t('defaults.reset.yes')}</button>
+          <button type="button" class="primary" onclick={() => { app.resetToFactory(); confirmReset = false; wrongIcons = {}; }} data-testid="defaults-reset-yes">{t('defaults.reset.yes')}</button>
           <button type="button" onclick={() => (confirmReset = false)}>{t('dialog.cancel')}</button>
         </span>
       {:else}
@@ -257,6 +334,33 @@
     flex-wrap: wrap;
     gap: 0.5rem;
     align-items: center;
+  }
+  .icons {
+    display: grid;
+    grid-template-columns: minmax(6rem, max-content) 4rem 1fr;
+    gap: 0.35rem 0.5rem;
+    align-items: center;
+  }
+  .icons input.icon {
+    width: 100%;
+    box-sizing: border-box;
+    text-align: center;
+    font-size: 1.1rem;
+    background: var(--surface-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 0.2rem;
+  }
+  .icons input.icon[aria-invalid='true'] {
+    border-color: var(--bad);
+  }
+  .icons input.icon:disabled {
+    opacity: 0.6;
+  }
+  .wrong {
+    color: var(--bad);
+    font-size: 0.9rem;
   }
   .layout .name {
     min-width: 8rem;

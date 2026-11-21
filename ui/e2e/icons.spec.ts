@@ -111,3 +111,68 @@ test('the icon of a task stands beside its title on the board, in the inbox, the
     removeFile(viewFile);
   }
 });
+
+test('the icons of the categories are chosen in the defaults: another icon on the board, and none while switched off', async ({ page }) => {
+  const slug = 'icons-e2e-c02';
+  const title = 'Icons e2e c02';
+  const file = join(state().vault, 'lib.nvim', 'ROADMAP', 'tasks', `${slug}.md`);
+  writeFileSync(file, `---\ntitle: ${title}\nstatus: open\ncategory: [bug]\ncreated: 2026-11-21\nupdated: 2026-11-21\n---\n\nA task with the icon of its category.\n`);
+  try {
+    await expect
+      .poll(
+        async () => {
+          const r = await page.request.get('/api/tasks/snapshot', { headers: { Authorization: `Bearer ${state().token}` } });
+          return r.ok() && (await r.text()).includes(`"lib.nvim/${slug}"`);
+        },
+        { timeout: 20_000 },
+      )
+      .toBe(true);
+    const problems = await pair(page, '/#view=board');
+    const card = page.locator(`[data-card="lib.nvim/${slug}"]`);
+    const icon = card.locator('[data-icon="category"]');
+    await expect(icon).toHaveText(BUG);
+
+    const openDefaults = async () => {
+      await page.getByRole('menuitem', { name: 'Options', exact: true }).click();
+      await page.getByRole('menuitem', { name: 'Defaults ...' }).click();
+      const dialog = page.getByTestId('defaults-dialog');
+      await expect(dialog).toBeVisible();
+      return dialog;
+    };
+    let dialog = await openDefaults();
+    const section = dialog.getByRole('group', { name: 'Icons of the categories' });
+    await section.scrollIntoViewIfNeeded();
+    await expectAccessible(page, 'the icons of the categories in the defaults dialog');
+    const bug = section.getByLabel('bug', { exact: true });
+    await expect(bug).toHaveValue(BUG);
+    // not one character: said at the field, not taken
+    await bug.fill('xy');
+    await expect(bug).toHaveAttribute('aria-invalid', 'true');
+    await expect(section.getByRole('alert')).toBeVisible();
+    await expectAccessible(page, 'a wrong icon of a category');
+    await expect(icon).toHaveText(BUG);
+    await bug.fill('🪲');
+    await expect(section.getByRole('alert')).toHaveCount(0);
+    await dialog.getByRole('button', { name: 'Close' }).click();
+    await expect(icon).toHaveText('🪲');
+
+    // kept in this browser: a reload shows the same
+    await page.reload();
+    await expect(page.getByRole('menubar')).toBeVisible();
+    await expect(icon).toHaveText('🪲');
+
+    dialog = await openDefaults();
+    await dialog.getByRole('checkbox', { name: 'A task without an icon of its own shows the icon of its category' }).uncheck();
+    await expect(dialog.getByLabel('bug', { exact: true })).toBeDisabled();
+    await expectAccessible(page, 'the icons of the categories switched off');
+    await dialog.getByRole('button', { name: 'Close' }).click();
+    await expect(card).toBeVisible();
+    await expect(card.locator('[data-icon]')).toHaveCount(0);
+    expect(JSON.parse((await page.evaluate(() => localStorage.getItem('tasks-desktop.category-icons'))) ?? '{}')).toEqual({ on: false, changed: { bug: '🪲' } });
+
+    expect(problems).toEqual([]);
+    expect(await violations(page)).toEqual([]);
+  } finally {
+    removeFile(file);
+  }
+});

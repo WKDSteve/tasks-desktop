@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { make, snapshot } from '../lib/appDouble';
 import type { Next, Snapshot, TaskEntry } from '../lib/contract';
 import { task } from '../lib/fixtures';
+import { withCategoryIcon } from '../lib/icons';
 import BoardView from './BoardView.svelte';
 import CalendarView from './CalendarView.svelte';
 import DailyList from './DailyList.svelte';
@@ -174,5 +175,23 @@ describe('the icon of a task beside its title', () => {
     const body = root.querySelector('[data-column="body"][data-task="pub/bug"]');
     expect(body?.querySelector('[data-icon]')?.textContent).toBe(BUG);
     expect(accessibleName(body!)).not.toContain(BUG);
+  });
+
+  it('follows the setting "Icons of the categories": another icon, none, switched off', async () => {
+    const m = await vault(() => [task('pub/bug', { title: 'Broken thing', category: ['bug'], status: 'open' })]);
+    const root = show(BoardView, { app: m.app });
+    await settle();
+    const icon = () => root.querySelector('[data-card="pub/bug"] [data-icon], [data-task="pub/bug"] [data-icon]');
+    expect(icon()?.textContent).toBe(BUG);
+    m.app.setCategoryIcons(withCategoryIcon(m.app.categoryIconPrefs, 'bug', '🪲'));
+    await settle();
+    expect(icon()?.textContent).toBe('🪲');
+    m.app.setCategoryIcons(withCategoryIcon(m.app.categoryIconPrefs, 'bug', ''));
+    await settle();
+    expect(icon()).toBeNull();
+    m.app.setCategoryIcons(withCategoryIcon(m.app.categoryIconPrefs, 'bug', '🪲'));
+    m.app.setCategoryIcons({ ...m.app.categoryIconPrefs, on: false });
+    await settle();
+    expect(icon()).toBeNull();
   });
 });

@@ -34,3 +34,29 @@ test('the defaults dialog of the web variant: a start view that holds when the p
   expect(seen.errors).toEqual([]);
   expect(seen.requests).toEqual([]);
 });
+
+test('the icons of the categories in the web variant: chosen in the defaults, kept for every vault of the browser', async ({ page }) => {
+  const seen = await watchPage(page);
+  const files = vaultFiles();
+  files['lib.nvim/ROADMAP/tasks/webicons-e2e-c01.md'] =
+    '---\ntitle: Webicons e2e c01\nstatus: open\nprio: 1\ncategory: [bug]\ncreated: 2026-11-21\nupdated: 2026-11-21\n---\n\nA task with the icon of its category.\n';
+  await openVault(page, files, 'Webicons e2e c01');
+  await page.getByRole('menuitem', { name: 'View', exact: true }).click();
+  await page.getByRole('menuitemradio', { name: 'List', exact: true }).click();
+  const icon = page.locator('button.row', { hasText: 'Webicons e2e c01' }).locator('[data-icon="category"]');
+  await expect(icon).toHaveText('🐞');
+  await page.getByRole('menuitem', { name: 'Options', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Defaults ...', exact: true }).click();
+  const dialog = page.getByTestId('defaults-dialog');
+  const section = dialog.getByRole('group', { name: 'Icons of the categories' });
+  await section.getByLabel('bug', { exact: true }).fill('🪲');
+  await expectAccessible(page, 'the icons of the categories in the web variant');
+  await dialog.getByRole('button', { name: 'Close' }).click();
+  await expect(icon).toHaveText('🪲');
+  // a preference of the person, not of the vault (web/vault-switch.ts)
+  expect(await page.evaluate(() => Object.keys(localStorage).filter((k) => k.startsWith('tasks-desktop.category-icons')))).toEqual([
+    'tasks-desktop.category-icons',
+  ]);
+  expect(seen.errors).toEqual([]);
+  expect(seen.requests).toEqual([]);
+});

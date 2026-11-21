@@ -180,6 +180,13 @@ import {
 } from './minutes';
 import type { RemindersMail } from './reminders';
 import { DEFAULT_ROW_ACTIONS, parseRowActions, serializeRowActions, type RowActionPrefs } from './rowActions';
+import {
+  DEFAULT_CATEGORY_ICON_PREFS,
+  categoryIconsOf,
+  parseCategoryIcons,
+  serializeCategoryIcons,
+  type CategoryIconPrefs,
+} from './icons';
 import type { RepoStatus } from './repoStatus';
 import { tagTargets } from './tagging';
 import { COLUMN_KEYS, defaultColumns, parseColumns, serializeColumns, type ListColumns } from './columns';
@@ -328,6 +335,8 @@ const LATE_CODE_MS = 60_000;
 export type HubState = 'here' | 'gone' | 'replaced';
 /** The saved view that was open last (its id). */
 const OPEN_VIEW_KEY = 'tasks-desktop.view-open';
+/** Where the setting "Icons of the categories" is kept in this browser (lib/icons.ts). */
+const CATEGORY_ICONS_KEY = 'tasks-desktop.category-icons';
 /** The key the palette remembers a choice of a saved view under (`view.<id>` of `paletteActions`, as an action). */
 const VIEW_ACTION = 'action:view.';
 
@@ -490,6 +499,10 @@ export class App {
   learningHidden = $state(false);
   /** XP, levels and rewards in the learning paths (off: none of them, and no notice of a level reached). */
   gamification = $state(true);
+  /** The setting "Icons of the categories" (lib/icons.ts): the last step of the inheritance, on or off, and its icons. */
+  categoryIconPrefs = $state.raw<CategoryIconPrefs>(DEFAULT_CATEGORY_ICON_PREFS);
+  /** The icon of each category with one, by `categoryIconPrefs`: what every icon of a task takes (`shownIcon`). */
+  categoryIcons = $state.raw<Readonly<Record<string, string>>>(categoryIconsOf(DEFAULT_CATEGORY_ICON_PREFS));
   /** The actions at the end of a row of a list, and whether every row shows them all the time (`lib/rowActions.ts`). */
   rowActions = $state.raw<RowActionPrefs>(DEFAULT_ROW_ACTIONS);
   /** The choice of the areas also stands in the bar at the top, for every view (a trial). */
@@ -953,6 +966,7 @@ export class App {
     this.zebra = safe(() => env.prefs.getItem('tasks-desktop.zebra')) === 'on';
     this.learningHidden = safe(() => env.prefs.getItem('tasks-desktop.hide-learning')) === 'on';
     this.gamification = safe(() => env.prefs.getItem('tasks-desktop.gamification')) !== 'off';
+    this.#takeCategoryIcons(parseCategoryIcons(safe(() => env.prefs.getItem(CATEGORY_ICONS_KEY))));
     this.rowActions = parseRowActions(safe(() => env.prefs.getItem('tasks-desktop.row-actions')) ?? null);
     this.groupAreas = safe(() => env.prefs.getItem('tasks-desktop.group-areas')) === 'on';
     this.barAreas = safe(() => env.prefs.getItem('tasks-desktop.bar-areas')) === 'on';
@@ -1033,6 +1047,7 @@ export class App {
     this.setGroupAreas(false);
     this.setBarAreas(false);
     this.setSaveMode('auto');
+    this.setCategoryIcons(DEFAULT_CATEGORY_ICON_PREFS);
     for (const view of LAYOUT_VIEWS) this.resetLayout(view);
     this.applyDefaults();
   }
@@ -4063,6 +4078,17 @@ export class App {
   setGamification(on: boolean): void {
     this.gamification = on;
     safe(() => this.env.prefs.setItem('tasks-desktop.gamification', on ? 'on' : 'off'));
+  }
+
+  /** The setting "Icons of the categories", kept in this browser. */
+  setCategoryIcons(prefs: CategoryIconPrefs): void {
+    this.#takeCategoryIcons(prefs);
+    safe(() => this.env.prefs.setItem(CATEGORY_ICONS_KEY, serializeCategoryIcons(prefs)));
+  }
+
+  #takeCategoryIcons(prefs: CategoryIconPrefs): void {
+    this.categoryIconPrefs = prefs;
+    this.categoryIcons = categoryIconsOf(prefs);
   }
 
   /**

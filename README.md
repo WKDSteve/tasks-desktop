@@ -427,8 +427,10 @@ a picture (`<img>`), never as markup of the page, so nothing in it runs. The edi
 has no description (what a screen reader says, and what shows when the file is missing). The item's `icon` (an emoji or
 an image below `assets/`) stands before its title in the task rows and in the head of a task, a plan, a project, a
 learning path and a meeting: its own, else the one of the learning path its point belongs to, else the one of its
-category (learning 📚, bug 🐞, security 🔒, performance ⚡, docs 📄, tests 🧪). Its `cover` stands in its head. The page
-reads each image with the session through one route:
+category (as it comes: learning 📚, bug 🐞, security 🔒, performance ⚡, docs 📄, tests 🧪). *Options > Defaults ...*
+(*Icons of the categories*) switches this last step off or sets one character per category (an emoji, or empty for
+none; a text that is not one character is said at the field and not taken), kept in this browser and put back by *Reset
+everything*. Its `cover` stands in its head. The page reads each image with the session through one route:
 
 - `GET /api/tasks/asset?kind=task|plan|project|path|meeting&id=<area>/<slug>&file=assets/...`: an image of the item
   in its folder form. The folder is the engine's (the file of a task, a path, a meeting) or the layout's (a plan, a

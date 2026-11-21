@@ -19,6 +19,7 @@ import type { Grouping } from './groups';
 import { DRAFT_ID } from './state/views.svelte';
 import { vaultMenuItems, vaultMenuOpened } from './vaultMenu';
 import { FakeHub, make, snapshot } from './appDouble';
+import { CATEGORY_ICONS, DEFAULT_CATEGORY_ICON_PREFS, withCategoryIcon } from './icons';
 
 describe('App', () => {
   it('uses the browser language', () => {
@@ -7001,6 +7002,25 @@ describe('the defaults (dialog "Defaults ...")', () => {
     again.app.resetToFactory();
     expect([again.app.areaSplit, again.app.zebra, again.app.barAreas, again.app.groupAreas]).toEqual([true, false, false, false]);
     m.app.stop();
+  });
+
+  it('keeps the icons of the categories in this browser, takes them at the start, and puts them back with the factory', () => {
+    const m = make({ token: 't' });
+    expect(m.app.categoryIcons.bug).toBe('🐞');
+    m.app.setCategoryIcons(withCategoryIcon(m.app.categoryIconPrefs, 'bug', '🪲'));
+    expect(m.app.categoryIcons.bug).toBe('🪲');
+    expect(JSON.parse(m.prefs.get('tasks-desktop.category-icons') ?? '{}')).toEqual({ on: true, changed: { bug: '🪲' } });
+    m.app.setCategoryIcons({ ...m.app.categoryIconPrefs, on: false });
+    expect(m.app.categoryIcons).toEqual({});
+    const again = make({ token: 't', prefs: m.prefs });
+    expect(again.app.categoryIconPrefs.on).toBe(false);
+    expect({ ...again.app.categoryIconPrefs.changed }).toEqual({ bug: '🪲' });
+    expect(again.app.categoryIcons).toEqual({});
+    again.app.resetToFactory();
+    expect(again.app.categoryIconPrefs).toEqual(DEFAULT_CATEGORY_ICON_PREFS);
+    expect({ ...again.app.categoryIcons }).toEqual(CATEGORY_ICONS);
+    m.app.stop();
+    again.app.stop();
   });
 
   it('resets everything to the factory: defaults, switches, order and filter', async () => {
