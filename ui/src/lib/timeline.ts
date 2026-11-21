@@ -286,8 +286,12 @@ export interface TimeEdge {
   backwards: boolean;
 }
 
-/** The arrows between the bars: each `blocked_by` and `after` of a task whose other end is on the timeline too. */
-export function edgesOf(bars: readonly Bar[]): TimeEdge[] {
+/**
+ * The arrows between the bars: each `blocked_by` and `after` of a task whose other end is on the timeline too. Whether
+ * an arrow points back in time is the engine's word when it has one (`engineLate`: capability `late_blockers`, the
+ * blockers of a task due after it begins); an older engine leaves it to the two bars.
+ */
+export function edgesOf(bars: readonly Bar[], engineLate = false): TimeEdge[] {
   const byId = new Map(bars.map((b) => [b.task.id, b]));
   const out: TimeEdge[] = [];
   for (const bar of bars) {
@@ -297,7 +301,10 @@ export function edgesOf(bars: readonly Bar[]): TimeEdge[] {
         const other = byId.get(id);
         if (!other || id === bar.task.id || seen.has(id)) continue;
         seen.add(id);
-        out.push({ from: id, to: bar.task.id, kind, backwards: other.to > bar.from });
+        const backwards = engineLate
+          ? (bar.task.late_blockers ?? []).some((late) => late.id === id && late.kind === kind)
+          : other.to > bar.from;
+        out.push({ from: id, to: bar.task.id, kind, backwards });
       }
     };
     add(bar.task.blocked_by, 'blocked_by');

@@ -224,6 +224,30 @@ describe('the arrows', () => {
     expect(edge('2026-11-09')).toBe(false);
   });
 
+  it("take the engine's late blockers when it names them, not the bars", () => {
+    const bars = barsOf([
+      // the bars say in time (the blocker ends before the follower begins) ...
+      task('a/first', { start: '2026-11-02', due: '2026-11-06' }),
+      task('a/second', {
+        start: '2026-11-09',
+        due: '2026-11-12',
+        blocked_by: ['a/first'],
+        after: ['a/first'],
+        // ... the engine says the hard one is late: its word counts, for that kind only
+        late_blockers: [{ id: 'a/first', kind: 'blocked_by', due: '2026-11-10', against: 'start' }],
+      }),
+    ]);
+    expect(edgesOf(bars, true)).toEqual([{ from: 'a/first', to: 'a/second', kind: 'blocked_by', backwards: true }]);
+    expect(edgesOf(bars, false)[0]?.backwards, 'an older engine: the bars').toBe(false);
+    // a late blocker the engine does not name is in time, whatever the bars say
+    const late = barsOf([
+      task('b/first', { start: '2026-11-02', due: '2026-11-10' }),
+      task('b/second', { start: '2026-11-09', blocked_by: ['b/first'] }),
+    ]);
+    expect(edgesOf(late, true)[0]?.backwards).toBe(false);
+    expect(edgesOf(late, false)[0]?.backwards).toBe(true);
+  });
+
   it('go out to the right and in from the left, and around when the target is not to the right', () => {
     expect(arrowPath(100, 15, 200, 45, 30)).toBe('M 100 15 H 108 V 45 H 200');
     expect(arrowPath(200, 15, 100, 45, 30)).toBe('M 200 15 H 208 V 30 H 92 V 45 H 100');

@@ -130,7 +130,7 @@
   const todayX = $derived(daysBetween(range.from, app.today) * dayWidth + dayWidth / 2);
 
   const arrows = $derived(
-    edgesOf(bars).flatMap((edge) => {
+    edgesOf(bars, app.can('late_blockers')).flatMap((edge) => {
       const a = barOfId.get(edge.from);
       const b = barOfId.get(edge.to);
       const ra = rowOf.get(edge.from);
@@ -145,7 +145,7 @@
   /** What a task waits for, by name, for the table (with a word for an arrow that points back). */
   const waits = $derived.by(() => {
     const out = new Map<string, { title: string; backwards: boolean }[]>();
-    for (const edge of edgesOf(bars)) {
+    for (const edge of edgesOf(bars, app.can('late_blockers'))) {
       const list = out.get(edge.to) ?? [];
       list.push({ title: barOfId.get(edge.from)?.task.title ?? edge.from, backwards: edge.backwards });
       out.set(edge.to, list);
