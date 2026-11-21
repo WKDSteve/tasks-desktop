@@ -8,4 +8,9 @@ return {
     title = "The first start is in the page: the vault and Neovim chosen in the dialogs of the system, the installation offered",
     docs = "README.md",
   },
+  {
+    id = "tasks.path-levels",
+    title = "The levels of a learning path set in a form: written to ## Level with a badge and rewards, refused by the engine, the XP of a promoted task",
+    docs = "README.md",
+  },
 }

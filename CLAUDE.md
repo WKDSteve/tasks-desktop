@@ -22,7 +22,7 @@ python tools/check-process-starts.py    # no process is started by hand (appkit_
 python tools/check-color-literals.py --root ui/src --tokens ui/src/palette.css   # no colour outside tokens and palette (CI job hygiene)
 python tools/check-bundle-size.py   # after pnpm build: the start (main chunk and the chunks it imports) stays within its budget
 python tools/check-lock-age.py --min-days 7   # after cargo update: no crate younger than 7 days (CI job rust); in a fresh worktree copy target/lock-age-cache.json of the main checkout first
-testing sheets run --all                # test sheets (TESTS/sheets, .testing.lua): the first start in the page against the example setup-hub, a folder of the run; Chrome; without the LIB_NVIM_DIR of the engine pin (testing.nvim needs a newer lib.nvim)
+testing sheets run --all                # test sheets (TESTS/sheets, .testing.lua): the first start in the page against the example setup-hub, the levels form of a path against the same hub with a vault of the run (app levels-hub; the engine as the machine finds it), a folder of the run; Chrome; without the LIB_NVIM_DIR of the engine pin (testing.nvim needs a newer lib.nvim)
 ```
 
 Die Web-Variante (eigene CI `web.yml`), bei jedem Sprung von `engine.lock` und jeder Änderung an `ui/src/web`:
