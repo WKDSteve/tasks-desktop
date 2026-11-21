@@ -421,6 +421,11 @@ suggestion; empty removes them. A level reached since the path was looked at las
 reward; the first look at a path only notes its level. Everything here is optional and quiet: **Options › Defaults ›
 XP, levels and rewards in learning paths** turns it off (kept per browser), the progress stays. The badge of the level
 reached stands beside it, and the badges of all levels below the bar (the ones not reached yet grey).
+**Set levels and rewards …** (with an engine that writes them, capability `path_levels`) opens a form below the bar:
+per level a threshold in XP or percent, a name, a badge (a picture of the path's `assets/badges/`) and a reward, and a
+reward for the whole path. The engine writes them into `## Level` as one change (`path_levels`, undone in the toast) and
+judges them; a refusal (thresholds that fall, a name too long) is said and the form stays open. **XP of the task …** in
+the menu of a promoted point sets the `xp:` of its task (`set`), which the point counts.
 
 **Images in the texts.** A Markdown image of a file below `assets/` of the item's own folder (`![Syntax](assets/images/
 lua.svg)`; `png`, `jpg`, `jpeg`, `webp`, `gif`, `svg`) is drawn as a picture in the text of a task, in the decisions and
