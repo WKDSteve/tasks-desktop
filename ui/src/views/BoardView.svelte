@@ -1,4 +1,5 @@
 <script lang="ts">
+  import TaskIcon from './TaskIcon.svelte';
   import ClaimTag from './ClaimTag.svelte';
   import { contextTarget } from 'appkit-ui/contextmenu';
   import { taskTarget } from '../lib/context';
@@ -290,7 +291,7 @@
                   else app.peek(card.id);
                 }}
               >
-                <span class="title">{#if app.marks.includes(card.id)}<span class="sr-only">{t('mark.marked')} </span>{/if}{markHidden(card.title)}</span>
+                <span class="titled"><TaskIcon {app} task={card} /><span class="title">{#if app.marks.includes(card.id)}<span class="sr-only">{t('mark.marked')} </span>{/if}{markHidden(card.title)}</span></span>
                 <span class="meta">
                   <!-- A finger drags by this grip (a screen reader and the keys have the keys of the board). -->
                   <span
@@ -346,6 +347,15 @@
 </div>
 
 <style>
+  /* The icon beside the title, in the one cell of the title (never a cell of the grid of its own). */
+  .titled {
+    display: flex;
+    align-items: baseline;
+    min-width: 0;
+  }
+  .titled .title {
+    min-width: 0;
+  }
   .tag.overdue {
     color: var(--warn);
     border-color: var(--warn);

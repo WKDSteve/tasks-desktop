@@ -1,4 +1,5 @@
 <script lang="ts">
+  import TaskIcon from './TaskIcon.svelte';
   // The inbox: the open tasks that are not sorted yet, one single key for each field (see `lib/inbox.ts`). The keys
   // are read in `App.svelte`, with the others; this view shows the list, what each task still lacks, and the keys.
   import { onMount, untrack } from 'svelte';
@@ -103,7 +104,7 @@
           onclick={() => app.select(task.id)}
         >
           <span class="id">{task.id}</span>
-          <span class="title">{#if app.marks.includes(task.id)}<span class="sr-only">{t('mark.marked')} </span>{/if}{markHidden(task.title)}</span>
+          <span class="titled"><TaskIcon {app} {task} /><span class="title">{#if app.marks.includes(task.id)}<span class="sr-only">{t('mark.marked')} </span>{/if}{markHidden(task.title)}</span></span>
           <span class="meta">
             {#each missingOf(task) as field (field)}
               <span class="tag" data-hint={hintOf(app.lang, 'hint.inbox.missing', field)}>{t(`inbox.missing.${field}` as Key)}</span>
@@ -124,6 +125,15 @@
 </div>
 
 <style>
+  /* The icon beside the title, in the one cell of the title (never a cell of the grid of its own). */
+  .titled {
+    display: flex;
+    align-items: baseline;
+    min-width: 0;
+  }
+  .titled .title {
+    min-width: 0;
+  }
   .split {
     display: grid;
     grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);

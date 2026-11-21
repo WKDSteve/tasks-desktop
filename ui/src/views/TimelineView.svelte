@@ -1,4 +1,5 @@
 <script lang="ts">
+  import TaskIcon from './TaskIcon.svelte';
   // The timeline (Gantt-like): a bar for each open task from `start` to `due` (a mark for a task with one date), in
   // rows grouped by plan or by area, a line for today, the dependencies as arrows (see `lib/timeline.ts`). Dragging a
   // bar moves both dates, dragging an end moves one; a finger drags by the grip of a row or by an end. The keys do the
@@ -452,7 +453,7 @@
         aria-label={label(bar)}
         onclick={() => open(task.id)}
       >
-        {#if bar.kind === 'bar'}<span class="bar-title" aria-hidden="true">{markHidden(task.title)}</span>{/if}
+        {#if bar.kind === 'bar'}<TaskIcon {app} {task} size={12} /><span class="bar-title" aria-hidden="true">{markHidden(task.title)}</span>{/if}
       </button>
       {#if bar.kind === 'bar'}
         <button
@@ -582,7 +583,7 @@
                     data-task={bar.task.id}
                     data-column="name"
                     title={bar.task.title}
-                    onclick={() => app.peek(bar.task.id)}>{markHidden(bar.task.title)}</button
+                    onclick={() => app.peek(bar.task.id)}><TaskIcon {app} task={bar.task} size={12} /><span class="name-title">{markHidden(bar.task.title)}</span></button
                   >
                 </div>
                 <div class="track" style:width="{width}px">
@@ -638,7 +639,7 @@
       <tbody>
         {#each [...bars.map((b) => b.task), ...loose].slice(0, TABLE_LIMIT) as task (task.id)}
           <tr data-table-task={task.id}>
-            <th scope="row"><button type="button" class="link" onclick={() => app.peek(task.id)}>{markHidden(task.title)}</button></th>
+            <th scope="row"><TaskIcon {app} {task} /><button type="button" class="link" onclick={() => app.peek(task.id)}>{markHidden(task.title)}</button></th>
             <td data-hint={t('hint.form.timeline.start')}>
               <input
                 type="date"

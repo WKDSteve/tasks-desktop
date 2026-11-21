@@ -1,4 +1,5 @@
 <script lang="ts">
+  import TaskIcon from './TaskIcon.svelte';
   // The calendar: the open tasks and the meetings on their days, a month, a week or a day (see `lib/calendar.ts`). Week
   // and day are the hour grid (`TimeGrid.svelte`, loaded when first shown); the month has the meetings as chips before
   // the tasks. A task stands on its due
@@ -369,7 +370,7 @@
   >
     <span class="sr-only">{t(`calendar.kind.${m.kind}` as Key)}: </span>
     <span aria-hidden="true">✓</span>
-    <span class="chip-title">{markHidden(task.title)}</span>
+    <TaskIcon {app} {task} size={12} /><span class="chip-title">{markHidden(task.title)}</span>
   </button>
 {/snippet}
 
@@ -557,7 +558,7 @@
                 onkeydown={onLooseKey}
                 onclick={() => app.peek(task.id)}
               >
-                <span class="chip-title">{markHidden(task.title)}</span>
+                <TaskIcon {app} {task} size={12} /><span class="chip-title">{markHidden(task.title)}</span>
               </button>
             </li>
           {/each}

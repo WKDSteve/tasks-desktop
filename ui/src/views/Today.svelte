@@ -1,8 +1,9 @@
 <script lang="ts">
+  import TaskIcon from './TaskIcon.svelte';
   import { tick, untrack } from 'svelte';
   import { metricOfTile } from '../lib/statsHistory';
   import { type App, type OrderedTile, type Tile } from '../lib/app.svelte';
-  import type { TaskBrief } from '../lib/contract';
+  import type { TaskBrief, TaskEntry } from '../lib/contract';
   import { narrows, waitingForMe } from '../lib/filter';
   import { dueItems } from '../lib/remind';
   import { hintOf, labelOf, translate, type Key } from '../lib/i18n';
@@ -180,6 +181,10 @@
   function why(brief: TaskBrief): string {
     return brief.reason ? t(`today.why.${brief.reason}` as Key) : '';
   }
+
+  // The engine's answer to next names a task briefly (id, title, status, area): its icon comes from the task of the
+  // list, which a few lines here may look up.
+  const fullTask = <T extends { id: string }>(brief: T): T | TaskEntry => app.tasks.find((x) => x.id === brief.id) ?? brief;
 </script>
 
 {#snippet handle(tile: OrderedTile)}
@@ -342,7 +347,7 @@
         </header>
         {#if next?.task}
           <button type="button" class="big" onclick={() => open(next.task!.id)}>
-            {markHidden(next.task.title)}
+            <TaskIcon {app} task={fullTask(next.task)} size={18} /><span class="title">{markHidden(next.task.title)}</span>
           </button>
           <p class="id"><code>{next.task.id}</code></p>
           <p class="muted">
@@ -357,7 +362,7 @@
             <ul class="plain">
               {#each alternatives as alt, i (`${alt.id}:${i}`)}
                 <li>
-                  <button type="button" class="link" onclick={() => open(alt.id)}
+                  <TaskIcon {app} task={fullTask(alt)} /><button type="button" class="link" onclick={() => open(alt.id)}
                     >{markHidden(alt.title)}</button
                   >
                   <span class="muted"><code>{alt.id}</code></span>
@@ -406,7 +411,7 @@
         <ul class="plain">
           {#each waiting as task, i (`${task.id}:${i}`)}
             <li>
-              <button type="button" class="link" onclick={() => open(task.id)}
+              <TaskIcon {app} {task} /><button type="button" class="link" onclick={() => open(task.id)}
                 >{markHidden(task.title)}</button
               >
               <span class="muted"><code>{task.id}</code></span>

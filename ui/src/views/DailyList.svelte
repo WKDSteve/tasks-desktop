@@ -19,6 +19,7 @@
 </script>
 
 <script lang="ts">
+  import TaskIcon from './TaskIcon.svelte';
   // The tasks behind a number of the tile Today, in a float over the page: the open tasks (made or changed in the
   // period) or the finished ones (all, or the part an evaluation counts). The tile hands over the groups, chosen with the
   // functions it counts with, so a number and its list cannot part. A task opens its detail as in the list; "in the list"
@@ -88,7 +89,7 @@
         <ul>
           {#each group.open ?? [] as task (task.id)}
             <li data-task={task.id}>
-              <button type="button" class="link" onclick={() => openTask(task.id)}>{markHidden(task.title)}</button>
+              <TaskIcon {app} {task} /><button type="button" class="link" onclick={() => openTask(task.id)}>{markHidden(task.title)}</button>
               <span class="muted">{task.area} · {labelOf(app.lang, 'status', task.status)} · {String(group.key === 'created' ? task.created : task.updated)}</span>
             </li>
           {/each}

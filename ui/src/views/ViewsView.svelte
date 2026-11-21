@@ -1,4 +1,5 @@
 <script lang="ts">
+  import TaskIcon from './TaskIcon.svelte';
   import { selectionTarget, taskTarget } from '../lib/context';
   import { contextTarget, type ContextTarget } from 'appkit-ui/contextmenu';
   // The tab of the saved views: which view is open, a form to make one, and the open view drawn in groups. A view is a
@@ -582,7 +583,7 @@
                         }}
                         onkeydown={(e) => onCellItemKey(e, task.id, cell)}
                       >
-                        <span class="title">{#if app.marks.includes(task.id)}<span class="sr-only">{t('mark.marked')} </span>{/if}{markHidden(task.title)}</span>
+                        <span class="titled"><TaskIcon {app} {task} /><span class="title">{#if app.marks.includes(task.id)}<span class="sr-only">{t('mark.marked')} </span>{/if}{markHidden(task.title)}</span></span>
                         <span class="id">{task.id}</span>
                       </button>
                     </li>
@@ -624,7 +625,7 @@
                   onkeydown={(e) => onItemKey(e, task.id, group.value)}
                   use:contextTarget={taskTarget(task)}
                 >
-                  <span class="title">{#if app.marks.includes(task.id)}<span class="sr-only">{t('mark.marked')} </span>{/if}{markHidden(task.title)}</span>
+                  <span class="titled"><TaskIcon {app} {task} /><span class="title">{#if app.marks.includes(task.id)}<span class="sr-only">{t('mark.marked')} </span>{/if}{markHidden(task.title)}</span></span>
                   <span class="id">{task.id}</span>
                 </button>
               {/snippet}
@@ -639,6 +640,15 @@
 </div>
 
 <style>
+  /* The icon beside the title, in the one cell of the title (never a cell of the grid of its own). */
+  .titled {
+    display: flex;
+    align-items: baseline;
+    min-width: 0;
+  }
+  .titled .title {
+    min-width: 0;
+  }
   .wrap {
     display: flex;
     flex-direction: column;
