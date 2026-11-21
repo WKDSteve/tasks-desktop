@@ -25,6 +25,17 @@ describe('App', () => {
     expect(make().app.lang).toBe('de');
   });
 
+  it('counts its day from its own clock, not from the machine', async () => {
+    // A day far from any real one: a page that read the machine's clock would show another.
+    const clock = { token: 't', now: new Date('2031-03-04T10:00:00').getTime() };
+    const { app } = make(clock);
+    expect(app.today).toBe('2031-03-04');
+    // A page that stood open over midnight takes the next day when it gets the focus back, from the same clock.
+    clock.now = new Date('2031-03-05T09:00:00').getTime();
+    await app.focused();
+    expect(app.today).toBe('2031-03-05');
+  });
+
   it('asks for pairing when there is no code and no session', async () => {
     const { app } = make();
     await app.start(null);

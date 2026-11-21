@@ -910,6 +910,9 @@ export class App {
   constructor(private readonly env: Env) {
     this.mode = env.mode ?? null;
     this.readOnly = env.readOnly === true;
+    // The day of the page's own clock (`env.now`), not of the machine: a page started on a set day (the tests, a
+    // preview) must not count from the real one.
+    this.today = localToday(new Date(env.now()));
     // Made here, not as a field: it reads the profile at once, and the fields are made before `env` is held.
     this.todayState = new TodayState({
       lang: () => this.lang,
@@ -5945,7 +5948,7 @@ export class App {
   /** Ask for a scan: the window got the focus back. */
   async focused(): Promise<void> {
     // A page that stood open over midnight: a reminder may be due since.
-    this.today = localToday();
+    this.today = localToday(new Date(this.env.now()));
     // A window the hub refused a stream (too many windows) tries again now, not at the end of its backoff: the window
     // that was closed to make room is often what gave this one the focus.
     if (this.streamsFull) this.#wakeStream?.();
