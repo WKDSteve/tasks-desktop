@@ -9,6 +9,7 @@ import type { DonePreview, Groupings, MeetingDocument, MeetingEntry, MeetingPars
 import { task } from './fixtures';
 import type { PrintSheet } from './export';
 import type { RemindersMail } from './reminders';
+import { localToday } from './remind';
 import type { RepoStatus } from './repoStatus';
 
 export function snapshot(tasks: TaskEntry[], rev = 'rev:1'): Snapshot {
@@ -768,5 +769,9 @@ export function make(
       },
     },
   };
-  return { app: new App(env), hub, saved, session, prefs, files, copied, printed, cleared: () => cleared, reloads: () => reloads };
+  const app = new App(env);
+  // A clock that stands still stands on its day too: `today` is read from the machine's clock at the start, and a test
+  // that says when it is must not depend on the day it runs (it went red after midnight).
+  if (overrides.now !== undefined) app.today = localToday(new Date(overrides.now));
+  return { app, hub, saved, session, prefs, files, copied, printed, cleared: () => cleared, reloads: () => reloads };
 }
