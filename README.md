@@ -8,11 +8,15 @@ A local web UI and desktop app for [tasks.nvim](https://github.com/WKDSteve/task
 see the vault at a glance, create and move tasks, plans and a dashboard,
 in the browser first and later as a small native app.
 
-**Status: pre-alpha, P2 (hub core and read-only UI) is built.** The hub
-serves the vault's snapshot, tasks, next and areas, searches the text of the
-tasks, tells open streams when the vault changed and ships a read-only
-interface in the browser. Writing and the native shell are not there yet.
-Nothing here is released.
+**Status: in use, no versioned release yet.** The hub reads and writes the
+vault through the engine (create, set fields, finish, move), searches the text
+of the tasks, tells open pages when the vault changed, runs in the background
+with an optional login entry and serves the interface to the browser and to a
+phone (`/m/`). The same interface runs without any install as one HTML file
+([tasks-web](https://github.com/WKDSteve/tasks-web)). There is no window of its
+own: the app is the hub program and your browser. The newest green `main` is the
+[rolling build](#the-rolling-build-the-newest-main-one-click) (pre-release
+`latest`); a release `vX.Y.Z` has not been published.
 
 > **Run `install`, `start` and `autostart` in a normal terminal.** A packaged
 > app (the Claude desktop app is an MSIX) and its child processes get what
