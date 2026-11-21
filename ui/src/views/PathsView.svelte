@@ -343,6 +343,12 @@
     closeField(node);
     void send(taskXpOp(task.id, task.etag, xp));
   }
+  /** The form of the levels closes (Save, Cancel): the focus goes back to the button that opened it, never to the page. */
+  async function closeLevels(): Promise<void> {
+    editingLevels = false;
+    await tick();
+    root?.querySelector<HTMLElement>('[data-levels-open]')?.focus();
+  }
   /** The levels as the form holds them: true when the engine wrote them (the form closes then). */
   async function sendLevels(op: Parameters<App['write']>[0][number]): Promise<boolean> {
     const result = await send(op);
@@ -549,7 +555,7 @@
                 <Lazy
                   {app}
                   load={() => import('./PathLevels.svelte')}
-                  extra={{ doc, busy, send: sendLevels, onclose: () => (editingLevels = false) }}
+                  extra={{ doc, busy, send: sendLevels, onclose: () => void closeLevels() }}
                   onfailed={() => (editingLevels = false)}
                 />
               </section>

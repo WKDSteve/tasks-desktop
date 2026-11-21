@@ -168,6 +168,16 @@ describe('PathsView: setting the levels', () => {
       ]),
     );
     await vi.waitFor(() => expect(page.querySelector('[data-levels-form]')).toBeNull());
+    // the focus goes back to the button that opened the form, not to the page
+    await vi.waitFor(() => expect(document.activeElement?.matches('[data-levels-open]')).toBe(true));
+  });
+
+  it('gives the focus back to the button that opened the form on Cancel', async () => {
+    const { page } = await show();
+    const form = await openForm(page);
+    [...form.querySelectorAll('button')].find((b) => b.textContent === 'Abbrechen')!.click();
+    await vi.waitFor(() => expect(page.querySelector('[data-levels-form]')).toBeNull());
+    await vi.waitFor(() => expect(document.activeElement?.matches('[data-levels-open]')).toBe(true));
   });
 
   it('sends the version the form was filled from: a path changed meanwhile is a conflict, not overwritten', async () => {
