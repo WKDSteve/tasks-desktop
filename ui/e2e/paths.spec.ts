@@ -199,6 +199,27 @@ test('ticking down a list by keyboard: the mark keeps the focus, no tick runs in
   }
 });
 
+test('a path whose text starts with its learning points has no summary line (no checkbox, no {#key})', async ({ page }) => {
+  // The engine's summary is the first paragraph; a list of learning points (tasks.nvim 93d87f9) and checkbox lines
+  // (90397a6) are none. Before those fixes the line under the title read "- [ ] Summary e2e {#root}".
+  const slug = 'paths-e2e-s01';
+  const dir = join(state().vault, 'lib.nvim', 'ROADMAP', 'paths');
+  mkdirSync(dir, { recursive: true });
+  const file = join(dir, `${slug}.md`);
+  const title = 'Path e2e s01';
+  writeFileSync(file, `---\ntitle: ${title}\nstatus: doing\n---\n\n## Lernpunkte\n\n- [ ] Summary e2e {#root}\n  - [ ] Leaf e2e s01 {#leaf}\n`);
+  try {
+    const problems = await pair(page, '/#view=paths');
+    await page.locator(`button[data-path="lib.nvim/${slug}"]`).click();
+    await expect(page.getByRole('list', { name: `Learning points of ${title}` })).toBeVisible();
+    await expect(page.getByRole('heading', { name: title })).toBeVisible();
+    await expect(page.locator('.path p.summary')).toHaveCount(0);
+    expect(problems).toEqual([]);
+  } finally {
+    rmSync(file, { force: true });
+  }
+});
+
 test('XP and levels: a level reached is said once with its reward, granted on disk, and the switch hides it all', async ({ page }) => {
   const slug = 'paths-e2e-x01';
   const dir = join(state().vault, 'lib.nvim', 'ROADMAP', 'paths');

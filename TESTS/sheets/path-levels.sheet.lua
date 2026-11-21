@@ -67,6 +67,10 @@ return {
       expect = "document.querySelector('p.level') === null",
       note = "no ## Level yet: no level line",
     },
+    {
+      expect = "document.querySelector('.path p.summary') === null",
+      note = "the text starts with its learning points: no summary line (tasks.nvim 93d87f9)",
+    },
 
     -- the form: two levels, a badge of the path's assets/badges/, a reward for the whole path
     { click = "[data-levels-open]", note = "'Set levels and rewards …'" },

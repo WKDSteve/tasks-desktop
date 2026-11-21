@@ -274,6 +274,9 @@ export type Snapshot = Head & {
      * The version of a file: `sha256:` and 16 hex digits of the hash of its bytes.
      */
     etag?: string;
+    requires?: Requires;
+    requires_gate?: RequiresGate;
+    waiting_on?: WaitingOn;
     valid: boolean;
     links?: PlanLinks;
     icon?: Icon;
@@ -343,6 +346,26 @@ export type PlanAssets = string[];
  * The folder holds more than the 100 `assets` listed.
  */
 export type PlanAssetsTruncated = true;
+/**
+ * What a requirement that is not finished does (`requires_gate`): `soft` (the default) is a hint only (the item keeps its stage), `hard` keeps the path or project from being finished and the line of the whole path in `## Level` open. Capability `requires`.
+ */
+export type RequiresGate = "soft" | "hard";
+/**
+ * What this path or project builds on (`requires:`), in the order of the file: `id`, `gate` (the file's `requires_gate`), `kind` (`path`, `project`, or `unknown`: no learning path or project of that id, `check` says `requires-unknown`) and `met` (the requirement is finished, closed into a Backlog). Only when the file names some. Capability `requires`.
+ */
+export type Requires = {
+  id: string;
+  gate: RequiresGate;
+  kind: "path" | "project" | "unknown";
+  met: boolean;
+}[];
+/**
+ * The open HARD requirements: the item cannot be finished while one is listed (a path's `level` then reads `finished: false`, the line of the whole path not reached). A path also lists the open hard requirements of its project, with `via` the project (a `requires` of a project holds for its paths). Empty: it may be finished. Present when the item names a requirement or inherits one. Capability `requires`.
+ */
+export type WaitingOn = {
+  id: string;
+  via?: string;
+}[];
 /**
  * The CI state of a task's commits beside `commits` (capability `ci`): pending (pushed, no verdict yet), green (the CI passed on every system) or red (it failed). Absent: not known.
  */
@@ -1048,7 +1071,7 @@ export type MeetingParse = Head & {
   problems: string[];
 };
 /**
- * tasks.paths: the open learning paths of the vault or of an area, each with its progress; no tree (that is tasks.path). Capability `paths`.
+ * tasks.paths: the open learning paths of the vault or of an area (with `include_done` the finished ones too, `stage: done`, after them), each with its progress; no tree (that is tasks.path). Capability `paths`.
  */
 export type Paths = Head & {
   kind: "tasks.paths";
@@ -1056,7 +1079,23 @@ export type Paths = Head & {
   digest: Digest;
   items: PathEntry[];
   incomplete: string[];
+  /**
+   * The circles of requirements among the open paths and projects (those `check` reports as `requires-cycle`), each starting at its smallest id. Only when a path or project names a requirement. Capability `requires`.
+   */
+  requires_cycles?: [string, ...string[]][];
+  /**
+   * With `include_done`: the finished projects a requirement names, so that an arrow of a map ends in a box. Only when a path or project names a requirement. Capability `requires`.
+   */
+  done_projects?: {
+    id: string;
+    area: string;
+    title: string;
+  }[];
 };
+/**
+ * The stage of a path for a map of them: `done` (finished), `parked`, `waiting` (`waiting_on` not empty), `doing` (`status: doing`, or a point learned or seen), else `idle`. An open soft requirement never makes it wait. Capability `requires`.
+ */
+export type PathStage = "done" | "parked" | "waiting" | "doing" | "idle";
 /**
  * tasks.path: one learning path with its body and its tree as a flat list in document order. Capability `path`.
  */
@@ -1072,7 +1111,7 @@ export type PathDocument = Head & {
   body_truncated: boolean;
   nodes: PathNode[];
   progress: PathProgress;
-  xp?: PathXp2;
+  xp?: PathXp3;
   /**
    * The lines of `## Level` in file order, the line of the whole path last; only when the file has the section. Capability `xp`.
    */
@@ -2084,7 +2123,7 @@ export interface MeetingEntry {
   problems: Problem[];
 }
 /**
- * A learning path (`<area>/ROADMAP/paths/<slug>.md`): the head of its file, its progress over the leaves of its tree, its version.
+ * A learning path (`<area>/ROADMAP/paths/<slug>.md`): the head of its file, its progress over the leaves of its tree (optional ones apart, `optional`), its version.
  */
 export interface PathEntry {
   id: string;
@@ -2109,6 +2148,11 @@ export interface PathEntry {
   progress: PathProgress;
   xp?: PathXp;
   level?: PathLevelState;
+  optional?: PathOptional;
+  requires?: Requires;
+  requires_gate?: RequiresGate;
+  waiting_on?: WaitingOn;
+  stage?: PathStage;
   links?: string[];
   icon?: Icon;
   cover?: Cover;
@@ -2183,7 +2227,36 @@ export interface PathLevelState {
   }[];
 }
 /**
- * One learning point of a tree. A parent has no mark of its own: its `derived` state comes from its leaves (learned, partial, open); `closed` when every leaf is.
+ * The optional points of a tree (`{optional}` on a node, and its subtree), apart: `progress` and `xp` of the path leave them out, so they count for no level in percent and not for the path being finished; their XP count for a level in XP once earned (`xp` only when the tree has XP). Only when the tree has optional points. Capability `optional_points`.
+ */
+export interface PathOptional {
+  progress: PathProgress;
+  xp?: PathXp1;
+}
+/**
+ * XP of a tree or a point (capability `xp`): learned counts in full, seen half (rounded down), dropped leaves sum and maximum.
+ */
+export interface PathXp1 {
+  earned: number;
+  /**
+   * Every leaf but the dropped ones.
+   */
+  possible: number;
+  /**
+   * The XP of the open and blocked leaves.
+   */
+  open: number;
+  /**
+   * Leaves (not dropped) with XP.
+   */
+  points: number;
+  /**
+   * Leaves (not dropped) without XP.
+   */
+  missing: number;
+}
+/**
+ * One learning point of a tree. A parent has no mark of its own: its `derived` state comes from its leaves (learned, partial, open); `closed` when every leaf is (a parent with points that are not optional: every one of those).
  */
 export interface PathNode {
   /**
@@ -2223,7 +2296,21 @@ export interface PathNode {
    */
   image?: string;
   note?: string;
-  progress: PathProgress;
+  progress: PathProgress1;
+  /**
+   * The point is `{optional}` or below one: it counts for nothing that says how far the path is. Capability `optional_points`.
+   */
+  optional?: true;
+  /**
+   * The machines the point may be practised on (`{machine=a,b}` on it, else on the nearest parent that has one); absent: every machine. Capability `path_marks`.
+   *
+   * @minItems 1
+   */
+  machine?: ["private" | "workstation" | "wsl", ...("private" | "workstation" | "wsl")[]];
+  /**
+   * The point is `{safety}` or below one: closing it needs `ack` (it was read). Capability `path_marks`.
+   */
+  safety?: true;
   /**
    * The XP the leaf counts: its task's when it was promoted and the task has `xp`, else its own `{xp=N}`. Capability `xp`.
    */
@@ -2236,12 +2323,23 @@ export interface PathNode {
    * A leaf without XP: a suggestion to fill a form in beforehand (never stored). Capability `xp`.
    */
   xp_suggest?: number;
-  xp_progress?: PathXp1;
+  xp_progress?: PathXp2;
 }
 /**
- * The XP below the point (its own for a leaf); only when the tree has XP. Capability `xp`.
+ * Progress over leaves, counted apart: learned, seen, dropped, open (blocked ones counted as open and once more as blocked).
  */
-export interface PathXp1 {
+export interface PathProgress1 {
+  learned: number;
+  seen: number;
+  dropped: number;
+  open: number;
+  blocked: number;
+  total: number;
+}
+/**
+ * XP of a tree or a point (capability `xp`): learned counts in full, seen half (rounded down), dropped leaves sum and maximum.
+ */
+export interface PathXp2 {
   earned: number;
   /**
    * Every leaf but the dropped ones.
@@ -2261,9 +2359,9 @@ export interface PathXp1 {
   missing: number;
 }
 /**
- * The XP of the tree; only when a point carries XP. Capability `xp`.
+ * XP of a tree or a point (capability `xp`): learned counts in full, seen half (rounded down), dropped leaves sum and maximum.
  */
-export interface PathXp2 {
+export interface PathXp3 {
   earned: number;
   /**
    * Every leaf but the dropped ones.
@@ -2465,7 +2563,7 @@ export interface ResultEntry {
      */
     xp?: number;
   };
-  progress?: PathProgress1;
+  progress?: PathProgress2;
   /**
    * `path_reward`: the level as it is now (capability `path_reward`).
    */
@@ -2582,7 +2680,7 @@ export interface ResultEntry {
 /**
  * Progress over leaves, counted apart: learned, seen, dropped, open (blocked ones counted as open and once more as blocked).
  */
-export interface PathProgress1 {
+export interface PathProgress2 {
   learned: number;
   seen: number;
   dropped: number;

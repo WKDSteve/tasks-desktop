@@ -37,8 +37,6 @@ export function prepare(run) {
       'status: doing',
       '---',
       '',
-      'A path of the test sheet path-levels.',
-      '',
       '## Lernpunkte',
       '',
       '- [ ] Levels sheet {#root}',
