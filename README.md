@@ -870,6 +870,15 @@ With the capability `rounds` the detail of a routine lists its *Earlier rounds*,
 finished, its due date, how it ended and its commits (the engine finds them in the Backlog by the routine's name).
 Discarding a routine ends it, so no further round comes: the detail says so beside *Discard* and asks once more, with
 the interval, before anything is written.
+With the capability `repeat_steps` a routine may be a **ladder** of growing intervals (`repeat: 1w,4w,12w`): each round
+takes the next interval, and the last round ends the routine. *Repeats* takes such a ladder and says the round the task
+is at (*round 2 of 3*, `repeat_step`); the finish dialog of the last round says that the routine ends instead of naming a
+next round (`ends_routine`), and *Discard* names the ladder and its round. A routine may also **start once something is
+finished** (`repeat_after`: a task, a learning path or a point of one): until then it has no due date, and the detail
+says what it waits for, with a link to that task or to the view of the paths. Finishing it (a task, a point set to done,
+a path closed) gives the routine its first due date; the message after the write says so (*A routine starts: …, due
+…*, `routines_started`), and such a write offers no *Undo* (taking the finish back would leave the routine started). A
+paired phone is given the ladder and its round, and what a routine waits for only when that is of a released area.
 
 The interface can create a task (`c`, or the Project menu), change status,
 priority, who, kind, effort, value and tags in the detail, tick a step of the plan section and add a dated line to the notes (the box of a step shows what the file says; a click asks the engine first), attach something to a task (three buttons in the detail, see *Attaching* below; or *Attach once it is made* in the new-task form: files from this computer and the image on the clipboard of the machine the hub runs on, else its newest screenshot, sent after the task is made; the detail then shows the link to put into the text),

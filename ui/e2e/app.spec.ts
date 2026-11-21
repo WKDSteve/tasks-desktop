@@ -2812,6 +2812,79 @@ test('a routine: its detail lists the finished rounds, and discarding it asks fi
   }
 });
 
+test('a ladder that waits for a finish: the detail names it and its round, the finish starts it, its last round ends it', async ({ page }) => {
+  await prepare(page);
+  await pair(page);
+  await showList(page);
+  const day = (offset: number): string => {
+    const d = new Date();
+    d.setDate(d.getDate() + offset);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  };
+  const stem = `ladder-e2e-${Date.now()}`;
+  const tasks = join(state().vault, 'lib.nvim', 'ROADMAP', 'tasks');
+  const cause = join(tasks, `${stem}-cause.md`);
+  const ladder = join(tasks, `${stem}-ladder.md`);
+  const causeId = `lib.nvim/${stem}-cause`;
+  const ladderId = `lib.nvim/${stem}-ladder`;
+  const finishedCause = join(state().vault, 'lib.nvim', 'Backlog', 'TASKS', `${day(0)}_${stem}-cause.md`);
+  const front = (title: string, more: string): string =>
+    `---\ntitle: ${title}\nstatus: open\n${more}created: ${day(-1)}\nupdated: ${day(-1)}\n---\n\nA task of the tests.\n`;
+  writeFileSync(cause, front('Ladder cause e2e', ''));
+  writeFileSync(ladder, front('Ladder e2e', `repeat: 1w,4w,12w\nrepeat_after: ${causeId}\n`));
+  try {
+    await expect(page.locator('button.row', { hasText: ladderId })).toHaveCount(1, { timeout: WRITE_BUDGET });
+    await open(page, ladderId);
+    const detail = taskFloat(page).locator('aside.detail');
+    // The ladder in the field Repeats, at its first round; it waits for the other task, which is a link to it.
+    await expect(detail.locator('[data-field="repeat"]')).toHaveValue('1w,4w,12w');
+    await expect(detail.locator('[data-repeat-round]')).toHaveText('(round 1 of 3)');
+    await expect(detail.getByRole('heading', { name: 'Starts once this is finished' })).toBeVisible();
+    await expect(detail.locator('[data-repeat-after]')).toContainText('once this is finished, its first round is due 1w later.');
+    await expect(detail.locator('[data-repeat-after] button', { hasText: causeId })).toBeVisible();
+    // Discarding names the ladder and its round; keeping it writes nothing.
+    await detail.locator('[data-field="reason"]').fill('no longer needed');
+    await detail.getByRole('button', { name: 'Discard', exact: true }).click();
+    const ask = detail.getByRole('alertdialog');
+    await expect(ask).toContainText('This task repeats as a ladder (1w, 4w, 12w; round 1 of 3).');
+    expect(await violations(page)).toEqual([]);
+    await ask.getByRole('button', { name: 'Keep it' }).click();
+    await detail.locator('[data-field="reason"]').fill('');
+
+    // Finishing what it waits for starts it: the toast says when its first round is due, the file has that due date.
+    await detail.locator('[data-repeat-after] button', { hasText: causeId }).click();
+    const causeDetail = taskFloat(page).locator('aside.detail');
+    await expect(causeDetail.locator('p.id code')).toHaveText(causeId);
+    await causeDetail.getByRole('button', { name: 'Done', exact: true }).click();
+    const done = page.getByRole('dialog', { name: 'Finish this task?' });
+    const finished = nextAnswer(page);
+    await done.getByRole('button', { name: 'Finish', exact: true }).click();
+    await finished;
+    await expect(page.getByRole('status').getByText(`Saved. A routine starts: ${ladderId}, due ${day(7)}.`)).toBeVisible();
+    await expect.poll(() => readFileSync(ladder, 'utf8')).toMatch(new RegExp(`^due: ${day(7)}$`, 'm'));
+
+    // Its last round: the finish dialog says the routine ends, and names no next round.
+    writeFileSync(ladder, readFileSync(ladder, 'utf8').replace(/^repeat: .*$/m, 'repeat: 1w,4w,12w\nrepeat_step: 3'));
+    await open(page, ladderId);
+    const last = taskFloat(page).locator('aside.detail');
+    await expect(last.locator('[data-repeat-round]')).toHaveText('(round 3 of 3)');
+    await expect(last.locator('[data-repeat-after]')).toHaveCount(0);
+    await last.getByRole('button', { name: 'Done', exact: true }).click();
+    await expect(done.locator('[data-ends-routine]')).toHaveText(
+      'The last round of the routine (1w, 4w, 12w): it ends, no further round comes.',
+    );
+    await expect(done.getByText('the next round starts')).toHaveCount(0);
+    expect(await violations(page)).toEqual([]);
+    await done.getByRole('button', { name: 'Cancel', exact: true }).click();
+    await expect(done).toHaveCount(0);
+    expect(consoleProblems.get(page)).toEqual([]);
+  } finally {
+    rmSync(cause, { force: true });
+    rmSync(ladder, { force: true });
+    rmSync(finishedCause, { force: true });
+  }
+});
+
 test('the capture dialog offers the acceptance lines of the choice and writes the ticked ones', async ({ page }) => {
   await pair(page);
   await closeFloat(page);

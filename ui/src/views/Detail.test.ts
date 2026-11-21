@@ -154,6 +154,48 @@ describe('a routine in the detail', () => {
   });
 });
 
+describe('a ladder and a routine that waits for a finish', () => {
+  it('takes a ladder in the field Repeats and says the round the task is at', () => {
+    const app = page(false, ['repeat', 'repeat_steps']);
+    app.tasks = [task('pub/a', { repeat: '1w,4w,12w', repeat_step: 2 })];
+    const out = detail(app);
+    expect(out).toMatch(/<span[^>]*>Repeats ?<small data-repeat-round[^>]*>\(round 2 of 3\)<\/small><\/span>\s*<input type="text" value="1w,4w,12w"/);
+    // Without `repeat_step` the ladder is at its first round; a single interval has no rounds to tell.
+    app.tasks = [task('pub/a', { repeat: '1w,4w' })];
+    expect(detail(app)).toContain('(round 1 of 2)');
+    app.tasks = [task('pub/a', { repeat: '4w' })];
+    expect(detail(app)).not.toContain('data-repeat-round');
+  });
+
+  it('shows what a routine waits for, with a way to it, until it has a due date', () => {
+    const app = page(false, ['repeat', 'repeat_steps', 'paths']);
+    app.tasks = [task('pub/a', { repeat: '1w,4w', repeat_after: 'pub/b' }), task('pub/b', { status: 'doing' })];
+    let out = detail(app);
+    expect(out).toContain('<h3>Starts once this is finished</h3>');
+    expect(out).toMatch(/<p data-repeat-after[^>]*>\s*<button type="button" class="link[^"]*"><code>pub\/b<\/code><\/button>/);
+    expect(out).toContain('once this is finished, its first round is due 1w later.');
+    // A point of a path: not a task of the list, so the link goes to the view of the paths.
+    app.tasks = [task('pub/a', { repeat: '2w', repeat_after: 'pub/path#k1' })];
+    out = detail(app);
+    expect(out).toMatch(/<button type="button" class="link[^"]*"><code>pub\/path#k1<\/code><\/button>/);
+    // Without the view of the paths it is named, not linked.
+    app.capabilities = ['repeat', 'repeat_steps'];
+    expect(detail(app)).toMatch(/<p data-repeat-after[^>]*>\s*<code>pub\/path#k1<\/code>/);
+    // Started: the finish wrote its due date, nothing waits any more.
+    app.tasks = [task('pub/a', { repeat: '2w', repeat_after: 'pub/path#k1', due: '2027-01-05' })];
+    expect(detail(app)).not.toContain('data-repeat-after');
+  });
+
+  it('says in the finish dialog that the last round of a ladder ends the routine, instead of a next round', () => {
+    const app = page(false, ['repeat', 'repeat_steps']);
+    app.tasks = [task('pub/a', { repeat: '1w,4w,12w', repeat_step: 3 })];
+    app.finishing = { id: 'pub/a', preview: { kind: 'tasks.donepreview', id: 'pub/a', to: 'Backlog/TASKS', ends_routine: true } as never };
+    const out = strip(render(DoneDialog, { props: { app } }).body);
+    expect(out).toMatch(/<li data-ends-routine[^>]*>\s*The last round of the routine \(1w, 4w, 12w\): it ends, no further round comes\.\s*<\/li>/);
+    expect(out).not.toContain('next round starts');
+  });
+});
+
 describe('the history and the end of a routine', () => {
   const doc = (more: Record<string, unknown>) =>
     ({ kind: 'tasks.task', task: task('pub/a', { repeat: '4w' }), body: '', body_truncated: false, steps: [], questions: [], ...more }) as never;

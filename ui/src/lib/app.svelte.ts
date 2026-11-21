@@ -193,6 +193,7 @@ import { COLUMN_KEYS, defaultColumns, parseColumns, serializeColumns, type ListC
 import { emptyFolds, foldOf, parseFolds, serializeFolds, type FoldMemory, type Folds, type FoldView } from './fold';
 import { parseSizes, serializeSizes, withSize, type Size, type Sizes } from './sizes';
 import { taskRoute, viewRoute } from './route';
+import { routinesStarted } from './routine';
 import { cardRoute, parseCardFolds, withCardFolded, type CardRoute, type StatsCard } from './statsCards';
 
 /** No task: the learning tasks that are hidden while none is. */
@@ -1707,6 +1708,12 @@ export class App {
     this.setView('plan');
   }
 
+  /** Show learning path `id` in the view of the paths. */
+  openPath(id: string): void {
+    this.pathChoice = id;
+    this.setView('paths');
+  }
+
   /** Show plan `id` in the plan view; the project page gives way to it. */
   openPlan(id: string): void {
     this.planChoice = id;
@@ -2157,7 +2164,13 @@ export class App {
         const undo = opts.undoable === false ? undefined : this.inverseOf(result);
         // A reorder numbers the neighbours where the spot needs it: more than one file is told.
         const files = result.results.reduce((n, r) => n + (r.writes ?? 0), 0);
-        if (files > 1) this.say('ok', 'write.saved_many', { n: files }, undo);
+        // A finish (`done`, a point of a path, a path) that started routines waiting for it says when they are due.
+        const started = routinesStarted(result);
+        const first = started[0];
+        if (first) {
+          const params = { id: first.id, due: first.due, n: started.length };
+          this.say('ok', started.length > 1 ? 'routine.started_many' : 'routine.started', params, undo);
+        } else if (files > 1) this.say('ok', 'write.saved_many', { n: files }, undo);
         else this.say('ok', opts.saidAs?.(result) ?? 'write.saved', {}, undo);
       }
       await this.readAfter(ops);
@@ -2227,6 +2240,8 @@ export class App {
     for (const entry of result.results) {
       // An entry that failed changed nothing: it has no way back and needs none.
       if (!entry.ok || entry.outcome === 'unchanged') continue;
+      // A routine it started (`repeat_after`) keeps its due date when the finish is taken back: no half way back.
+      if ((entry.routines_started?.length ?? 0) > 0) return undefined;
       // A move that numbered neighbours: one set for each file written gives it its old `order` back (the inverse
       // alone would only restore the place).
       if (entry.restore && entry.restore.length > 0) {

@@ -3721,6 +3721,54 @@ describe('writing', () => {
     expect(app.finishing).toBeNull();
   });
 
+  it('says when the routines a finish started are due, and offers no way back that would leave them started', async () => {
+    const { app, hub } = await ready();
+    app.setLang('en');
+    const started = (routines: { id: string; due: string; after: string }[]) =>
+      ({
+        kind: 'tasks.result',
+        ok: true,
+        dry_run: false,
+        results: [{ n: 1, op: 'done', id: 'pub/a', ok: true, outcome: 'done', changed_ids: ['pub/a', ...routines.map((r) => r.id)], routines_started: routines }],
+      }) as unknown as Result;
+    hub.next_ops = started([{ id: 'pub/r', due: '2027-01-05', after: 'pub/a' }]);
+    await app.startFinish('pub/a');
+    await app.confirmFinish();
+    expect(app.toast).toEqual({ kind: 'ok', text: 'Saved. A routine starts: pub/r, due 2027-01-05.' });
+    hub.next_ops = started([
+      { id: 'pub/r', due: '2027-01-05', after: 'pub/a' },
+      { id: 'pub/s', due: '2027-01-12', after: 'pub/a' },
+    ]);
+    await app.startFinish('pub/a');
+    await app.confirmFinish();
+    expect(app.toast).toEqual({ kind: 'ok', text: 'Saved. 2 routines start, the first pub/r, due 2027-01-05.' });
+    // Without a routine started the finish can be taken back, as before.
+    hub.next_ops = started([]);
+    await app.startFinish('pub/a');
+    await app.confirmFinish();
+    expect(app.toast?.text).toBe('Saved.');
+    expect(app.toast?.undo).toEqual([{ op: 'reopen', id: 'pub/a' }]);
+  });
+
+  it('says it of a point of a path set done too, whose inverse would not take the routine back', async () => {
+    const { app, hub } = await ready();
+    app.setLang('en');
+    hub.next_ops = {
+      kind: 'tasks.result',
+      ok: true,
+      dry_run: false,
+      results: [
+        {
+          n: 1, op: 'node_set', id: 'pub/p', ok: true, outcome: 'changed', changed_ids: ['pub/p', 'pub/r'],
+          inverse: { op: 'node_set', id: 'pub/p', point: 'k1', state: 'open' },
+          routines_started: [{ id: 'pub/r', due: '2027-02-01', after: 'pub/p#k1' }],
+        },
+      ],
+    } as unknown as Result;
+    await app.write([{ op: 'node_set', id: 'pub/p', point: 'k1', state: 'done' } as never]);
+    expect(app.toast).toEqual({ kind: 'ok', text: 'Saved. A routine starts: pub/r, due 2027-02-01.' });
+  });
+
   it('does not ask again for a task that is finished already', async () => {
     const { app, hub } = await ready();
     hub.previews.set('pub/a', { already: true });

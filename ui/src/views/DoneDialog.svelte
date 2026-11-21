@@ -6,6 +6,7 @@
   import type { App } from '../lib/app.svelte';
   import { translate, type Key } from '../lib/i18n';
   import { markHidden } from '../lib/text';
+  import { everyOf } from '../lib/routine';
 
   let { app }: { app: App } = $props();
   const t = (key: Key, params: Record<string, string | number> = {}) =>
@@ -55,7 +56,12 @@
       {#if finishing.preview.closes_project}
         <li>{t('done.closes_project', { project: finishing.preview.closes_project })}</li>
       {/if}
-      {#if finishing.preview.next_round}
+      {#if finishing.preview.ends_routine}
+        <!-- The last round of a ladder: no next round, the routine ends with this finish. -->
+        <li data-ends-routine>
+          {t('done.ends_routine', { every: everyOf(app.tasks.find((x) => x.id === finishing.id)?.repeat) })}
+        </li>
+      {:else if finishing.preview.next_round}
         <li>{t('done.next_round', { due: finishing.preview.next_round.due })}</li>
       {/if}
       {#if (finishing.preview.freed?.length ?? 0) > 0}

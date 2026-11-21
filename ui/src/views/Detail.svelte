@@ -12,6 +12,7 @@
   import { editableBody, hasHidden, markHidden, MAX_BODY_EDIT } from '../lib/text';
   import { REMIND_CHOICES } from '../lib/remind';
   import { REPEAT_FROMS } from '../lib/next';
+  import { discardAsk, intervalsOf, pathOfRef, roundOf, waitsFor } from '../lib/routine';
   import { shownTask } from '../lib/drafts';
   import { classChange as classChangeOf } from '../lib/bulk';
   import { copyText } from '../lib/exportDom';
@@ -177,6 +178,12 @@
   let reason = $state('');
   // Discarding a routine ends it: it is asked once more, with the interval, before anything is written.
   let endingRoutine = $state(false);
+  /** The question before discarding a routine: a ladder names its intervals and the round it is at. */
+  const endRoutineAsk = $derived.by(() => {
+    if (!task) return '';
+    const ask = discardAsk(task);
+    return t(ask.key, ask.params);
+  });
 
   /** The link of the attached screenshot on the clipboard (the page may write it, never read it). */
   async function copyLink(link: string): Promise<void> {
@@ -686,7 +693,10 @@
                ends the routine. Where the next round counts from is only asked of a routine (or shown to be taken
                away where a file carries it without one). -->
           <label data-hint={t('hint.field.repeat')}>
-            <span>{t('field.repeat')}</span>
+            <!-- A ladder (`1w,4w,12w`) says the round the task is at (`repeat_step`). -->
+            <span
+              >{t('field.repeat')}{#if roundOf(shown)} <small data-repeat-round>({t('repeat.round', roundOf(shown) ?? { step: 1, of: 1 })})</small>{/if}</span
+            >
             <input
               type="text"
               value={shown.repeat ?? ''}
@@ -968,6 +978,24 @@
           </li>
         {/each}
       </ul>
+    {/if}
+    {#if waitsFor(task)}
+      {@const after = waitsFor(task) ?? ''}
+      <!-- A routine that waits for a finish (`repeat_after`, no due date yet): a task of the list is revealed; anything
+           else it can wait for is a learning path or a point of one (an open task is always in the list), shown in the
+           view of the paths. -->
+      <h3>{t('detail.repeat_after')}</h3>
+      <p data-repeat-after>
+        {#if byId.has(after)}
+          <button type="button" class="link" onclick={() => app.reveal(after)}><code>{after}</code></button>
+          <span class="muted">{statusOf(after)}</span>
+        {:else if app.can('paths')}
+          <button type="button" class="link" onclick={() => app.openPath(pathOfRef(after))}><code>{after}</code></button>
+        {:else}
+          <code>{after}</code>
+        {/if}
+        <br /><span class="muted">{t('detail.repeat_after_hint', { every: intervalsOf(task.repeat)[0] ?? '' })}</span>
+      </p>
     {/if}
     {#if task.after.length > 0}
       <h3>{t('detail.after')}</h3>
@@ -1260,8 +1288,8 @@
             />
           </label>
           {#if endingRoutine}
-            <span class="ask" role="alertdialog" aria-label={t('discard.routine.ask', { every: task.repeat ?? '' })}>
-              <span class="warn">{t('discard.routine.ask', { every: task.repeat ?? '' })}</span>
+            <span class="ask" role="alertdialog" aria-label={endRoutineAsk}>
+              <span class="warn">{endRoutineAsk}</span>
               <button type="button" disabled={app.locked} onclick={() => void discard(true)}>{t('discard.routine.yes')}</button>
               <button type="button" onclick={() => (endingRoutine = false)}>{t('discard.routine.no')}</button>
             </span>

@@ -53,6 +53,7 @@ const TASK_FIELDS: &[&str] = &[
     "due",
     "start",
     "repeat",
+    "repeat_step",
     "repeat_from",
     "phase",
     "done_in",
@@ -112,6 +113,14 @@ pub(crate) fn task_entry(classes: &AreaPolicy, task: &Value) -> Option<Value> {
         if let Some(list) = task.get(*field) {
             out.insert((*field).to_owned(), ids(classes, list));
         }
+    }
+    // What a routine waits for (`repeat_after`: a task, a path or a point of one) names another file: only one of a
+    // released area stays. Without it the phone sees a routine with no due date, which is what it is.
+    if let Some(after) = task["repeat_after"]
+        .as_str()
+        .filter(|after| released_id(classes, after))
+    {
+        out.insert("repeat_after".to_owned(), Value::from(after));
     }
     // The plan and the project of a task are not in `TASK_FIELDS`: a task of a released area may belong to a plan of a
     // private one, whose name would tell of it. A phone sees the plans of the snapshot (`plans`), not which task is in
@@ -376,6 +385,7 @@ pub(crate) fn done_preview(
             "resumed",
             "steps_ticked",
             "next_round",
+            "ends_routine",
             "etag",
             "confirm",
         ],
@@ -450,6 +460,21 @@ pub(crate) fn result(classes: &AreaPolicy, doc: &Value, released_plans: &[String
                         .collect();
                     e.insert(field.to_owned(), Value::Array(kept));
                 }
+            }
+            // The routines this operation started (`repeat_after`): only those whose own task and whose cause are both of
+            // released areas (each names the other).
+            if let Some(list) = entry["routines_started"].as_array() {
+                let kept: Vec<Value> = list
+                    .iter()
+                    .filter(|r| {
+                        r["id"].as_str().is_some_and(|id| released_id(classes, id))
+                            && r["after"]
+                                .as_str()
+                                .is_some_and(|after| released_id(classes, after))
+                    })
+                    .map(|r| Value::Object(copy(r, &["id", "due", "after"])))
+                    .collect();
+                e.insert("routines_started".to_owned(), Value::Array(kept));
             }
             // Undoing a change of the phone's own task: the operation as the engine gives it, for a released task.
             if entry["inverse"]["id"]
@@ -1085,6 +1110,41 @@ mod tests {
         assert_eq!(cut["results"][0]["plans_closed"], json!(["open/p"]));
         assert!(cut.get("rev").is_none() && cut["results"][0].get("file").is_none());
         assert_eq!(cut["client_op_id"], "c");
+    }
+
+    #[test]
+    fn a_ladder_and_what_a_routine_waits_for_reach_a_phone_only_of_released_areas() {
+        let c = classes();
+        let entry = |after: &str| {
+            json!({ "id": "open/r", "area": "open", "title": "R", "repeat": "1w,4w,12w", "repeat_step": 2,
+                "repeat_after": after })
+        };
+        let cut = task_entry(&c, &entry("pub/p#k1")).unwrap();
+        assert_eq!(cut["repeat"], "1w,4w,12w");
+        assert_eq!(cut["repeat_step"], 2);
+        assert_eq!(cut["repeat_after"], "pub/p#k1");
+        let cut = task_entry(&c, &entry("secret/p#k1")).unwrap();
+        assert!(cut.get("repeat_after").is_none(), "{cut}");
+        assert_eq!(cut["repeat_step"], 2);
+
+        let preview = json!({ "kind": "tasks.donepreview", "id": "open/r", "to": "x", "confirm": "c",
+            "ends_routine": true });
+        assert_eq!(
+            done_preview(&c, &preview, &[]).unwrap()["ends_routine"],
+            true
+        );
+
+        let doc = json!({ "kind": "tasks.result", "ok": true, "results": [{ "n": 1, "op": "node_set", "id": "pub/p",
+            "ok": true, "changed_ids": ["pub/p", "open/r", "secret/s"], "routines_started": [
+                { "id": "open/r", "due": "2027-01-05", "after": "pub/p#k1", "file": "E:/x" },
+                { "id": "secret/s", "due": "2027-01-05", "after": "pub/p#k1" },
+                { "id": "open/t", "due": "2027-01-05", "after": "secret/q" }] }] });
+        let cut = result(&c, &doc, &[]);
+        assert_eq!(
+            cut["results"][0]["routines_started"],
+            json!([{ "id": "open/r", "due": "2027-01-05", "after": "pub/p#k1" }])
+        );
+        assert!(!cut.to_string().contains("secret"), "{cut}");
     }
 
     #[test]

@@ -50,6 +50,14 @@ export function edgeFiles() {
   task('edge.nvim', 'steps', head(['title: Steps of a plan', 'status: doing', ...day]) + 'x\n\n## Plan\n\n- [ ] 1. first -- Acceptance 2\n- [x] 2. second\n- [ ] 10. tenth\n- [ ] 3. out of order\n- [ ] 3. twice\n');
   task('edge.nvim', 'questions', head(['title: Questions in the text', 'status: decision', 'actor: me', ...day]) + 'Ask.\n\n## Fragen\n\n### Which one?\n\n- [ ] A\n- [x] B\n- [ ] C\n');
 
+  // routines: a ladder at its second round, a ladder waiting for a task, one waiting for a point of a path, a ladder
+  // the engine refuses (blank inside, one interval too many is not tested: the engine's own specs do)
+  task('edge.nvim', 'ladder', head(['title: A ladder', 'status: open', 'repeat: 1w,4w,12w', 'repeat_step: 2', 'due: 2026-02-01', ...day]) + 'x\n');
+  task('edge.nvim', 'ladder-last', head(['title: The last round of a ladder', 'status: open', 'repeat: 1w,4w', 'repeat_step: 2', 'due: 2026-03-01', ...day]) + 'x\n');
+  task('edge.nvim', 'ladder-waits', head(['title: A ladder that waits', 'status: open', 'repeat: 1d,1w', 'repeat_after: edge.nvim/steps', ...day]) + 'x\n');
+  task('edge.nvim', 'waits-for-point', head(['title: Waits for a point', 'status: open', 'repeat: 2w', 'repeat_after: edge.nvim/a-path#k1', ...day]) + 'x\n');
+  task('edge.nvim', 'ladder-blank', head(['title: A ladder with a blank', 'status: open', 'repeat: 1w, 4w', 'repeat_step: 0', ...day]) + 'x\n');
+
   // text outside ASCII, long and odd titles, characters JSON must escape
   task('edge.nvim', 'unicode-title', head(['title: Übergrößen — Ünïcödé 日本語 🎉 ǅ İ ß ΑΣ', 'status: open', 'tags: [Ä, ä, ß, İ, ı, 日本]', ...day]) + 'Ünïcödé body 🎉\n');
   task('edge.nvim', 'combining', head(['title: Cafe\u0301 vs Café, Å vs Å', 'status: open', ...day]) + 'x\n');
