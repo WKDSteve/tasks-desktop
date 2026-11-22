@@ -8,7 +8,8 @@ import { disk, openVault, vaultFiles, violations, watchPage } from './page';
 test('a learning path in the web variant: a point ticked and a note written into the file on the disk', async ({ page }) => {
   const seen = await watchPage(page);
   await openVault(page, vaultFiles());
-  await page.getByRole('menuitem', { name: /^(View|Ansicht)$/ }).click();
+  // The learning paths are in the tab Learning plans of the menu bar.
+  await page.getByRole('menuitem', { name: /^(Learning plans|Lernpläne)$/ }).click();
   await page.getByRole('menuitemradio', { name: /^(Learning paths|Lernpfade)$/ }).click();
   const tree = page.getByRole('list', { name: /^(Learning points of|Lernpunkte von) Lua lernen$/ });
   await expect(tree).toBeVisible({ timeout: 30_000 });

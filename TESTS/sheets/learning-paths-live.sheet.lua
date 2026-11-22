@@ -15,7 +15,7 @@ return {
   engine = "manual",
   steps = {
     {
-      ask = "View > Learning paths in the installed app: the paths on the left with their progress, the tree on the"
+      ask = "Learning plans > Learning paths in the installed app: the paths on the left with their progress, the tree on the"
         .. " right; folding, 'Fold all' and 'Unfold all' look and feel right in the window?",
     },
     {

@@ -11,6 +11,7 @@ import { followTaskRoute } from './lib/followRoute.svelte';
 import { placeAddress } from './lib/history';
 import { takeInjected } from './lib/inject';
 import { routedTask } from './lib/route';
+import { missingLearnView } from './lib/learnViews';
 import { routedCard } from './lib/statsCards';
 import { askForSession, shareSession, type ChannelLike } from 'appkit-ui/handoff';
 import { placeOf } from 'appkit-ui/nav';
@@ -79,6 +80,9 @@ if (place !== null) state.openPlace(place.view, place.selectedId, place.filter, 
     ...(place.plan !== undefined ? { plan: place.plan } : {}),
     ...(place.sort !== undefined ? { sort: place.sort } : {}),
   });
+// A view of the tab Learning plans that is planned but not built yet: the page shows where such a link lands.
+const missingLearn = place === null ? missingLearnView(window.location.hash) : null;
+if (missingLearn !== null) state.openMissingLearnView(missingLearn);
 if (routed !== null) state.openRoute(routed);
 if (routedStats !== null) state.openCardRoute(routedStats);
 if (channel) {

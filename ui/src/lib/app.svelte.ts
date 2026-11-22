@@ -198,6 +198,7 @@ import { COLUMN_KEYS, defaultColumns, parseColumns, serializeColumns, type ListC
 import { emptyFolds, foldOf, parseFolds, serializeFolds, type FoldMemory, type Folds, type FoldView } from './fold';
 import { parseSizes, serializeSizes, withSize, type Size, type Sizes } from './sizes';
 import { pathRoute, taskRoute, viewRoute } from './route';
+import { learnFallback } from './learnViews';
 import { routinesStarted } from './routine';
 import { cardRoute, parseCardFolds, withCardFolded, type CardRoute, type StatsCard } from './statsCards';
 
@@ -4948,8 +4949,25 @@ export class App {
     if (open !== null && this.tasks.some((t) => t.id === open)) this.takeRoute();
   }
 
+  /** A view of the tab Learning plans that the address named and the page does not have yet, told once the list is there. */
+  #learnMissing: string | null = null;
+
+  /**
+   * The address named a view of the tab Learning plans that is planned but not built (learnViews.ts): the page opens
+   * where such a link lands, and says so once the list is there (the words of the page are loaded by then).
+   */
+  openMissingLearnView(view: string): void {
+    this.view = learnFallback() as View;
+    this.#learnMissing = view;
+  }
+
   /** After a read of the list: the task the address named is shown, or told to be gone. */
   private takeRoute(): void {
+    const missing = this.#learnMissing;
+    if (missing !== null) {
+      this.#learnMissing = null;
+      this.say('ok', 'learn.missing', { view: missing, target: translate(this.lang, `nav.${this.view}` as Key) });
+    }
     const open = this.#openRoute;
     if (open !== null) {
       this.#openRoute = null;

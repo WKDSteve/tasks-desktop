@@ -417,7 +417,13 @@ over the tasks, not the paths):
 A point is ticked, marked seen, dropped or blocked with `node_set`, made a task of its own with `promote` and taken
 back with `unpromote` (through `ops`).
 
-The view **View › Learning paths** (also in the web variant, `#view=paths`) shows them: the paths with their progress
+The tab **Learning plans** of the menu bar (after View; there only when the engine has the learning paths) holds the
+views of the learning plans in sections (Overview, Paths, Progress, Knowledge); a view the engine cannot serve, or one
+not built yet, is left out rather than greyed, and a link to one not built yet (`#view=badges`) shows the learning
+paths with a word that says so. While one of its views is shown the tab carries the dot (its name: "Learning plans,
+current: Learning paths"); export and print stay in View. The palette (Ctrl+K) has "Go to ..." for each of them.
+
+The view **Learning plans › Learning paths** (also in the web variant, `#view=paths`) shows them: the paths with their progress
 on the left, the chosen one as a tree on the right, with a bar counted apart (learned, seen, not applicable, open).
 A click (or a tap) on the mark of a point ticks it as learned or sets it open again; its menu **More** sets it seen,
 not applicable or blocked, each with a reason it asks for first (the key it waits for, for blocked), writes its note

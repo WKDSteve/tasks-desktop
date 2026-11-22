@@ -28,4 +28,9 @@ return {
     title = "The competence map of the learning paths: boxes by stage, frames of projects, the arrows of requires, a circle and a ghost; finished ones hidden, the list, a box opens its path",
     docs = "README.md",
   },
+  {
+    id = "tasks.learn-tab",
+    title = "The tab Learning plans of the menu bar: after View, the views of the learning plans that are there, the dot of the view shown, a link to a view not built yet",
+    docs = "README.md",
+  },
 }

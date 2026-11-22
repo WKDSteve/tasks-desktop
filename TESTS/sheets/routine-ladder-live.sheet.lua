@@ -27,7 +27,7 @@ return {
         .. " finished' with that task as a link and its status; a click opens that task?",
     },
     {
-      ask = "'repeat_after: <area>/<path>#k1' (a point of a learning path): the link opens View > Learning paths with"
+      ask = "'repeat_after: <area>/<path>#k1' (a point of a learning path): the link opens Learning plans > Learning paths with"
         .. " that path chosen?",
     },
     {
@@ -35,7 +35,7 @@ return {
         .. " 1w), has no Undo, and the routine's file has due, start and remind of that day?",
     },
     {
-      ask = "Setting the point k1 to learned in View > Learning paths: the same toast for a routine that waits for"
+      ask = "Setting the point k1 to learned in Learning plans > Learning paths: the same toast for a routine that waits for"
         .. " the point?",
     },
     {

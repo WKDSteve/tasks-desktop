@@ -17,6 +17,7 @@ import { detectLang, loadLang, translate } from './lib/i18n';
 import { logo } from './lib/logo';
 import { trackHistory } from './lib/trackHistory.svelte';
 import { routedTask } from './lib/route';
+import { missingLearnView } from './lib/learnViews';
 import { routedCard } from './lib/statsCards';
 import { placeAddress } from './lib/history';
 import { placeOf } from 'appkit-ui/nav';
@@ -258,6 +259,9 @@ async function begin(folder: string | null, name: string, readOnly: boolean): Pr
     ...(place.plan !== undefined ? { plan: place.plan } : {}),
     ...(place.sort !== undefined ? { sort: place.sort } : {}),
   });
+  // A view of the tab Learning plans that is planned but not built yet: the page shows where such a link lands.
+  const missingLearn = place === null ? missingLearnView(window.location.hash) : null;
+  if (missingLearn !== null) state.openMissingLearnView(missingLearn);
   if (routed !== null) state.openRoute(routed);
   if (routedStats !== null) state.openCardRoute(routedStats);
   installTooltips(document, window, { regionLabel: () => translate(state.lang, 'hint.region') });

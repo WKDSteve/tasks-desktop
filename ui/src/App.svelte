@@ -19,7 +19,7 @@
   import Brand from 'appkit-ui/Brand.svelte';
   import DocsDialog from 'appkit-ui/DocsDialog.svelte';
   import { helpItems, type DocEntry } from 'appkit-ui/docs';
-  import MenuBar, { type Menu } from 'appkit-ui/MenuBar.svelte';
+  import MenuBar, { type Menu, type MenuItem } from 'appkit-ui/MenuBar.svelte';
   import AreaFilter from './views/AreaFilter.svelte';
   import Capture from './views/Capture.svelte';
   import DoneDialog from './views/DoneDialog.svelte';
@@ -35,6 +35,7 @@
   import { installTaskApart } from './lib/taskApart';
   import { createContextRegistry, taskTarget, viewTarget } from './lib/context';
   import { vaultMenuItems, vaultMenuOpened } from './lib/vaultMenu';
+  import { isLearnView, learnMenu } from './lib/learnViews';
   import SetupCard from './views/SetupCard.svelte';
   import HubNotice from './views/HubNotice.svelte';
   import Toast from './views/Toast.svelte';
@@ -326,6 +327,8 @@
     app.tell(ok ? 'ok' : 'error', ok ? 'menu.id_copied' : 'menu.copy_id_failed');
   }
 
+  // The views of the tab Learning plans that are offered now (learnViews.ts).
+  const learnSections = $derived(learnMenu({ can: (c) => app.can(c), gamification: app.gamification }));
   // The menu bar of the page (the native shell shows the same entries).
   const menus = $derived.by((): Menu[] => {
     const ready = app.phase === 'ready';
@@ -572,28 +575,7 @@
                 },
               ]
             : []),
-          // The learning paths (capability `paths`): an older engine knows none, so there is nothing to offer.
-          ...(app.can('paths') && app.can('path')
-            ? [
-                {
-                  kind: 'radio' as const,
-                  label: t('nav.paths'),
-                  hint: t('hint.item.nav.paths'),
-                  checked: app.view === 'paths',
-                  onselect: () => app.setView('paths'),
-                  ...apart('paths'),
-                },
-                // The competence map of the paths (requires): beside the paths until learning plans get a menu of their own.
-                {
-                  kind: 'radio' as const,
-                  label: t('nav.pathmap'),
-                  hint: t('hint.item.nav.pathmap'),
-                  checked: app.view === 'pathmap',
-                  onselect: () => app.setView('pathmap'),
-                  ...apart('pathmap'),
-                },
-              ]
-            : []),
+          // The learning paths and the other views of the learning plans are in a tab of their own (learnViews.ts).
           // The export belongs to the view that is shown: it takes what that view draws.
           { kind: 'section', label: t('menu.sec.export') },
           ...exportItems(ready),
@@ -622,6 +604,29 @@
           })),
         ],
       },
+      // The tab of the learning plans, after View: only with the learning paths of the engine, and only the views the
+      // page has and the engine serves (learnViews.ts); the export and the print of the view shown stay in View.
+      ...(learnSections.length > 0
+        ? [
+            {
+              id: 'learn',
+              label: t('menu.learn'),
+              hint: t('hint.ui.menu.learn'),
+              current: isLearnView(app.view) ? t(`nav.${app.view}` as Key) : null,
+              items: learnSections.flatMap(({ section, views }): MenuItem[] => [
+                { kind: 'section', label: t(`menu.sec.learn_${section}` as Key) },
+                ...views.map((id) => ({
+                  kind: 'radio' as const,
+                  label: t(`nav.${id}` as Key),
+                  hint: t(`hint.item.nav.${id}` as Key),
+                  checked: app.view === id,
+                  onselect: () => app.setView(id as View),
+                  ...apart(id as View),
+                })),
+              ]),
+            },
+          ]
+        : []),
       {
         id: 'options',
         label: t('menu.options'),
@@ -870,7 +875,7 @@
     <Brand label={t('app.title')} hint={t('hint.ui.brand', { name: t('app.title'), version: app.appVersion })} onclick={() => app.setView('today')}>
       <span class="brand-mark"><img src={logo} alt="" width="24" height="24" /></span>
     </Brand>
-    <MenuBar {menus} label={t('menu.label')} />
+    <MenuBar {menus} label={t('menu.label')} labels={{ submenuCurrent: t('menu.current') }} />
     <span class="spacer"></span>
     {#if app.conflicts.length > 0}
       <ConflictsButton {app} />

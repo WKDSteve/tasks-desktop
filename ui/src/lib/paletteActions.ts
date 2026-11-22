@@ -1,7 +1,8 @@
 // What the palette can do: the actions of the page, as a list for the state it is in (a task that is selected, a
 // board the engine can serve, marks that are made). Only what can be done now is listed.
 
-import type { App } from './app.svelte';
+import type { App, View } from './app.svelte';
+import { learnMenu } from './learnViews';
 import { labelOf, translate, type Key } from './i18n';
 import { isColumn } from './board';
 import type { PaletteAction } from 'appkit-ui/palette';
@@ -54,9 +55,9 @@ export function paletteActions(app: App): PaletteAction[] {
   if (app.can('finished')) add('go.done', t('palette.go', { view: t('nav.done') }), () => app.setView('done'));
   add('go.repos', t('palette.go', { view: t('nav.repos') }), () => app.setView('repos'));
   if (app.machineActions) add('go.repostatus', t('palette.go', { view: t('nav.repostatus') }), () => app.setView('repostatus'));
-  if (app.can('paths') && app.can('path')) {
-    add('go.paths', t('palette.go', { view: t('nav.paths') }), () => app.setView('paths'));
-    add('go.pathmap', t('palette.go', { view: t('nav.pathmap') }), () => app.setView('pathmap'));
+  // The views of the tab Learning plans that are offered now, each by its name (learnViews.ts).
+  for (const { views } of learnMenu({ can: (c) => app.can(c), gamification: app.gamification })) {
+    for (const id of views) add(`go.${id}`, t('palette.go', { view: t(`nav.${id}` as Key) }), () => app.setView(id as View));
   }
   if (app.can('views')) {
     add('go.views', t('palette.go', { view: t('nav.views') }), () => app.setView('views'));
