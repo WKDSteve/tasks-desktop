@@ -313,17 +313,17 @@ area. A view to try (opened from a context menu) lives in the page only and is
 written nowhere until it is saved.
 
 A file from the page goes through `POST /api/tasks/upload?id=<area>/<slug>` (a
-button and a drop on the detail): the body is the file as it is, of any size and
-type. It is one of the routes an app names to the guard (`with_upload_path`), so
+button and a drop on the detail): the body is the file as it is, of at most 2 GiB
+and of a type on the allow-list of its kind (*Uploads*, below). It is one of the routes an app names to the guard (`with_upload_path`), so
 the limit of a request, `application/json` and the time limit of a request do not
-hold for it; a session and the origin are asked as everywhere. The hub streams
+hold for it (the route has its own limits); a session and the origin are asked as everywhere. The hub streams
 the body to a file under a name of its own, in `uploads` below its configuration
 folder, asks the disk for the room up front when the size is known, and ends a
 transfer that sends nothing for 60 seconds. The engine takes that file
 (`from: upload`, with `upload_dir`, a field the door of `ops` refuses from a
 page), copies it below the folder of the task, and the hub removes its copy,
 whatever the engine said; what a killed hub left there goes after a day at the
-next start. The name the page sends is cleaned to letters, digits and `_ . -`,
+next start. The name the page sends is refused when it has a control character or a `..` part, and else cleaned to letters, digits and `_ . -`,
 and it names no folder. `kind=video|image|screenshot|audio` asks for the folder of that
 kind below `assets/` of the task (`assets/videos/`, `assets/images/`,
 `assets/screenshots/`, `assets/audio/`): the hub passes one of these four words to the engine
@@ -840,6 +840,50 @@ board's drawing (SVG, at most 2 MB) is passed on as it is, with `nosniff` and `d
 picture to an `<img>` and runs nothing when opened. The small pictures are kept in `cache/thumbs/` of the settings
 folder, named by a hash of the source's path, size and time of change, at most 1000 (the oldest go first); nothing is
 written into a vault.
+
+## Uploads (ASVS 5.0 V5, file handling)
+
+Every way a file gets from a page (or a phone) into the hub, by the points ASVS V5 asks for. *Lücke* marks what is not
+met, with where it is; what this change closed says so.
+
+| Way | Allowed types | Largest | Name | Where it lands | Retrieval |
+| --- | --- | --- | --- | --- | --- |
+| `POST /api/tasks/upload` (attachments: `AttachBar`, `PendingAttachments`, a drop on `Detail`; photo and voice note of `MeetingMinutes`; recordings of `capture.ts`; the same route for a paired phone) | by ending of the cleaned name (`upload.rs`, `extension_allowed`): with `kind` only that kind's (`image`, `screenshot`, `video`, `audio`); without, documents, data, archives and the media kinds. An ending on no list (`exe`, `bat`, `cmd`, `ps1`, `sh`, `html`, `js`, ...) or none: `415 unsupported_type` | 2 GiB (`MAX_UPLOAD_BYTES`): `413 too_large` at once when `Content-Length` says more, else when the stream passes it | `X-Upload-Name` is percent-decoded; a control character, a format character (bidi override) or a `..` part: `400 bad_name`; else the last part of a path, letters, digits and `_ . -`, at most 120 bytes, a Windows device name gets a `_`. The file in the hub's folder has a name the hub makes (`u<time>-<pid>-<n>`) | the hub's `uploads` folder below its configuration (never the vault, never the web root), `create_new`, removed whatever the engine said; the engine copies it below `assets/` of the task or meeting | the hub serves no file by this route. An image of the asset can be read back only by `GET /api/tasks/asset` (below) |
+| `POST /api/tasks/board` (`BoardEditor`) | no file: `ink` (text) and `svg` (text that starts with `<svg`) in a JSON body; a picture behind the strokes is a JPEG that the page made itself and put in the text | 48 MiB (`BOARD_MAX_BYTES`, `413`) | `name`: letters, digits, `-`, `_`, no dot, at most 80; the files in the hub's folder are named by the hub (`b<time>-<pid>-<n>`) | as above, then `assets/boards/` by the engine | `asset` (the strokes as `application/json`) and `meeting/thumb` (the preview), sealed |
+| `attach` from the clipboard or the newest screenshot (`POST /api/tasks/ops`) | what the engine finds: an image | the engine's | the engine's; the request names no path | below the task, by the engine | as the first row |
+| a JSON file in `IntentDialog` | the page reads it itself (`.json`) and sends the text to `intent`; nothing is stored | 64 KiB | none | nowhere | none |
+
+Retrieval. The hub hands out only these: `asset` (an image kind or the strokes of a board, `Content-Type` by that kind,
+`nosniff`, `default-src 'none'; style-src 'unsafe-inline'; sandbox`, `no-store`), `meeting/thumb` and `repos/image` (the
+hub's own PNG, or an SVG with the same seal), and `meeting/ics` (`Content-Disposition: attachment`, `text/calendar`,
+`nosniff`, sealed). A file with another ending (a PDF, an archive) is never served: the vault is read by the engine or
+the person's own programs. The upload folder is never served.
+
+The web variant (`ui/src/web`) has no hub and no upload: it writes into the folder the person chose, and is not part of
+this section (WSEC-06).
+
+What the phone page (`tasks-mobile`, not in this repository) does can be read off the hub's route only: it uses the same
+`upload` route with `kind=image` or `kind=audio` (a photo, a voice note) and `exact=1`, so the limits above hold for it
+too; whatever it checks before sending is its own and not looked at here.
+
+Gaps, as of this change:
+
+* closed: no limit on the size (`upload.rs`, `upload`: the old text said "of any size"); no allow-list of types
+  (anything was taken, `.exe` and `.html` included); a name with a control character or a `..` part was silently made
+  into another name instead of refused. Tested in `crates/hub-testkit/tests/write_route.rs` and `upload.rs`.
+* **Lücke**: the content is not checked against the ending (`upload.rs`, `receive`): a file named `a.png` that is no
+  picture is taken. The hub never serves it as what its ending says (`asset` decides by the ending and the page draws
+  it only as `<img>`; `meeting/thumb` decodes it with the `image` crate and writes its own PNG), so the harm is a file in
+  the vault that is not what it says.
+* **Lücke** (low): `asset`, `meeting/thumb` and `repos/image` send no `Content-Disposition`
+  (`assets.rs`, `asset`; `repos.rs`, `repo_image`). An SVG opened on its own runs nothing (sandboxing CSP, `nosniff`),
+  and the page reads the image with `fetch` into a `blob:`.
+* **Lücke**: the hub checks of a board's `ink` only that it is not empty (`boards.rs`, `board`); that it is the
+  drawing is the engine's check (50 MiB each).
+* **Lücke**: no quota. One upload is limited, the sum is not: a session can fill the disk with files of 2 GiB, one after
+  the other, within the rate of the writes (`post_limit`). The disk is asked for the room first when the size is known
+  (`507 disk_full`).
+* not done, not asked for at this level: a scan for malware.
 
 ## Whiteboards (`POST /api/tasks/board`)
 

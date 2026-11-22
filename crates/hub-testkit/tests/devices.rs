@@ -618,6 +618,13 @@ async fn a_phone_uploads_to_a_task_and_only_a_photo_or_voice_note_to_a_meeting()
         let auth = format!("Bearer {phone}");
         let port = r.server.addr().port();
         async move {
+            // A name whose ending is one of the kind: the type is judged before the target is.
+            let name = match kind {
+                "image" => "photo.jpg",
+                "video" => "clip.mp4",
+                "screenshot" => "shot.png",
+                _ => "note.m4a",
+            };
             let kind = if kind.is_empty() {
                 String::new()
             } else {
@@ -631,7 +638,7 @@ async fn a_phone_uploads_to_a_task_and_only_a_photo_or_voice_note_to_a_meeting()
                     ("Authorization", auth.as_str()),
                     ("Origin", origin.as_str()),
                     ("Content-Type", "application/octet-stream"),
-                    ("X-Upload-Name", "note.m4a"),
+                    ("X-Upload-Name", name),
                 ],
                 "bytes",
             )
