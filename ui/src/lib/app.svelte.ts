@@ -2183,6 +2183,8 @@ export class App {
       saidAs?: (result: Result) => Key | undefined;
       /** The values `saidAs` words need (`{title}` and the like). */
       saidWith?: Record<string, string | number>;
+      /** A reorder: when it wrote more than one file, the words say that the order was renumbered there. */
+      renumbers?: boolean;
     } = {},
   ): Promise<Result | null> {
     // Every way to change a task ends here (keys, palette, menus, drops): refused with the reason, nothing is sent.
@@ -2230,10 +2232,10 @@ export class App {
         } else {
           const said = opts.saidAs?.(result);
           if (said) {
-            // Where the card went comes first (a status message, WCAG 4.1.3); a reorder that renumbered its neighbours
-            // says that too, after it.
+            // The words of the write come first (where the card went: a status message, WCAG 4.1.3); a reorder that
+            // renumbered its neighbours says that too, after them. Another write of several files keeps its own words.
             const where = translate(this.lang, said, opts.saidWith ?? {});
-            const text = files > 1 ? `${where} ${translate(this.lang, 'write.renumbered', { n: files })}` : where;
+            const text = files > 1 && opts.renumbers ? `${where} ${translate(this.lang, 'write.renumbered', { n: files })}` : where;
             this.toast = { kind: 'ok', text, ...(undo ? { undo } : {}) };
           } else if (files > 1) this.say('ok', 'write.saved_many', { n: files }, undo);
           else this.say('ok', 'write.saved', {}, undo);
@@ -3413,7 +3415,7 @@ export class App {
       else if (move.reason === 'edge') this.say('error', 'board.refused_edge');
       return;
     }
-    await this.write([move.op], said ? { saidAs: () => said.key, saidWith: said.params } : {});
+    await this.write([move.op], said ? { saidAs: () => said.key, saidWith: said.params, renumbers: true } : {});
   }
 
   cancelRepriority(): void {

@@ -86,4 +86,14 @@ describe('the move bar of the board', () => {
       `${translate(m.app.lang, 'board.moved_down', { title: 'Card pub/a' })} ${translate(m.app.lang, 'write.renumbered', { n: 3 })}`,
     );
   });
+
+  it('keeps the words of another write of several files, without the words of a reorder', async () => {
+    const { m } = await board([card('pub/a', 'doing', 'doing|1', 'e1')]);
+    m.hub.next_ops = { client_op_id: 'x', results: [{ ok: true, id: 'pub/a', writes: 2 }] } as unknown as typeof m.hub.next_ops;
+    await m.app.write([{ op: 'set', id: 'pub/a', patch: { prio: 1 }, if_match: 'e1' }], {
+      saidAs: () => 'board.moved',
+      saidWith: { title: 'Card pub/a' },
+    });
+    expect(m.app.toast?.text).toBe(translate(m.app.lang, 'board.moved', { title: 'Card pub/a' }));
+  });
 });
