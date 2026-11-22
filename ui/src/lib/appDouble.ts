@@ -661,8 +661,8 @@ export class FakeHub {
       this.vaultDoc = { ...this.vaultDoc, vaults: this.vaultDoc.vaults.filter((v) => v.name !== name) };
     }
   }
-  async openInEditor(id: string): Promise<void> {
-    this.vaultCalls.push(`open ${id}`);
+  async openInEditor(id: string, kind?: 'competence'): Promise<void> {
+    this.vaultCalls.push(kind ? `open ${kind} ${id}` : `open ${id}`);
     if (this.vaultError) throw this.vaultError;
   }
   async selectVault(name: string): Promise<void> {

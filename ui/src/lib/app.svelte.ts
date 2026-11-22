@@ -4030,9 +4030,9 @@ export class App {
   }
 
   /** Show the file of a task in Neovim. The hub starts the window; the answer says when it could not. */
-  async openInEditor(id: string): Promise<void> {
+  async openInEditor(id: string, kind?: 'competence'): Promise<void> {
     try {
-      await this.env.hub.openInEditor(id);
+      await this.env.hub.openInEditor(id, kind);
       this.say('ok', 'editor.opened');
     } catch (error) {
       const message = error instanceof ApiError ? error.message : '';

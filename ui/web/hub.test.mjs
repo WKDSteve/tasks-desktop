@@ -731,3 +731,13 @@ test('meetings, meeting and meeting_parse: judged as the Rust hub judges them, t
     ['meeting_parse', { params: { text: 'Mo 14:00 Sync' } }],
   ]);
 });
+
+test('the web variant opens no file in an editor, neither of a task nor of a field of knowledge', async () => {
+  const h = hub({});
+  for (const body of ['{"id":"a/b"}', '{"id":"ALL/os","kind":"competence"}']) {
+    const r = await h.post('open', body);
+    assert.equal(r.status, 404, body);
+    assert.equal((await error(r)).code, 'not_available', body);
+  }
+  assert.deepEqual(h.calls, [], 'the engine was not asked');
+});

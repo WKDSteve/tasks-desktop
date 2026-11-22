@@ -1183,9 +1183,10 @@ pub(super) async fn plan_for(State(st): State<Arc<Shared>>, RawQuery(query): Raw
     }
 }
 
-/// `POST /api/tasks/open` `{ "id" }`: show the file of a task in Neovim, in a window of its own. The page names the
-/// task, never a file: the engine says which file it is, the hub checks that it is a plain file inside the vault, and
-/// starts the editor with that one argument (no shell).
+/// `POST /api/tasks/open` `{ "id", "kind"? }`: show the file of a task in Neovim, in a window of its own. The page names
+/// the task, never a file: the engine says which file it is, the hub checks that it is a plain file inside the vault, and
+/// starts the editor with that one argument (no shell). With `"kind": "competence"` the id is that of a field of
+/// knowledge (`<area>/<slug>`), and the file is the one `competences` of the engine names for it.
 pub(super) async fn open_file(State(st): State<Arc<Shared>>, body: Bytes) -> Response {
     let rt = st.rt();
     let Some(opener) = &rt.opener else {
@@ -1195,9 +1196,20 @@ pub(super) async fn open_file(State(st): State<Arc<Shared>>, body: Bytes) -> Res
             "this hub cannot open a file in an editor",
         );
     };
-    let map = match vault_request(&body, &["id"]) {
+    let map = match vault_request(&body, &["id", "kind"]) {
         Ok(m) => m,
         Err(r) => return r,
+    };
+    let competence = match map.get("kind").map(|k| k.as_str()) {
+        None | Some(Some("task")) => false,
+        Some(Some("competence")) => true,
+        Some(_) => {
+            return error_body(
+                StatusCode::BAD_REQUEST,
+                "bad_kind",
+                "kind is task or competence",
+            )
+        }
     };
     let id = match vault_text(&map, "id", 200) {
         Ok(id) if valid_task_id(&id) => id,
@@ -1214,19 +1226,27 @@ pub(super) async fn open_file(State(st): State<Arc<Shared>>, body: Bytes) -> Res
     let Some(vault) = rt.vault.clone() else {
         return engine_unavailable(&st);
     };
-    let reply = match ask(&st, Calls::Task, Some(&json!({ "id": id }))).await {
-        Ok(r) => r,
-        Err(response) => return response,
-    };
-    let name = serde_json::from_str::<serde_json::Value>(&reply.text)
-        .ok()
-        .and_then(|doc| doc["task"]["file"].as_str().map(str::to_owned));
-    let Some(name) = name else {
-        return error_body(
-            StatusCode::BAD_GATEWAY,
-            "engine_failed",
-            "the engine named no file for this task",
-        );
+    let name = if competence {
+        match competence_file(&st, &id).await {
+            Ok(name) => name,
+            Err(response) => return response,
+        }
+    } else {
+        let reply = match ask(&st, Calls::Task, Some(&json!({ "id": id }))).await {
+            Ok(r) => r,
+            Err(response) => return response,
+        };
+        let name = serde_json::from_str::<serde_json::Value>(&reply.text)
+            .ok()
+            .and_then(|doc| doc["task"]["file"].as_str().map(str::to_owned));
+        let Some(name) = name else {
+            return error_body(
+                StatusCode::BAD_GATEWAY,
+                "engine_failed",
+                "the engine named no file for this task",
+            );
+        };
+        name
     };
     let file = match crate::editor::file_in_vault(&vault, &name) {
         Ok(f) => f,
@@ -1236,6 +1256,33 @@ pub(super) async fn open_file(State(st): State<Arc<Shared>>, body: Bytes) -> Res
         Ok(()) => axum::Json(json!({ "ok": true })).into_response(),
         Err(why) => error_body(StatusCode::BAD_GATEWAY, "open_failed", &why),
     }
+}
+
+/// The file of the field of knowledge `id`, as `competences` of the engine names it (asked for the area of the id only).
+// The error is the answer to send, as for the routes: a response is large, and rare.
+#[allow(clippy::result_large_err)]
+async fn competence_file(st: &Shared, id: &str) -> Result<String, Response> {
+    let area = id.split_once('/').map_or(id, |(area, _)| area);
+    let reply = ask(st, Calls::Competences, Some(&json!({ "area": area }))).await?;
+    let doc: serde_json::Value = serde_json::from_str(&reply.text).unwrap_or_default();
+    let items = doc["items"]
+        .as_array()
+        .map(Vec::as_slice)
+        .unwrap_or_default();
+    let Some(item) = items.iter().find(|item| item["id"] == id) else {
+        return Err(error_body(
+            StatusCode::NOT_FOUND,
+            "not_found",
+            "the engine knows no field of knowledge of this id",
+        ));
+    };
+    item["file"].as_str().map(str::to_owned).ok_or_else(|| {
+        error_body(
+            StatusCode::BAD_GATEWAY,
+            "engine_failed",
+            "the engine named no file for this field of knowledge",
+        )
+    })
 }
 
 /// `POST /api/tasks/vault_reveal` `{}`: show the folder of the vault the hub reads in the file manager. The page names

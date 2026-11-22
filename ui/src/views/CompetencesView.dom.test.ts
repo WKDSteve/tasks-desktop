@@ -90,8 +90,8 @@ async function settle(): Promise<void> {
   flushSync();
 }
 
-async function show(opts: { competences?: unknown; caps?: string[] } = {}) {
-  const m = make({ token: 't' });
+async function show(opts: { competences?: unknown; caps?: string[]; mode?: 'web' } = {}) {
+  const m = make({ token: 't', ...(opts.mode ? { mode: opts.mode } : {}) });
   made = m;
   m.hub.capabilities = opts.caps ?? ['paths', 'path', 'requires', 'competences', 'learn_evidence'];
   m.hub.doc = snapshot([], 'rev:1');
@@ -166,6 +166,25 @@ describe('CompetencesView', () => {
     more.click();
     await settle();
     expect(page.querySelector('[data-competence-detail="ALL/os"]')).toBeNull();
+  });
+
+  it('opens the file of a field in Neovim by its id, never by its path; not in the web variant', async () => {
+    const { m, page } = await show();
+    await vi.waitFor(() => expect(row(page, 'ALL/os')).not.toBeNull());
+    row(page, 'ALL/os')!.querySelector<HTMLButtonElement>('[data-competence-more]')!.click();
+    await settle();
+    const open = page.querySelector<HTMLButtonElement>('[data-competence-detail="ALL/os"] button.open-editor')!;
+    expect(open.textContent).toBe('Open in Neovim');
+    expect(open.getAttribute('aria-label')).toBe('Open in Neovim: Operating systems');
+    open.click();
+    await vi.waitFor(() => expect(m.hub.vaultCalls).toEqual(['open competence ALL/os']));
+
+    const web = await show({ mode: 'web' });
+    await vi.waitFor(() => expect(row(web.page, 'ALL/os')).not.toBeNull());
+    row(web.page, 'ALL/os')!.querySelector<HTMLButtonElement>('[data-competence-more]')!.click();
+    await settle();
+    expect(web.page.querySelector('[data-competence-detail="ALL/os"]')).not.toBeNull();
+    expect(web.page.querySelector('[data-competence-detail="ALL/os"] button.open-editor')).toBeNull();
   });
 
   it('filters by target, by path and by text, orders by distance, and lists the paths without a field last', async () => {

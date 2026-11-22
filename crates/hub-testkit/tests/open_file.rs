@@ -326,6 +326,78 @@ async fn a_name_that_leads_out_of_the_vault_is_refused_and_nothing_is_started() 
     assert!(opened(&r).is_empty(), "something was started");
 }
 
+/// The answer of `competences` of the fake engine: one field of knowledge whose file is `file`.
+fn competences_naming(r: &Rig, file: &str) {
+    std::fs::write(
+        r.vault.join(".fake-merge-competences.json"),
+        serde_json::json!({ "kind": "tasks.competences", "items": [{ "id": "alpha.nvim/os", "file": file }] })
+            .to_string(),
+    )
+    .unwrap();
+}
+
+#[tokio::test]
+async fn the_file_of_a_field_of_knowledge_is_the_one_the_engine_names_and_never_one_of_the_page() {
+    let r = rig("competence", true).await;
+    let dir = r
+        .vault
+        .join("alpha.nvim")
+        .join("ROADMAP")
+        .join("competences");
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(
+        dir.join("os.md"),
+        "---
+title: OS
+---
+",
+    )
+    .unwrap();
+    competences_naming(&r, "alpha.nvim/ROADMAP/competences/os.md");
+    let (status, doc) = open(&r, r#"{"id":"alpha.nvim/os","kind":"competence"}"#, true).await;
+    assert_eq!(status, 200, "{doc}");
+    let seen = opened(&r);
+    assert_eq!(seen.len(), 1, "{seen:?}");
+    assert!(seen[0].ends_with("os.md"), "{seen:?}");
+    assert!(
+        !doc.to_string().contains("os.md"),
+        "the answer holds no path"
+    );
+    // a field the engine does not know
+    let (status, doc) = open(&r, r#"{"id":"alpha.nvim/nope","kind":"competence"}"#, true).await;
+    assert_eq!(
+        (status, doc["error"]["code"].as_str()),
+        (404, Some("not_found"))
+    );
+    // a file the engine named that leads out of the vault, or is no plain file in it
+    for name in [
+        "../outside.md",
+        "/etc/passwd",
+        "C:/Windows/win.ini",
+        "alpha.nvim/ROADMAP/competences",
+        "alpha.nvim/../../outside.md",
+    ] {
+        competences_naming(&r, name);
+        let (status, doc) = open(&r, r#"{"id":"alpha.nvim/os","kind":"competence"}"#, true).await;
+        assert_eq!(
+            (status, doc["error"]["code"].as_str()),
+            (400, Some("open_refused")),
+            "{name}"
+        );
+    }
+    // the page names a field, never a file; an unknown kind or a path is refused before the engine is asked
+    for bad in [
+        r#"{"id":"alpha.nvim/os","kind":"file"}"#,
+        r#"{"id":"alpha.nvim/os","kind":5}"#,
+        r#"{"id":"../alpha.nvim/os","kind":"competence"}"#,
+        r#"{"id":"alpha.nvim/os","kind":"competence","file":"/etc/passwd"}"#,
+    ] {
+        let (status, _) = open(&r, bad, true).await;
+        assert_eq!(status, 400, "{bad}");
+    }
+    assert_eq!(opened(&r).len(), 1, "nothing else was started");
+}
+
 #[tokio::test]
 async fn the_form_the_credential_and_a_hub_without_an_editor() {
     let r = rig("form", true).await;

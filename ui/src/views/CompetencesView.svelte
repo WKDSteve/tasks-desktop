@@ -291,7 +291,19 @@
                           {/each}
                         </ul>
                       {/if}
-                      <p class="file">{t('competences.file')}: <code>{markHidden(item.file)}</code></p>
+                      <p class="file">
+                        {t('competences.file')}: <code>{markHidden(item.file)}</code>
+                        {#if app.machineActions}
+                          <!-- The hub opens the file the engine names for this id; the page sends the id, never the path. -->
+                          <button
+                            type="button"
+                            class="open-editor"
+                            data-hint={t('competences.open_editor_hint')}
+                            aria-label={t('competences.open_editor', { title: markHidden(item.title) })}
+                            onclick={() => void app.openInEditor(item.id, 'competence')}>{t('editor.button')}</button
+                          >
+                        {/if}
+                      </p>
                     </div>
                   </td>
                 </tr>
@@ -539,6 +551,9 @@
   }
   .file code {
     overflow-wrap: anywhere;
+  }
+  .open-editor {
+    margin-inline-start: 0.5rem;
   }
   .legend {
     display: flex;
