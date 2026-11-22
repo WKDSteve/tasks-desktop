@@ -15,6 +15,7 @@
   import Detail from './views/Detail.svelte';
   import { triageKey } from './lib/inbox';
   import { copyText } from './lib/exportDom';
+  import { exportWord } from './lib/exportWord';
   import Brand from 'appkit-ui/Brand.svelte';
   import DocsDialog from 'appkit-ui/DocsDialog.svelte';
   import { helpItems, type DocEntry } from 'appkit-ui/docs';
@@ -286,6 +287,9 @@
     app.cachedAt !== null ? 'cached' : app.streamsFull && app.connection !== 'live' ? 'full' : app.connection,
   );
 
+  /** The word of an export entry: the view's own where it gives tables instead of tasks (`ViewTables.label`). */
+  const tl = (key: Key): string => exportWord(app, key, t);
+
   /** The entries of the menu that export what the view shows: a file for each format, then the clipboard. */
   const exportItems = (ready: boolean) =>
     // Only where the view shows tasks: an export from Today or the inbox would take the list, which is not shown there.
@@ -301,13 +305,13 @@
     )
       .map(([label, format, how]) => ({
         kind: 'action' as const,
-        label: t(label),
-        hint: t(`hint.item.${label}` as Key),
+        label: tl(label),
+        hint: tl(`hint.item.${label}` as Key),
         disabled: !ready || !app.exportable,
         onselect: () => void app.exportView(format, how),
       }))
-      .concat({ kind: 'action' as const, label: t('menu.print_view'), hint: t('hint.item.menu.print_view'), disabled: !ready || !app.exportable, onselect: () => void app.printView() })
-      .concat(app.canPng ? [{ kind: 'action' as const, label: t('export.png'), hint: t('hint.item.menu.png'), disabled: !ready || !app.exportable, onselect: () => void app.pngView() }] : []);
+      .concat({ kind: 'action' as const, label: tl('menu.print_view'), hint: tl('hint.item.menu.print_view'), disabled: !ready || !app.exportable, onselect: () => void app.printView() })
+      .concat(app.canPng ? [{ kind: 'action' as const, label: tl('export.png'), hint: tl('hint.item.menu.png'), disabled: !ready || !app.exportable, onselect: () => void app.pngView() }] : []);
 
   /** The task the engine names as the next one to take: the one the tile of that name shows. */
   const nextTaskId = $derived(app.next?.task?.id ?? null);

@@ -2811,8 +2811,8 @@ export class App {
    */
   viewTables = $state.raw<ViewTables | null>(null);
 
-  /** The tables of the view shown, when it gave some. */
-  private get ownTables(): ViewTables | null {
+  /** The tables of the view shown, when it gave some (also for the words of the export entries, lib/exportWord.ts). */
+  get ownTables(): ViewTables | null {
     return this.viewTables !== null && this.viewTables.view === this.view ? this.viewTables : null;
   }
 

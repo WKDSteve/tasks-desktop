@@ -321,6 +321,9 @@ describe('LearnStatsView', () => {
     expect(md).not.toContain('Tagebuch');
     // a path the vault no longer names (no area known) is held back as well
     expect(md).not.toContain('gone/ghost');
+    // the entries of the menu say "tables", in the view's words
+    expect(m.app.viewTables?.label?.('menu.save_csv')).toBe('Save tables as CSV file ...');
+    expect(m.app.viewTables?.label?.('export.png')).toBeUndefined();
     // gone with the view
     unmount(mounted!);
     mounted = undefined;

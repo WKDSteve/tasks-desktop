@@ -13,6 +13,7 @@
   import type { ViewTables } from '../lib/export';
   import Info from 'appkit-ui/Info.svelte';
   import LearnScopeNote from './LearnScopeNote.svelte';
+  import { tablesLabel } from '../lib/viewTablesTexts';
   import { learnScope } from '../lib/learnScope';
   import LearnBars from './LearnBars.svelte';
   import { markHidden } from '../lib/text';
@@ -297,6 +298,7 @@
       title: t('nav.learnstats'),
       tables: () => untrack(tables),
       words: (what, n) => texts.text(app.lang, `learnstats.out.${what}`, { n }),
+      label: (key, params) => tablesLabel(app.lang, key, params),
     };
     app.viewTables = own;
     return () => {

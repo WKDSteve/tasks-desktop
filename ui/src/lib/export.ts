@@ -181,6 +181,11 @@ export interface ViewTables {
   tables(): { title?: string; headers: string[]; rows: string[][] }[];
   /** What the page says of them (`n` rows): the view's words, which come with its chunk and not with the start. */
   words(what: 'saved' | 'copied' | 'save_failed' | 'copy_failed' | 'empty' | 'png_saved', n: number): string;
+  /**
+   * The word of an export entry of the menu View or the palette (its key in `i18n`), where the page's word speaks of
+   * tasks (lib/viewTablesTexts.ts); undefined: the page's word. From the view's chunk, as `words`.
+   */
+  label?(key: string, params?: Record<string, string | number>): string | undefined;
 }
 
 /**

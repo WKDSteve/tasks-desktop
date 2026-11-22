@@ -5,6 +5,10 @@ import { describe, expect, it } from 'vitest';
 import { make } from './appDouble';
 import type { ViewTables } from './export';
 import type { View } from './app.svelte';
+import { exportWord } from './exportWord';
+import { paletteActions } from './paletteActions';
+import { tablesLabel, TABLE_KEYS } from './viewTablesTexts';
+import { translate, type Key } from './i18n';
 
 const words: ViewTables['words'] = (what, n) => `${what} ${n}`;
 const tables = (rows: string[][] = [['Lua', '3']]): ViewTables => ({
@@ -99,5 +103,42 @@ describe('App, the tables of a view of figures', () => {
       ],
     });
     app.stop();
+  });
+  it('name the export entries "tables" while their view is shown, "tasks" of the page elsewhere', async () => {
+    const { app } = await shown('learn');
+    const page = (key: string) => translate('en', key as Key);
+    const own: ViewTables = { ...tables(), label: (key, params) => tablesLabel('en', key, params) };
+    expect(exportWord({ ownTables: own }, 'menu.save_csv', page)).toBe('Save tables as CSV file ...');
+    expect(exportWord({ ownTables: own }, 'hint.item.menu.copy_md', page)).toBe('The tables of this view as Markdown on the clipboard.');
+    expect(exportWord({ ownTables: own }, 'menu.print_view', page)).toBe('Print tables or save as PDF ...');
+    // a word that names no tasks stays the page's
+    expect(exportWord({ ownTables: own }, 'export.png', page)).toBe('Save as PNG ...');
+    // a view without words of its own, no tables, or another view shown (App.ownTables is null then): the page's
+    expect(exportWord({ ownTables: tables() }, 'menu.save_csv', page)).toBe('Save tasks as CSV file ...');
+    expect(exportWord({ ownTables: null }, 'menu.save_csv', page)).toBe('Save tasks as CSV file ...');
+    app.viewTables = own;
+    expect(exportWord(app, 'menu.save_csv', page)).toBe('Save tables as CSV file ...');
+    app.setView('paths');
+    expect(exportWord(app, 'menu.save_csv', page)).toBe('Save tasks as CSV file ...');
+    app.setView('learn');
+
+    // the palette says the same
+    await app.setLang('en');
+    app.viewTables = own;
+    const labels = paletteActions(app).filter((a) => a.key.startsWith('export.')).map((a) => a.label);
+    expect(labels).toContain('Export tables: Save as CSV ...');
+    expect(labels).toContain('Export tables: Print or save as PDF ...');
+    app.viewTables = tables();
+    expect(paletteActions(app).find((a) => a.key === 'export.save.csv')?.label).toBe('Export: Save as CSV ...');
+    app.stop();
+  });
+
+  it('have words in both languages for every entry that names tasks', () => {
+    for (const key of TABLE_KEYS) {
+      expect(tablesLabel('de', key, { what: 'x' }), key).toBeTruthy();
+      expect(tablesLabel('en', key, { what: 'x' }), key).toBeTruthy();
+      expect(translate('en', key as Key), key).toBeTruthy();
+    }
+    expect(tablesLabel('de', 'menu.save_csv')).toBe('Tabellen als CSV-Datei speichern ...');
   });
 });

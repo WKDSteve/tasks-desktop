@@ -3,6 +3,7 @@
 
 import type { App, View } from './app.svelte';
 import { learnMenu } from './learnViews';
+import { exportWord } from './exportWord';
 import { labelOf, translate, type Key } from './i18n';
 import { isColumn } from './board';
 import type { PaletteAction } from 'appkit-ui/palette';
@@ -85,12 +86,14 @@ export function paletteActions(app: App): PaletteAction[] {
 
   // The export of what the view shows, by format and way out (the same entries as the button of the view), only where
   // the view shows tasks.
+  // A view that gives its own tables (`ViewTables.label`) says so: "Export tables: ..." instead of "Export: ...".
+  const ex = (what: string): string => exportWord(app, 'palette.export', t, { what });
   for (const [format, name] of app.exportable ? ([['csv', 'CSV'], ['json', 'JSON'], ['markdown', 'Markdown']] as const) : []) {
-    add(`export.save.${format}`, t('palette.export', { what: t('export.save', { format: name }) }), () => app.exportView(format, 'save'));
-    add(`export.copy.${format}`, t('palette.export', { what: t('export.copy', { format: name }) }), () => app.exportView(format, 'copy'));
+    add(`export.save.${format}`, ex(t('export.save', { format: name })), () => app.exportView(format, 'save'));
+    add(`export.copy.${format}`, ex(t('export.copy', { format: name })), () => app.exportView(format, 'copy'));
   }
-  if (app.exportable) add('export.print', t('palette.export', { what: t('export.print') }), () => app.printView());
-  if (app.exportable && app.canPng) add('export.png', t('palette.export', { what: t('export.png') }), () => app.pngView());
+  if (app.exportable) add('export.print', ex(t('export.print')), () => app.printView());
+  if (app.exportable && app.canPng) add('export.png', ex(t('export.png')), () => app.pngView());
 
   if (app.conflicts.length > 0) add('conflicts.show', t('palette.conflicts', { n: app.conflicts.length }), () => app.openConflicts());
   add('rescan', t('menu.rescan'), () => app.focused());
