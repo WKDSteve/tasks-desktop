@@ -134,8 +134,10 @@ describe('walkTiles', () => {
     expect(walkTiles('ArrowDown', 1, sizes, 3)).toBe(4);
     // From the last row of the first group, column 1: the second tile of the next group.
     expect(walkTiles('ArrowDown', 4, sizes, 3)).toBe(6);
-    // Column 2 of the first row, no tile below in its group: the next group's last tile in reach.
-    expect(walkTiles('ArrowDown', 2, sizes, 3)).toBe(6);
+    // Column 2 of the first row, no tile below it but a shorter row: that row's last tile, no row is skipped.
+    expect(walkTiles('ArrowDown', 2, sizes, 3)).toBe(4);
+    // From there on into the next group.
+    expect(walkTiles('ArrowDown', 4, sizes, 3)).toBe(6);
     expect(walkTiles('ArrowUp', 6, sizes, 3)).toBe(4);
     expect(walkTiles('ArrowUp', 5, sizes, 3)).toBe(3);
     expect(walkTiles('ArrowUp', 1, sizes, 3)).toBe(1);

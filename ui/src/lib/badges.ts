@@ -159,7 +159,8 @@ export function badgeImage(tile: BadgeTile): string | null {
  * The roving focus over the tiles of several grids (one per group), as one Tab stop: `at` is the index over all tiles,
  * `sizes` the number of tiles of each group, `columns` the tiles in a row. Left and right go on over the end of a group,
  * up and down keep the column (into the last or first row of the group before or after), Home and End go to the first and
- * last tile of all. The next index, or null when the key is not one of the walk.
+ * last tile of all; down onto a shorter last row goes to its last tile. The next index, or null when the key is not one
+ * of the walk.
  */
 export function walkTiles(key: string, at: number, sizes: readonly number[], columns: number): number | null {
   const count = sizes.reduce((a, b) => a + b, 0);
@@ -181,6 +182,8 @@ export function walkTiles(key: string, at: number, sizes: readonly number[], col
       return Math.max(0, at - 1);
     case 'ArrowDown': {
       if (inGroup + cols < size) return at + cols;
+      // A shorter last row below: its last tile (a row is never skipped).
+      if (Math.floor(inGroup / cols) < Math.floor((size - 1) / cols)) return start + size - 1;
       // The last row of a group: the same column of the first row of the next group (or its last tile).
       if (group === sizes.length - 1) return at;
       const col = inGroup % cols;
