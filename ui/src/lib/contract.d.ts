@@ -31,6 +31,11 @@ export type TasksExport =
   | MeetingParse
   | Paths
   | PathDocument
+  | LearnNext
+  | LearnNotes
+  | LearnEvidence
+  | LearnHistory
+  | Competences
   | Milestones
   | MilestoneDocument
   | DonePreview
@@ -1097,6 +1102,10 @@ export type Paths = Head & {
  */
 export type PathStage = "done" | "parked" | "waiting" | "doing" | "idle";
 /**
+ * A stage of the scale of the competences, 0 (unknown) to 8 (mastermind), in halves (3.5: the evidence for 4 begun).
+ */
+export type CompetenceLevel = number;
+/**
  * tasks.path: one learning path with its body and its tree as a flat list in document order. Capability `path`.
  */
 export type PathDocument = Head & {
@@ -1117,6 +1126,24 @@ export type PathDocument = Head & {
    */
   levels?: PathLevel[];
   /**
+   * The sessions of `## Zeitplan`: the points with planned hours that are a root or one level below, in file order, each with its hours, its result (the text after `Nachweis:`, `Aufgabe:` or `Ergebnis:` of its first such child) and its state (`partial`: some of its leaves closed). Only when the path has `hours`. Capability `path_hours`.
+   */
+  schedule?: (PathHours & {
+    index: number;
+    key?: string;
+    /**
+     * As written (untrusted).
+     */
+    label: string;
+    result?: string;
+    state: "open" | "partial" | "done";
+    /**
+     * Its leaves closed (learned, seen, dropped).
+     */
+    closed: number;
+    total: number;
+  })[];
+  /**
    * The problems of `## Level` (`level-...` codes); with `levels`. Capability `xp`.
    */
   level_problems?: {
@@ -1130,6 +1157,272 @@ export type PathDocument = Head & {
     key?: string;
     message: string;
   }[];
+};
+/**
+ * tasks.learn_next: for every running learning path (stage `doing`, or `idle` with its project's `status: doing`) the first `n` points (default 3) that may be learned now, in document order: open (not blocked), not optional, on the machine when one is asked for. Only paths with such a point; `doing` before `idle`, then the most recently active first (the last day the series of the learning figures saw a change, else `updated`), then by id. Capability `learn_next`.
+ */
+export type LearnNext = Head & {
+  kind: "tasks.learn_next";
+  rev: Rev;
+  digest: Digest;
+  /**
+   * The machine asked for; absent: every machine.
+   */
+  machine?: "private" | "workstation" | "wsl";
+  items: {
+    path: string;
+    area: string;
+    title: string;
+    icon?: Icon;
+    project?: string;
+    stage: "doing" | "idle";
+    /**
+     * @minItems 1
+     */
+    points: [LearnPoint, ...LearnPoint[]];
+  }[];
+  incomplete: string[];
+};
+/**
+ * tasks.learn_notes: the points of all learning paths that carry a note (`> ` lines), a link or an image, narrowed to a `kind` and a search text (`query`: a part of the label, the note or the link, without case), each with its path, stage and state; open paths by id, then with `include_done` the finished ones, each in document order. At most `limit` (default 200); `total` counts every hit. Capability `learn_notes`.
+ */
+export type LearnNotes = Head & {
+  kind: "tasks.learn_notes";
+  rev: Rev;
+  digest: Digest;
+  items: {
+    path: string;
+    area: string;
+    title: string;
+    /**
+     * The path is finished (from a Backlog, `include_done`).
+     */
+    path_done?: true;
+    index: number;
+    key?: string;
+    /**
+     * As written (Markdown, untrusted).
+     */
+    label: string;
+    stage_index: number;
+    stage_label: string;
+    /**
+     * The state shown (`PathNode.derived`).
+     */
+    state: "open" | "learned" | "seen" | "dropped" | "blocked" | "partial";
+    /**
+     * The `> ` lines below the point, joined by newlines (Markdown, untrusted).
+     */
+    note?: string;
+    link?: string;
+    /**
+     * A file below `assets/` of the path; a client draws it as an image only.
+     */
+    image?: string;
+  }[];
+  total: number;
+  truncated: boolean;
+  incomplete: string[];
+};
+/**
+ * tasks.learn_evidence: the evidence of all learning paths: the points whose label starts with `Nachweis:`, `Aufgabe:` or `Ergebnis:` (`Evidence:`, `Result:`), each with its path, the competences the path serves, its stage, state, link and the stage of the competence scale it proves (`{for=t4}`). Narrowed to the paths that serve `competence`, to areas and paths; with `include_done` the finished paths too. Open paths by id, then the finished ones, each in document order. Capability `learn_evidence`.
+ */
+export type LearnEvidence = Head & {
+  kind: "tasks.learn_evidence";
+  rev: Rev;
+  digest: Digest;
+  /**
+   * The competence asked for.
+   */
+  competence?: string;
+  items: {
+    path: string;
+    area: string;
+    title: string;
+    /**
+     * The path is finished (from a Backlog, `include_done`).
+     */
+    path_done?: true;
+    /**
+     * The competences the path serves (`competence:`).
+     *
+     * @minItems 1
+     */
+    competence?: [string, ...string[]];
+    index: number;
+    key?: string;
+    /**
+     * As written (Markdown, untrusted), the word `Nachweis:` and the like included.
+     */
+    label: string;
+    stage_index: number;
+    stage_label: string;
+    /**
+     * The state shown (`PathNode.derived`): `learned` is evidence given.
+     */
+    state: "open" | "learned" | "seen" | "dropped" | "blocked" | "partial";
+    /**
+     * The first link of the label: where the evidence lies.
+     */
+    link?: string;
+    /**
+     * The stage it proves (`{for=t4}`): `t` theory or `p` practice.
+     */
+    for?: {
+      axis: "t" | "p";
+      level: CompetenceLevel;
+    };
+  }[];
+  incomplete: string[];
+};
+/**
+ * tasks.learn_history: what the series of the learning figures (`_Telemetry/history/learn-YYYY-MM.jsonl`, one row per day and path, written by `history_record`, `tasks history record` and `tasks index`) says over a window `since`..`until` in steps of a `day`, `week` (from Monday) or `month`. The series exists from the day it was introduced: a step before its first day (`first`) is absent, never 0; without any row there are no `points`, no `first`, no `streak`. A path's first row on the first day of the series is where it starts (nothing learned that day); a path that appears later counts from nothing. Capability `learn_history`.
+ */
+export type LearnHistory = Head & {
+  kind: "tasks.learn_history";
+  rev: Rev;
+  digest: Digest;
+  since: string;
+  until: string;
+  step: "day" | "week" | "month";
+  /**
+   * The first day of the series in the scope.
+   */
+  first?: string;
+  /**
+   * Learning days in a row (a day on which a point was learned or seen): `current` the run that ends on `until` or the day before (today not learned yet keeps it), `longest` the longest run since `first`, `last_day` the last learning day.
+   */
+  streak?: {
+    current: number;
+    longest: number;
+    last_day?: string;
+  };
+  /**
+   * One per step from the step of `first` on, `date` its first day: the sums over the paths, `days` the learning days of the step, `paths` the paths that changed in it (with the level reached at its end).
+   */
+  points: (LearnStepFigures & {
+    date: string;
+    days: number;
+    paths: (LearnStepFigures & {
+      id: string;
+      level?: number;
+    })[];
+  })[];
+  /**
+   * Every path of the scope with a row, by id: its first row, the last day something changed (up to `until`), the level at `until`, the day each level was first reached (`ref` as `PathLevel.ref`) and each reward first granted, and once the series reaches four weeks back the pace of those weeks (`points` closed and `hours` done per week) and `forecast_weeks`: the weeks the open points (and open hours, `hours_min`/`hours_max`) of an open path take at that pace (absent at a pace of 0).
+   */
+  paths: {
+    id: string;
+    area: string;
+    /**
+     * The title of the path as it is now (open or finished); absent when it is gone.
+     */
+    title?: string;
+    first: string;
+    last_active?: string;
+    level?: number;
+    levels: {
+      ref: string;
+      reached_on: string;
+    }[];
+    rewards: {
+      ref: string;
+      given_on: string;
+    }[];
+    pace?: {
+      points: number;
+      hours: number;
+    };
+    forecast_weeks?: {
+      points?: number;
+      hours_min?: number;
+      hours_max?: number;
+    };
+  }[];
+  /**
+   * Lines and files of the series that were skipped, relative to the vault.
+   */
+  incomplete: string[];
+};
+/**
+ * tasks.competences: the fields of knowledge of the vault (`<area>/ROADMAP/competences/<slug>.md`), each with its stage in theory (`t`) and practice (`p`; absent: not assessed, `?`), its targets in 12 and 24 months, the day it was assessed, its text (untrusted, cut at 16 KiB) and the open learning paths that name it (`competence:`), plus the scale (0..8 with the names of the stages) in the language of the vault. A broken file is still here (`valid: false`, `problems`). Capability `competences`.
+ */
+export type Competences = Head & {
+  kind: "tasks.competences";
+  rev: Rev;
+  digest: Digest;
+  /**
+   * The language of the names of the scale: the vault's (`tasks-vault.json`), else German.
+   */
+  lang: "de" | "en";
+  /**
+   * @minItems 9
+   * @maxItems 9
+   */
+  scale: [
+    {
+      level: number;
+      name: string;
+    },
+    {
+      level: number;
+      name: string;
+    },
+    {
+      level: number;
+      name: string;
+    },
+    {
+      level: number;
+      name: string;
+    },
+    {
+      level: number;
+      name: string;
+    },
+    {
+      level: number;
+      name: string;
+    },
+    {
+      level: number;
+      name: string;
+    },
+    {
+      level: number;
+      name: string;
+    },
+    {
+      level: number;
+      name: string;
+    }
+  ];
+  items: {
+    id: string;
+    area: string;
+    slug: string;
+    title: string;
+    group?: string;
+    t?: CompetenceLevel;
+    p?: CompetenceLevel;
+    target_12?: CompetenceTarget1;
+    target_24?: CompetenceTarget1;
+    assessed?: string;
+    /**
+     * The text after the frontmatter, trimmed (Markdown, untrusted): why, and the next evidence.
+     */
+    body: string;
+    body_truncated?: true;
+    /**
+     * The open learning paths that name it, by id.
+     */
+    paths: string[];
+    file: string;
+    etag?: string;
+    valid: boolean;
+    problems: string[];
+  }[];
+  incomplete: string[];
 };
 /**
  * tasks.milestones: the milestones of the vault or of an area (`<area>/ROADMAP/milestones/`), each with its progress over its members. Capability `milestones`.
@@ -2153,6 +2446,21 @@ export interface PathEntry {
   requires_gate?: RequiresGate;
   waiting_on?: WaitingOn;
   stage?: PathStage;
+  /**
+   * With `levels: true` of `tasks.paths`: every line of `## Level` in file order, the line of the whole path last; only when the file has the section. Capability `paths_levels`.
+   */
+  levels?: PathEntryLevel[];
+  /**
+   * The competences the path serves (`competence:`, ids of `<area>/ROADMAP/competences/<slug>.md`); only when the file names some. Capability `competences`.
+   *
+   * @minItems 1
+   */
+  competence?: [string, ...string[]];
+  competence_target?: CompetenceTarget;
+  /**
+   * The hours of the path; only when a point carries `{h=…}` or `{done_h=…}`. Capability `path_hours`.
+   */
+  hours?: PathHours;
   links?: string[];
   icon?: Icon;
   cover?: Cover;
@@ -2254,6 +2562,48 @@ export interface PathXp1 {
    * Leaves (not dropped) without XP.
    */
   missing: number;
+}
+/**
+ * One line of `## Level` as `tasks.paths` carries it with `levels: true` (capability `paths_levels`): what `PathLevel` says, plus for a level not reached what is missing (`missing_xp`: the XP of a level in XP, or of a level in percent when the tree has XP; `missing_percent`: of a level in percent without XP, and of the line of the whole path), and from the series of the learning figures (`tasks.learn_history`) the day it was first reached (`reached_on`, only while it is reached) and its reward first granted (`given_on`, only while it is granted); absent before the series knew it.
+ */
+export interface PathEntryLevel {
+  ref: string;
+  number?: number;
+  line: number;
+  kind: "xp" | "percent" | "done";
+  threshold?: number;
+  name?: string;
+  /**
+   * As written; a file below `assets/badges/` (a client draws it as an image only).
+   */
+  badge?: string;
+  /**
+   * What one grants oneself, untrusted text.
+   */
+  reward?: string;
+  given: boolean;
+  reached: boolean;
+  missing_xp?: number;
+  missing_percent?: number;
+  reached_on?: string;
+  given_on?: string;
+}
+/**
+ * The stages the path aims at (`competence_target:`). Capability `competences`.
+ */
+export interface CompetenceTarget {
+  t?: CompetenceLevel;
+  p?: CompetenceLevel;
+}
+/**
+ * Hours of a path or a session: planned (`{h=N}`, `{h=N-M}` on the outermost point that carries it: an inner one is part of it), done (`{done_h=N}`, the outermost too) and open (the planned hours of the points not closed, less what was done on each, never below 0). A point whose leaves are all dropped plans nothing; optional points count for nothing. Two decimal places at most.
+ */
+export interface PathHours {
+  planned_min: number;
+  planned_max: number;
+  done: number;
+  open_min: number;
+  open_max: number;
 }
 /**
  * One learning point of a tree. A parent has no mark of its own: its `derived` state comes from its leaves (learned, partial, open); `closed` when every leaf is (a parent with points that are not optional: every one of those).
@@ -2409,6 +2759,69 @@ export interface PathLevel {
    */
   given: boolean;
   reached: boolean;
+}
+/**
+ * A learning point as the learning views over all paths carry it: where it stands, its stage (the root it stands below) and what its marks say.
+ */
+export interface LearnPoint {
+  /**
+   * Position in document order (`PathNode.index`); `#<index>` names the point where it has no key.
+   */
+  index: number;
+  key?: string;
+  /**
+   * As written (Markdown, untrusted).
+   */
+  label: string;
+  /**
+   * The `index` of the root it stands below (its own for a root).
+   */
+  stage_index: number;
+  /**
+   * The label of that root (untrusted).
+   */
+  stage_label: string;
+  link?: string;
+  /**
+   * The task the point was promoted to.
+   */
+  promoted?: string;
+  /**
+   * Planned hours (`{h=N}` or the lower end of `{h=N-M}`).
+   */
+  h_min?: number;
+  h_max?: number;
+  /**
+   * The XP the point counts (`PathNode.xp`).
+   */
+  xp?: number;
+  /**
+   * The point is `{safety}` or below one: closing it needs `ack`.
+   */
+  safety?: true;
+  /**
+   * The machines the point may be practised on; absent: every machine.
+   *
+   * @minItems 1
+   */
+  machine?: ["private" | "workstation" | "wsl", ...("private" | "workstation" | "wsl")[]];
+}
+/**
+ * What changed in a step: points learned, seen and dropped, XP earned and hours done (differences of the series, may be negative when a mark was taken back).
+ */
+export interface LearnStepFigures {
+  learned: number;
+  seen: number;
+  dropped: number;
+  xp: number;
+  done_h: number;
+}
+/**
+ * Stages aimed at, in theory (`t`) and practice (`p`); a target written as one stage holds for both.
+ */
+export interface CompetenceTarget1 {
+  t?: CompetenceLevel;
+  p?: CompetenceLevel;
 }
 /**
  * A milestone (`<area>/ROADMAP/milestones/<slug>.md`): the head of its file, its progress, whether it is overdue, its version.
@@ -2631,6 +3044,14 @@ export interface ResultEntry {
    * `history_record`: the rows written into the series (a dry run: that would be written).
    */
   rows?: number;
+  /**
+   * `history_record`: the rows written into the series of the learning paths (`_Telemetry/history/learn-YYYY-MM.jsonl`; a dry run: that would be written). Capability `learn_history`.
+   */
+  learn_rows?: number;
+  /**
+   * `history_record`: the month file of the learning series, relative to the vault. Capability `learn_history`.
+   */
+  learn_file?: string;
   to?: string;
   steps_ticked?: number;
   plans_closed?: string[];
@@ -2662,6 +3083,10 @@ export interface ResultEntry {
     key: string;
     state: "open" | "learned" | "seen" | "dropped" | "blocked";
     changed: boolean;
+    /**
+     * The point was left as it was: it is on or under a `{safety}` mark and the finish carried no `ack`; the notes say so (capability `path_marks`).
+     */
+    held?: true;
   };
   notes?: string[];
   move?: MovePlan;
@@ -2716,6 +3141,10 @@ export interface Inverse {
    * `node_set` that wrote XP: the XP the point had (capability `xp`).
    */
   xp?: number;
+  /**
+   * `node_set` that reopens a point closed under `{safety}`: the inverse closes it again and carries the ack (capability `path_marks`).
+   */
+  ack?: true;
   /**
    * `node_set` that wrote XP on a point that had none: remove them again (capability `xp`).
    */
