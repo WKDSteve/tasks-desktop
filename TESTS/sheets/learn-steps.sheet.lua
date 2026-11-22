@@ -5,7 +5,8 @@
 -- Next learning step: a card per running path, the machine filter, the keys of a card (l marks its point, the engine
 -- names the next), the safety question before a {safety} point is closed (cancel, then yes). Learning time: the
 -- overrun beside the bar, the sessions of a path. Notes & sources: / finds the search, the engine's hit is marked, a hit
--- opens its point in the path. Both sizes: a wide window and a narrow one (the learning time draws its rows as cards).
+-- opens its point in the path. One size: the code of the link pairs once per app; the narrow window (the learning
+-- time draws its rows as cards) is checked by the browser test with axe.
 -- The steps go by data attributes, not by words: the page speaks the language of the browser. The browser test
 -- ui/e2e/learn-steps.spec.ts checks the same against the test hub of the e2e run, with axe in both themes; what only
 -- eyes and ears show stays in the hand run tasks-desktop/abnahme-reiter-lernplaene-und-ansichten-von-hand.
@@ -24,9 +25,9 @@ local function point_of(id, value)
 end
 -- the machine filter is a <select>; a sheet has no step to choose in one, so the expression chooses as a person would
 local function machine(value)
-  return "const s = [...document.querySelectorAll('.learnnext select')].at(-1); s.value = '"
+  return "(() => { const s = [...document.querySelectorAll('.learnnext select')].at(-1); s.value = '"
     .. value
-    .. "'; s.dispatchEvent(new Event('change', { bubbles: true })); return true;"
+    .. "'; s.dispatchEvent(new Event('change', { bubbles: true })); return true; })()"
 end
 
 return {
@@ -36,7 +37,7 @@ return {
   title = "tasks-desktop: next learning step, learning time, notes & sources (cards, keys, safety question, machine filter; hours and sessions; search, hit, jump to the point)",
   engine = "browser",
   app = "learn-steps-hub",
-  sizes = { { cols = 1300, rows = 900 }, { cols = 420, rows = 900 } },
+  sizes = { { cols = 1300, rows = 900 } },
   steps = {
     -- next learning step
     {
@@ -58,13 +59,17 @@ return {
     },
     { expect = machine("workstation"), note = "machine: workstation" },
     {
-      wait = "document.querySelectorAll('" .. card(OS) .. " details.after li').length === 1",
+      wait = "!(document.querySelector('"
+        .. card(OS)
+        .. " details.after')?.textContent ?? '').includes('Load a driver')",
       timeout = 10000,
-      note = "the driver is for the private machine only: the engine leaves it out",
+      note = "the driver is for the private machine only: the engine leaves it out (and names the page tables instead)",
     },
     { expect = machine(""), note = "every machine again" },
     {
-      wait = "document.querySelectorAll('" .. card(OS) .. " details.after li').length === 2",
+      wait = "(document.querySelector('"
+        .. card(OS)
+        .. " details.after')?.textContent ?? '').includes('Load a driver')",
       timeout = 10000,
     },
     { shot = "next", note = "the cards" },
@@ -105,7 +110,10 @@ return {
     },
 
     -- learning time
-    { open = "${link}&view=learntime", note = "the learning time" },
+    {
+      expect = "(() => { location.hash = '#view=learntime'; return true; })()",
+      note = "the learning time, in the same page (the code of the link pairs once)",
+    },
     { wait = "document.querySelector('" .. row(SHELL) .. "') !== null", timeout = 20000 },
     {
       expect = "document.querySelector('"
@@ -122,7 +130,10 @@ return {
     { shot = "time", note = "the table, the bars, the sessions" },
 
     -- notes & sources
-    { open = "${link}&view=learnnotes", note = "notes & sources" },
+    {
+      expect = "(() => { location.hash = '#view=learnnotes'; return true; })()",
+      note = "notes & sources, in the same page (the code of the link pairs once)",
+    },
     { wait = "document.querySelector('ul.hits') !== null", timeout = 20000 },
     { blur = true },
     { press = "/", note = "/ finds the search" },
@@ -152,7 +163,6 @@ return {
   judge = {
     "a card names its path, its point, the stage and the hours; a safety point says so in a word beside the sign",
     "in the learning time an overrun reads as '+3 h' in the warning colour, and the bar is not the only hint",
-    "a narrow window shows each row of the learning time as a card with the name of each value",
     "the hit of the search is marked and readable in the light theme",
   },
 }
