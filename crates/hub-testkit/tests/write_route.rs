@@ -724,10 +724,10 @@ fn leftovers(r: &Rig) -> usize {
 }
 
 #[tokio::test]
-async fn a_file_of_any_size_and_type_reaches_the_engine_and_is_gone_afterwards() {
+async fn a_file_of_a_listed_type_reaches_the_engine_and_is_gone_afterwards() {
     let _one_at_a_time = ONE_AT_A_TIME.lock().await;
     let r = rig("upload").await;
-    // Over the limit of one request of the guard, and not JSON.
+    // Over the limit of one request of the guard (2 MB), and not JSON: the upload has a limit of its own.
     let body = "x".repeat(2 * 1024 * 1024);
     let (status, doc) = upload(&r, "alpha.nvim/t1", "My%20Report.pdf", &body).await;
     assert_eq!(status, 200, "{doc}");
@@ -748,6 +748,152 @@ false null
         doc.get("large_for_git").is_none(),
         "only from 100 MB on: {doc}"
     );
+}
+
+/// An upload with the head as given (the size may be a lie), the answer's status and document.
+async fn upload_raw(
+    r: &Rig,
+    query: &str,
+    headers: &[(&str, &str)],
+    length: u64,
+    body: &[u8],
+) -> (u16, Value) {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let port = r.server.addr().port();
+    let mut head = format!(
+        "POST /api/tasks/upload?{query} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nOrigin: http://127.0.0.1:{port}\r\nAuthorization: Bearer {}\r\nContent-Type: application/octet-stream\r\nContent-Length: {length}\r\nConnection: close\r\n",
+        r.token
+    );
+    for (name, value) in headers {
+        head.push_str(&format!("{name}: {value}\r\n"));
+    }
+    head.push_str("\r\n");
+    let mut stream = tokio::net::TcpStream::connect(r.server.addr())
+        .await
+        .unwrap();
+    stream.write_all(head.as_bytes()).await.unwrap();
+    // The hub may answer before it reads the body (and close): a failed write is then no failure of the test.
+    let _ = stream.write_all(body).await;
+    let mut reply = Vec::new();
+    let _ = stream.read_to_end(&mut reply).await;
+    let reply = String::from_utf8_lossy(&reply).into_owned();
+    let status = reply
+        .split(' ')
+        .nth(1)
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(0);
+    let json = reply.split_once("\r\n\r\n").map_or("", |(_, b)| b);
+    // Chunked or not, the document is the one `{...}` in the body.
+    let doc = json
+        .find('{')
+        .and_then(|a| json.rfind('}').map(|b| &json[a..=b]));
+    (
+        status,
+        doc.and_then(|d| serde_json::from_str(d).ok())
+            .unwrap_or(Value::Null),
+    )
+}
+
+#[tokio::test]
+async fn a_file_over_the_limit_is_refused_before_a_byte_of_it_is_taken() {
+    let _one_at_a_time = ONE_AT_A_TIME.lock().await;
+    let r = rig("upload-too-large").await;
+    // The size is announced (a lie or not): the hub does not read the body.
+    let too_big = 2 * 1024 * 1024 * 1024 + 1;
+    let (status, doc) = upload_raw(
+        &r,
+        "id=alpha.nvim/t1",
+        &[("X-Upload-Name", "big.pdf")],
+        too_big,
+        b"x",
+    )
+    .await;
+    assert_eq!(
+        (status, doc["error"]["code"].clone()),
+        (413, Value::from("too_large")),
+        "{doc}"
+    );
+    assert!(
+        !r.vault.join(".fake-upload").exists(),
+        "nothing reached the engine"
+    );
+    assert_eq!(leftovers(&r), 0);
+}
+
+#[tokio::test]
+async fn a_file_of_a_type_the_hub_does_not_take_is_refused_and_nothing_is_written() {
+    let _one_at_a_time = ONE_AT_A_TIME.lock().await;
+    let r = rig("upload-type").await;
+    for (query, name) in [
+        ("alpha.nvim/t1", "setup.exe"),
+        ("alpha.nvim/t1", "run.bat"),
+        ("alpha.nvim/t1", "page.html"),
+        ("alpha.nvim/t1", "x.js"),
+        ("alpha.nvim/t1", "noending"),
+        ("alpha.nvim/t1", "x.exe.png.exe"),
+        // The ending must be one of the asked kind: a document is no image, a picture no voice note.
+        ("alpha.nvim/t1&kind=image", "a.pdf"),
+        ("alpha.nvim/t1&kind=audio", "a.png"),
+        ("alpha.nvim/t1&kind=video", "a.exe"),
+    ] {
+        let (status, doc) = upload(&r, query, name, "x").await;
+        assert_eq!(
+            (status, doc["error"]["code"].clone()),
+            (415, Value::from("unsupported_type")),
+            "{query} {name}: {doc}"
+        );
+    }
+    assert!(
+        !r.vault.join(".fake-upload").exists(),
+        "nothing reached the engine"
+    );
+    assert_eq!(leftovers(&r), 0);
+    // A listed type is taken, in either case.
+    let (status, doc) = upload(&r, "alpha.nvim/t1&kind=image", "PHOTO.JPG", "x").await;
+    assert_eq!(status, 200, "{doc}");
+}
+
+#[tokio::test]
+async fn a_name_with_a_way_up_or_a_control_character_is_refused_and_no_path_comes_of_a_name() {
+    let _one_at_a_time = ONE_AT_A_TIME.lock().await;
+    let r = rig("upload-name").await;
+    // Percent-encoded as the page sends it.
+    for name in [
+        "..%2F..%2Fetc%2Fpasswd.txt",
+        "..%5C..%5Cwin.ini",
+        "a%2F..%2Fb.txt",
+        "a%00.pdf",
+        "a%0D%0AX-Evil%3A%201.pdf",
+        "a%0A.pdf",
+        "a%7F.pdf",
+        "a%C2%85.pdf",
+        "a%E2%80%AEfdp.pdf",
+        "%2E%2E",
+    ] {
+        let (status, doc) = upload(&r, "alpha.nvim/t1", name, "x").await;
+        assert_eq!(
+            (status, doc["error"]["code"].clone()),
+            (400, Value::from("bad_name")),
+            "{name}: {doc}"
+        );
+    }
+    assert!(
+        !r.vault.join(".fake-upload").exists(),
+        "nothing reached the engine"
+    );
+    assert_eq!(leftovers(&r), 0);
+    // A path of a client that sends one is cut to its last part: nothing of a folder comes from a name, and the
+    // name the engine gets holds no separator.
+    for (name, engine_name) in [
+        ("C%3A%5CUsers%5Cme%5Creport.pdf", "report.pdf"),
+        ("%2Ftmp%2Freport.pdf", "report.pdf"),
+        ("a%3Ab%2A%3F.pdf", "a-b--.pdf"),
+    ] {
+        let (status, doc) = upload(&r, "alpha.nvim/t1", name, "x").await;
+        assert_eq!(status, 200, "{name}: {doc}");
+        let seen = std::fs::read_to_string(r.vault.join(".fake-upload")).unwrap();
+        assert_eq!(seen, format!("{engine_name} 1"), "{name}");
+    }
 }
 
 #[tokio::test]

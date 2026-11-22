@@ -9,9 +9,12 @@
 //!
 //! The body is the file as it is, streamed to disk under a name the hub gives it, in a folder of the hub's own below its
 //! configuration; the engine takes it from there (`from: upload`) and the hub removes it afterwards, whatever came of
-//! it. There is no limit on the size and none on the type: what guards the machine is the disk, asked for the room up
-//! front when the size is known. The name the person sees travels in `X-Upload-Name`, percent-encoded, and is cleaned
-//! here to what the engine takes as an asset name.
+//! it. The size is limited ([`MAX_UPLOAD_BYTES`], `413 too_large`, asked up front when the size is known and counted
+//! while the body streams in) and so is the type: the ending of the name must be on the allow-list of its kind
+//! ([`extension_allowed`], `415 unsupported_type`); the disk is asked for the room up front when the size is known.
+//! The name the person sees travels in `X-Upload-Name`, percent-encoded; a name with a control character or a `..`
+//! part is refused (`400 bad_name`, [`refused_name`]), any other is cleaned here to what the engine takes as an asset
+//! name.
 
 use std::io::Write as _;
 use std::path::Path;
@@ -25,6 +28,8 @@ const STALLED_AFTER: Duration = Duration::from_secs(60);
 const LARGE_FOR_GIT: u64 = 100 * 1024 * 1024;
 /// The longest asset name: a file name has room for 255 bytes, and the slug's folder is in the path as well.
 const MAX_NAME_BYTES: usize = 120;
+/// The largest file one upload takes (ASVS 5.0 V5.2.1): a video of the camera fits, a disk image does not.
+pub(super) const MAX_UPLOAD_BYTES: u64 = 2 * 1024 * 1024 * 1024;
 /// A file left behind by a hub that was killed is gone after this long.
 const LEFTOVER_AFTER: Duration = Duration::from_secs(24 * 60 * 60);
 
@@ -71,6 +76,63 @@ fn percent_decoded(text: &str) -> String {
         }
     }
     String::from_utf8_lossy(&out).into_owned()
+}
+
+/// A name the hub does not even clean: a control character (C0, DEL, C1: a NUL cuts a name short in some systems, a
+/// newline splits a log line), a character that only formats text (a right-to-left override makes `gpj.exe` read as
+/// `exe.jpg`), or a `..` part of a path. A plain separator is no reason (a client may send `C:\\dir\\file.txt`; the last
+/// part is the name, see [`clean_name`]).
+fn refused_name(name: &str) -> bool {
+    let formatting = |c: char| {
+        matches!(c,
+            '\u{200b}'..='\u{200f}' | '\u{202a}'..='\u{202e}' | '\u{2060}'..='\u{2064}' | '\u{2066}'..='\u{2069}' | '\u{feff}')
+    };
+    name.chars().any(|c| c.is_control() || formatting(c))
+        || name.split(['/', '\\']).any(|part| part == "..")
+}
+
+const IMAGES: &[&str] = &[
+    "png", "jpg", "jpeg", "gif", "webp", "avif", "heic", "heif", "bmp", "tif", "tiff", "svg",
+];
+const SCREENSHOTS: &[&str] = &["png", "jpg", "jpeg", "webp", "bmp"];
+const VIDEOS: &[&str] = &["mp4", "m4v", "mov", "webm", "mkv", "avi", "ogv", "3gp"];
+const AUDIOS: &[&str] = &[
+    "m4a", "mp3", "aac", "ogg", "oga", "opus", "wav", "flac", "weba", "webm", "mp4", "3gp", "amr",
+];
+/// Documents, data and archives a person attaches to a task. Nothing a system runs when it is opened (`exe`, `bat`,
+/// `cmd`, `com`, `scr`, `msi`, `ps1`, `vbs`, `jar`, `lnk`, `sh`, `apk`, `dll`) and nothing a browser runs (`html`, `htm`,
+/// `xhtml`, `js`, `mjs`): they are not on any list, so they are refused.
+const DOCUMENTS: &[&str] = &[
+    "pdf", "txt", "md", "markdown", "log", "csv", "tsv", "json", "jsonl", "yaml", "yml", "toml",
+    "xml", "ini", "conf", "diff", "patch", "sql", "ics", "vcf", "eml", "rtf", "odt", "ods", "odp",
+    "doc", "docx", "xls", "xlsx", "ppt", "pptx", "zip", "gz", "tgz", "tar", "7z",
+];
+
+/// Is the ending of the (cleaned) `name` one the hub takes? With a `kind` the ending must be one of that kind's (a
+/// `.pdf` is no `image`); without, one of the documents or of any kind. A name with no ending is refused.
+fn extension_allowed(name: &str, kind: Option<&str>) -> bool {
+    let Some((_, ext)) = name.rsplit_once('.') else {
+        return false;
+    };
+    let ext = ext.to_ascii_lowercase();
+    let ext = ext.as_str();
+    match kind {
+        Some("image") => IMAGES.contains(&ext),
+        Some("screenshot") => SCREENSHOTS.contains(&ext),
+        Some("video") => VIDEOS.contains(&ext),
+        Some("audio") => AUDIOS.contains(&ext),
+        _ => [DOCUMENTS, IMAGES, VIDEOS, AUDIOS]
+            .iter()
+            .any(|list| list.contains(&ext)),
+    }
+}
+
+fn too_large() -> Response {
+    error_body(
+        StatusCode::PAYLOAD_TOO_LARGE,
+        "too_large",
+        "the file is larger than the hub takes",
+    )
 }
 
 /// What the engine takes as an asset name: the last part of a path, letters and digits of any language and `_ . -`, no
@@ -154,7 +216,12 @@ fn too_little_room() -> Response {
 /// The file in the hub's folder, written as it arrives. With a known size the room is taken first, so that a disk that
 /// is too small says so before the transfer.
 #[allow(clippy::result_large_err)]
-async fn receive(dir: PathBuf, size: Option<u64>, body: Body) -> Result<(Incoming, u64), Response> {
+async fn receive(
+    dir: PathBuf,
+    size: Option<u64>,
+    max: u64,
+    body: Body,
+) -> Result<(Incoming, u64), Response> {
     let failed = |e: std::io::Error| {
         if e.kind() == std::io::ErrorKind::StorageFull {
             too_little_room()
@@ -207,6 +274,10 @@ async fn receive(dir: PathBuf, size: Option<u64>, body: Body) -> Result<(Incomin
             Ok(Some(Ok(chunk))) => chunk,
         };
         written += chunk.len() as u64;
+        // A body without a size, or with a false one, is counted as it comes: it stops at the limit.
+        if written > max {
+            return Err(too_large());
+        }
         file = tokio::task::spawn_blocking(move || file.write_all(&chunk).map(|()| file))
             .await
             .map_err(|_| too_little_room())?
@@ -362,11 +433,29 @@ pub(super) async fn upload(
             "X-Upload-Name names the file",
         );
     };
-    let name = clean_name(&percent_decoded(&raw_name));
+    let decoded = percent_decoded(&raw_name);
+    if refused_name(&decoded) {
+        return error_body(
+            StatusCode::BAD_REQUEST,
+            "bad_name",
+            "the name has a control character or a .. part",
+        );
+    }
+    let name = clean_name(&decoded);
+    if !extension_allowed(&name, kind) {
+        return error_body(
+            StatusCode::UNSUPPORTED_MEDIA_TYPE,
+            "unsupported_type",
+            "the hub takes no file of this type here",
+        );
+    }
     let size = match single(&headers, &header::CONTENT_LENGTH) {
         Ok(Some(text)) => text.parse::<u64>().ok(),
         _ => None,
     };
+    if size.is_some_and(|size| size > MAX_UPLOAD_BYTES) {
+        return too_large();
+    }
     if !st.post_limit.allow() {
         return too_many();
     }
@@ -410,7 +499,7 @@ pub(super) async fn upload(
             "a phone attaches only to a task, and a photo or a voice note to a meeting",
         );
     }
-    let (incoming, written) = match receive(dir.clone(), size, body).await {
+    let (incoming, written) = match receive(dir.clone(), size, MAX_UPLOAD_BYTES, body).await {
         Ok(done) => done,
         Err(response) => return response,
     };
@@ -501,7 +590,97 @@ static UPLOAD_NAME: header::HeaderName = header::HeaderName::from_static("x-uplo
 
 #[cfg(test)]
 mod tests {
-    use super::{asked_kind, attach_op, clean_name, kind_for_meeting, percent_decoded};
+    use super::{
+        asked_kind, attach_op, clean_name, extension_allowed, kind_for_meeting, percent_decoded,
+        receive, refused_name,
+    };
+
+    #[test]
+    fn a_name_with_a_control_character_or_a_way_up_is_refused() {
+        for bad in [
+            "a\0.png",
+            "a\n.png",
+            "a\r\nX: y.png",
+            "a\u{7f}.png",
+            "a\u{85}.png",
+            "a\u{202e}gpj.exe",
+            "../x.png",
+            "a/../x.png",
+            "..\\x.png",
+            "..",
+            "a\tb.png",
+        ] {
+            assert!(refused_name(bad), "{bad:?}");
+        }
+        for good in [
+            "a.png",
+            "C:\\dir\\a.png",
+            "/tmp/a.png",
+            "Übersicht.md",
+            "a..b.txt",
+            ".hidden",
+        ] {
+            assert!(!refused_name(good), "{good:?}");
+        }
+        // The percent-encoded form is judged after it is decoded.
+        assert!(refused_name(&percent_decoded("a%00.png")));
+        assert!(refused_name(&percent_decoded("%2e%2e%2fx.png")));
+    }
+
+    #[test]
+    fn the_ending_of_a_name_is_on_the_list_of_its_kind() {
+        for (name, kind) in [
+            ("a.pdf", None),
+            ("A.PDF", None),
+            ("a.png", None),
+            ("a.m4a", None),
+            ("a.png", Some("image")),
+            ("a.png", Some("screenshot")),
+            ("a.webm", Some("video")),
+            ("a.webm", Some("audio")),
+            ("a.m4a", Some("audio")),
+            ("a.tar.gz", None),
+        ] {
+            assert!(extension_allowed(name, kind), "{name} {kind:?}");
+        }
+        for (name, kind) in [
+            ("a.exe", None),
+            ("a.bat", None),
+            ("a.ps1", None),
+            ("a.html", None),
+            ("a.htm", None),
+            ("a.js", None),
+            ("a.sh", None),
+            ("a.lnk", None),
+            ("a.dll", None),
+            ("noending", None),
+            ("upload", None),
+            ("a.exe", Some("image")),
+            ("a.pdf", Some("image")),
+            ("a.svg", Some("screenshot")),
+            ("a.mp4", Some("image")),
+            ("a.png", Some("audio")),
+            ("a.png", Some("video")),
+            ("a.pdf", Some("audio")),
+        ] {
+            assert!(!extension_allowed(name, kind), "{name} {kind:?}");
+        }
+    }
+
+    /// A body that sends more than the limit is stopped, whatever its header says (here: none).
+    #[tokio::test]
+    async fn a_body_over_the_limit_is_stopped_as_it_comes() {
+        let dir = std::env::temp_dir().join(format!("upload-limit-{}", std::process::id()));
+        let body = axum::body::Body::from(vec![0u8; 100]);
+        let over = receive(dir.clone(), None, 99, body).await;
+        assert_eq!(over.err().map(|r| r.status().as_u16()), Some(413));
+        let body = axum::body::Body::from(vec![0u8; 100]);
+        let exact = receive(dir.clone(), None, 100, body).await;
+        assert_eq!(exact.ok().map(|(_, n)| n), Some(100));
+        let left = std::fs::read_dir(&dir).map_or(0, Iterator::count);
+        assert_eq!(left, 0, "a file that was refused or dropped is gone");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     #[test]
     fn a_meeting_takes_from_a_phone_a_photo_and_a_voice_note_only() {
