@@ -5,8 +5,9 @@ import { chunkTexts, placeholders, type ChunkTexts } from './chunkTexts';
 import { badgeTexts } from './badgeTexts';
 import { rewardTexts } from './rewardTexts';
 import { competenceTexts } from './competenceTexts';
+import { evidenceTexts } from './evidenceTexts';
 
-const ALL: Record<string, ChunkTexts<string>> = { badges: badgeTexts, rewards: rewardTexts, competences: competenceTexts };
+const ALL: Record<string, ChunkTexts<string>> = { badges: badgeTexts, rewards: rewardTexts, competences: competenceTexts, evidence: evidenceTexts };
 
 describe('chunkTexts', () => {
   it('fills placeholders and falls back to the words of the page', () => {

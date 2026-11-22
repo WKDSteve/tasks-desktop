@@ -299,6 +299,8 @@ const de: Record<PageKey, string> = {
   'hint.item.nav.rewards': 'Offene und gegönnte Belohnungen aller Lernpfade an einem Ort, und die, die noch kommen.',
   'nav.competences': 'Kompetenzkatalog',
   'hint.item.nav.competences': 'Die Kompetenzgebiete mit Stufe in Theorie und Praxis, Ziel und den Pfaden, die dahin führen.',
+  'nav.evidence': 'Nachweise',
+  'hint.item.nav.evidence': 'Die Nachweise aller Lernpfade nach Gebiet, erbracht und offen, mit Stufe und Beleg.',
   'paths.loading': 'Lese die Lernpfade…',
   'paths.reading': 'Lese den Pfad…',
   'paths.failed': 'Die Lernpfade ließen sich nicht lesen.',
