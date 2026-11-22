@@ -4,8 +4,9 @@
 -- a week ago, 5 today), step by step:
 --   testing sheets step learn-figures --headed
 -- The overview: the period Today by its radio, the points learned today against yesterday with the mark and the words,
--- the bars of the week as a table. The steps go by data attributes and values, not by words: the page speaks the
--- language of the browser. The browser test ui/e2e/learn-figures.spec.ts checks the same against the test hub of the
+-- the bars of the week as a table. The statistics: two days of one's own (eight days back to today), the row of the
+-- path (5 learned, 50 XP, 2.5 h), the calendar of the learning days as a table. The steps go by data attributes and
+-- values, not by words: the page speaks the language of the browser. The browser test ui/e2e/learn-figures.spec.ts checks the same against the test hub of the
 -- e2e run, with axe in both themes and a narrow window; what only eyes and ears show stays in the hand run
 -- tasks-desktop/abnahme-reiter-lernplaene-und-ansichten-von-hand.
 
@@ -15,12 +16,18 @@ end
 local function text_of(sel)
   return "(document.querySelector('" .. sel .. "')?.textContent ?? '')"
 end
+local ROW = 'section[aria-labelledby="learnstats-paths"] tr[data-path="lib.nvim/learn-sheet-figures"]'
+-- the two days are date fields; a sheet has no step to type into one, so the expression sets them as a person would
+local DAYS = "(() => { const day = (n) => { const d = new Date(); d.setDate(d.getDate() + n); "
+  .. "return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; }; "
+  .. "for (const [id, n] of [['learnstats-since', -8], ['learnstats-until', 0]]) { const i = document.getElementById(id); "
+  .. "i.value = day(n); i.dispatchEvent(new Event('change', { bubbles: true })); } return true; })()"
 
 return {
   id = "tasks.learn-figures",
   feature = "tasks.learn-figures",
   task = "tasks-desktop/lern-uebersicht-start-des-reiters-mit-zeitraum-kachel",
-  title = "tasks-desktop: the overview of the tab Lernpläne (period by radios, figures against the period before, bars as a table)",
+  title = "tasks-desktop: the overview and the statistics of the tab Lernpläne (period by radios, figures against the period before, bars as a table; days of one's own, a row per path, the learning days)",
   engine = "browser",
   app = "learn-figures-hub",
   sizes = { { cols = 1300, rows = 900 } },
@@ -67,5 +74,31 @@ return {
       note = "the running path: 5 of 8 points",
     },
     { shot = "overview-table", note = "the bars as a table" },
+
+    -- the statistics
+    {
+      expect = "(() => { location.hash = '#view=learnstats'; return true; })()",
+      note = "the statistics, in the same page (the code of the link pairs once)",
+    },
+    { wait = "document.getElementById('learnstats-paths') !== null", timeout = 20000 },
+    { click = 'input[name="learnstats-period"][value="custom"]', note = "a period of its own" },
+    { wait = "document.getElementById('learnstats-since') !== null" },
+    { expect = DAYS, note = "from eight days back to today" },
+    {
+      wait = text_of(ROW .. " td") .. " === '5'",
+      timeout = 10000,
+      note = "the path learned 5 points in those days",
+    },
+    {
+      expect = "/^50[|]2[.,]5 h$/.test([...document.querySelectorAll('" .. ROW .. " td')].map((c) => c.textContent.trim()).slice(1, 3).join('|'))",
+      note = "50 XP and 2.5 hours (2,5 in German)",
+    },
+    { shot = "stats", note = "the charts, the calendar and the row of the path" },
+    { click = 'button[aria-controls="learnstats-days-table"]', note = "the learning days as a table" },
+    {
+      wait = "document.querySelectorAll('#learnstats-days-table:not(.sr-only) tr[data-day]').length === 9",
+      note = "a row per day the series knows, eight days back to today",
+    },
+    { shot = "stats-days", note = "the days as a table" },
   },
 }

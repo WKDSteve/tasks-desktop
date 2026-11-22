@@ -433,6 +433,17 @@ steps (each opens its point in the path), the running paths (the last active fir
 level of each path within reach (badge, what is missing, its reward) and the number of open rewards. A narrow window
 draws the tiles one below the other.
 
+The view **Learning plans › Learning statistics** (`#view=learnstats`) is the history: a period (**Week | Month |
+Quarter | Year** as the calendar has them, or **Free …** with two days; kept on this device), **Project** and **Path**
+(one path is asked of the engine, its streak is its own). It draws the XP (the points without gamification) per day,
+week or month, learned and seen, with their running sum as a dashed line; the learning time per week stacked by path
+(the five with the most hours, the rest as "Others", each in its colour and every other one striped, named in the
+legend); the learning days as a calendar (weeks by weekdays, five stages, the number in the tooltip) with the current
+and the longest streak; and a row per path with what it learned, its XP, hours and the level it reached (and when).
+Every chart has **As table**; the menu View saves, copies, prints or pictures the tables (a path of a private area is
+not named in them). Before the series begins the bars count only the finished tasks promoted from a point, marked
+"incomplete"; without the series (an engine without `learn_history`) the view shows today's state per path.
+
 Four views of the tab gather what all learning paths hold (each only with the engine's capability, the first two only
 with gamification on):
 

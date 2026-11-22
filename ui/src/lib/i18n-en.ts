@@ -300,6 +300,8 @@ const en = {
   'nav.learn': 'Overview',
   'nav.learn_long': 'Overview of the learning plans',
   'hint.item.nav.learn': 'Your learning of a period at a glance, the next steps, the running paths.',
+  'nav.learnstats': 'Learning statistics',
+  'hint.item.nav.learnstats': 'Points and XP over time, learning time per week and path, the learning days and the streak; every chart also as a table.',
   'hint.item.nav.pathmap': 'The learning paths as a map: each path a box coloured by its stage, each project a frame around its paths, an arrow from a requirement to what builds on it.',
   'nav.badges': 'Badges',
   'hint.item.nav.badges': 'All earned and open badges of all learning paths, with level, path and day.',

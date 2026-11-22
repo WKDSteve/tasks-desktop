@@ -7,7 +7,8 @@ import { STATE } from './global';
 
 // The figures of the tab Lernpläne against the real hub and the real engine (capability learn_history): the overview
 // with its period (kept on the device), the figures of a period against the one before in words and a mark, the bars
-// as a table, the running paths. The series of the learning figures is written here as the engine writes it
+// as a table, the running paths; the statistics of one path over two days of one's own, its charts as tables, and
+// the export of its tables from the menu View. The series of the learning figures is written here as the engine writes it
 // (`_Telemetry/history/learn-YYYY-MM.jsonl`, absolute figures per day and path) for a path of this test only, around
 // today; what the series says is the engine's, the test reads what the page draws from it, with axe in both themes
 // and a narrow window. The vault is shared with the other tests: only the rows of this path are checked by number.
@@ -121,6 +122,59 @@ test('the overview: the period by radios and kept, the figures against the perio
 
     await item.getByRole('button', { name: 'LV3 e2e Figures' }).click();
     await expect(page).toHaveURL(/#view=paths/);
+    expect(problems).toEqual([]);
+  } finally {
+    clean();
+  }
+});
+
+test('the statistics: one path over days of its own, the charts as tables, the export from the menu View, axe', async ({ page }) => {
+  const clean = write();
+  try {
+    const problems = await pair(page, '/#view=learnstats');
+    await expect(page.getByRole('heading', { name: 'Learning plans · Learning statistics', level: 2 })).toBeVisible();
+    await page.getByRole('group', { name: 'Period' }).getByRole('radio', { name: 'Free …' }).check();
+    await page.getByLabel('From', { exact: true }).fill(dayFrom(-8));
+    await page.getByLabel('From', { exact: true }).dispatchEvent('change');
+    await page.getByLabel('To', { exact: true }).fill(dayFrom(0));
+    await page.getByLabel('To', { exact: true }).dispatchEvent('change');
+    // one path: the engine is asked for it alone
+    const asked = page.waitForRequest((r) => r.url().includes('/api/tasks/learn_history') && r.url().includes(`path=${encodeURIComponent(ID).replace(/%2F/gi, '/')}`));
+    await page.getByLabel('Path', { exact: true }).selectOption(ID);
+    await asked;
+
+    const perPath = page.getByRole('region', { name: 'Per path' });
+    const row = perPath.locator(`tr[data-path="${ID}"]`);
+    await expect(row.locator('td')).toHaveText(['5', '50', '2.5 h', '–']);
+    await expect(page.locator('[data-streak]')).toContainText('Streak: 1 day');
+
+    // the chart of the points as a table: today's 3 and the running sum of the XP
+    await page.locator('section[aria-labelledby="learnstats-points"]').getByRole('button', { name: 'As table' }).click();
+    const today = page.locator(`#learnstats-bars-table tr[data-bar="${dayFrom(0)}"] td`);
+    await expect(today.first()).toHaveText('3');
+    await expect(today.last()).toHaveText('50');
+    await page.locator('section[aria-labelledby="learnstats-hours"]').getByRole('button', { name: 'As table' }).click();
+    await expect(page.getByRole('region', { name: 'Hours per week, stacked by path' })).toBeVisible();
+
+    // the menu View saves the tables of the view
+    await page.getByRole('menubar').getByRole('menuitem', { name: 'View', exact: true }).click();
+    const download = page.waitForEvent('download');
+    await page.getByRole('menuitem', { name: 'Save tasks as CSV file ...' }).click();
+    const file = await download;
+    expect(file.suggestedFilename()).toBe(`tasks-learnstats-${dayFrom(0)}.csv`);
+    const csv = readFileSync(await file.path(), 'utf8');
+    expect(csv).toContain('LV3 e2e Figures');
+    await expect(page.getByText(/\d+ rows saved\./)).toBeVisible();
+
+    await expectAccessible(page, 'learning statistics, light');
+    await page.emulateMedia({ colorScheme: 'dark' });
+    await expectAccessible(page, 'learning statistics, dark');
+    await page.emulateMedia({ colorScheme: 'light' });
+    await page.setViewportSize({ width: 420, height: 900 });
+    // the table of the paths is a card per row: the values under their names
+    await expect(row.locator('td').first()).toBeVisible();
+    expect(await row.evaluate((tr) => getComputedStyle(tr).display)).toBe('block');
+    await expectAccessible(page, 'learning statistics, narrow');
     expect(problems).toEqual([]);
   } finally {
     clean();

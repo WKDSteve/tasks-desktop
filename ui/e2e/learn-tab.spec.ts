@@ -5,8 +5,8 @@ import { expectAccessible, violations, watchViolations } from './a11y';
 import { STATE } from './global';
 
 // The tab Learning plans of the menu bar against the real hub and the real engine: its place after View, the learning
-// paths in it (and no more in View), the dot and the name of the view shown, the keys of the bar, a link to a view not
-// built yet, and the palette. axe on the open tab. Which views it offers is learnViews.ts (unit tests).
+// paths in it (and no more in View), the dot and the name of the view shown, the keys of the bar, a link to a view of
+// it, and the palette. axe on the open tab. Which views it offers is learnViews.ts (unit tests).
 
 test.use({ locale: 'en-US' });
 
@@ -56,6 +56,7 @@ test('the tab Learning plans: after View, the learning paths with the dot of the
     'Learning paths',
     'Competence map',
     'Competence catalogue',
+    'Learning statistics',
     'Learning time',
     'Badges',
     'Rewards',
@@ -91,30 +92,28 @@ test('the tab Learning plans: after View, the learning paths with the dot of the
   expect(await violations(page)).toEqual([]);
 });
 
-test('a link to a view of the tab not built yet shows the overview and says so; the palette goes there', async ({ page }) => {
+test('a link to a view of the tab opens it, also pasted into the open page; the palette goes to the overview', async ({ page }) => {
+  // Every view of the concept is built: a link to a view not built yet is a unit test of learnViews.ts.
   const problems = await pair(page, '/#view=learnstats');
-  await expect(page.getByText('The learning view “learnstats” is not in this version yet; showing Overview.')).toBeVisible();
-  await expect(page.getByRole('menuitem', { name: 'Learning plans, current: Overview' })).toBeVisible();
-  await expect(page).toHaveURL(/#view=learn$/);
+  await expect(page.getByRole('heading', { name: 'Learning plans · Learning statistics', level: 2 })).toBeVisible();
+  await expect(page.getByRole('menuitem', { name: 'Learning plans, current: Learning statistics' })).toBeVisible();
 
-  // The palette: "Go to Learning paths" from another view.
+  // The palette: "Go to Overview of the learning plans" from another view.
   await bar(page).getByRole('menuitem', { name: 'View', exact: true }).click();
   await page.getByRole('menuitemradio', { name: 'List' }).click();
   await page.keyboard.press('Control+k');
   const palette = page.getByRole('dialog');
   await expect(palette).toBeVisible();
-  await page.keyboard.type('Go to Learning paths');
+  await page.keyboard.type('Go to Overview of the learning plans');
   await page.keyboard.press('Enter');
-  await expect(page.getByRole('menuitem', { name: 'Learning plans, current: Learning paths' })).toBeVisible();
+  await expect(page.getByRole('menuitem', { name: 'Learning plans, current: Overview' })).toBeVisible();
+  await expect(page).toHaveURL(/#view=learn$/);
 
-  // The same link pasted into the open page (only the fragment changes): the same landing and words.
-  await bar(page).getByRole('menuitem', { name: 'View', exact: true }).click();
-  await page.getByRole('menuitemradio', { name: 'List' }).click();
+  // A link pasted into the open page (only the fragment changes).
   await page.evaluate(() => {
     location.hash = '#view=learnstats';
   });
-  await expect(page.getByText('The learning view “learnstats” is not in this version yet; showing Overview.')).toBeVisible();
-  await expect(page.getByRole('menuitem', { name: 'Learning plans, current: Overview' })).toBeVisible();
+  await expect(page.getByRole('menuitem', { name: 'Learning plans, current: Learning statistics' })).toBeVisible();
 
   expect(problems).toEqual([]);
   expect(await violations(page)).toEqual([]);

@@ -301,6 +301,8 @@ const de: Record<PageKey, string> = {
   'nav.learn': 'Übersicht',
   'nav.learn_long': 'Übersicht der Lernpläne',
   'hint.item.nav.learn': 'Dein Lernen eines Zeitraums auf einen Blick, die nächsten Schritte, die laufenden Pfade.',
+  'nav.learnstats': 'Lern-Statistik',
+  'hint.item.nav.learnstats': 'Punkte und XP über die Zeit, Lernzeit je Woche und Pfad, die Lerntage und die Serie; jedes Diagramm auch als Tabelle.',
   'hint.item.nav.pathmap': 'Die Lernpfade als Karte: jeder Pfad eine Box in der Farbe seines Stands, jedes Projekt ein Rahmen um seine Pfade, ein Pfeil von einer Voraussetzung zu dem, was darauf aufbaut.',
   'nav.badges': 'Abzeichen',
   'hint.item.nav.badges': 'Alle verdienten und offenen Abzeichen aller Lernpfade, mit Level, Pfad und Datum.',

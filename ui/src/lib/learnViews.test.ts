@@ -23,6 +23,7 @@ describe('learnViews', () => {
     expect(learnMenu({ can: caps('paths', 'path'), gamification: true })).toEqual([
       { section: 'overview', views: ['learn'] },
       { section: 'paths', views: ['paths', 'pathmap'] },
+      { section: 'progress', views: ['learnstats'] },
     ]);
     expect(learnMenu({ can: caps('paths', 'path'), gamification: true, built: ['paths'] })).toEqual([{ section: 'paths', views: ['paths'] }]);
   });
@@ -59,10 +60,10 @@ describe('learnViews', () => {
   it('knows a view of the tab, and a link to one the page does not have yet', () => {
     expect(isLearnView('paths')).toBe(true);
     expect(isLearnView('list')).toBe(false);
-    expect(missingLearnView('#view=learnstats')).toBe('learnstats');
-    expect(missingLearnView('#view=learnnotes')).toBeNull();
-    expect(missingLearnView('#open=a%2Fb&view=learnstats')).toBe('learnstats');
-    expect(missingLearnView('#view=learn')).toBeNull();
+    // every view of the concept is built: a page without one is named by `built`
+    for (const view of ALL_VIEWS) expect(missingLearnView(`#view=${view}`)).toBeNull();
+    expect(missingLearnView('#view=learnstats', { built: ['learn', 'paths'] })).toBe('learnstats');
+    expect(missingLearnView('#open=a%2Fb&view=learnstats', { built: ['learn'] })).toBe('learnstats');
     expect(missingLearnView('#view=paths')).toBeNull();
     expect(missingLearnView('#view=list')).toBeNull();
     expect(missingLearnView('#view=nothing')).toBeNull();

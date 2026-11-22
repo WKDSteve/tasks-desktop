@@ -30,7 +30,7 @@ return {
   },
   {
     id = "tasks.learn-figures",
-    title = "The figures of the tab Lernpläne: the overview with its period (today to year) against the period before, in words and a mark, and its bars as a table",
+    title = "The figures of the tab Lernpläne: the overview with its period (today to year) against the period before, in words and a mark, and its bars as a table; the statistics over days of one's own, per path, the learning days",
     docs = "README.md",
   },
   {
