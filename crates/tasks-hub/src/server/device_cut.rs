@@ -779,7 +779,7 @@ pub(crate) fn learn_history(classes: &AreaPolicy, doc: &Value) -> Value {
                 .is_some_and(|id| released_id(classes, id) && p["area"].as_str() == area_of(id))
         })
         .map(|p| {
-            Value::Object(copy(
+            let mut one = copy(
                 p,
                 &[
                     "id",
@@ -788,12 +788,24 @@ pub(crate) fn learn_history(classes: &AreaPolicy, doc: &Value) -> Value {
                     "first",
                     "last_active",
                     "level",
-                    "levels",
-                    "rewards",
                     "pace",
                     "forecast_weeks",
                 ],
-            ))
+            );
+            // the days of the levels and rewards, each field by field (a field the engine adds later stays on the PC)
+            for (list, fields) in [
+                ("levels", ["ref", "reached_on"]),
+                ("rewards", ["ref", "given_on"]),
+            ] {
+                let items: Vec<Value> = p[list]
+                    .as_array()
+                    .map_or(&[][..], Vec::as_slice)
+                    .iter()
+                    .map(|item| Value::Object(copy(item, &fields)))
+                    .collect();
+                one.insert(list.to_owned(), Value::Array(items));
+            }
+            Value::Object(one)
         })
         .collect();
     out.insert("paths".to_owned(), Value::Array(paths));

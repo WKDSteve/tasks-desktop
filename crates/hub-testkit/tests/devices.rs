@@ -909,6 +909,11 @@ async fn a_phone_reads_the_paths_of_released_areas_and_ticks_a_point() {
     let tick = json!({ "op": "node_set", "id": "alpha.nvim/p1", "point": "a", "state": "seen", "reason": "kenne ich" });
     let (status, doc) = r.op(&phone, &tick).await;
     assert_eq!(status, 200, "{doc}");
+    // The confirmation of a point under {safety}, asked on the phone, goes with the tick (the engine wants it).
+    let mut acked = tick.clone();
+    acked["ack"] = json!(true);
+    let (status, doc) = r.op(&phone, &acked).await;
+    assert_eq!(status, 200, "{doc}");
     for extra in [json!({ "note": "x" }), json!({ "xp": 5 })] {
         let mut op = tick.clone();
         op.as_object_mut()
@@ -958,7 +963,8 @@ async fn a_phone_reads_the_next_steps_and_the_series_of_released_areas_only() {
                  "points": [{ "date": "2026-11-02", "learned": 1, "seen": 0, "dropped": 0, "xp": 10, "done_h": 1, "days": 1,
                               "paths": [{ "id": "alpha.nvim/p1", "learned": 1, "seen": 0, "dropped": 0, "xp": 10, "done_h": 1 },
                                         { "id": "secret-area/p9", "learned": 5, "seen": 0, "dropped": 0, "xp": 0, "done_h": 0 }] }],
-                 "paths": [{ "id": "alpha.nvim/p1", "area": "alpha.nvim", "title": "P1", "first": "2026-11-01", "levels": [], "rewards": [] },
+                 "paths": [{ "id": "alpha.nvim/p1", "area": "alpha.nvim", "title": "P1", "first": "2026-11-01",
+                             "levels": [{ "ref": "l1", "reached_on": "2026-11-02", "file": "E:/v/badge.png" }], "rewards": [] },
                            { "id": "secret-area/p9", "area": "secret-area", "title": "Secret", "first": "2026-11-01", "levels": [], "rewards": [] }],
                  "incomplete": ["E:/v/_Telemetry/history/learn-2026-11.jsonl"] }),
     );
@@ -995,6 +1001,11 @@ async fn a_phone_reads_the_next_steps_and_the_series_of_released_areas_only() {
         "{doc}"
     );
     assert_eq!(doc["streak"]["longest"], 2);
+    assert_eq!(
+        doc["paths"][0]["levels"],
+        json!([{ "ref": "l1", "reached_on": "2026-11-02" }]),
+        "{doc}"
+    );
     assert!(!doc.to_string().contains("secret"), "{doc}");
     assert!(!doc.to_string().contains("E:/"), "{doc}");
     assert_eq!(doc["partial"], true);

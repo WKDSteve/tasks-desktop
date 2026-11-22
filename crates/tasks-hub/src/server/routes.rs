@@ -2495,8 +2495,9 @@ pub(super) fn device_op_fields(op: &str) -> &'static [&'static str] {
         "set" => &["op", "id", "patch", "if_match"],
         "answer" => &["op", "id", "question", "option", "if_match"],
         "done" => &["op", "id", "confirm"],
-        // A learning point ticked: its state and the reason of `seen` or `dropped`; no note, no XP.
-        "node_set" => &["op", "id", "point", "state", "reason", "if_match"],
+        // A learning point ticked: its state and the reason of `seen` or `dropped`, and `ack` once the person confirmed
+        // closing a point under `{safety}` on the phone (the engine refuses such a point without it); no note, no XP.
+        "node_set" => &["op", "id", "point", "state", "reason", "ack", "if_match"],
         // A line of the minutes written on the phone: text, a task, a decision or a question, or a photo or a voice note
         // the phone uploaded to the meeting before (`device_op_shape`).
         "meeting_capture" => &["op", "id", "entry"],

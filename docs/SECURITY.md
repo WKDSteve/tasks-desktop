@@ -933,7 +933,8 @@ without the other areas a path names (`areas`, `target`, `project`), its file an
 `cover`, an icon or a badge that is a file, the image of a point), the line numbers and the faults of the file as text
 (`problems`, `tree_problems`; the list says only `partial`); a point's `link` only as `http://` or `https://`, the task a
 point was promoted to only when its area is released. The writes are `node_set`, `promote` and `unpromote` of `ops`; a
-phone may only tick a point (`node_set` with `state` and `reason`, at the level `change`; no note, no XP,
+phone may only tick a point (`node_set` with `state`, `reason` and the `ack` of a point under `{safety}` it confirmed,
+at the level `change`; no note, no XP,
 `device_op_level`, `device_op_fields`), the others are refused to it. The page draws a label, a reason and a note as text, never as markup; it opens a link of a point
 only when it is `http://` or `https://`, in a new tab without a referrer (`rel="noopener noreferrer"`,
 `referrerpolicy="no-referrer"`).
