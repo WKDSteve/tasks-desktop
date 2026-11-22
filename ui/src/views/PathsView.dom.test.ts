@@ -149,6 +149,39 @@ describe('PathsView', () => {
     expect(m.app.pathPoint).toBeNull();
   });
 
+  it('asks before it closes a point under {safety}, sends ack only after yes, and cancel sends nothing', async () => {
+    const { m, page } = await show();
+    const safe = doc('e1', [
+      node(1, { key: 'lua', children: 2, state: undefined, mark: '', derived: 'open', progress: progress({ open: 2, total: 2 }) }),
+      node(2, { key: 'drv', parent: 1, depth: 1, safety: true, label: 'Load a driver' }),
+      node(3, { key: 'plain', parent: 1, depth: 1 }),
+    ]);
+    m.hub.pathDocs.set('lib/lua', safe);
+    m.app.writes += 1;
+    await settle();
+    await vi.waitFor(() => expect(page.querySelector('[data-point="drv"]')).not.toBeNull());
+    expect(point(page, 'drv').querySelector('.safety-point')?.textContent).toContain('Sicherheit');
+    point(page, 'drv').querySelector<HTMLButtonElement>('button.mark')!.click();
+    await settle();
+    const ask = point(page, 'drv').querySelector<HTMLElement>('.safety-ask')!;
+    expect(ask.textContent).toContain('Load a driver betrifft die Sicherheit. Als gelernt markieren?');
+    await vi.waitFor(() => expect(document.activeElement?.id).toBe('safety-no-2'));
+    expect(sentOps(m)).toEqual([]);
+    [...ask.querySelectorAll('button')].find((b) => b.textContent === 'Abbrechen')!.click();
+    await settle();
+    expect(point(page, 'drv').querySelector('.safety-ask')).toBeNull();
+    expect(sentOps(m)).toEqual([]);
+    point(page, 'drv').querySelector<HTMLButtonElement>('button.mark')!.click();
+    await settle();
+    [...point(page, 'drv').querySelectorAll('.safety-ask button')].find((b) => b.textContent === 'Ja, markieren')!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await settle();
+    expect(sentOps(m)).toEqual([{ op: 'node_set', id: 'lib/lua', point: 'drv', state: 'learned', ack: true, if_match: 'e1' }]);
+    // A point without the mark is ticked at once, without ack.
+    point(page, 'plain').querySelector<HTMLButtonElement>('button.mark')!.click();
+    await settle();
+    expect(sentOps(m).at(-1)).toEqual({ op: 'node_set', id: 'lib/lua', point: 'plain', state: 'learned', if_match: 'e1' });
+  });
+
   it('folds a parent: its points go, and come back', async () => {
     const { page } = await show();
     const fold = point(page, 'lua').querySelector<HTMLButtonElement>('button.fold')!;

@@ -19,10 +19,12 @@
   import { AssetImages } from '../lib/assetImages.svelte';
   import { shownIcon } from '../lib/icons';
   import { markHidden } from '../lib/text';
+  import { pathSafetyText, type PathSafetyKey } from '../lib/pathSafetyTexts';
   import {
     clickedState,
     cleanNote,
     cleanReason,
+    closesSafety,
     indicesOf,
     isMarkable,
     labelText,
@@ -49,6 +51,8 @@
   type EditKind = 'reason' | 'note' | 'xp' | 'task_xp';
   let { app }: { app: App } = $props();
   const t = (key: Key, params: Record<string, string | number> = {}) => translate(app.lang, key, params);
+  // The words of the safety question come with the chunk of the view (lib/pathSafetyTexts.ts).
+  const ts = (key: PathSafetyKey, params: Record<string, string | number> = {}) => pathSafetyText(app.lang, key, params);
 
   const MARKS: Record<PathNode['derived'], string> = { open: ' ', learned: '✓', seen: '~', dropped: '–', blocked: '!', partial: '◐' };
 
@@ -251,6 +255,7 @@
     conflict = false;
     editing = null;
     editingLevels = false;
+    confirming = null;
     app.pathChoice = id;
   }
 
@@ -272,9 +277,27 @@
     });
   }
 
+  // The point under `{safety}` whose closing waits for the person's yes (by its name), with what will be sent.
+  let confirming = $state<{ id: string; state: PointState; reason?: string } | null>(null);
   function setState(node: PathNode, state: PointState, reason?: string): void {
     if (!doc) return;
+    if (closesSafety(node, state)) {
+      confirming = { id: idOf(node), state, ...(reason !== undefined ? { reason } : {}) };
+      void focusField(`safety-no-${node.index}`);
+      return;
+    }
     void send(stateOp(doc.path.id, doc.path.etag, node, state, reason));
+  }
+  function confirmSafety(node: PathNode): void {
+    if (!doc || !confirming || confirming.id !== idOf(node) || refused()) return;
+    const { state, reason } = confirming;
+    confirming = null;
+    void focusPoint(node);
+    void send(stateOp(doc.path.id, doc.path.etag, node, state, reason, true));
+  }
+  function cancelSafety(node: PathNode): void {
+    confirming = null;
+    void focusPoint(node);
   }
   function clickMark(node: PathNode): void {
     // The mark is never `disabled` (a disabled button drops the focus to the page): a click while busy is refused here.
@@ -668,6 +691,9 @@
                     {/if}
                     {#if parent}<span class="count">{progressText(node.progress)}</span>{/if}
                   </span>
+                  {#if node.safety && !parent}
+                    <span class="safety-point"><span aria-hidden="true">⚠</span> {ts('paths.safety.badge')}</span>
+                  {/if}
                   {#if game && !parent && node.xp !== undefined}
                     <span class="xp-point" data-xp={node.xp}>{t(node.xp_from === 'task' ? 'paths.xp.from_task' : 'paths.xp.point', { n: node.xp })}</span>
                   {/if}
@@ -713,6 +739,28 @@
                   <p class="note" aria-label={t('paths.note_of', { label })}>{markHidden(node.note)}</p>
                 {/if}
 
+                {#if confirming && confirming.id === idOf(node)}
+                  {@const closing = confirming.state === 'seen' ? 'seen' : 'learned'}
+                  <div class="edit safety-ask" role="group" aria-labelledby="safety-ask-{node.index}">
+                    <p id="safety-ask-{node.index}">
+                      <span aria-hidden="true">⚠</span>
+                      {ts('paths.safety.ask', { label, state: ts(`paths.safety.state.${closing}`) })}
+                    </p>
+                    <span class="buttons">
+                      <button type="button" class="primary" aria-disabled={busy ? 'true' : undefined} onclick={() => confirmSafety(node)}
+                        >{ts('paths.safety.yes')}</button
+                      >
+                      <button
+                        type="button"
+                        id="safety-no-{node.index}"
+                        onclick={() => cancelSafety(node)}
+                        onkeydown={(e) => {
+                          if (e.key === 'Escape') cancelSafety(node);
+                        }}>{ts('paths.safety.no')}</button
+                      >
+                    </span>
+                  </div>
+                {/if}
                 {#if editing && editingOf(node, 'reason') && editing.state}
                   <form
                     class="edit"
@@ -893,6 +941,11 @@
   .count,
   .sub,
   .status,
+  .safety-point {
+    color: var(--warn);
+    font-weight: 600;
+    font-size: 0.9em;
+  }
   .busy,
   .host {
     color: var(--muted);

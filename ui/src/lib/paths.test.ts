@@ -20,6 +20,7 @@ import {
   REASON_MAX,
   rewardOp,
   stateOp,
+  closesSafety,
   visiblePoints,
   XP_MAX,
   xpOp,
@@ -153,6 +154,20 @@ describe('paths: what is sent', () => {
       if_match: 'e1',
     });
     expect(stateOp('lib/lua', undefined, { index: 4 }, 'learned')).toEqual({ op: 'node_set', id: 'lib/lua', point: '#4', state: 'learned' });
+    expect(stateOp('lib/lua', 'e1', { key: 'drv', index: 2 }, 'learned', undefined, true)).toEqual({
+      op: 'node_set',
+      id: 'lib/lua',
+      point: 'drv',
+      state: 'learned',
+      ack: true,
+      if_match: 'e1',
+    });
+    // Closing (learned, seen) a point under {safety} wants the yes; dropping, blocking, opening it does not.
+    expect(closesSafety({ safety: true }, 'learned')).toBe(true);
+    expect(closesSafety({ safety: true }, 'seen')).toBe(true);
+    expect(closesSafety({ safety: true }, 'dropped')).toBe(false);
+    expect(closesSafety({ safety: true }, 'open')).toBe(false);
+    expect(closesSafety({}, 'learned')).toBe(false);
     expect(noteOp('lib/lua', 'e1', { key: 'pil', index: 4 }, '')).toEqual({ op: 'node_set', id: 'lib/lua', point: 'pil', note: '', if_match: 'e1' });
     expect(promoteOp('lib/lua', 'e1', { key: 'cc', index: 6 })).toEqual({ op: 'promote', container: 'lib/lua', point: 'cc', if_match: 'e1' });
   });

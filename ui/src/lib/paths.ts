@@ -151,9 +151,32 @@ export function clickedState(state: PointState): PointState {
 
 const match = (etag: string | undefined): { if_match?: string } => (etag ? { if_match: etag } : {});
 
-/** The operation that gives point `node` of path `id` the state `state` (with its reason), on the version read. */
-export function stateOp(id: string, etag: string | undefined, node: Pick<PathNode, 'key' | 'index'>, state: PointState, reason?: string): Op {
-  return { op: 'node_set', id, point: pointRef(node), state, ...(reason !== undefined ? { reason } : {}), ...match(etag) };
+/**
+ * The operation that gives point `node` of path `id` the state `state` (with its reason), on the version read; `ack`
+ * when the person confirmed closing a point under `{safety}` (capability `path_marks`).
+ */
+export function stateOp(
+  id: string,
+  etag: string | undefined,
+  node: Pick<PathNode, 'key' | 'index'>,
+  state: PointState,
+  reason?: string,
+  ack = false,
+): Op {
+  return {
+    op: 'node_set',
+    id,
+    point: pointRef(node),
+    state,
+    ...(reason !== undefined ? { reason } : {}),
+    ...(ack ? { ack: true as const } : {}),
+    ...match(etag),
+  };
+}
+
+/** Whether giving `node` the state `state` closes a point under `{safety}`: the engine wants `ack`, the page asks first. */
+export function closesSafety(node: Pick<PathNode, 'safety'>, state: PointState): boolean {
+  return node.safety === true && (state === 'learned' || state === 'seen');
 }
 
 /** The operation that writes the note of point `node` (`""` removes it), on the version read (capability `node_note`). */
