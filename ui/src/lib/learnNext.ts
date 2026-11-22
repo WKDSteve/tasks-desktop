@@ -22,11 +22,19 @@ export function stepNeedsAck(point: Pick<LearnPoint, 'safety'>, state: StepState
 }
 
 /**
- * The operation that marks `point` of path `path`. `learn_next` carries no version of the file, so none is sent: the
- * engine names the point by its key (or `#<index>`) and refuses one that is gone. `ack` only when the person confirmed
- * a point under `{safety}`.
+ * The operation that marks `point` of path `path`, on the version of the file that was read (`etag` of the entry of
+ * `learn_next`, sent as `if_match`): a change of the file since is refused as a `conflict`, never written blindly onto
+ * a point that moved. An engine that names no version sends none. `ack` only when the person confirmed a point under
+ * `{safety}`.
  */
-export function stepOp(path: string, point: Pick<LearnPoint, 'key' | 'index'>, state: StepState, reason?: string, ack = false): Op {
+export function stepOp(
+  path: string,
+  point: Pick<LearnPoint, 'key' | 'index'>,
+  state: StepState,
+  reason?: string,
+  ack = false,
+  etag?: string,
+): Op {
   return {
     op: 'node_set',
     id: path,
@@ -34,7 +42,13 @@ export function stepOp(path: string, point: Pick<LearnPoint, 'key' | 'index'>, s
     state,
     ...(reason !== undefined ? { reason } : {}),
     ...(ack ? { ack: true as const } : {}),
+    ...(etag ? { if_match: etag } : {}),
   };
+}
+
+/** Whether the answer to a write refused it because the file changed since it was read. */
+export function isConflict(result: { results: { ok: boolean; error?: { code?: string } }[] } | null): boolean {
+  return result?.results.some((r) => !r.ok && r.error?.code === 'conflict') ?? false;
 }
 
 /** The planned hours of a point as shown: `2`, `2–3`; null without any. */

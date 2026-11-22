@@ -109,6 +109,32 @@ describe('LearnNextView', () => {
     await vi.waitFor(() => expect(m.hub.learnQueries.length).toBeGreaterThan(1));
   });
 
+  it('writes on the version read (if_match); a changed file is said, read again, and an open question closed', async () => {
+    const { m, page } = await show([{ ...LUA, etag: 'sha256:1111111111111111' }, SHELL]);
+    m.hub.next_ops = {
+      kind: 'tasks.result',
+      ok: false,
+      dry_run: false,
+      results: [{ n: 1, op: 'node_set', id: 'lib/lua', ok: false, error: { code: 'conflict', message: 'changed', retryable: false } }],
+    } as unknown as typeof m.hub.next_ops;
+    const { promise: held, resolve: release } = Promise.withResolvers<void>();
+    m.hub.holdOps = held;
+    const before = m.hub.learnQueries.length;
+    button(card(page, 'lib/lua'), 'Learned').click();
+    await settle();
+    expect(sentOps(m)).toEqual([{ op: 'node_set', id: 'lib/lua', point: 'meta', state: 'learned', if_match: 'sha256:1111111111111111' }]);
+    // while the write is on its way a question opens on another card
+    button(card(page, 'ops/shell'), 'Seen').click();
+    await settle();
+    expect(card(page, 'ops/shell').querySelector('input.reason')).not.toBeNull();
+    release();
+    await vi.waitFor(() => expect(m.app.toast?.text).toContain('The path changed meanwhile'));
+    await vi.waitFor(() => expect(m.hub.learnQueries.length).toBeGreaterThan(before));
+    await settle();
+    expect(card(page, 'ops/shell').querySelector('input.reason')).toBeNull();
+    expect(sentOps(m)).toHaveLength(1);
+  });
+
   it('asks a reason for seen before it sends, and says when it is missing', async () => {
     const { m, page } = await show();
     const lua = card(page, 'lib/lua');

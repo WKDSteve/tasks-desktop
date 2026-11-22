@@ -1,12 +1,29 @@
 import { describe, expect, it } from 'vitest';
-import { cardKey, hoursText, ofProject, projectsOf, stepNeedsAck, stepNeedsReason, stepOp } from './learnNext';
+import { cardKey, hoursText, isConflict, ofProject, projectsOf, stepNeedsAck, stepNeedsReason, stepOp } from './learnNext';
 import { isLearnNextKey, learnNextText } from './learnNextTexts';
 
 const key = (k: string, mods: Partial<KeyboardEvent> = {}) => ({ key: k, altKey: false, ctrlKey: false, metaKey: false, ...mods });
 
+describe('isConflict', () => {
+  it('is true only for an answer with a refused conflict', () => {
+    expect(isConflict(null)).toBe(false);
+    expect(isConflict({ results: [{ ok: true }] })).toBe(false);
+    expect(isConflict({ results: [{ ok: false, error: { code: 'not_found' } }] })).toBe(false);
+    expect(isConflict({ results: [{ ok: false, error: { code: 'conflict' } }] })).toBe(true);
+  });
+});
+
 describe('the next learning step', () => {
   it('marks a point by its key, or #index without one; a reason and ack only when given', () => {
     expect(stepOp('lib/lua', { key: 'meta', index: 3 }, 'learned')).toEqual({ op: 'node_set', id: 'lib/lua', point: 'meta', state: 'learned' });
+    // on the version read: the etag of the entry goes as if_match; none from an older engine sends none
+    expect(stepOp('lib/lua', { key: 'meta', index: 3 }, 'learned', undefined, false, 'sha256:1111111111111111')).toEqual({
+      op: 'node_set',
+      id: 'lib/lua',
+      point: 'meta',
+      state: 'learned',
+      if_match: 'sha256:1111111111111111',
+    });
     expect(stepOp('lib/lua', { index: 7 }, 'seen', 'skimmed', true)).toEqual({
       op: 'node_set',
       id: 'lib/lua',

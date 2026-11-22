@@ -26,6 +26,7 @@
     stepNeedsAck,
     stepNeedsReason,
     stepOp,
+    isConflict,
     type LearnNextItem,
     type StepState,
   } from '../lib/learnNext';
@@ -115,7 +116,20 @@
 
   function send(item: LearnNextItem, state: StepState, reason?: string, ack = false): void {
     const point = item.points[0];
-    void app.write([stepOp(item.path, point, state, reason, ack)]).then(() => focusCard(item.path));
+    // On the version read: a file changed since (in another program) is said as in the path view and read again.
+    const conflict = (result: Parameters<typeof isConflict>[0]): boolean => {
+      if (!isConflict(result)) return false;
+      app.tell('error', 'paths.conflict');
+      return true;
+    };
+    void app.write([stepOp(item.path, point, state, reason, ack, item.etag)], { onAnswer: conflict }).then(async (result) => {
+      if (isConflict(result)) {
+        asking = null;
+        pendingReason = undefined;
+        await read();
+      }
+      await focusCard(item.path);
+    });
   }
 
   /** The choice of a card: learned goes at once (after the safety question), seen and dropped ask for a reason first. */
