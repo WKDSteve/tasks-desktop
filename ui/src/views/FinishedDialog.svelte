@@ -85,6 +85,9 @@
     width: min(36rem, calc(100vw - 2rem));
     max-height: calc(100vh - 3rem);
     overflow: auto;
+    /* The height of the sticky bar (.bar): Tab to a field below it stops under the bar, not behind it (WCAG 2.4.11). */
+    --bar-h: 3rem;
+    scroll-padding-top: var(--bar-h);
   }
   dialog::backdrop {
     background: var(--backdrop);
@@ -92,6 +95,8 @@
   .bar {
     position: sticky;
     top: 0;
+    box-sizing: border-box;
+    min-height: var(--bar-h);
     display: flex;
     align-items: center;
     gap: 0.75rem;

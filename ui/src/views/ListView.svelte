@@ -661,6 +661,12 @@
     flex: 1;
     min-height: 0;
     border-top: 1px solid var(--border);
+    /* The height of the sticky area head (.area-head). */
+    --head-h: 2.2rem;
+  }
+  /* A row (or the head's own button) the keys and Tab scroll to stops below the head, not under it (WCAG 2.4.11). */
+  .rows[data-areas='groups'] {
+    scroll-padding-top: var(--head-h);
   }
   /* The areas of a list set apart (lib/areaBands.ts): a head per area that stays at the top while its rows scroll. */
   .area-group + .area-group {
@@ -676,6 +682,8 @@
     gap: 0.6rem;
     margin: 0;
     padding: 0.2rem 0.6rem 0.2rem 0.45rem;
+    box-sizing: border-box;
+    min-height: var(--head-h);
     background: var(--surface-2);
     border-bottom: 1px solid var(--border);
     border-left: 3px solid var(--band);
@@ -707,10 +715,6 @@
     font-weight: 400;
     font-size: 0.8rem;
     white-space: nowrap;
-  }
-  /* The head stays over the rows: a row the keys scroll to stops below it, not under it. */
-  .rows[data-areas='groups'] :global(.row) {
-    scroll-margin-top: 2.2rem;
   }
   /* Every second row on a quieter ground (Options > "Zebra stripes in lists"); a marked row keeps its own. */
   .rows.zebra :global(.line:nth-child(even):not(.marked)) {
