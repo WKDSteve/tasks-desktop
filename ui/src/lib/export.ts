@@ -177,11 +177,23 @@ export function exportFileName(view: string, day: string, format: ExportFormat):
  * the filters), and the tasks as tables, one section for each group the view has, in its order. Text only: the page that
  * puts it into the document sets text, never markup.
  */
+/** The tables of a view that draws figures, not tasks: what the menu View exports and prints while it is shown. */
+export interface ViewTables {
+  /** The view that gave them (`App.view`). */
+  view: string;
+  title: string;
+  /** The tables as they stand now, every cell a text (as a card of the statistics exports them). */
+  tables(): { title?: string; headers: string[]; rows: string[][] }[];
+  /** What the page says of them (`n` rows): the view's words, which come with its chunk and not with the start. */
+  words(what: 'saved' | 'copied' | 'save_failed' | 'copy_failed' | 'empty' | 'png_saved', n: number): string;
+}
+
 export interface PrintSheet {
   title: string;
   facts: string[];
   headers: string[];
-  sections: { heading?: string; rows: string[][] }[];
+  /** A section with its own `headers` (a table of figures among others) takes those instead of the sheet's. */
+  sections: { heading?: string; headers?: string[]; rows: string[][] }[];
 }
 
 /** The sheet of the rows: `cells` gives the cells of a task under `headers`; a group starts a section of its own. */

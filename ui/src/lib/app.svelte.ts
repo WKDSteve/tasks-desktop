@@ -122,7 +122,7 @@ import { conflictsOf, conflictsOfRequest, retryOp, type Conflict } from './confl
 import { browserStreamShare, Preferences, StreamSession } from 'appkit-ui/session';
 import type { SseMessage } from 'appkit-ui/sse';
 import { labelOf, langSwitcher, LANGS, translate, type Key, type Lang } from './i18n';
-import { csvSeparatorFor, EXPORT_FILES, exportFileName, rowsText, sheetOf, type ExportFormat, type ExportRow, type PrintSheet } from './export';
+import { csvSeparatorFor, EXPORT_FILES, exportFileName, rowsText, sheetOf, type ExportFormat, type ExportRow, type PrintSheet, type ViewTables } from './export';
 import {
   AS_THEY_ARE,
   boardRows,
@@ -2805,9 +2805,23 @@ export class App {
     this.marks = next;
   }
 
-  /** Whether the view that is shown draws tasks an export can take (the list, the board, the plan, an open saved view). */
+  /**
+   * The tables of a view that draws figures and no tasks (the learning statistics): what the export and the print of
+   * the menu View take while it is shown. The view sets them once it is there and takes them back when it goes.
+   */
+  viewTables = $state.raw<ViewTables | null>(null);
+
+  /** The tables of the view shown, when it gave some. */
+  private get ownTables(): ViewTables | null {
+    return this.viewTables !== null && this.viewTables.view === this.view ? this.viewTables : null;
+  }
+
+  /**
+   * Whether the view that is shown draws tasks an export can take (the list, the board, the plan, an open saved view),
+   * or gave its tables of figures.
+   */
   get exportable(): boolean {
-    return this.view === 'list' || this.view === 'board' || this.view === 'plan' || (this.view === 'views' && this.viewsState.open !== null);
+    return this.view === 'list' || this.view === 'board' || this.view === 'plan' || (this.view === 'views' && this.viewsState.open !== null) || this.ownTables !== null;
   }
 
   /** A choice of a view kept in this browser (`tasks-desktop.view.<name>`): the periods of the learning views. */
@@ -2817,6 +2831,34 @@ export class App {
 
   setViewPref(name: string, value: string): void {
     safe(() => this.env.prefs.setItem(`tasks-desktop.view.${name}`, value));
+  }
+
+  /** Save or copy the tables of the view shown (lib/viewTablesOut.ts, loaded then). */
+  private async exportTables(own: ViewTables, format: ExportFormat, how: 'save' | 'copy'): Promise<void> {
+    const out = await import('./viewTablesOut');
+    const tables = own.tables();
+    const n = out.rowCount(tables);
+    if (n === 0) return this.sayTables(own, 'error', 'empty');
+    const text = out.tablesText(own, tables, format, this.localDay(), this.csvSeparator);
+    const ok = how === 'save' ? this.env.out.save(exportFileName(own.view, this.localDay(), format), text, EXPORT_FILES[format].type) : await this.env.out.copy(text);
+    if (!ok) this.sayTables(own, 'error', how === 'save' ? 'save_failed' : 'copy_failed');
+    else this.sayTables(own, 'ok', how === 'save' ? 'saved' : 'copied', n);
+  }
+
+  private sayTables(own: ViewTables, kind: Toast['kind'], what: Parameters<ViewTables['words']>[0], n = 0): void {
+    this.toast = { kind, text: own.words(what, n) };
+  }
+
+  /** The tables of the view shown as a sheet, for the printer (`print`) or a picture. */
+  private async tablesSheet(own: ViewTables): Promise<{ sheet: PrintSheet; count: number } | null> {
+    const out = await import('./viewTablesOut');
+    const tables = own.tables();
+    const count = out.rowCount(tables);
+    if (count === 0) {
+      this.sayTables(own, 'error', 'empty');
+      return null;
+    }
+    return { sheet: out.tablesSheet(own, tables, this.localDay()), count };
   }
 
   /**
@@ -2918,6 +2960,8 @@ export class App {
    * export of nothing is not made and says so; the tasks of areas that may not leave the app are named by their number.
    */
   async exportView(format: ExportFormat, how: 'save' | 'copy'): Promise<void> {
+    const own = this.ownTables;
+    if (own) return this.exportTables(own, format, how);
     const { view, text, count, kept } = this.exportTasks(format);
     if (count === 0) {
       this.sayNothingExported(kept);
@@ -2979,6 +3023,13 @@ export class App {
    * own selection), and a chip that names an area which may not leave is not.
    */
   printView(): void {
+    const own = this.ownTables;
+    if (own) {
+      void this.tablesSheet(own).then((made) => {
+        if (made && !this.env.out.print(made.sheet)) this.say('error', 'print.failed');
+      });
+      return;
+    }
     const sheet = this.viewSheet();
     if (sheet && !this.env.out.print(sheet.sheet)) this.say('error', 'print.failed');
   }
@@ -2990,10 +3041,12 @@ export class App {
 
   /** The sheet of `printView` as one long picture. */
   async pngView(): Promise<void> {
-    const made = this.viewSheet();
+    const own = this.ownTables;
+    const made = own ? await this.tablesSheet(own) : this.viewSheet();
     if (!made || !this.env.out.png) return;
     const result = await this.env.out.png(made.sheet, exportFileName(this.view, this.localDay(), 'markdown').replace(/\.[a-z]+$/, '.png'));
-    if (result === 'saved') this.say('ok', 'export.png_saved', { n: made.count });
+    if (result === 'saved' && own) this.sayTables(own, 'ok', 'png_saved', made.count);
+    else if (result === 'saved') this.say('ok', 'export.png_saved', { n: made.count });
     else this.say('error', result === 'too_long' ? 'export.png_too_long' : 'export.png_failed', { n: made.count });
   }
 

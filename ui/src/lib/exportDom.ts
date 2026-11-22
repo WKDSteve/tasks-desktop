@@ -51,7 +51,7 @@ export function sheetElement(doc: Document, sheet: PrintSheet, id: string): HTML
     const table = doc.createElement('table');
     const head = doc.createElement('thead');
     const headRow = doc.createElement('tr');
-    for (const h of sheet.headers) {
+    for (const h of section.headers ?? sheet.headers) {
       const th = text('th', h);
       th.scope = 'col';
       headRow.append(th);
