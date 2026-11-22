@@ -10,7 +10,7 @@
   import type { Competences, LearnEvidence } from '../lib/contract';
   import Info from 'appkit-ui/Info.svelte';
   import LearnScopeNote from './LearnScopeNote.svelte';
-  import { learnScope } from '../lib/learnScope';
+  import { scopeOf } from '../lib/learnScope';
   import Blocks from 'appkit-ui/Blocks.svelte';
   import { hostOf, parseMarkdown } from 'appkit-ui/markdown';
   import { markHidden } from '../lib/text';
@@ -41,7 +41,7 @@
   let problem = $state(false);
   // The area filter of the page (lib/learnScope.ts): the evidence of the paths of its areas, read again when it
   // changes. The fields stay all of them: they only name what a piece of evidence proves.
-  const scope = $derived(learnScope(app.filter.areas, app.matchAreas));
+  const scope = $derived(scopeOf(app));
   const asking = $derived(JSON.stringify(scope.query));
   let asked = 0;
   async function read(): Promise<void> {

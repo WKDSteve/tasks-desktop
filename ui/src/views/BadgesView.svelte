@@ -11,7 +11,7 @@
   import type { Paths, PathEntryLevel } from '../lib/contract';
   import Info from 'appkit-ui/Info.svelte';
   import LearnScopeNote from './LearnScopeNote.svelte';
-  import { learnScope } from '../lib/learnScope';
+  import { scopeOf } from '../lib/learnScope';
   import BadgeMedal from './BadgeMedal.svelte';
   import ItemIcon from './ItemIcon.svelte';
   import { AssetImages } from '../lib/assetImages.svelte';
@@ -66,7 +66,7 @@
   let filter = $state<BadgeFilter>('all');
   let grouping = $state<BadgeGrouping>('path');
   // The paths of the areas the area filter of the page shows (lib/learnScope.ts).
-  const scope = $derived(learnScope(app.filter.areas, app.matchAreas));
+  const scope = $derived(scopeOf(app));
   const tiles = $derived(badgeTiles(scope.keep(doc?.items ?? [])));
   const hiddenByScope = $derived(tiles.length === 0 && scope.active && badgeTiles(doc?.items ?? []).length > 0);
   const earned = $derived(tiles.filter((tile) => tile.earned).length);

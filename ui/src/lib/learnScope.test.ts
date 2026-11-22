@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { NO_AREA } from './areaGroups';
 import { learnQuery } from './api';
-import { learnScope } from './learnScope';
+import { learnScope, scopeOf } from './learnScope';
 
 const rows = [{ area: 'lib.nvim' }, { area: 'ops' }, { area: 'ALL' }];
 
@@ -42,5 +42,19 @@ describe('learnScope', () => {
     const s = learnScope(['nobody'], [NO_AREA]);
     expect(s.empty).toBe(true);
     expect(s.keep(rows)).toEqual([]);
+  });
+  it('never asks the engine for a name the vault does not know (it would refuse the read): the page narrows instead', () => {
+    const s = learnScope(['renamed'], ['renamed'], ['lib.nvim', 'ops']);
+    expect(s.query).toEqual({});
+    expect(s.keep(rows)).toEqual([]);
+    expect(learnScope(['ops'], ['ops'], ['lib.nvim', 'ops']).query).toEqual({ area: 'ops' });
+    const app = { filter: { areas: ['tools'] }, matchAreas: ['lib.nvim'], allAreaNames: ['lib.nvim', 'ops'], areaGroups: [{ name: 'tools' }] };
+    expect(scopeOf(app).query).toEqual({ area: 'tools' });
+  });
+
+  it('a name with a dot at its start or end is no name of a folder: asked for all areas', () => {
+    expect(learnScope(['.git'], ['.git']).query).toEqual({});
+    expect(learnScope(['x.'], ['x.']).query).toEqual({});
+    expect(learnScope(['lib.nvim'], ['lib.nvim']).query).toEqual({ area: 'lib.nvim' });
   });
 });

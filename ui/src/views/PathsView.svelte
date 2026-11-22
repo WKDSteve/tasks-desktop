@@ -17,7 +17,7 @@
   import ItemIcon from './ItemIcon.svelte';
   import Lazy from './Lazy.svelte';
   import LearnScopeNote from './LearnScopeNote.svelte';
-  import { learnScope } from '../lib/learnScope';
+  import { scopeOf } from '../lib/learnScope';
   import { AssetImages } from '../lib/assetImages.svelte';
   import { shownIcon } from '../lib/icons';
   import { markHidden } from '../lib/text';
@@ -172,13 +172,14 @@
     untrack(() => void readList());
   });
   // The paths of the areas the area filter of the page shows (lib/learnScope.ts).
-  const scope = $derived(learnScope(app.filter.areas, app.matchAreas));
+  const scope = $derived(scopeOf(app));
   const shownList = $derived(list === null ? null : scope.keep(list));
-  // Nothing chosen yet (or the chosen one is gone or hidden by the filter): the first path shown, so the view never
-  // stands empty beside a list.
+  // Nothing chosen yet (or the chosen one is gone): the first path shown, so the view never stands empty beside a list.
+  // A path chosen on purpose (`App.openPath` from the catalogue, a link, the history) stays, also when the filter hides
+  // it from the list: it is shown beside the list of the others.
   $effect(() => {
     const first = shownList?.[0];
-    if (first && !shownList.some((p) => p.id === app.pathChoice)) untrack(() => (app.pathChoice = first.id));
+    if (first && !list?.some((p) => p.id === app.pathChoice)) untrack(() => (app.pathChoice = first.id));
   });
   $effect(() => {
     void app.writes;

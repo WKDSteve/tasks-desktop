@@ -13,7 +13,7 @@
   import type { Competences, LearnNotes, PathEntry } from '../lib/contract';
   import Info from 'appkit-ui/Info.svelte';
   import LearnScopeNote from './LearnScopeNote.svelte';
-  import { learnScope } from '../lib/learnScope';
+  import { scopeOf } from '../lib/learnScope';
   import Blocks from 'appkit-ui/Blocks.svelte';
   import { hostOf, parseMarkdown } from 'appkit-ui/markdown';
   import { markHidden } from '../lib/text';
@@ -52,7 +52,7 @@
   let whole = $state<ReadonlySet<string>>(new Set());
 
   // The area filter of the page (lib/learnScope.ts): the engine searches the paths of its areas.
-  const scope = $derived(learnScope(app.filter.areas, app.matchAreas));
+  const scope = $derived(scopeOf(app));
   const asking = $derived(JSON.stringify(scope.query));
   let asked = 0;
   async function read(): Promise<void> {

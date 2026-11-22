@@ -10,7 +10,7 @@
   import type { Paths, PathEntryLevel } from '../lib/contract';
   import Info from 'appkit-ui/Info.svelte';
   import LearnScopeNote from './LearnScopeNote.svelte';
-  import { learnScope } from '../lib/learnScope';
+  import { scopeOf } from '../lib/learnScope';
   import BadgeMedal from './BadgeMedal.svelte';
   import { AssetImages } from '../lib/assetImages.svelte';
   import { markHidden } from '../lib/text';
@@ -49,7 +49,7 @@
   });
 
   // The paths of the areas the area filter of the page shows (lib/learnScope.ts).
-  const scope = $derived(learnScope(app.filter.areas, app.matchAreas));
+  const scope = $derived(scopeOf(app));
   const rows = $derived(rewardRows(scope.keep(doc?.items ?? [])));
   const count = (r: ReturnType<typeof rewardRows>): number => r.open.length + r.given.length + r.coming.length;
   const none = $derived(count(rows) === 0);

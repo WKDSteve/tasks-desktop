@@ -13,7 +13,7 @@
   import ItemIcon from './ItemIcon.svelte';
   import BadgeMedal from './BadgeMedal.svelte';
   import LearnScopeNote from './LearnScopeNote.svelte';
-  import { learnScope } from '../lib/learnScope';
+  import { scopeOf } from '../lib/learnScope';
   import LearnBars from './LearnBars.svelte';
   import { AssetImages } from '../lib/assetImages.svelte';
   import { shownIcon } from '../lib/icons';
@@ -115,7 +115,7 @@
 
   // The area filter of the page (lib/learnScope.ts): the paths of its areas, and of the series the figures of those
   // (the area of a path is the part of its id before the slash).
-  const scope = $derived(learnScope(app.filter.areas, app.matchAreas));
+  const scope = $derived(scopeOf(app));
   const keep = $derived(scope.active ? (id: string) => scope.has(id.slice(0, id.indexOf('/'))) : null);
   const items = $derived(scope.keep(doc?.items ?? []));
 

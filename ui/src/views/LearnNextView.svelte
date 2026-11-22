@@ -12,7 +12,7 @@
   import type { LearnNext, LearnPoint } from '../lib/contract';
   import Info from 'appkit-ui/Info.svelte';
   import LearnScopeNote from './LearnScopeNote.svelte';
-  import { learnScope } from '../lib/learnScope';
+  import { scopeOf } from '../lib/learnScope';
   import { hostOf } from 'appkit-ui/markdown';
   import ItemIcon from './ItemIcon.svelte';
   import { shownIcon } from '../lib/icons';
@@ -86,7 +86,7 @@
   });
 
   // The paths of the areas the area filter of the page shows (lib/learnScope.ts); the engine counts per path.
-  const scope = $derived(learnScope(app.filter.areas, app.matchAreas));
+  const scope = $derived(scopeOf(app));
   const all = $derived(scope.keep(doc?.items ?? []));
   const projects = $derived(projectsOf(all));
   const projectTitle = (id: string): string => app.snapshot?.projects?.find((p) => p.id === id)?.title ?? id;

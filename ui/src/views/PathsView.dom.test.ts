@@ -444,4 +444,20 @@ describe('PathsView', () => {
     await vi.waitFor(() => expect(page.querySelector('.scope-note')).toBeNull());
     expect(page.querySelector('button.pick[data-path="lib/lua"]')).not.toBeNull();
   });
+  it('keeps a path opened on purpose that the area filter hides, and shows the paths of the filter beside it', async () => {
+    const { m, page } = await show();
+    const shell = { ...ENTRY, id: 'ops/sh', area: 'ops', slug: 'sh', title: 'Shell', file: 'ops/ROADMAP/paths/sh.md' };
+    m.hub.pathsDoc = { kind: 'tasks.paths', rev: 'p2', digest: 'd', items: [ENTRY, shell], incomplete: [] };
+    m.hub.pathDocs.set('ops/sh', { ...doc(), path: shell });
+    m.app.filter = { ...m.app.filter, areas: ['ops'] };
+    m.hub.doc = snapshot([task('lib/c-compiler', { status: 'doing' })], 'rev:2');
+    await m.app.refresh();
+    await settle();
+    // the path chosen before, of another area, is not taken away
+    expect(m.app.pathChoice).toBe('lib/lua');
+    expect([...page.querySelectorAll<HTMLElement>('button.pick')].map((b) => b.dataset['path'])).toEqual(['ops/sh']);
+    m.app.openPath('lib/lua');
+    await settle();
+    expect(m.app.pathChoice).toBe('lib/lua');
+  });
 });

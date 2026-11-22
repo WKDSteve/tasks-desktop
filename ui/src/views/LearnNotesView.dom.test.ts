@@ -291,6 +291,8 @@ describe('LearnNotesView', () => {
   });
   it('follows the area filter of the page: a filter of another area hides the notes, said with a button that clears it', async () => {
     const { m, page } = await show();
+    // names the vault knows (the hub's list of areas): only those are asked of the engine
+    m.app.hubAreas = ['elsewhere', 'ops', 'lib'].map((name) => ({ name }) as never);
     m.app.filter = { ...m.app.filter, areas: ['elsewhere'] };
     await settle();
     await vi.waitFor(() => expect(page.querySelector('.scope-note p')?.textContent).toBe('The area filter (elsewhere) hides the learning paths here.'));
@@ -306,6 +308,8 @@ describe('LearnNotesView', () => {
 
   it('asks the engine for the areas of the filter, several as a list, and lists those only', async () => {
     const { m, page } = await show();
+    // names the vault knows (the hub's list of areas): only those are asked of the engine
+    m.app.hubAreas = ['elsewhere', 'ops', 'lib'].map((name) => ({ name }) as never);
     m.app.filter = { ...m.app.filter, areas: ['ops'] };
     await settle();
     await vi.waitFor(() => expect(notesAsked(m).at(-1)).toEqual({ area: 'ops' }));

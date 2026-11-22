@@ -231,11 +231,13 @@ describe('CompetencesView', () => {
   });
   it('follows the area filter of the page: a filter of another area hides the fields, said with a button that clears it', async () => {
     const { m, page } = await show();
+    // names the vault knows (the hub's list of areas): only those are asked of the engine
+    m.app.hubAreas = ['elsewhere', 'ops', 'lib'].map((name) => ({ name }) as never);
     m.app.filter = { ...m.app.filter, areas: ['elsewhere'] };
     await settle();
     await vi.waitFor(() => expect(page.querySelector('.scope-note p')?.textContent).toBe('The area filter (elsewhere) hides the learning paths here.'));
-    // the engine is asked for the fields and the evidence of that area (it scopes a field by the area of its file)
-    expect(m.hub.learnQueries.filter(([name]) => name === 'competences').at(-1)).toEqual(['competences', { area: 'elsewhere' }]);
+    // the evidence is asked for that area; the fields are read whole and narrowed by the area of their file
+    expect(m.hub.learnQueries.filter(([name]) => name === 'competences').every(([, q]) => JSON.stringify(q) === '{}')).toBe(true);
     expect(m.hub.learnQueries.filter(([name]) => name === 'learn_evidence').at(-1)).toEqual(['learn_evidence', { include_done: true, area: 'elsewhere' }]);
     const clear = page.querySelector<HTMLButtonElement>('.scope-note button')!;
     expect(clear.textContent).toBe('Clear filter');
@@ -243,6 +245,16 @@ describe('CompetencesView', () => {
     await settle();
     expect(m.app.filter.areas).toEqual([]);
     await vi.waitFor(() => expect(page.querySelector('.scope-note')).toBeNull());
-    expect(m.hub.learnQueries.filter(([name]) => name === 'competences').at(-1)).toEqual(['competences', {}]);
+    expect(row(page, 'ALL/os')).not.toBeNull();
+  });
+  it('lists as paths without a field only the paths of the areas of the filter', async () => {
+    const { m, page } = await show();
+    await vi.waitFor(() => expect(page.querySelector('[data-competences-without]')?.textContent).toContain('Free path'));
+    m.app.hubAreas = ['ALL', 'lib'].map((name) => ({ name }) as never);
+    m.app.filter = { ...m.app.filter, areas: ['ALL'] };
+    await settle();
+    // the fields of ALL stay, the paths of lib are not "without a field" of ALL
+    expect(row(page, 'ALL/os')).not.toBeNull();
+    expect(page.querySelector('[data-competences-without]')).toBeNull();
   });
 });

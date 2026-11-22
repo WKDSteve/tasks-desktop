@@ -11,7 +11,7 @@
   import type { Competences, LearnEvidence, PathEntry, PathStage, Paths } from '../lib/contract';
   import Info from 'appkit-ui/Info.svelte';
   import LearnScopeNote from './LearnScopeNote.svelte';
-  import { learnScope } from '../lib/learnScope';
+  import { scopeOf } from '../lib/learnScope';
   import Blocks from 'appkit-ui/Blocks.svelte';
   import { parseMarkdown } from 'appkit-ui/markdown';
   import { markHidden } from '../lib/text';
@@ -44,9 +44,10 @@
   let paths = $state<PathEntry[]>([]);
   let evidence = $state<LearnEvidence['items'] | null>(null);
   let problem = $state(false);
-  // The area filter of the page (lib/learnScope.ts): the fields of its areas, as the engine scopes them (a field
-  // belongs to the area its file is in), and the evidence of the paths of its areas; read again when it changes.
-  const scope = $derived(learnScope(app.filter.areas, app.matchAreas));
+  // The area filter of the page (lib/learnScope.ts): the fields of its areas (a field belongs to the area its file is
+  // in, as the engine scopes them) and the evidence of the paths of its areas; read again when it changes. The fields
+  // are read whole and narrowed here: which path a field of another area serves still counts for "paths without a field".
+  const scope = $derived(scopeOf(app));
   const asking = $derived(JSON.stringify(scope.query));
   let asked = 0;
   async function read(): Promise<void> {
@@ -55,7 +56,7 @@
     const pathsRead: Promise<Paths | null> = app.can('paths') ? app.pathsForMap().catch(() => null) : Promise.resolve(null);
     const evidenceRead: Promise<LearnEvidence | null> = withEvidence ? app.learnEvidence({ include_done: true, ...query }).catch(() => null) : Promise.resolve(null);
     try {
-      const [answer, pathDoc, evidenceDoc] = await Promise.all([app.competences(query), pathsRead, evidenceRead]);
+      const [answer, pathDoc, evidenceDoc] = await Promise.all([app.competences(), pathsRead, evidenceRead]);
       if (mine !== asked) return;
       doc = answer;
       paths = pathDoc?.items ?? [];
@@ -78,11 +79,10 @@
   let withPath = $state(false);
   let text = $state('');
   let sort = $state<CompetenceSort>('name');
-  // A name the hub cannot be asked for: the page narrows what the engine gave for all areas.
   const items = $derived(scope.keep(doc?.items ?? []));
   const groups = $derived(competenceGroups(items, paths, { withTarget, withPath, text }, sort));
   const counts = $derived(evidenceCounts(evidence ?? []));
-  const without = $derived(pathsWithoutCompetence(paths, items));
+  const without = $derived(pathsWithoutCompetence(scope.keep(paths), doc?.items ?? []));
   const scale = $derived(doc?.scale);
 
   const stage = (level: number): string => stageText(scale, level, app.lang);

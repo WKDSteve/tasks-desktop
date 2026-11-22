@@ -9,7 +9,7 @@ import { NO_AREA } from './areaGroups';
  * A name the hub takes as a plain query value (`parse_query` of appkit-hub): a name with a blank or an umlaut is
  * refused there, so it cannot be asked for.
  */
-const PLAIN = /^[A-Za-z0-9._-]{1,128}$/;
+const PLAIN = /^(?!\.)[A-Za-z0-9._-]{1,128}(?<!\.)$/;
 
 /** The most bytes the hub takes for one query value, and the most names of `areas` (`AREAS_MAX` of the hub). */
 const VALUE_MAX = 128;
@@ -34,12 +34,17 @@ export interface LearnScope {
   keep<T extends { area: string }>(items: readonly T[]): T[];
 }
 
-/** The scope of the filter: `chosen` as the filter names it (`App.filter.areas`), `matched` with groups resolved (`App.matchAreas`). */
-export function learnScope(chosen: readonly string[], matched: readonly string[]): LearnScope {
+/**
+ * The scope of the filter: `chosen` as the filter names it (`App.filter.areas`), `matched` with groups resolved
+ * (`App.matchAreas`), `known` the areas and area groups of the vault. A name the vault does not know (a filter kept from
+ * before an area was renamed) is never asked of the engine, which refuses it (`not_found`): the list is narrowed by the
+ * page instead, and shows nothing of it, as the list of tasks does.
+ */
+export function learnScope(chosen: readonly string[], matched: readonly string[], known?: readonly string[]): LearnScope {
   const active = chosen.length > 0;
   const set = new Set(matched);
   const has = (area: string): boolean => !active || set.has(area);
-  const plain = chosen.every((name) => PLAIN.test(name));
+  const plain = chosen.every((name) => PLAIN.test(name) && (known === undefined || known.includes(name)));
   const joined = chosen.join('/');
   const query: { area?: string; areas?: string } =
     !active || !plain ? {} : chosen.length === 1 ? { area: joined } : chosen.length <= AREAS_MAX && joined.length <= VALUE_MAX ? { areas: joined } : {};
@@ -52,4 +57,14 @@ export function learnScope(chosen: readonly string[], matched: readonly string[]
     // Without a filter the same array (a caller may tell nothing changed); the caller never writes to it.
     keep: <T extends { area: string }>(items: readonly T[]): T[] => (active ? items.filter((item) => set.has(item.area)) : (items as T[])),
   };
+}
+
+/** The scope of the area filter of `app`, with the areas and groups of its vault. */
+export function scopeOf(app: {
+  filter: { areas: readonly string[] };
+  matchAreas: readonly string[];
+  allAreaNames: readonly string[];
+  areaGroups: readonly { name: string }[];
+}): LearnScope {
+  return learnScope(app.filter.areas, app.matchAreas, [...app.allAreaNames, ...app.areaGroups.map((g) => g.name)]);
 }

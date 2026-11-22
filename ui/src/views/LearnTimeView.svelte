@@ -11,7 +11,7 @@
   import type { LearnHistory, PathDocument, Paths } from '../lib/contract';
   import Info from 'appkit-ui/Info.svelte';
   import LearnScopeNote from './LearnScopeNote.svelte';
-  import { learnScope } from '../lib/learnScope';
+  import { scopeOf } from '../lib/learnScope';
   import ItemIcon from './ItemIcon.svelte';
   import { shownIcon } from '../lib/icons';
   import { markHidden } from '../lib/text';
@@ -59,7 +59,7 @@
   });
 
   // The paths of the areas the area filter of the page shows (lib/learnScope.ts); a forecast is per path.
-  const scope = $derived(learnScope(app.filter.areas, app.matchAreas));
+  const scope = $derived(scopeOf(app));
   const rows = $derived(doc ? timeRows(scope.keep(doc.items), history) : []);
   const hiddenByScope = $derived(rows.length === 0 && scope.active && doc !== null && timeRows(doc.items, history).length > 0);
   const projects = $derived(rowProjects(rows));

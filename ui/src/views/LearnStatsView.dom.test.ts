@@ -350,4 +350,15 @@ describe('LearnStatsView', () => {
     expect(cells(page.querySelector('#learnstats-bars-table tr[data-bar="2026-11-16"]')).slice(0, 5)).toEqual(['Mon, 16 Nov 2026', '1', '0', '0', '0.25']);
     expect([...page.querySelectorAll<HTMLElement>('section[aria-labelledby="learnstats-paths"] tr[data-path]')].map((r) => r.dataset['path'])).toEqual(['priv/diary']);
   });
+  it('shows the figures of an area whose paths are in the series only (finished, not in the list)', async () => {
+    const { page, m } = await show();
+    m.hub.pathsDoc = { kind: 'tasks.paths', rev: 'p2', digest: 'd', items: [LUA, SHELL], incomplete: [] };
+    m.hub.pathsLevelsDoc = null;
+    m.hub.doc = snapshot([], 'rev:2');
+    await m.app.refresh();
+    m.app.filter = { ...m.app.filter, areas: ['priv'] };
+    await settle();
+    expect(page.querySelector('.scope-note')).toBeNull();
+    expect(cells(page.querySelector('#learnstats-bars-table tr[data-bar="2026-11-16"]')).slice(0, 5)).toEqual(['Mon, 16 Nov 2026', '1', '0', '0', '0.25']);
+  });
 });

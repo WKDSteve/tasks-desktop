@@ -14,7 +14,7 @@
   import Info from 'appkit-ui/Info.svelte';
   import LearnScopeNote from './LearnScopeNote.svelte';
   import { tablesLabel } from '../lib/viewTablesTexts';
-  import { learnScope } from '../lib/learnScope';
+  import { scopeOf } from '../lib/learnScope';
   import LearnBars from './LearnBars.svelte';
   import { markHidden } from '../lib/text';
   import { addDays } from '../lib/calendar';
@@ -171,9 +171,13 @@
 
   // The area filter of the page (lib/learnScope.ts): the paths of its areas, and of the series the figures of those
   // (the area of a path is the part of its id before the slash, so a finished path no list names counts as well).
-  const scope = $derived(learnScope(app.filter.areas, app.matchAreas));
+  const scope = $derived(scopeOf(app));
   const entries = $derived(scope.keep(doc?.items ?? []));
-  const hiddenByScope = $derived(scope.active && entries.length === 0 && (doc?.items.length ?? 0) > 0);
+  // Nothing of the areas of the filter: no path of the list, and none in the series (a finished path the list leaves out
+  // without the capability `requires` still has figures there).
+  const hiddenByScope = $derived(
+    scope.active && entries.length === 0 && (doc?.items.length ?? 0) > 0 && !(history?.paths ?? []).some((p) => scope.has(p.area)),
+  );
   const projects = $derived([...new Set(entries.map((p) => p.project).filter((p): p is string => p !== undefined))].sort());
   const pathChoices = $derived(
     entries.filter((p) => project === '' || p.project === project).toSorted((a, b) => a.title.localeCompare(b.title)),

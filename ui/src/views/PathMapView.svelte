@@ -13,7 +13,7 @@
   import Info from 'appkit-ui/Info.svelte';
   import ItemIcon from './ItemIcon.svelte';
   import LearnScopeNote from './LearnScopeNote.svelte';
-  import { learnScope } from '../lib/learnScope';
+  import { scopeOf } from '../lib/learnScope';
   import { shownIcon } from '../lib/icons';
   import { markHidden } from '../lib/text';
   import {
@@ -80,7 +80,7 @@
   const paths = $derived(new Map(all.map((p) => [p.id, p] as const)));
   // The area filter of the page (lib/learnScope.ts): a path of another area is hidden like a finished one, so an arrow
   // to it still knows its title.
-  const scope = $derived(learnScope(app.filter.areas, app.matchAreas));
+  const scope = $derived(scopeOf(app));
   const titleOf = (id: string): string => paths.get(id)?.title ?? projects.find((p) => p.id === id)?.title ?? id;
   // The projects a path of the list belongs to, for the filter.
   const projectChoices = $derived(
