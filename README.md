@@ -478,6 +478,27 @@ only that chain, Esc lets go. The arrow keys walk the chain (Alt: the next one o
 finished** and **Map | List** are kept per browser; the list says the same as a table per project (stage, progress,
 what a path needs and what it is a requirement for) and is the start in a window narrower than about 600 px.
 
+The view **Learning plans › Next learning step** (`#view=learnnext`, an engine with `learn_next`) shows a card for every
+running learning path with the next point to learn now and, folded below, the two after it; the engine chooses them
+(open, not blocked, not optional, in the order of the file; the paths active last first). A card names the stage, the
+source of the point, its planned hours and XP; **Learned** marks it, **Seen…** and **Does not apply…** ask for a reason
+first, **Open in the path** shows the point in the view of the paths. On a focused card `l`, `s` and `n` do the same and
+Enter opens it. A point under `{safety}` says so and asks before it is closed (in the view of the paths too); only a
+yes sends it. **Project** and **Machine** narrow the list (the engine leaves out what the machine does not take).
+
+The view **Learning plans › Learning time** (`#view=learntime`, an engine with `path_hours`) lists the paths that plan
+hours (`{h=N}`, `{h=N-M}`) or record them (`{done_h=N}`): planned, done, left, a bar of done against planned (more than
+planned in the warning colour and as "+3 h") and, once the series of the learning figures reaches four weeks back, the
+weeks until done at that pace. A row unfolds the sessions of its path (as `tasks path --schedule` lists them); a narrow
+window draws each row as a card.
+
+The view **Learning plans › Notes & sources** (`#view=learnnotes`, an engine with `learn_notes`) finds the notes (the
+`> ` lines below a point), links and images of the points of all paths; the engine searches the label, the note and the
+link. `/` puts the focus into the search; **All | Notes | Links | Images**, a path, a competence, a state and
+**Finished paths too** narrow it. A hit names path, stage and point, marks the text found, shows a note cut (whole on
+**more**, through the Markdown reader), a link as domain and title and an image as a small preview (larger on a click).
+Enter on a hit opens its point in the view of the paths.
+
 **Images in the texts.** A Markdown image of a file below `assets/` of the item's own folder (`![Syntax](assets/images/
 lua.svg)`; `png`, `jpg`, `jpeg`, `webp`, `gif`, `svg`) is drawn as a picture in the text of a task, in the decisions and
 the result of a meeting and in a point of a learning path, at most 24rem high; a click shows it larger (Escape closes

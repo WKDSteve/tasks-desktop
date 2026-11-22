@@ -191,7 +191,7 @@
     <p class="none">{t('learnnotes.no_engine')}</p>
   {:else}
     <search class="tools">
-      <label class="field grow"
+      <label class="field grow" data-hint={t('learnnotes.hint.search')}
         ><span class="sr-only">{t('learnnotes.search')}</span>
         <input
           type="search"
@@ -209,13 +209,13 @@
           maxlength="200"
         /></label
       >
-      <fieldset class="kinds">
+      <fieldset class="kinds" data-hint={t('learnnotes.hint.kind')}>
         <legend class="sr-only">{t('learnnotes.kind')}</legend>
         {#each KINDS as k (k)}
           <label class="kind"><input type="radio" name="learnnotes-kind" value={k} bind:group={kind} />{t(k === '' ? 'learnnotes.kind.all' : `learnnotes.kind.${k}`)}</label>
         {/each}
       </fieldset>
-      <label class="field"
+      <label class="field" data-hint={t('learnnotes.hint.path')}
         >{t('learnnotes.path')}
         <select bind:value={path}>
           <option value="">{t('learnnotes.path.all')}</option>
@@ -223,7 +223,7 @@
         </select></label
       >
       {#if competenceChoices.length > 0}
-        <label class="field"
+        <label class="field" data-hint={t('learnnotes.hint.competence')}
           >{t('learnnotes.competence')}
           <select bind:value={competence}>
             <option value="">{t('learnnotes.competence.all')}</option>
@@ -231,14 +231,14 @@
           </select></label
         >
       {/if}
-      <label class="field"
+      <label class="field" data-hint={t('learnnotes.hint.state')}
         >{t('learnnotes.state')}
         <select bind:value={noteState}>
           <option value="">{t('learnnotes.state.all')}</option>
           {#each NOTE_STATES as s (s)}<option value={s}>{t(`learnnotes.state.${s}`)}</option>{/each}
         </select></label
       >
-      <label class="check"><input type="checkbox" bind:checked={withDone} />{t('learnnotes.done')}</label>
+      <label class="check" data-hint={t('learnnotes.hint.done')}><input type="checkbox" bind:checked={withDone} />{t('learnnotes.done')}</label>
     </search>
 
     {#if problem && !doc}

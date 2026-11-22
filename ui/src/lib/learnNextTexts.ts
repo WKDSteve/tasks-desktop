@@ -57,6 +57,9 @@ const EN = {
   'learnnext.reading': 'Reading the next steps …',
   'learnnext.saving': 'Saving…',
   'learnnext.incomplete': 'Not every area could be read: {list}',
+  'learnnext.hint.project': 'Only the paths of one project.',
+  'learnnext.hint.machine': 'Only the points that may be practised on this machine; the engine leaves out the others ({machine=...}).',
+  'learnnext.hint.reason': 'Why it is only seen, or does not apply: one line, written beside the point in the file.',
 };
 
 type LearnNextKey = keyof typeof EN;
@@ -115,6 +118,9 @@ const DE: Record<LearnNextKey, string> = {
   'learnnext.reading': 'Die nächsten Schritte werden gelesen …',
   'learnnext.saving': 'Wird gespeichert…',
   'learnnext.incomplete': 'Nicht jeder Bereich ließ sich lesen: {list}',
+  'learnnext.hint.project': 'Nur die Pfade eines Projekts.',
+  'learnnext.hint.machine': 'Nur die Punkte, die auf dieser Maschine geübt werden können; die anderen lässt die Engine weg ({machine=...}).',
+  'learnnext.hint.reason': 'Warum nur angeschaut oder nicht zutreffend: eine Zeile, sie steht dann neben dem Punkt in der Datei.',
 };
 
 export type { LearnNextKey };

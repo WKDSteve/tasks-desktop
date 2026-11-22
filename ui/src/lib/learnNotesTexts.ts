@@ -49,6 +49,12 @@ const EN = {
   'learnnotes.retry': 'Read again',
   'learnnotes.reading': 'Reading the notes …',
   'learnnotes.incomplete': 'Not every area could be read: {list}',
+  'learnnotes.hint.search': 'A part of the label, the note or the link, without case; the engine searches once you pause (Enter: at once). / puts the focus here.',
+  'learnnotes.hint.kind': 'Only the points with a note, a link or an image.',
+  'learnnotes.hint.path': 'Only the points of one path.',
+  'learnnotes.hint.competence': 'Only the paths that serve this competence (competence: in the path).',
+  'learnnotes.hint.state': 'Only the points in this state.',
+  'learnnotes.hint.done': 'The finished paths of the Backlogs too.',
 };
 
 type LearnNotesKey = keyof typeof EN;
@@ -99,6 +105,12 @@ const DE: Record<LearnNotesKey, string> = {
   'learnnotes.retry': 'Neu lesen',
   'learnnotes.reading': 'Die Notizen werden gelesen …',
   'learnnotes.incomplete': 'Nicht jeder Bereich ließ sich lesen: {list}',
+  'learnnotes.hint.search': 'Ein Teil von Label, Notiz oder Link, ohne Groß/Klein; die Engine sucht, sobald du innehältst (Enter: sofort). / setzt den Fokus hierher.',
+  'learnnotes.hint.kind': 'Nur die Punkte mit Notiz, Link oder Bild.',
+  'learnnotes.hint.path': 'Nur die Punkte eines Pfads.',
+  'learnnotes.hint.competence': 'Nur die Pfade, die dieser Kompetenz dienen (competence: im Pfad).',
+  'learnnotes.hint.state': 'Nur die Punkte in diesem Stand.',
+  'learnnotes.hint.done': 'Auch die fertigen Pfade aus den Backlogs.',
 };
 
 export type { LearnNotesKey };

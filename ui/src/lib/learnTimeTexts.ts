@@ -46,6 +46,7 @@ const EN = {
   'learntime.failed': 'The learning paths could not be read.',
   'learntime.retry': 'Read again',
   'learntime.reading': 'Reading the learning paths …',
+  'learntime.hint.project': 'Only the paths of one project.',
 };
 
 type LearnTimeKey = keyof typeof EN;
@@ -93,6 +94,7 @@ const DE: Record<LearnTimeKey, string> = {
   'learntime.failed': 'Die Lernpfade ließen sich nicht lesen.',
   'learntime.retry': 'Neu lesen',
   'learntime.reading': 'Die Lernpfade werden gelesen …',
+  'learntime.hint.project': 'Nur die Pfade eines Projekts.',
 };
 
 export type { LearnTimeKey };

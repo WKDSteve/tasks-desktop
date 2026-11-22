@@ -963,19 +963,9 @@
                           ? t('nav.repos')
                           : app.view === 'repostatus'
                             ? t('nav.repostatus')
-                            : app.view === 'paths'
-                              ? t('nav.paths')
-                              : app.view === 'pathmap'
-                                ? t('nav.pathmap')
-                                : app.view === 'competences'
-                                  ? t('nav.competences')
-                                  : app.view === 'badges'
-                                    ? t('nav.badges')
-                                    : app.view === 'rewards'
-                                      ? t('nav.rewards')
-                                      : app.view === 'evidence'
-                                        ? t('nav.evidence')
-                                        : t('nav.list')}
+                            : isLearnView(app.view)
+                              ? t(`nav.${app.view}` as Key)
+                              : t('nav.list')}
         </h1>
         {#if alone}
           <!-- A window of one task (detached from a float): its detail, alone, as wide as the window allows. -->
@@ -1021,6 +1011,12 @@
           <Lazy {app} load={() => import('./views/RewardsView.svelte')} />
         {:else if app.view === 'evidence'}
           <Lazy {app} load={() => import('./views/EvidenceView.svelte')} />
+        {:else if app.view === 'learnnext'}
+          <Lazy {app} load={() => import('./views/LearnNextView.svelte')} />
+        {:else if app.view === 'learntime'}
+          <Lazy {app} load={() => import('./views/LearnTimeView.svelte')} />
+        {:else if app.view === 'learnnotes'}
+          <Lazy {app} load={() => import('./views/LearnNotesView.svelte')} />
         {:else}
           <ListView {app} bind:searchBox />
         {/if}

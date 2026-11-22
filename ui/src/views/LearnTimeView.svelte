@@ -128,7 +128,7 @@
   {:else}
     {#if projects.length > 0}
       <div class="tools">
-        <label class="field"
+        <label class="field" data-hint={t('learntime.hint.project')}
           >{t('learntime.project')}
           <select bind:value={project}>
             <option value="">{t('learntime.project.all')}</option>

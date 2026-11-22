@@ -194,7 +194,7 @@
   {:else}
     <div class="tools">
       {#if projects.length > 0}
-        <label class="field"
+        <label class="field" data-hint={t('learnnext.hint.project')}
           >{t('learnnext.project')}
           <select bind:value={project}>
             <option value="">{t('learnnext.project.all')}</option>
@@ -202,7 +202,7 @@
           </select></label
         >
       {/if}
-      <label class="field"
+      <label class="field" data-hint={t('learnnext.hint.machine')}
         >{t('learnnext.machine')}
         <select bind:value={machine}>
           {#each MACHINES as m (m)}<option value={m}>{t(m === '' ? 'learnnext.machine.all' : `learnnext.machine.${m}`)}</option>{/each}
@@ -278,6 +278,7 @@
               {#if open?.kind === 'reason'}
                 <form
                   class="ask"
+                  data-hint={t('learnnext.hint.reason')}
                   onsubmit={(e) => {
                     e.preventDefault();
                     saveReason(item);
