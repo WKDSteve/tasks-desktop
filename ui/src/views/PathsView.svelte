@@ -941,14 +941,14 @@
   .count,
   .sub,
   .status,
+  .busy,
+  .host {
+    color: var(--muted);
+  }
   .safety-point {
     color: var(--warn);
     font-weight: 600;
     font-size: 0.9em;
-  }
-  .busy,
-  .host {
-    color: var(--muted);
   }
   button:not(.link):not(.pick) {
     background: var(--surface);
