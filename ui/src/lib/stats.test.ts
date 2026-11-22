@@ -333,6 +333,13 @@ describe('the finished tasks per area', () => {
   it('keeps only the areas the filter means', () => {
     expect(finishedPerArea(byArea, ['b', 'c'])).toEqual({ total: 2, counts: { b: 2 } });
   });
+  it('keeps an area called __proto__ as a key of its own (folder names are foreign keys)', () => {
+    const got = finishedPerArea([{ area: '__proto__', count: 4 }, { area: 'a', count: 1 }], []);
+    expect(got.total).toBe(5);
+    expect(Object.keys(got.counts).toSorted()).toEqual(['__proto__', 'a']);
+    expect(Object.getOwnPropertyDescriptor(got.counts, '__proto__')?.value).toBe(4);
+    expect(Object.getPrototypeOf(got.counts)).toBeNull();
+  });
 });
 
 describe('where the effort comes from', () => {
