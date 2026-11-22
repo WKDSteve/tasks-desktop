@@ -6,6 +6,7 @@
   // github.com; a commit that waits for approval shows the command that approves it, to copy. The web variant has no
   // hub and says so.
   import { untrack } from 'svelte';
+  import { SvelteMap } from 'svelte/reactivity';
   import type { App } from '../lib/app.svelte';
   import { translate, type Key } from '../lib/i18n';
   import { byUrgency, CI_SIGN, inTurns, LOCAL_SIGN, type RepoStatus } from '../lib/repoStatus';
@@ -32,7 +33,8 @@
   const ids = $derived(repos.map((r) => r.id).join(' '));
 
   // What the hub said of each repo: its state, or that it did not answer. A repo not in here was not asked yet.
-  let states = $state<Record<string, RepoStatus | 'failed'>>({});
+  // A SvelteMap: the ids come from the hub, and a key like `__proto__` is no special case in a map.
+  const states = new SvelteMap<string, RepoStatus | 'failed'>();
   let asking = $state(false);
   // Only a round the person asked for is said ("Asking…"): the rounds the view starts by itself every quarter of a
   // minute would be read out by a screen reader again and again.
@@ -45,7 +47,7 @@
     const known = new Map(repos.map((r) => [r.id, r]));
     const placed = order.filter((id) => known.has(id));
     const rest = repos.filter((r) => !placed.includes(r.id)).map((r) => r.id);
-    return [...placed, ...rest].map((id) => ({ ...known.get(id)!, state: states[id] }));
+    return [...placed, ...rest].map((id) => ({ ...known.get(id)!, state: states.get(id) }));
   });
 
   // The view is in the page: a round that is under way when it goes asks the hub for nothing more.
@@ -64,9 +66,9 @@
     await inTurns(asked, WIDTH, async (id) => {
       if (!alive) return;
       try {
-        states[id] = await app.repoStatus(id, fresh);
+        states.set(id, await app.repoStatus(id, fresh));
       } catch {
-        states[id] = 'failed';
+        states.set(id, 'failed');
       }
     });
     // A row that moves loses the focus: while a link or a button of the table has it, the order stays as it is (the
@@ -74,7 +76,7 @@
     if (!table?.contains(document.activeElement)) {
       order = byUrgency(
         repos.map((r) => {
-          const state = states[r.id];
+          const state = states.get(r.id);
           return { name: r.name, id: r.id, status: state === undefined || state === 'failed' ? null : state };
         }),
       ).map((r) => r.id);

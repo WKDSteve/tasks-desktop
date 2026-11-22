@@ -77,6 +77,18 @@ export class VaultLimitError extends Error {
   }
 }
 
+/**
+ * Files as the record the worker messages carry (relative path -> bytes). The paths come from the folder the person
+ * picked, so a key can be `__proto__`: on a plain `{}` that assignment sets the prototype and the file is lost (or
+ * worse, an object of the folder's making becomes the prototype). Without a prototype the key is an ordinary own
+ * property, and it survives the structured clone of `postMessage` as one.
+ */
+export function filesRecord(entries: Iterable<readonly [string, Uint8Array]>): Record<string, Uint8Array> {
+  const record: Record<string, Uint8Array> = Object.create(null);
+  for (const [path, bytes] of entries) record[path] = bytes;
+  return record;
+}
+
 /** A name that may become one segment of a path inside the VM. */
 export function safeName(name: unknown): name is string {
   return (
