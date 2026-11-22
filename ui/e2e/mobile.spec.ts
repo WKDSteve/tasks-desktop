@@ -1,5 +1,5 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { devices } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { STATE } from './global';
@@ -272,6 +272,20 @@ due: ${day(3)}
 repeat_after: lib.nvim/${stem}-cause
 `));
   try {
+    // The hub answers from the snapshot it holds: the phone is paired once that snapshot has the files just written
+    // (asked with the PC's session, as the meetings test does). Alone this test met a hub that had not read the vault
+    // yet; after another test the phone got the snapshot of before and never listed these tasks.
+    const token = (JSON.parse(readFileSync(STATE, 'utf8')) as { token: string }).token;
+    await expect
+      .poll(
+        async () => {
+          const r = await page.request.get(`${origin()}/api/tasks/snapshot`, { headers: { Authorization: `Bearer ${token}` } });
+          const text = r.ok() ? await r.text() : '';
+          return [cause, last, waiting].every((f) => text.includes(`lib.nvim/${basename(f, '.md')}`));
+        },
+        { timeout: 15_000 },
+      )
+      .toBe(true);
     await page.goto(pairingLink(config).replace('/#pair=', '/m/#pair='));
     await expect(page.getByTestId('connection')).toHaveAttribute('data-state', 'live');
     await page.getByRole('button', { name: 'List', exact: true }).click();
