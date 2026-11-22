@@ -263,4 +263,20 @@ describe('LearnView, the other tiles', () => {
     [...page.querySelectorAll('button')].find((b) => b.textContent === 'To the learning paths')!.click();
     expect(m.app.view).toBe('paths');
   });
+  it('follows the area filter of the page: the figures and paths of its areas, an area without paths said with a button that clears it', async () => {
+    const { m, page } = await show();
+    m.app.filter = { ...m.app.filter, areas: ['ops'] };
+    await settle();
+    // the week of ops alone: the 17th, one point seen with 5 XP; the week before had nothing of ops
+    expect(text(fig(page, 'xp'))).toBe('XP 5 ▲ +5 vs last week');
+    expect(text(page.querySelector('[aria-labelledby="learn-next"]'))).not.toContain('Metatables');
+    expect(text(page.querySelector('[aria-labelledby="learn-next"]'))).toContain('Pipes');
+    m.app.filter = { ...m.app.filter, areas: ['elsewhere'] };
+    await settle();
+    expect(page.querySelector('.scope-note p')?.textContent).toBe('The area filter (elsewhere) hides the learning paths here.');
+    page.querySelector<HTMLButtonElement>('.scope-note button')!.click();
+    await settle();
+    expect(m.app.filter.areas).toEqual([]);
+    expect(text(fig(page, 'xp'))).toBe('XP 35 ▲ +15 vs last week');
+  });
 });

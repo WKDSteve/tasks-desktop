@@ -12,6 +12,8 @@
   import Info from 'appkit-ui/Info.svelte';
   import ItemIcon from './ItemIcon.svelte';
   import BadgeMedal from './BadgeMedal.svelte';
+  import LearnScopeNote from './LearnScopeNote.svelte';
+  import { learnScope } from '../lib/learnScope';
   import LearnBars from './LearnBars.svelte';
   import { AssetImages } from '../lib/assetImages.svelte';
   import { shownIcon } from '../lib/icons';
@@ -111,17 +113,23 @@
     });
   });
 
+  // The area filter of the page (lib/learnScope.ts): the paths of its areas, and of the series the figures of those
+  // (the area of a path is the part of its id before the slash).
+  const scope = $derived(learnScope(app.filter.areas, app.matchAreas));
+  const keep = $derived(scope.active ? (id: string) => scope.has(id.slice(0, id.indexOf('/'))) : null);
+  const items = $derived(scope.keep(doc?.items ?? []));
+
   const first = $derived(history?.first);
   const days = $derived(byDate(history));
-  const now = $derived(history ? sumSpan(days, frame.current, app.today, first, null) : null);
+  const now = $derived(history ? sumSpan(days, frame.current, app.today, first, keep) : null);
   const before = $derived(
-    history && frame.previous && coverage(frame.previous, first) === 'full' ? sumSpan(days, frame.previous, app.today, first, null) : null,
+    history && frame.previous && coverage(frame.previous, first) === 'full' ? sumSpan(days, frame.previous, app.today, first, keep) : null,
   );
-  const bars = $derived(history && first !== undefined ? barsOf(days, frame, app.today, first, null) : []);
+  const bars = $derived(history && first !== undefined ? barsOf(days, frame, app.today, first, keep) : []);
   const ofDays = $derived(knownDays(frame.current, app.today, first));
 
   // The paths that are not finished; the running ones by their last day of activity in the series, else by `updated`.
-  const open = $derived((doc?.items ?? []).filter((p) => p.stage !== 'done' && p.status !== 'done'));
+  const open = $derived(items.filter((p) => p.stage !== 'done' && p.status !== 'done'));
   const lastActive = $derived(new Map((history?.paths ?? []).map((p) => [p.id, p.last_active ?? ''])));
   const isRunning = (p: PathEntry): boolean => (p.stage !== undefined ? p.stage === 'doing' : p.status === 'doing' || p.progress.learned + p.progress.seen > 0);
   const running = $derived(
@@ -140,7 +148,7 @@
       .sort((a, b) => (b.progress ?? -1) - (a.progress ?? -1))
       .slice(0, 4),
   );
-  const rewards = $derived(withLevels ? openRewardCount(doc?.items ?? []) : 0);
+  const rewards = $derived(withLevels ? openRewardCount(items) : 0);
 
   // One store of pictures per path whose next badge is a picture; given back when it is gone or the view goes.
   const imagePaths = $derived([...new Set(reach.filter((tile) => badgeImage(tile) !== null).map((tile) => tile.path))].sort().join('\n'));
@@ -204,7 +212,7 @@
     return null;
   }
 
-  const steps = $derived(next !== null && next !== 'failed' ? next.items.slice(0, 3) : []);
+  const steps = $derived(next !== null && next !== 'failed' ? scope.keep(next.items).slice(0, 3) : []);
   const streak = $derived(history?.streak);
   function streakText(n: number): string {
     return n === 0 ? t('learnov.streak_none') : n === 1 ? t('learnov.streak_one') : t('learnov.streak', { n });
@@ -228,6 +236,8 @@
     </div>
   {:else if !doc}
     <p class="none" role="status">{t('learnov.reading')}</p>
+  {:else if items.length === 0 && doc.items.length > 0}
+    <LearnScopeNote {app} {scope} />
   {:else if doc.items.length === 0}
     <div class="empty">
       <p><strong>{t('learnov.empty')}</strong></p>
