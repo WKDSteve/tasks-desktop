@@ -265,8 +265,11 @@ describe('LearnView, the other tiles', () => {
   });
   it('follows the area filter of the page: the figures and paths of its areas, an area without paths said with a button that clears it', async () => {
     const { m, page } = await show();
+    m.app.hubAreas = ['lib', 'ops'].map((name) => ({ name }) as never);
     m.app.filter = { ...m.app.filter, areas: ['ops'] };
     await settle();
+    // the series is asked for the area, so that its streak and first day are those of ops
+    expect(m.hub.learnQueries.filter(([name]) => name === 'learn_history').at(-1)).toEqual(['learn_history', { since: '2026-11-09', until: '2026-11-18', step: 'day', area: 'ops' }]);
     // the week of ops alone: the 17th, one point seen with 5 XP; the week before had nothing of ops
     expect(text(fig(page, 'xp'))).toBe('XP 5 ▲ +5 vs last week');
     expect(text(page.querySelector('[aria-labelledby="learn-next"]'))).not.toContain('Metatables');

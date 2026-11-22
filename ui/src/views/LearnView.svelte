@@ -87,7 +87,11 @@
   // Kept with the window it answers: until the answer for another period is there, no figures (the old series over the
   // new window would add up wrong and the live region would say so).
   let got = $state<{ key: string; doc: LearnHistory } | null>(null);
-  const askKey = $derived(`${frame.ask.since}..${frame.ask.until}`);
+  // The area filter of the page (lib/learnScope.ts): the series is asked for its areas, so that the streak and the first
+  // day of the series are theirs too; the paths of the lists are narrowed below.
+  const scope = $derived(scopeOf(app));
+  const asking = $derived(JSON.stringify(scope.query));
+  const askKey = $derived(`${frame.ask.since}..${frame.ask.until}|${asking}`);
   const history = $derived(got !== null && got.key === askKey ? got.doc : null);
   let historyFailed = $state(false);
   let askedHistory = 0;
@@ -95,14 +99,15 @@
     void app.writes;
     void app.snapshot?.rev;
     const { since, until } = frame.ask;
+    const key = askKey;
     if (!usable || !withHistory) return;
     const mine = ++askedHistory;
     untrack(() => {
       app
-        .learnHistory({ since, until, step: 'day' })
+        .learnHistory({ since, until, step: 'day', ...scope.query })
         .then((answer) => {
           if (mine !== askedHistory) return;
-          got = { key: `${since}..${until}`, doc: answer };
+          got = { key, doc: answer };
           historyFailed = false;
         })
         .catch(() => {
@@ -113,10 +118,9 @@
     });
   });
 
-  // The area filter of the page (lib/learnScope.ts): the paths of its areas, and of the series the figures of those
-  // (the area of a path is the part of its id before the slash).
-  const scope = $derived(scopeOf(app));
-  const keep = $derived(scope.active ? (id: string) => scope.has(id.slice(0, id.indexOf('/'))) : null);
+  // The figures of the paths of the filter's areas (the area of a path is the part of its id before the slash): the
+  // engine narrowed the series already where it could be asked (`scope.query`), this narrows it where it could not.
+  const keep = $derived(scope.active ? (id: string) => scope.has(id.includes('/') ? id.slice(0, id.indexOf('/')) : id) : null);
   const items = $derived(scope.keep(doc?.items ?? []));
 
   const first = $derived(history?.first);

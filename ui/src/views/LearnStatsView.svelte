@@ -190,7 +190,7 @@
   const keep = $derived.by((): Keep => {
     if (path !== '' || (project === '' && !scope.active)) return null;
     const ids = project === '' ? null : new Set(entries.filter((p) => p.project === project).map((p) => p.id));
-    return (id: string) => (ids === null || ids.has(id)) && scope.has(id.slice(0, id.indexOf('/')));
+    return (id: string) => (ids === null || ids.has(id)) && scope.has(id.includes('/') ? id.slice(0, id.indexOf('/')) : id);
   });
 
   // The finished tasks before the series: of the path chosen alone (the engine asked for it alone), else as the paths.

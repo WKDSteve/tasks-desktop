@@ -671,11 +671,6 @@ async fn area_names(engine: &dyn Engine) -> Result<Vec<String>, String> {
         .collect())
 }
 
-/// Run the server until Ctrl-C.
-///
-/// # Errors
-///
-/// A text for the person at the terminal: what is missing or in the way.
 /// The browser tests pair a phone in nearly every test of `ui/e2e/mobile.spec.ts`, and pairing, challenge and device
 /// session share one guard of appkit (`exchange_max`, 10 per minute): a file of them run on its own went past it, and
 /// the last phone got 429 instead of the 401 of its revoked key. A debug build, which is never shipped (the browser
@@ -689,6 +684,11 @@ fn test_exchange_max(env: &Env) -> Option<usize> {
     value.parse().ok().filter(|n| (1..=10_000).contains(n))
 }
 
+/// Run the server until Ctrl-C.
+///
+/// # Errors
+///
+/// A text for the person at the terminal: what is missing or in the way.
 pub async fn serve(opts: ServeOptions) -> Result<(), String> {
     let env = Env::from_process();
     let dir = app_dir(&env)?;
