@@ -1,0 +1,454 @@
+<script lang="ts">
+  // The view "Notes & sources" of the tab Lernpläne (concept "Reiter Lernpläne" 11): the notes, links and images of the
+  // learning points of all paths. The engine searches (`tasks.learn_notes` with `query` and `kind`, capability
+  // `learn_notes`; WEB-13); the page narrows by path (asked of the engine), competence and state (of the list it got)
+  // and marks the hits. A note is untrusted Markdown: cut as text with its hits marked, and whole through the kit's
+  // Markdown reader on "more". A link shows its domain and title; an image its file name (opened in the path). A hit
+  // is a button: Enter (or a click) opens the point in the view of the paths. `/` puts the focus into the search.
+  import { untrack } from 'svelte';
+  import type { App } from '../lib/app.svelte';
+  import { translate, type Key } from '../lib/i18n';
+  import { isLearnNotesKey, learnNotesText, type LearnNotesKey } from '../lib/learnNotesTexts';
+  import type { Competences, LearnNotes, PathEntry } from '../lib/contract';
+  import Info from 'appkit-ui/Info.svelte';
+  import Blocks from 'appkit-ui/Blocks.svelte';
+  import { hostOf, parseMarkdown } from 'appkit-ui/markdown';
+  import { markHidden } from '../lib/text';
+  import { labelText, openableLink, pointRef } from '../lib/paths';
+  import { imageName, linkTitle, marked, narrowed, NOTE_STATES, snippet, type NoteItem, type NoteKind, type NoteState } from '../lib/learnNotes';
+
+  let { app }: { app: App } = $props();
+  // The words of the view come with its chunk (lib/learnNotesTexts.ts); the others are the page's.
+  const t = (key: Key | LearnNotesKey, params: Record<string, string | number> = {}) =>
+    isLearnNotesKey(key) ? learnNotesText(app.lang, key, params) : translate(app.lang, key, params);
+
+  const KINDS: readonly NoteKind[] = ['', 'note', 'link', 'image'];
+  /** How long the page waits after the last key before it asks the engine. */
+  const TYPING_MS = 250;
+
+  const usable = $derived(app.can('learn_notes') && app.can('path'));
+
+  let doc = $state<LearnNotes | null>(null);
+  let problem = $state(false);
+  let reading = $state(false);
+  let typed = $state('');
+  let query = $state('');
+  let kind = $state<NoteKind>('');
+  let path = $state('');
+  let competence = $state('');
+  let noteState = $state<NoteState | ''>('');
+  let withDone = $state(false);
+  let searchBox: HTMLInputElement | undefined = $state();
+  // The paths for the filter (titles, the competences each serves) and the competences (titles).
+  let paths = $state<readonly PathEntry[]>([]);
+  let competences = $state<Competences | null>(null);
+  // The hits whose whole note is shown, by `path#index`.
+  let whole = $state<ReadonlySet<string>>(new Set());
+
+  let asked = 0;
+  async function read(): Promise<void> {
+    const mine = ++asked;
+    reading = true;
+    try {
+      const answer = await app.learnNotes({
+        ...(query.trim() !== '' ? { q: query } : {}),
+        ...(kind !== '' ? { kind } : {}),
+        ...(path !== '' ? { path } : {}),
+        ...(withDone ? { include_done: true } : {}),
+      });
+      if (mine !== asked) return;
+      doc = answer;
+      problem = false;
+    } catch {
+      if (mine !== asked) return;
+      problem = true;
+    } finally {
+      if (mine === asked) reading = false;
+    }
+  }
+  $effect(() => {
+    void app.writes;
+    void app.snapshot?.rev;
+    void query;
+    void kind;
+    void path;
+    void withDone;
+    if (!usable) return;
+    untrack(() => void read());
+  });
+  // The lists of the filters: read with the view, again after a write.
+  $effect(() => {
+    void app.writes;
+    if (!usable) return;
+    untrack(() => {
+      void app
+        .paths()
+        .then((d) => (paths = d.items))
+        .catch(() => undefined);
+      if (app.can('competences'))
+        void app
+          .competences()
+          .then((d) => (competences = d))
+          .catch(() => undefined);
+    });
+  });
+
+  // The search text goes to the engine once typing pauses.
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  function onType(): void {
+    clearTimeout(timer);
+    timer = setTimeout(() => (query = typed), TYPING_MS);
+  }
+  $effect(() => () => clearTimeout(timer));
+
+  const served = (p: PathEntry): readonly string[] => p.competence ?? [];
+  const servesCompetence = $derived(
+    competence === '' ? null : new Set(paths.filter((p) => served(p).includes(competence)).map((p) => p.id)),
+  );
+  const shown = $derived(doc ? narrowed(doc.items, { paths: servesCompetence, state: noteState }) : []);
+  const competenceChoices = $derived(
+    (competences?.items ?? []).filter((c) => paths.some((p) => served(p).includes(c.id))).toSorted((a, b) => a.title.localeCompare(b.title)),
+  );
+  const pathChoices = $derived(paths.toSorted((a, b) => a.title.localeCompare(b.title)));
+  const keyOf = (item: NoteItem): string => `${item.path}#${item.index}`;
+  const crumbs = (item: NoteItem): string =>
+    t('learnnotes.crumbs', { path: markHidden(item.title), stage: markHidden(labelText({ label: item.stage_label })), point: markHidden(labelText(item)) });
+  const filtered = $derived(competence !== '' || noteState !== '' || path !== '' || kind !== '' || withDone);
+
+  function toggleWhole(item: NoteItem): void {
+    const k = keyOf(item);
+    const next = new Set(whole);
+    if (next.has(k)) next.delete(k);
+    else next.add(k);
+    whole = next;
+  }
+
+  /** `/` puts the focus into the search, unless a field or a dialog has the keys. */
+  function onWindowKey(event: KeyboardEvent): void {
+    if (event.key !== '/' || event.altKey || event.ctrlKey || event.metaKey) return;
+    const target = event.target as HTMLElement | null;
+    if (target?.closest('input, textarea, select, [contenteditable="true"], dialog')) return;
+    event.preventDefault();
+    searchBox?.focus();
+  }
+</script>
+
+<svelte:window onkeydown={onWindowKey} />
+
+{#snippet hits(text: string)}{#each marked(text, query) as part, i (i)}{#if part.hit}<mark>{part.text}</mark>{:else}{part.text}{/if}{/each}{/snippet}
+
+<section class="learnnotes" aria-labelledby="learnnotes-title">
+  <header class="intro">
+    <div class="head">
+      <h2 id="learnnotes-title">{t('learnnotes.title')}</h2>
+      <Info hint={t('learnnotes.intro')} label={t('hint.about', { what: t('learnnotes.title') })} />
+    </div>
+  </header>
+
+  {#if !usable}
+    <p class="none">{t('learnnotes.no_engine')}</p>
+  {:else}
+    <search class="tools">
+      <label class="field grow"
+        ><span class="sr-only">{t('learnnotes.search')}</span>
+        <input
+          type="search"
+          bind:this={searchBox}
+          bind:value={typed}
+          oninput={onType}
+          onkeydown={(e) => {
+            if (e.key === 'Enter') {
+              clearTimeout(timer);
+              query = typed;
+            }
+          }}
+          placeholder={t('learnnotes.search_placeholder')}
+          aria-keyshortcuts="/"
+          maxlength="200"
+        /></label
+      >
+      <fieldset class="kinds">
+        <legend class="sr-only">{t('learnnotes.kind')}</legend>
+        {#each KINDS as k (k)}
+          <label class="kind"><input type="radio" name="learnnotes-kind" value={k} bind:group={kind} />{t(k === '' ? 'learnnotes.kind.all' : `learnnotes.kind.${k}`)}</label>
+        {/each}
+      </fieldset>
+      <label class="field"
+        >{t('learnnotes.path')}
+        <select bind:value={path}>
+          <option value="">{t('learnnotes.path.all')}</option>
+          {#each pathChoices as p (p.id)}<option value={p.id}>{markHidden(p.title)}</option>{/each}
+        </select></label
+      >
+      {#if competenceChoices.length > 0}
+        <label class="field"
+          >{t('learnnotes.competence')}
+          <select bind:value={competence}>
+            <option value="">{t('learnnotes.competence.all')}</option>
+            {#each competenceChoices as c (c.id)}<option value={c.id}>{markHidden(c.title)}</option>{/each}
+          </select></label
+        >
+      {/if}
+      <label class="field"
+        >{t('learnnotes.state')}
+        <select bind:value={noteState}>
+          <option value="">{t('learnnotes.state.all')}</option>
+          {#each NOTE_STATES as s (s)}<option value={s}>{t(`learnnotes.state.${s}`)}</option>{/each}
+        </select></label
+      >
+      <label class="check"><input type="checkbox" bind:checked={withDone} />{t('learnnotes.done')}</label>
+    </search>
+
+    {#if problem && !doc}
+      <div class="empty" role="alert">
+        <p>{t('learnnotes.failed')}</p>
+        <button type="button" onclick={() => void read()}>{t('learnnotes.retry')}</button>
+      </div>
+    {:else if !doc}
+      <p class="none" role="status">{t('learnnotes.reading')}</p>
+    {:else}
+      <p class="count" role="status">
+        {#if reading}{t('learnnotes.reading')}{:else}{shown.length === 1 ? t('learnnotes.count_one') : t('learnnotes.count', { n: shown.length })}{/if}
+      </p>
+      {#if doc.incomplete.length > 0}
+        <p class="note" role="note">{t('learnnotes.incomplete', { list: doc.incomplete.map(markHidden).join(', ') })}</p>
+      {/if}
+      {#if shown.length === 0}
+        <div class="empty">
+          {#if query.trim() !== ''}
+            <p>{t('learnnotes.no_hit', { text: markHidden(query.trim()) })}</p>
+          {:else if filtered}
+            <p>{t('learnnotes.no_hit_filtered')}</p>
+          {:else}
+            <p><strong>{t('learnnotes.none')}</strong></p>
+            <p>{t('learnnotes.none_how')}</p>
+            <button type="button" class="primary" onclick={() => app.setView('paths')}>{t('learnnotes.to_paths')}</button>
+          {/if}
+        </div>
+      {:else}
+        <ul class="hits" aria-label={t('learnnotes.list', { n: shown.length })}>
+          {#each shown as item (keyOf(item))}
+            {@const point = markHidden(labelText(item))}
+            {@const link = openableLink(item.link)}
+            {@const title = item.link ? linkTitle(item.label) : null}
+            {@const cut = item.note ? snippet(item.note, query) : null}
+            {@const isWhole = whole.has(keyOf(item))}
+            <li data-path={item.path} data-point={pointRef(item)} data-state={item.state}>
+              <button type="button" class="open" aria-label={t('learnnotes.open', { crumbs: crumbs(item) })} onclick={() => app.openPath(item.path, pointRef(item))}>
+                <span class="crumbs"
+                  >{markHidden(item.title)} <span aria-hidden="true">›</span> {markHidden(labelText({ label: item.stage_label }))} <span aria-hidden="true">›</span></span
+                >
+                <span class="point">{@render hits(point)}</span>
+              </button>
+              <span class="tags">
+                <span class="state {item.state}">{t(`learnnotes.state.${item.state}`)}</span>
+                {#if item.path_done}<span class="sub">· {t('learnnotes.path_done')}</span>{/if}
+              </span>
+              {#if item.note && cut}
+                {#if isWhole}
+                  <div class="whole prose"><Blocks blocks={parseMarkdown(item.note)} headingBase={3} /></div>
+                {:else}
+                  <p class="snippet">{@render hits(markHidden(cut.text))}</p>
+                {/if}
+                {#if cut.cut}
+                  <button type="button" class="link" aria-expanded={isWhole} aria-label={t('learnnotes.more_of', { point })} onclick={() => toggleWhole(item)}
+                    >{t(isWhole ? 'learnnotes.less' : 'learnnotes.more')}</button
+                  >
+                {/if}
+              {/if}
+              {#if link}
+                <p class="source">
+                  <span class="sub">{t('learnnotes.link')}:</span>
+                  <a href={link} target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer"
+                    ><strong>{@render hits(hostOf(link) ?? link)}</strong>{#if title}{' — '}{@render hits(markHidden(title))}{/if}</a
+                  >
+                </p>
+              {/if}
+              {#if item.image}
+                <p class="source"><span aria-hidden="true">🖼</span> {t('learnnotes.image', { name: markHidden(imageName(item.image)) })}</p>
+              {/if}
+            </li>
+          {/each}
+        </ul>
+        {#if doc.truncated}
+          <p class="note">{t('learnnotes.truncated', { shown: doc.items.length, total: doc.total })}</p>
+        {/if}
+      {/if}
+    {/if}
+  {/if}
+</section>
+
+<style>
+  .learnnotes {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    padding: 0.5rem 0;
+  }
+  .intro .head,
+  .tools,
+  .kinds,
+  .tags {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+  h2,
+  p {
+    margin: 0;
+  }
+  .none,
+  .sub,
+  .count,
+  .note,
+  .crumbs {
+    color: var(--muted);
+  }
+  .field,
+  .check,
+  .kind {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+  }
+  .grow {
+    flex: 1 1 16rem;
+  }
+  .grow input {
+    inline-size: 100%;
+  }
+  .kinds {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 0.15rem 0.5rem;
+    margin: 0;
+  }
+  select,
+  input[type='search'] {
+    font: inherit;
+    color: var(--text);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 0.2rem 0.4rem;
+  }
+  .hits {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  .hits > li {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 0.6rem 0.75rem;
+  }
+  .open {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.3rem;
+    align-items: baseline;
+    background: none;
+    border: 0;
+    padding: 0;
+    font: inherit;
+    color: var(--text);
+    text-align: start;
+    cursor: pointer;
+  }
+  .open .point {
+    font-weight: 600;
+    text-decoration: underline;
+    overflow-wrap: anywhere;
+  }
+  .open:focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
+  }
+  mark {
+    background: var(--mark);
+    color: var(--text);
+    border-radius: 2px;
+    text-decoration: underline;
+  }
+  .snippet,
+  .whole {
+    overflow-wrap: anywhere;
+  }
+  .whole :global(p) {
+    margin: 0.2rem 0;
+  }
+  .source a {
+    color: var(--accent);
+    overflow-wrap: anywhere;
+  }
+  .state.learned {
+    color: var(--ok);
+  }
+  .state.open,
+  .state.blocked,
+  .state.dropped {
+    color: var(--muted);
+  }
+  .state.seen,
+  .state.partial {
+    color: var(--accent);
+  }
+  button.primary,
+  .empty button {
+    background: var(--surface);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 0.25rem 0.6rem;
+    min-height: 2rem;
+    font: inherit;
+    cursor: pointer;
+  }
+  button.primary {
+    background: var(--accent);
+    color: var(--accent-text);
+    border-color: var(--accent);
+  }
+  .link {
+    align-self: flex-start;
+    background: none;
+    border: 0;
+    padding: 0;
+    color: var(--accent);
+    font: inherit;
+    cursor: pointer;
+    text-decoration: underline;
+  }
+  .empty {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
+    padding: 1rem;
+    background: var(--surface);
+    border: 1px dashed var(--border);
+    border-radius: var(--radius);
+  }
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  @media (forced-colors: active) {
+    mark {
+      background: Highlight;
+      color: HighlightText;
+    }
+  }
+</style>
