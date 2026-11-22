@@ -11375,6 +11375,9 @@ test('the minutes of a meeting: every kind of entry, a line turned into a decisi
     const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
     await meetingPage.locator('input[type="file"][accept="image/*"]').setInputFiles({ name: 'tafel-e2e.png', mimeType: 'image/png', buffer: png });
     await expect.poll(text, { timeout: 15_000 }).toMatch(/!\[[^\]]*\]\(assets\/images\/tafel-e2e\.png\)/);
+    // As a person does: the next recording once the button takes one again (the page reads the meeting after each
+    // write; a file handed over meanwhile is refused with "still reading").
+    await expect(meetingPage.getByRole('button', { name: '♪ Audio' })).toBeEnabled();
     await meetingPage.locator('input[type="file"][accept="audio/*"]').setInputFiles({ name: 'note-e2e.m4a', mimeType: 'audio/mp4', buffer: Buffer.from('m4a') });
     await expect.poll(text, { timeout: 15_000 }).toMatch(/\[Audio: [^\]]*\]\(assets\/audio\/note-e2e\.m4a\)/);
     await expectAccessible(page, 'the minutes of a meeting');

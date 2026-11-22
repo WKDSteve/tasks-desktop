@@ -3806,6 +3806,9 @@ export class App {
         return null;
       }
       this.attached = entry.link ? { id: entry.id ?? id, link: entry.link } : null;
+      // A write like any other: what shows the item reads it again (the meeting page offers the new picture as its
+      // cover, the detail lists the asset); the Markdown may be unchanged, so no change of the vault would tell them.
+      this.writes += 1;
       this.say(
         'ok',
         result.large_for_git ? 'attach.file_done_large' : 'attach.file_done',

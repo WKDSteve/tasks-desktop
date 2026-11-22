@@ -138,3 +138,23 @@ describe('making a meeting', () => {
     expect(m.app.meetingOpen).toBeNull();
   });
 });
+
+describe('a file attached to a meeting', () => {
+  it('counts as a write when it is attached, so the page reads the meeting again, and not when it is refused', async () => {
+    const m = await ready();
+    const hub = m.hub as unknown as { upload: (id: string, file: File, kind?: string) => Promise<Result> };
+    hub.upload = async (id, file) => uploaded(id, `assets/images/${file.name}`);
+    const before = m.app.writes;
+    expect(await m.app.attachFile('pub/m', new File(['p'], 'second.png', { type: 'image/png' }), 'image')).toBe(true);
+    expect(m.app.writes).toBe(before + 1);
+    hub.upload = async (id) =>
+      ({
+        kind: 'tasks.result',
+        ok: false,
+        dry_run: false,
+        results: [{ n: 1, op: 'attach', id, ok: false, outcome: 'failed', changed_ids: [], error: { code: 'invalid_argument', message: 'no', retryable: false } }],
+      }) as unknown as Result;
+    expect(await m.app.attachFile('pub/m', new File(['p'], 'third.png', { type: 'image/png' }), 'image')).toBe(false);
+    expect(m.app.writes).toBe(before + 1);
+  });
+});
