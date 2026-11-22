@@ -91,8 +91,8 @@ test('the tab Learning plans: after View, the learning paths with the dot of the
 });
 
 test('a link to a view of the tab not built yet shows the learning paths and says so; the palette goes there', async ({ page }) => {
-  const problems = await pair(page, '/#view=learnnotes');
-  await expect(page.getByText('The learning view “learnnotes” is not in this version yet; showing Learning paths.')).toBeVisible();
+  const problems = await pair(page, '/#view=learn');
+  await expect(page.getByText('The learning view “learn” is not in this version yet; showing Learning paths.')).toBeVisible();
   await expect(page.getByRole('menuitem', { name: 'Learning plans, current: Learning paths' })).toBeVisible();
   await expect(page).toHaveURL(/#view=paths/);
 
