@@ -52,10 +52,34 @@ describe('periodFrame', () => {
   it('the month, the quarter by weeks, the year by months', () => {
     expect(periodFrame('month', '2026-03-31')).toMatchObject({ current: { since: '2026-03-01', until: '2026-03-31' }, previous: { since: '2026-02-01', until: '2026-02-28' } });
     const q = periodFrame('quarter', '2026-11-22');
-    expect(q).toMatchObject({ current: { since: '2026-10-01', until: '2026-12-31' }, previous: { since: '2026-07-01', until: '2026-09-30' }, bucket: 'week' });
-    expect(periodFrame('quarter', '2026-01-05').previous).toEqual({ since: '2025-10-01', until: '2025-12-31' });
+    expect(q).toMatchObject({ current: { since: '2026-10-01', until: '2026-12-31' }, previous: { since: '2026-07-01', until: '2026-08-22' }, bucket: 'week' });
+    expect(periodFrame('quarter', '2026-01-05').previous).toEqual({ since: '2025-10-01', until: '2025-10-05' });
     const y = periodFrame('year', '2026-11-22');
     expect(y).toMatchObject({ current: { since: '2026-01-01', until: '2026-12-31' }, bucket: 'month', ask: { since: '2025-01-01', until: '2026-11-22' } });
+  });
+});
+
+describe('periodFrame, the period before over as many days (decision B)', () => {
+  it('a week: Monday to the same weekday of the week before; on a Monday the Monday before', () => {
+    expect(periodFrame('week', '2026-11-18').previous).toEqual({ since: '2026-11-09', until: '2026-11-11' });
+    expect(periodFrame('week', '2026-11-16').previous).toEqual({ since: '2026-11-09', until: '2026-11-09' });
+  });
+  it('a month from its 1st to the same day of the month before, to its end when it is shorter', () => {
+    expect(periodFrame('month', '2026-11-01').previous).toEqual({ since: '2026-10-01', until: '2026-10-01' });
+    expect(periodFrame('month', '2026-11-22').previous).toEqual({ since: '2026-10-01', until: '2026-10-22' });
+    expect(periodFrame('month', '2026-03-31').previous).toEqual({ since: '2026-02-01', until: '2026-02-28' });
+    expect(periodFrame('month', '2028-03-30').previous).toEqual({ since: '2028-02-01', until: '2028-02-29' });
+  });
+  it('a quarter to the same month and day of the quarter before; a year to the same date', () => {
+    expect(periodFrame('quarter', '2026-05-31').previous).toEqual({ since: '2026-01-01', until: '2026-02-28' });
+    expect(periodFrame('year', '2026-11-22').previous).toEqual({ since: '2025-01-01', until: '2025-11-22' });
+    expect(periodFrame('year', '2028-02-29').previous).toEqual({ since: '2027-01-01', until: '2027-02-28' });
+  });
+  it('over the turn of the year', () => {
+    expect(periodFrame('day', '2027-01-01').previous).toEqual({ since: '2026-12-31', until: '2026-12-31' });
+    expect(periodFrame('week', '2027-01-01').previous).toEqual({ since: '2026-12-21', until: '2026-12-25' });
+    expect(periodFrame('month', '2027-01-15').previous).toEqual({ since: '2026-12-01', until: '2026-12-15' });
+    expect(periodFrame('year', '2027-01-01').previous).toEqual({ since: '2026-01-01', until: '2026-01-01' });
   });
 });
 

@@ -426,9 +426,9 @@ print stay in View. The palette (Ctrl+K) has "Go to ..." for each of them ("Go t
 The view **Learning plans › Overview** (`#view=learn`, the first of the tab) is the glance: the tile **My learning** with
 a period (**Today | Week | Month | Quarter | Year**, as the calendar has them, kept on this device) and, from the series
 of the learning figures (an engine with `learn_history`), the points learned, the XP (gamification on), the learning
-time, the learning days and the streak, each against the whole period before in words with ▲/▼ ("+5 vs last week"),
-and the bars of the period (**As table** shows the same figures as a table). Before the series begins it says from
-when; without it the tile shows today's state (learned of all points) and why. Beside it the first three next learning
+time, the learning days and the streak, each against as many days of the period before in words with ▲/▼ ("+5 vs
+last week to Wednesday": Monday to Wednesday against Monday to Wednesday), and the bars of the period (**As table**
+shows the same figures as a table). Before the series begins it says from when; without it the tile shows today's state (learned of all points) and why. Beside it the first three next learning
 steps (each opens its point in the path), the running paths (the last active first, with progress and level), the next
 level of each path within reach (badge, what is missing, its reward) and the number of open rewards. A narrow window
 draws the tiles one below the other.

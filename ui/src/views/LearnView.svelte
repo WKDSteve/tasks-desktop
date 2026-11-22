@@ -165,6 +165,8 @@
   const number = $derived(new Intl.NumberFormat(locale, { maximumFractionDigits: 2 }));
   const longDay = $derived(new Intl.DateTimeFormat(locale, { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' }));
   const dayText = (day: string): string => longDay.format(new Date(`${day}T12:00:00Z`));
+  const weekdayLong = $derived(new Intl.DateTimeFormat(locale, { weekday: 'long', timeZone: 'UTC' }));
+  const dayMonth = $derived(new Intl.DateTimeFormat(locale, { day: 'numeric', month: 'long', timeZone: 'UTC' }));
   const h = (n: number): string => t('learnov.h', { n: number.format(n) });
 
   /** A figure against the period before: the mark (a picture only) and the words. */
@@ -172,7 +174,9 @@
     if (!now) return null;
     if (!before) return first !== undefined ? { mark: '', text: t('learnov.no_compare', { date: dayText(first) }) } : null;
     const change = changeOf(pick(now), pick(before));
-    const what = t(`learnov.before.${period}`);
+    // the days compared, named: "last week to Wednesday", "last month to 22 October"
+    const end = frame.previous ? new Date(`${frame.previous.until}T12:00:00Z`) : null;
+    const what = t(`learnov.before.${period}`, end ? { day: weekdayLong.format(end), date: dayMonth.format(end) } : {});
     if (change.direction === 'same') return { mark: '=', text: t('learnov.same', { before: what }) };
     return { mark: change.direction === 'up' ? '▲' : '▼', text: t(change.direction === 'up' ? 'learnov.up' : 'learnov.down', { by: format(change.by), before: what }) };
   }

@@ -79,7 +79,20 @@ export function isoWeek(day: string): number {
   return Math.floor((thursday.getTime() - jan1) / 86_400_000 / 7) + 1;
 }
 
-/** The window of a period of the overview on `today`, the period before it, and the chart of it. */
+/**
+ * The same day of the month in the month that starts on `monthStart`: the day number of `day`, or the last day of that
+ * month when it is shorter (31 March against February: the 28th or 29th).
+ */
+function sameDayIn(monthStart: string, day: string): string {
+  return min(addDays(monthStart, Number(day.slice(8, 10)) - 1), lastOfMonth(monthStart));
+}
+
+/**
+ * The window of a period of the overview on `today`, the days of the period before it that compare with it, and the
+ * chart of it. The period before counts as many days as the current one has had (decision of 2026-11-22, option B):
+ * Monday to Wednesday against Monday to Wednesday of the week before; the 1st to the 22nd against the 1st to the 22nd of
+ * the month before (to its end when it is shorter); in a quarter the same month of it and day; in a year the same date.
+ */
 export function periodFrame(period: LearnPeriod, today: string): PeriodFrame {
   let current: Span;
   let previous: Span;
@@ -95,14 +108,15 @@ export function periodFrame(period: LearnPeriod, today: string): PeriodFrame {
     case 'week': {
       const monday = startOfWeek(today);
       current = { since: monday, until: addDays(monday, 6) };
-      previous = { since: addDays(monday, -7), until: addDays(monday, -1) };
+      previous = { since: addDays(monday, -7), until: addDays(today, -7) };
       chart = current;
       break;
     }
     case 'month': {
       const first = addMonths(today, 0);
       current = { since: first, until: lastOfMonth(first) };
-      previous = { since: addMonths(today, -1), until: addDays(first, -1) };
+      const before = addMonths(today, -1);
+      previous = { since: before, until: sameDayIn(before, today) };
       chart = current;
       break;
     }
@@ -110,7 +124,7 @@ export function periodFrame(period: LearnPeriod, today: string): PeriodFrame {
       const month = Number(today.slice(5, 7)) - 1;
       const first = addMonths(today, -(month % 3));
       current = { since: first, until: addDays(addMonths(first, 3), -1) };
-      previous = { since: addMonths(first, -3), until: addDays(first, -1) };
+      previous = { since: addMonths(first, -3), until: sameDayIn(addMonths(today, -3), today) };
       chart = current;
       bucket = 'week';
       break;
@@ -118,7 +132,7 @@ export function periodFrame(period: LearnPeriod, today: string): PeriodFrame {
     case 'year': {
       const year = Number(today.slice(0, 4));
       current = { since: `${year}-01-01`, until: `${year}-12-31` };
-      previous = { since: `${year - 1}-01-01`, until: `${year - 1}-12-31` };
+      previous = { since: `${year - 1}-01-01`, until: sameDayIn(addMonths(today, -12), today) };
       chart = current;
       bucket = 'month';
       break;

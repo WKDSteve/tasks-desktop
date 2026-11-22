@@ -120,11 +120,11 @@ describe('LearnView, the tile My learning', () => {
     const { m, page } = await show();
     expect(m.hub.learnQueries).toContainEqual(['learn_history', { since: '2026-11-09', until: '2026-11-18', step: 'day' }]);
     expect(page.querySelector<HTMLInputElement>('input[value="week"]')!.checked).toBe(true);
-    expect(text(fig(page, 'learned'))).toBe('Points learned 3 ▲ +1 vs last week');
+    expect(text(fig(page, 'learned'))).toBe('Points learned 3 ▲ +1 vs last week to Wednesday');
     expect(fig(page, 'learned')!.querySelector('[aria-hidden="true"]')?.textContent).toBe('▲');
-    expect(text(fig(page, 'xp'))).toBe('XP 35 ▲ +15 vs last week');
-    expect(text(fig(page, 'hours'))).toBe('Learning time 1.5 h ▲ +0.5 h vs last week');
-    expect(text(fig(page, 'days'))).toBe('Learning days 2 of 3 ▲ +1 vs last week');
+    expect(text(fig(page, 'xp'))).toBe('XP 35 ▲ +15 vs last week to Wednesday');
+    expect(text(fig(page, 'hours'))).toBe('Learning time 1.5 h ▲ +0.5 h vs last week to Wednesday');
+    expect(text(fig(page, 'days'))).toBe('Learning days 2 of 3 ▲ +1 vs last week to Wednesday');
     expect(text(fig(page, 'streak'))).toBe('Streak 🔥 2 days in a row longest: 3 days');
   });
 
@@ -144,6 +144,12 @@ describe('LearnView, the tile My learning', () => {
     expect(page.querySelector('.chart')).toBeNull();
     expect(page.querySelector('#learn-bars-table')!.classList.contains('sr-only')).toBe(false);
     expect(toggle.getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('compares as many days of the period before: a month to the same day of the month before', async () => {
+    const { page } = await show({ period: 'month' });
+    // 1st to 18th November against 1st to 18th October: the series begins on 9 November, so October is not known
+    expect(text(fig(page, 'learned'))).toBe('Points learned 5 no comparison: the series begins on 9 November 2026');
   });
 
   it('switches the period by a radio, asks again and keeps it on the device', async () => {
