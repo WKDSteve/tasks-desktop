@@ -19,8 +19,8 @@ describe('learnViews', () => {
     ]);
   });
 
-  it('offers only the views the page has, today the learning paths', () => {
-    expect(learnMenu({ can: caps('paths', 'path'), gamification: true })).toEqual([{ section: 'paths', views: ['paths'] }]);
+  it('offers only the views the page has, today the learning paths and the competence map', () => {
+    expect(learnMenu({ can: caps('paths', 'path'), gamification: true })).toEqual([{ section: 'paths', views: ['paths', 'pathmap'] }]);
   });
 
   it('has no tab without the learning paths of the engine', () => {

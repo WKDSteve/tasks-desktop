@@ -54,19 +54,20 @@ return {
     {
       expect = "document.querySelectorAll('"
         .. POPUP
-        .. " [role=menuitemradio]').length === 1"
+        .. " [role=menuitemradio]').length === 2"
         .. " && document.querySelector('"
         .. POPUP
         .. ' [href*="view=badges"]\') === null',
-      note = "a view the page does not have yet is missing, not greyed (badges, rewards ...)",
+      note = "the learning paths and the competence map; a view the page does not have yet is missing, not greyed",
     },
     { shot = "tab-open" },
     { press = "Escape", note = "closed" },
     { click = "button.mb-trigger[data-for=view]", note = "the menu View" },
     { wait = "document.querySelector('[role=menu][data-menu=view]') !== null", timeout = 5000 },
     {
-      expect = "document.querySelector('[role=menu][data-menu=view] [href*=\"view=paths\"]') === null",
-      note = "View has no learning paths any more",
+      expect = "document.querySelector('[role=menu][data-menu=view] [href*=\"view=paths\"]') === null"
+        .. " && document.querySelector('[role=menu][data-menu=view] [href*=\"view=pathmap\"]') === null",
+      note = "View has neither the learning paths nor the competence map any more",
     },
     { press = "Escape" },
     {

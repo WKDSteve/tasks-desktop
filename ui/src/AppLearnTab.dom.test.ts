@@ -47,15 +47,18 @@ it('stands after View with its sections, and View has no learning paths any more
   expect(trigger('learn')!.textContent).toBe('Lernpläne');
   const learn = open('learn');
   expect(learn.getAttribute('aria-label')).toBe('Lernpläne');
-  // Only the view the page has: the section Pfade with Lernpfade; the sections without a view are left out.
+  // Only the views the page has: the section Pfade with Lernpfade and Kompetenzkarte; the sections without a view are
+  // left out.
   expect([...learn.querySelectorAll('[role="group"]')].map((g) => g.getAttribute('aria-labelledby') !== null)).toEqual([true]);
   expect(learn.textContent).toContain('Pfade');
   expect(learn.textContent).not.toContain('Überblick');
-  expect(labels(learn)).toEqual(['Lernpfade']);
+  expect(labels(learn)).toEqual(['Lernpfade', 'Kompetenzkarte']);
   const item = learn.querySelector<HTMLAnchorElement>('.mb-item')!;
   expect(item.getAttribute('role')).toBe('menuitemradio');
   expect(item.getAttribute('href')).toContain('#view=paths');
-  expect(labels(open('view'))).not.toContain('Lernpfade');
+  const inView = labels(open('view'));
+  expect(inView).not.toContain('Lernpfade');
+  expect(inView).not.toContain('Kompetenzkarte');
 });
 
 it('carries the dot and says the view shown, and View then has nothing checked among its views', async () => {

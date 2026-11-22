@@ -39,6 +39,7 @@ test('the tab Learning plans: after View, the learning paths with the dot of the
   await bar(page).getByRole('menuitem', { name: 'View', exact: true }).click();
   await expect(page.getByRole('menu', { name: 'View' })).toBeVisible();
   await expect(page.getByRole('menuitemradio', { name: 'Learning paths' })).toHaveCount(0);
+  await expect(page.getByRole('menuitemradio', { name: 'Competence map' })).toHaveCount(0);
 
   // The pointer moves over to the tab while View is open (as in the other menus).
   await tab.hover();
@@ -48,6 +49,8 @@ test('the tab Learning plans: after View, the learning paths with the dot of the
   await expect(paths).toHaveAttribute('aria-checked', 'false');
   await expect(paths).toHaveAttribute('href', /#view=paths/);
   await expect(menu.getByRole('group', { name: 'Paths' })).toBeVisible();
+  await expect(menu.getByRole('menuitemradio')).toHaveText(['Learning paths', 'Competence map']);
+  await expect(menu.getByRole('menuitemradio', { name: 'Competence map' })).toHaveAttribute('href', /#view=pathmap/);
   await expectAccessible(page, 'the open tab Learning plans');
   await paths.click();
 

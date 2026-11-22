@@ -156,27 +156,40 @@ test('a hint goes where it covers no other control: the one of Help in a wide wi
 });
 
 test('a hint that lies on the next control lets the pointer through, so the first press reaches the control', async ({ page }) => {
-  // At 448 px the popup of Help finds no free place (no room above the menu bar, none beside it) and stays below Help,
-  // over the upper edge of the filter Areas. Raw mouse events, as a person moves (Playwright's click would scroll and
-  // wait until the target is free); the pointer rests on Help first, as a person reading it does.
-  await page.setViewportSize({ width: 448, height: 800 });
+  // At a narrow width the popup of Help finds no free place (no room above the menu bar, none beside it) and stays
+  // below Help, over the upper edge of the filter Areas. Which width that is depends on the menus of the bar (448 px
+  // with five menus, less with six): the test looks for it. Raw mouse events, as a person moves (Playwright's click
+  // would scroll and wait until the target is free); the pointer rests on Help first, as a person reading it does.
   await pair(page);
   await showList(page);
   await page.keyboard.press('Escape');
-  const help = (await page.getByRole('menuitem', { name: 'Help', exact: true }).boundingBox())!;
-  await page.mouse.move(help.x + help.width / 2, help.y + help.height / 2);
-  await page.waitForTimeout(600);
   const tip = page.locator('#hint-tip');
-  await expect(tip).toBeVisible();
-  const areas = (await page.getByRole('button', { name: 'Areas', exact: true }).boundingBox())!;
+  let cover: { left: number; right: number; top: number; bottom: number } | null = null;
+  for (const width of [448, 430, 470, 410, 490, 400, 520]) {
+    await page.setViewportSize({ width, height: 800 });
+    await page.mouse.move(0, 700);
+    await expect(tip).toBeHidden();
+    const help = (await page.getByRole('menuitem', { name: 'Help', exact: true }).boundingBox())!;
+    await page.mouse.move(help.x + help.width / 2, help.y + help.height / 2);
+    await page.waitForTimeout(600);
+    await expect(tip).toBeVisible();
+    const areas = (await page.getByRole('button', { name: 'Areas', exact: true }).boundingBox())!;
+    const over = (await tip.boundingBox())!;
+    const box = {
+      left: Math.max(areas.x, over.x),
+      right: Math.min(areas.x + areas.width, over.x + over.width),
+      top: Math.max(areas.y, over.y),
+      bottom: Math.min(areas.y + areas.height, over.y + over.height),
+    };
+    if (box.right > box.left && box.bottom > box.top) {
+      cover = box;
+      break;
+    }
+  }
   // The case of the test: the popup lies on the control (without this the test would pass when the layout simply put
   // the popup elsewhere). The pointer goes to the middle of the part of the control the popup covers.
-  const over = (await tip.boundingBox())!;
-  const left = Math.max(areas.x, over.x);
-  const right = Math.min(areas.x + areas.width, over.x + over.width);
-  const top = Math.max(areas.y, over.y);
-  const bottom = Math.min(areas.y + areas.height, over.y + over.height);
-  expect(right > left && bottom > top, 'the popup of Help covers a part of the filter Areas').toBe(true);
+  expect(cover, 'at one of the widths the popup of Help covers a part of the filter Areas').not.toBeNull();
+  const { left, right, top, bottom } = cover!;
   const x = (left + right) / 2;
   const y = (top + bottom) / 2;
   await page.mouse.move(x, y, { steps: 4 });

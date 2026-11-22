@@ -446,7 +446,7 @@ reward for the whole path. The engine writes them into `## Level` as one change 
 judges them; a refusal (thresholds that fall, a name too long) is said and the form stays open. **XP of the task …** in
 the menu of a promoted point sets the `xp:` of its task (`set`), which the point counts.
 
-The view **View › Competence map** (`#view=pathmap`, an engine with learning paths) draws the paths as a map: each
+The view **Learning plans › Competence map** (`#view=pathmap`, an engine with learning paths) draws the paths as a map: each
 path a box with its stage by colour, symbol and word (finished, in progress, waits for …, not started, paused), its
 progress and, with XP on, its level; each project a frame around its paths; each `requires` an arrow from the
 requirement to what builds on it, hard ones solid with a filled head, soft ones dashed with an open one, open ones in
