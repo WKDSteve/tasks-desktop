@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Hub } from './api';
+import { Hub, learnQuery } from './api';
 
 /** A fetch that answers each call with the next response, after the next gate. */
 function scripted(steps: { status: number; gate?: Promise<void> }[], sent: (auth: string | null) => void): typeof fetch {
@@ -53,6 +53,39 @@ describe('the finished tasks', () => {
     expect(urls).toEqual(['/api/tasks/finished?ci=pending.red&limit=1', '/api/tasks/finished?area=lib.nvim&plan=a/p&since=2026-01-01']);
     // what the hub refuses as not plain: no character outside letters, digits and . _ - /
     expect(urls[0]).toMatch(/^[^?]*\?([A-Za-z0-9._/-]+=[A-Za-z0-9._/-]+&?)+$/);
+  });
+});
+
+describe('the reads of the tab Lernpläne', () => {
+  it('escape the search text as a whole and keep the slash of an id, a flag as 1, nothing for an empty value', () => {
+    expect(learnQuery({})).toBe('');
+    expect(learnQuery({ q: 'a/b & c?', kind: 'note', path: 'lib.nvim/lua', include_done: true, limit: 50 })).toBe(
+      '?q=a%2Fb%20%26%20c%3F&kind=note&path=lib.nvim/lua&include_done=1&limit=50',
+    );
+    expect(learnQuery({ q: '', include_done: false, area: undefined })).toBe('');
+  });
+
+  it('ask the routes of their name', async () => {
+    const urls: string[] = [];
+    const fetchFn = (async (url: unknown) => {
+      urls.push(String(url));
+      return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }) as typeof fetch;
+    const hub = new Hub(fetchFn);
+    await hub.learnNext({ machine: 'wsl', n: 3 });
+    await hub.learnNotes({ q: 'shell' });
+    await hub.learnEvidence();
+    await hub.learnHistory({ step: 'week' });
+    await hub.competences({ area: 'ALL' });
+    await hub.pathsWithLevels();
+    expect(urls).toEqual([
+      '/api/tasks/learn_next?machine=wsl&n=3',
+      '/api/tasks/learn_notes?q=shell',
+      '/api/tasks/learn_evidence',
+      '/api/tasks/learn_history?step=week',
+      '/api/tasks/competences?area=ALL',
+      '/api/tasks/paths?levels=1',
+    ]);
   });
 });
 

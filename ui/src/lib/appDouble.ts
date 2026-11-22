@@ -12,6 +12,9 @@ import type { RemindersMail } from './reminders';
 import { localToday } from './remind';
 import type { RepoStatus } from './repoStatus';
 
+/** The reads of the tab "Lernpläne" over all paths, by the name of their route. */
+export type LearnReadName = 'learn_next' | 'learn_notes' | 'learn_evidence' | 'learn_history' | 'competences';
+
 export function snapshot(tasks: TaskEntry[], rev = 'rev:1'): Snapshot {
   return {
     kind: 'tasks.snapshot',
@@ -432,6 +435,43 @@ export class FakeHub {
   async paths(_signal?: AbortSignal, includeDone = false) {
     this.pathCalls.push(includeDone ? 'paths include_done' : 'paths');
     return this.pathsDoc as never;
+  }
+  /** `paths` with `levels: true` (capability `paths_levels`): `pathsLevelsDoc`, else `pathsDoc`. */
+  pathsLevelsDoc: unknown = null;
+  async pathsWithLevels() {
+    this.pathCalls.push('paths levels');
+    return (this.pathsLevelsDoc ?? this.pathsDoc) as never;
+  }
+  /**
+   * The reads of the tab "Lernpläne" over all paths: per read a document or one made from the question; until a test
+   * sets one the call fails like an engine without the capability (`not_supported`). Each question is kept in order.
+   */
+  learnDocs: Partial<Record<LearnReadName, unknown>> = {};
+  learnQueries: [LearnReadName, unknown][] = [];
+  /** Each answer of a read of the tab waits for the next of these gates first (none: it answers at once). */
+  learnGates: Promise<void>[] = [];
+  private async learnRead(name: LearnReadName, query: unknown) {
+    this.learnQueries.push([name, query]);
+    const gate = this.learnGates.shift();
+    if (gate) await gate;
+    const doc = this.learnDocs[name];
+    if (doc === undefined) throw new ApiError(400, 'not_supported', `${name} is not faked here`);
+    return (typeof doc === 'function' ? (doc as (q: unknown) => unknown)(query) : doc) as never;
+  }
+  learnNext(query: unknown = {}) {
+    return this.learnRead('learn_next', query);
+  }
+  learnNotes(query: unknown = {}) {
+    return this.learnRead('learn_notes', query);
+  }
+  learnEvidence(query: unknown = {}) {
+    return this.learnRead('learn_evidence', query);
+  }
+  learnHistory(query: unknown = {}) {
+    return this.learnRead('learn_history', query);
+  }
+  competences(query: unknown = {}) {
+    return this.learnRead('competences', query);
   }
   async path(id: string) {
     this.pathCalls.push(`path ${id}`);

@@ -9,6 +9,11 @@ import type {
   Finished,
   Groupings,
   History,
+  Competences,
+  LearnEvidence,
+  LearnHistory,
+  LearnNext,
+  LearnNotes,
   LevelsSpec,
   Links,
   MeetingDocument,
@@ -879,6 +884,36 @@ export class Hub extends HubClient<Snapshot> {
     return this.json<Paths>(includeDone ? '/api/tasks/paths?include_done=1' : '/api/tasks/paths', signal ? { signal } : undefined);
   }
 
+  /** For every running learning path the next points to learn (capability `learn_next`; the engine chooses). */
+  learnNext(query: LearnNextQuery = {}, signal?: AbortSignal): Promise<LearnNext> {
+    return this.json<LearnNext>(`/api/tasks/learn_next${learnQuery(query)}`, signal ? { signal } : undefined);
+  }
+
+  /** The notes, links and images of the learning points of all paths (capability `learn_notes`; the engine searches). */
+  learnNotes(query: LearnNotesQuery = {}, signal?: AbortSignal): Promise<LearnNotes> {
+    return this.json<LearnNotes>(`/api/tasks/learn_notes${learnQuery(query)}`, signal ? { signal } : undefined);
+  }
+
+  /** The evidence of all learning paths (capability `learn_evidence`). */
+  learnEvidence(query: LearnEvidenceQuery = {}, signal?: AbortSignal): Promise<LearnEvidence> {
+    return this.json<LearnEvidence>(`/api/tasks/learn_evidence${learnQuery(query)}`, signal ? { signal } : undefined);
+  }
+
+  /** The series of the learning figures over a window (capability `learn_history`). */
+  learnHistory(query: LearnHistoryQuery = {}, signal?: AbortSignal): Promise<LearnHistory> {
+    return this.json<LearnHistory>(`/api/tasks/learn_history${learnQuery(query)}`, signal ? { signal } : undefined);
+  }
+
+  /** The fields of knowledge with their stages and the scale (capability `competences`). */
+  competences(query: { area?: string } = {}, signal?: AbortSignal): Promise<Competences> {
+    return this.json<Competences>(`/api/tasks/competences${learnQuery(query)}`, signal ? { signal } : undefined);
+  }
+
+  /** The open learning paths with every line of `## Level` of each (capability `paths_levels`). */
+  pathsWithLevels(signal?: AbortSignal): Promise<Paths> {
+    return this.json<Paths>('/api/tasks/paths?levels=1', signal ? { signal } : undefined);
+  }
+
   /** One learning path with its tree, a flat list in document order (capability `path`). */
   path(id: string, signal?: AbortSignal): Promise<PathDocument> {
     const path = `/api/tasks/path?id=${encodeURIComponent(id).replace(/%2F/gi, '/')}`;
@@ -901,4 +936,55 @@ export class Hub extends HubClient<Snapshot> {
     const path = `/api/tasks/done_preview?id=${encodeURIComponent(id).replace(/%2F/gi, '/')}`;
     return this.json<DonePreview>(path);
   }
+}
+
+/** The query of `learnNext`: an area, one path, a machine, the points per path (1..20). */
+export interface LearnNextQuery {
+  area?: string;
+  path?: string;
+  machine?: 'private' | 'workstation' | 'wsl';
+  n?: number;
+}
+
+/** The query of `learnNotes`: the search text (`q`), a kind, an area, one path, the finished paths too, a limit. */
+export interface LearnNotesQuery {
+  q?: string;
+  kind?: 'note' | 'link' | 'image';
+  area?: string;
+  path?: string;
+  include_done?: boolean;
+  limit?: number;
+}
+
+/** The query of `learnEvidence`: a competence (its id), an area, one path, the finished paths too. */
+export interface LearnEvidenceQuery {
+  competence?: string;
+  area?: string;
+  path?: string;
+  include_done?: boolean;
+}
+
+/** The query of `learnHistory`: a window of days, its step, an area, one path. */
+export interface LearnHistoryQuery {
+  since?: string;
+  until?: string;
+  step?: 'day' | 'week' | 'month';
+  area?: string;
+  path?: string;
+}
+
+/**
+ * The query string of a read of the tab "Lernpläne": every value escaped (the search text may hold anything), a flag as
+ * `1`, an absent, false or empty value left out; '' without any.
+ */
+export function learnQuery(query: object): string {
+  const parts: string[] = [];
+  for (const [key, value] of Object.entries(query) as [string, unknown][]) {
+    if (value === undefined || value === false || value === '') continue;
+    const text = value === true ? '1' : String(value);
+    const escaped = encodeURIComponent(text);
+    // An id keeps its slash (a plain value of the hub); the search text stays escaped as a whole.
+    parts.push(`${key}=${key === 'q' ? escaped : escaped.replace(/%2F/gi, '/')}`);
+  }
+  return parts.length === 0 ? '' : `?${parts.join('&')}`;
 }

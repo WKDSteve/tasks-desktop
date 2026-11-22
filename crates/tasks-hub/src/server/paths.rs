@@ -16,7 +16,7 @@ fn bad_query(why: &str) -> Response {
 
 /// The question of `paths` to the engine from the query of the route; `Err`: why it is refused.
 pub(super) fn paths_request(query: Option<&str>) -> Result<serde_json::Value, &'static str> {
-    let params = parse_query(query, &["area", "include_done"])?;
+    let params = parse_query(query, &["area", "include_done", "levels"])?;
     let mut request = serde_json::Map::new();
     if let Some(area) = params.get("area") {
         if crate::config::valid_area_name(area).is_err() {
@@ -32,11 +32,19 @@ pub(super) fn paths_request(query: Option<&str>) -> Result<serde_json::Value, &'
         }
         Some(_) => return Err("include_done is 1 or absent"),
     }
+    // Every line of `## Level` of each path (capability `paths_levels`): the badges and rewards without a request per path.
+    match params.get("levels").map(String::as_str) {
+        None => {}
+        Some("1") => {
+            request.insert("levels".to_owned(), json!(true));
+        }
+        Some(_) => return Err("levels is 1 or absent"),
+    }
     Ok(serde_json::Value::Object(request))
 }
 
-/// `GET /api/tasks/paths?area=&include_done=1`: the open learning paths with their progress, no tree (`tasks.paths`);
-/// with `include_done` the finished ones too.
+/// `GET /api/tasks/paths?area=&include_done=1&levels=1`: the open learning paths with their progress, no tree
+/// (`tasks.paths`); with `include_done` the finished ones too, with `levels` every level of each.
 pub(super) async fn paths(
     State(st): State<Arc<Shared>>,
     caller: Option<axum::Extension<Caller>>,
@@ -118,6 +126,14 @@ mod tests {
         assert_eq!(
             paths_request(Some("include_done=yes")),
             Err("include_done is 1 or absent")
+        );
+        assert_eq!(
+            paths_request(Some("levels=1")),
+            Ok(json!({ "levels": true }))
+        );
+        assert_eq!(
+            paths_request(Some("levels=0")),
+            Err("levels is 1 or absent")
         );
         assert!(paths_request(Some("id=a/b")).is_err());
     }

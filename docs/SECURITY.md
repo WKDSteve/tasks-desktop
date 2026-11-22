@@ -938,6 +938,19 @@ phone may only tick a point (`node_set` with `state` and `reason`, at the level 
 only when it is `http://` or `https://`, in a new tab without a referrer (`rel="noopener noreferrer"`,
 `referrerpolicy="no-referrer"`).
 
+## The reads of the tab Lernpläne (`learn_next`, `learn_notes`, `learn_evidence`, `learn_history`, `competences`)
+
+Five data routes, each behind a session (in the security matrix) and none for a paired phone (no `with_device_route`:
+a phone is refused before a handler runs). The query is plain (`parse_query`): an area name, a path or competence id
+`<area>/<slug>`, a word of a fixed list (`machine`, `kind`, `step`), a whole number in range (`n` 1..20, `limit`
+1..500), a day `YYYY-MM-DD`, a flag `1`; anything else is `400` before the engine is asked (`server/learn.rs`, the web
+variant `ui/src/web/learnQuery.ts` with the same rules). The one free text, the search of `learn_notes`, is `q` escaped
+as `encodeURIComponent` writes it (as for the search of the tasks), at most 200 bytes, no control character; the
+engine searches with it as a plain part of a text, never as a pattern. The documents go to the PC as the engine wrote
+them; their labels, notes and texts are untrusted and drawn as text or through the kit's Markdown reader, an image only
+as an image, a link only `http://` or `https://`. `paths?levels=1` adds the levels of each path; a phone's cut
+(`device_cut::paths`) keeps only its listed fields, so it never sees them.
+
 ## The ranges of the fields (`GET /api/tasks/enums`)
 
 A read without parameters (a query is `400`), a session needed. The hub asks the engine `hello` and passes on only its

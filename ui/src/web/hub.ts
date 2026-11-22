@@ -12,6 +12,7 @@
 import { INTENT_MAX_BYTES } from '../lib/intent.ts';
 import type { CallResult } from './engine.ts';
 import { parseQuery as parseSearchQuery, parseRequest, readCorpus, search as searchCorpus, type Corpus } from './search.ts';
+import { learnRequest, type LearnRead } from './learnQuery.ts';
 
 /** How a request of `ops` ended (`VaultSession.ops`). */
 export type OpsOutcome =
@@ -653,13 +654,29 @@ export function createWebHub(deps: HubDeps): WebHub {
       case 'paths': {
         // The open learning paths with their progress (`tasks.paths`), asked each time as the hub does; with
         // `include_done=1` the finished ones too (capability `requires`, the competence map).
-        const q = parseQuery(query, ['area', 'include_done']);
+        // With `levels=1` every line of `## Level` of each path (capability `paths_levels`).
+        const q = parseQuery(query, ['area', 'include_done', 'levels']);
         if (typeof q === 'string') return errorBody(400, 'bad_query', q);
         const area = q.get('area');
         if (area !== undefined && !validAreaName(area)) return errorBody(400, 'bad_query', 'area is not a name');
         const done = q.get('include_done');
         if (done !== undefined && done !== '1') return errorBody(400, 'bad_query', 'include_done is 1 or absent');
-        return passOn('paths', { ...(area !== undefined ? { area } : {}), ...(done !== undefined ? { include_done: true } : {}) });
+        const levels = q.get('levels');
+        if (levels !== undefined && levels !== '1') return errorBody(400, 'bad_query', 'levels is 1 or absent');
+        return passOn('paths', {
+          ...(area !== undefined ? { area } : {}),
+          ...(done !== undefined ? { include_done: true } : {}),
+          ...(levels !== undefined ? { levels: true } : {}),
+        });
+      }
+      case 'learn_next':
+      case 'learn_notes':
+      case 'learn_evidence':
+      case 'learn_history':
+      case 'competences': {
+        // The reads of the tab "Lernpläne" over all paths (`server/learn.rs` of the hub): the engine's documents.
+        const params = learnRequest({ parseQuery, validAreaName, validTaskId }, name as LearnRead, query);
+        return typeof params === 'string' ? errorBody(400, 'bad_query', params) : passOn(name, params);
       }
       case 'asset': {
         // An image below `assets/` of a container's folder (`GET /api/tasks/asset` of the hub): the folder comes from

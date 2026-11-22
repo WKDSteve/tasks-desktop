@@ -76,6 +76,20 @@ test('a request the Rust hub refuses never reaches the engine', async () => {
     ['snapshot?x=1', 400, 'bad_query'],
     ['paths?include_done=true', 400, 'bad_query'],
     ['paths?x=1', 400, 'bad_query'],
+    ['paths?levels=yes', 400, 'bad_query'],
+    ['learn_next?machine=mac', 400, 'bad_query'],
+    ['learn_next?n=21', 400, 'bad_query'],
+    ['learn_next?path=lua', 400, 'bad_query'],
+    ['learn_notes?q=a&q=b', 400, 'bad_query'],
+    ['learn_notes?q=a%ZZ', 400, 'bad_query'],
+    ['learn_notes?q=a%0Ab', 400, 'bad_query'],
+    [`learn_notes?q=${'a'.repeat(201)}`, 400, 'bad_query'],
+    ['learn_notes?kind=video', 400, 'bad_query'],
+    ['learn_notes?limit=501', 400, 'bad_query'],
+    ['learn_evidence?competence=os', 400, 'bad_query'],
+    ['learn_history?since=2026-1-01', 400, 'bad_query'],
+    ['learn_history?step=year', 400, 'bad_query'],
+    ['competences?path=a/b', 400, 'bad_query'],
     ['nothing', 404, 'not_found'],
   ];
   for (const [path, status, code] of cases) {
@@ -107,6 +121,7 @@ test('a valid read passes its parameters to the engine and the document back unc
   // the finished paths too (capability `requires`, the competence map)
   await h.get('paths?include_done=1');
   await h.get('paths?area=lib.nvim');
+  await h.get('paths?levels=1');
   assert.deepEqual(h.calls, [
     ['task', { params: { id: 'lib.nvim/alpha' } }],
     ['next', { params: { n: 3, actor: 'cdx', area: 'lib.nvim' } }],
@@ -120,6 +135,28 @@ test('a valid read passes its parameters to the engine and the document back unc
     ['waits', { params: { area: 'lib.nvim' } }],
     ['paths', { params: { include_done: true } }],
     ['paths', { params: { area: 'lib.nvim' } }],
+    ['paths', { params: { levels: true } }],
+  ]);
+});
+
+test('the reads of the tab Lernpläne pass their question to the engine of the same name', async () => {
+  const docs = { learn_next: '{"a":1}', learn_notes: '{"b":1}', learn_evidence: '{"c":1}', learn_history: '{"d":1}', competences: '{"e":1}' };
+  const h = hub(docs);
+  const r = await h.get('learn_next?area=lib.nvim&machine=wsl&n=5&path=lib.nvim/lua');
+  assert.equal(await r.text(), docs.learn_next, 'the bytes of the engine');
+  // the search text is escaped as encodeURIComponent writes it, then trimmed; only blanks is no search
+  await h.get('learn_notes?q=%20Shell%20%C3%BCben%20&kind=link&include_done=1&limit=50');
+  await h.get('learn_notes?q=%20%20');
+  await h.get('learn_evidence?competence=ALL/os&include_done=1');
+  await h.get('learn_history?since=2026-11-01&until=2026-11-22&step=week&area=lib.nvim');
+  await h.get('competences?area=ALL');
+  assert.deepEqual(h.calls, [
+    ['learn_next', { params: { area: 'lib.nvim', paths: ['lib.nvim/lua'], machine: 'wsl', n: 5 } }],
+    ['learn_notes', { params: { query: 'Shell üben', kind: 'link', include_done: true, limit: 50 } }],
+    ['learn_notes', { params: {} }],
+    ['learn_evidence', { params: { competence: 'ALL/os', include_done: true } }],
+    ['learn_history', { params: { since: '2026-11-01', until: '2026-11-22', step: 'week', area: 'lib.nvim' } }],
+    ['competences', { params: { area: 'ALL' } }],
   ]);
 });
 

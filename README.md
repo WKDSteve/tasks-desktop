@@ -406,6 +406,13 @@ over the tasks, not the paths):
 - `GET /api/tasks/paths?area=&include_done=1`: the open learning paths with their progress (learned, seen, dropped,
   open), no tree; with `include_done=1` (an engine with `requires`) the finished ones too.
 - `GET /api/tasks/path?id=<area>/<slug>`: one path with its body and its tree as a flat list in document order.
+- `GET /api/tasks/paths?levels=1`: the same with every level of each path (an engine with `paths_levels`).
+- The reads of the tab **Lernpläne** over all paths, each needing the engine's capability of the same name:
+  `GET /api/tasks/learn_next?area=&path=&machine=&n=` (what to learn next in every running path),
+  `GET /api/tasks/learn_notes?q=&kind=note|link|image&area=&path=&include_done=1&limit=` (the notes, links and images of
+  the points, the engine searches), `GET /api/tasks/learn_evidence?competence=&area=&path=&include_done=1` (the
+  evidence), `GET /api/tasks/learn_history?since=&until=&step=day|week|month&area=&path=` (the series of the learning
+  figures) and `GET /api/tasks/competences?area=` (the fields of knowledge and their scale).
 
 A point is ticked, marked seen, dropped or blocked with `node_set`, made a task of its own with `promote` and taken
 back with `unpromote` (through `ops`).

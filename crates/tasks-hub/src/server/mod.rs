@@ -63,6 +63,7 @@ mod check;
 pub(crate) mod device_cut;
 mod events;
 mod history;
+mod learn;
 mod mail;
 mod meetings;
 mod paths;
@@ -382,6 +383,12 @@ fn app_routes(core: &Arc<Shared>) -> Router<Arc<Shared>> {
         // The learning paths (concept "Lernplan" 11.3): the open paths, one path with its tree; the writes are `ops`.
         .route(&r("paths"), get(self::paths::paths))
         .route(&r("path"), get(self::paths::path))
+        // The reads of the tab "Lernpläne" over all paths (concept "Reiter Lernpläne"); a phone has none of them.
+        .route(&r("learn_next"), get(self::learn::learn_next))
+        .route(&r("learn_notes"), get(self::learn::learn_notes))
+        .route(&r("learn_evidence"), get(self::learn::learn_evidence))
+        .route(&r("learn_history"), get(self::learn::learn_history))
+        .route(&r("competences"), get(self::learn::competences))
         .route(
             &r("meeting_parse"),
             post(self::meetings::meeting_parse).layer(DefaultBodyLimit::max(small)),
