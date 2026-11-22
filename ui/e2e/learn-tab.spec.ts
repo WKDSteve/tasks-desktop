@@ -49,7 +49,7 @@ test('the tab Learning plans: after View, the learning paths with the dot of the
   await expect(paths).toHaveAttribute('aria-checked', 'false');
   await expect(paths).toHaveAttribute('href', /#view=paths/);
   await expect(menu.getByRole('group', { name: 'Paths' })).toBeVisible();
-  await expect(menu.getByRole('menuitemradio')).toHaveText(['Learning paths', 'Competence map']);
+  await expect(menu.getByRole('menuitemradio')).toHaveText(['Learning paths', 'Competence map', 'Competence catalogue', 'Badges', 'Rewards', 'Evidence']);
   await expect(menu.getByRole('menuitemradio', { name: 'Competence map' })).toHaveAttribute('href', /#view=pathmap/);
   await expectAccessible(page, 'the open tab Learning plans');
   await paths.click();
@@ -80,8 +80,8 @@ test('the tab Learning plans: after View, the learning paths with the dot of the
 });
 
 test('a link to a view of the tab not built yet shows the learning paths and says so; the palette goes there', async ({ page }) => {
-  const problems = await pair(page, '/#view=badges');
-  await expect(page.getByText('The learning view “badges” is not in this version yet; showing Learning paths.')).toBeVisible();
+  const problems = await pair(page, '/#view=learnnotes');
+  await expect(page.getByText('The learning view “learnnotes” is not in this version yet; showing Learning paths.')).toBeVisible();
   await expect(page.getByRole('menuitem', { name: 'Learning plans, current: Learning paths' })).toBeVisible();
   await expect(page).toHaveURL(/#view=paths/);
 
@@ -99,9 +99,9 @@ test('a link to a view of the tab not built yet shows the learning paths and say
   await bar(page).getByRole('menuitem', { name: 'View', exact: true }).click();
   await page.getByRole('menuitemradio', { name: 'List' }).click();
   await page.evaluate(() => {
-    location.hash = '#view=rewards';
+    location.hash = '#view=learnstats';
   });
-  await expect(page.getByText('The learning view “rewards” is not in this version yet; showing Learning paths.')).toBeVisible();
+  await expect(page.getByText('The learning view “learnstats” is not in this version yet; showing Learning paths.')).toBeVisible();
   await expect(page.getByRole('menuitem', { name: 'Learning plans, current: Learning paths' })).toBeVisible();
 
   expect(problems).toEqual([]);

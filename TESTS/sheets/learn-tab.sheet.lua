@@ -54,11 +54,11 @@ return {
     {
       expect = "document.querySelectorAll('"
         .. POPUP
-        .. " [role=menuitemradio]').length === 2"
+        .. " [role=menuitemradio]').length === 6"
         .. " && document.querySelector('"
         .. POPUP
-        .. ' [href*="view=badges"]\') === null',
-      note = "the learning paths and the competence map; a view the page does not have yet is missing, not greyed",
+        .. ' [href*="view=learnnotes"]\') === null',
+      note = "the six views the page has; one it does not have yet is missing, not greyed",
     },
     { shot = "tab-open" },
     { press = "Escape", note = "closed" },
@@ -71,11 +71,11 @@ return {
     },
     { press = "Escape" },
     {
-      expect = "(location.hash = '#view=badges', location.reload(), true)",
+      expect = "(location.hash = '#view=learnnotes', location.reload(), true)",
       note = "a link to a view of the tab that is not built yet (the page reloads with it)",
     },
     {
-      wait = "(document.querySelector('.toast')?.textContent ?? '').includes('badges')",
+      wait = "(document.querySelector('.toast')?.textContent ?? '').includes('learnnotes')",
       timeout = 20000,
       note = "a word says the view is not there yet",
     },

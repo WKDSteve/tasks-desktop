@@ -28,11 +28,22 @@ describe('learnViews', () => {
     expect(learnMenu({ can: caps('paths'), gamification: true, built: ALL_VIEWS })).toEqual([]);
   });
 
-  it('leaves out a view whose capability is missing, and badges and rewards without xp or gamification', () => {
-    const every = caps('paths', 'path', 'learn_next', 'competences', 'path_hours', 'xp', 'learn_evidence', 'learn_notes');
+  it('leaves out a view whose capability is missing, and badges and rewards without their levels, xp or gamification', () => {
+    const every = caps('paths', 'path', 'learn_next', 'competences', 'path_hours', 'xp', 'paths_levels', 'path_reward', 'learn_evidence', 'learn_notes');
     expect(learnMenu({ can: every, gamification: true, built: ALL_VIEWS }).flatMap((s) => s.views)).toEqual(ALL_VIEWS);
     const off = learnMenu({ can: every, gamification: false, built: ALL_VIEWS });
     expect(off.find((s) => s.section === 'progress')?.views).toEqual(['learnstats', 'learntime']);
+    const noLevels = caps('paths', 'path', 'path_hours', 'xp', 'path_reward');
+    expect(learnMenu({ can: noLevels, gamification: true, built: ALL_VIEWS }).find((s) => s.section === 'progress')?.views).toEqual([
+      'learnstats',
+      'learntime',
+    ]);
+    const noReward = caps('paths', 'path', 'path_hours', 'xp', 'paths_levels');
+    expect(learnMenu({ can: noReward, gamification: true, built: ALL_VIEWS }).find((s) => s.section === 'progress')?.views).toEqual([
+      'learnstats',
+      'learntime',
+      'badges',
+    ]);
     const bare = learnMenu({ can: caps('paths', 'path'), gamification: true, built: ALL_VIEWS });
     expect(bare).toEqual([
       { section: 'overview', views: ['learn'] },
@@ -44,7 +55,7 @@ describe('learnViews', () => {
   it('knows a view of the tab, and a link to one the page does not have yet', () => {
     expect(isLearnView('paths')).toBe(true);
     expect(isLearnView('list')).toBe(false);
-    expect(missingLearnView('#view=badges')).toBe('badges');
+    expect(missingLearnView('#view=learnnotes')).toBe('learnnotes');
     expect(missingLearnView('#open=a%2Fb&view=learn')).toBe('learn');
     expect(missingLearnView('#view=paths')).toBeNull();
     expect(missingLearnView('#view=list')).toBeNull();
@@ -63,14 +74,14 @@ describe('App, a link to a view of the tab that is not built yet', () => {
   it('shows the learning paths and says so once the list is there', async () => {
     const { app, hub } = make({ token: 't' });
     hub.capabilities = ['paths', 'path'];
-    app.openMissingLearnView('badges');
+    app.openMissingLearnView('learnnotes');
     expect(app.view).toBe('paths');
     expect(app.toast).toBeNull();
     await app.start(null);
     expect(app.view).toBe('paths');
     expect(app.toast).toMatchObject({
       kind: 'ok',
-      text: translate('de', 'learn.missing', { view: 'badges', target: translate('de', 'nav.paths') }),
+      text: translate('de', 'learn.missing', { view: 'learnnotes', target: translate('de', 'nav.paths') }),
     });
     app.stop();
   });
@@ -80,11 +91,11 @@ describe('App, a link to a view of the tab that is not built yet', () => {
     hub.capabilities = ['paths', 'path'];
     await app.start(null);
     app.setView('list');
-    app.openMissingLearnView('rewards');
+    app.openMissingLearnView('learnstats');
     expect(app.view).toBe('paths');
     expect(app.toast).toMatchObject({
       kind: 'ok',
-      text: translate('de', 'learn.missing', { view: 'rewards', target: translate('de', 'nav.paths') }),
+      text: translate('de', 'learn.missing', { view: 'learnstats', target: translate('de', 'nav.paths') }),
     });
     app.stop();
   });

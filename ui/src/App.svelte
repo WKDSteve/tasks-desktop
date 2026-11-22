@@ -967,7 +967,15 @@
                               ? t('nav.paths')
                               : app.view === 'pathmap'
                                 ? t('nav.pathmap')
-                                : t('nav.list')}
+                                : app.view === 'competences'
+                                  ? t('nav.competences')
+                                  : app.view === 'badges'
+                                    ? t('nav.badges')
+                                    : app.view === 'rewards'
+                                      ? t('nav.rewards')
+                                      : app.view === 'evidence'
+                                        ? t('nav.evidence')
+                                        : t('nav.list')}
         </h1>
         {#if alone}
           <!-- A window of one task (detached from a float): its detail, alone, as wide as the window allows. -->
@@ -1005,6 +1013,14 @@
           <Lazy {app} load={() => import('./views/PathsView.svelte')} />
         {:else if app.view === 'pathmap'}
           <Lazy {app} load={() => import('./views/PathMapView.svelte')} />
+        {:else if app.view === 'competences'}
+          <Lazy {app} load={() => import('./views/CompetencesView.svelte')} />
+        {:else if app.view === 'badges'}
+          <Lazy {app} load={() => import('./views/BadgesView.svelte')} />
+        {:else if app.view === 'rewards'}
+          <Lazy {app} load={() => import('./views/RewardsView.svelte')} />
+        {:else if app.view === 'evidence'}
+          <Lazy {app} load={() => import('./views/EvidenceView.svelte')} />
         {:else}
           <ListView {app} bind:searchBox />
         {/if}

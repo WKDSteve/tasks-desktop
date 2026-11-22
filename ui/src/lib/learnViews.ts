@@ -43,8 +43,8 @@ export const LEARN_SECTIONS: readonly { section: LearnSection; views: readonly L
     views: [
       { id: 'learnstats', needs: LEARN_NEEDS },
       { id: 'learntime', needs: [...LEARN_NEEDS, 'path_hours'] },
-      { id: 'badges', needs: [...LEARN_NEEDS, 'xp'], game: true },
-      { id: 'rewards', needs: [...LEARN_NEEDS, 'xp'], game: true },
+      { id: 'badges', needs: [...LEARN_NEEDS, 'xp', 'paths_levels'], game: true },
+      { id: 'rewards', needs: [...LEARN_NEEDS, 'xp', 'paths_levels', 'path_reward'], game: true },
     ],
   },
   {

@@ -33,4 +33,9 @@ return {
     title = "The tab Learning plans of the menu bar: after View, the views of the learning plans that are there, the dot of the view shown, a link to a view not built yet",
     docs = "README.md",
   },
+  {
+    id = "tasks.learn-views",
+    title = "Badges, rewards, competence catalogue and evidence of all learning paths: earned and open badges, a reward granted and taken back, a field with its stage and paths, evidence by field",
+    docs = "README.md",
+  },
 }

@@ -419,9 +419,26 @@ back with `unpromote` (through `ops`).
 
 The tab **Learning plans** of the menu bar (after View; there only when the engine has the learning paths) holds the
 views of the learning plans in sections (Overview, Paths, Progress, Knowledge); a view the engine cannot serve, or one
-not built yet, is left out rather than greyed, and a link to one not built yet (`#view=badges`) shows the learning
+not built yet, is left out rather than greyed, and a link to one not built yet (`#view=learnnotes`) shows the learning
 paths with a word that says so. While one of its views is shown the tab carries the dot (its name: "Learning plans,
 current: Learning paths"); export and print stay in View. The palette (Ctrl+K) has "Go to ..." for each of them.
+
+Four views of the tab gather what all learning paths hold (each only with the engine's capability, the first two only
+with gamification on):
+
+- **Badges** (`#view=badges`, capability `paths_levels`): the badge of every level of every path, earned ones in colour,
+  open ones grey with a lock and a ring of the way to go; filter (all, earned, open) and grouping (by path, by date).
+  The arrow keys move between the tiles, Enter opens the detail below the group (level, date, what is missing), Escape
+  closes it.
+- **Rewards** (`#view=rewards`, `path_reward`): the rewards of the levels reached and not granted yet, each with
+  **Granted** (writes `[x]` into the path, with Undo in the word that follows), the granted ones with their date (and
+  **Not granted after all**), and the coming ones with the way to go.
+- **Competence catalogue** (`#view=competences`, `competences`): the fields of knowledge of the vault's `competences`
+  files, grouped, each with its stage in theory and practice on a ladder of eight rungs, the targets in 12 and 24 months,
+  the evidence and the paths that teach it (a click opens the path); filter and sort, the file's text below a row.
+- **Evidence** (`#view=evidence`, `learn_evidence`): the evidence points of all paths, given and open, grouped by field
+  of knowledge (or by path), with what each proves, a link to the proof and **In the path**, which opens the path on
+  that point.
 
 The view **Learning plans › Learning paths** (also in the web variant, `#view=paths`) shows them: the paths with their progress
 on the left, the chosen one as a tree on the right, with a bar counted apart (learned, seen, not applicable, open).
