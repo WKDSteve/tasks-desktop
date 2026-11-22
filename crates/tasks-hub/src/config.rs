@@ -27,6 +27,10 @@ pub struct TasksSettings {
     /// system.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub attach_dirs: Vec<PathBuf>,
+    /// The largest file one upload takes, in MiB; none: 2048 (2 GiB, `server::DEFAULT_UPLOAD_MAX_BYTES`). Read when the
+    /// hub starts.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub upload_max_mb: Option<u64>,
     /// The Web Push reminders of a day for the paired phones.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reminders: Option<RemindersSettings>,
@@ -136,6 +140,20 @@ impl TasksSettings {
     }
 }
 
+/// The largest `upload_max_mb`: 1 TiB.
+pub const MAX_UPLOAD_MB: u64 = 1024 * 1024;
+
+impl TasksSettings {
+    /// The largest file one upload takes, in bytes.
+    #[must_use]
+    pub fn upload_max_bytes(&self) -> u64 {
+        self.upload_max_mb
+            .map_or(crate::server::DEFAULT_UPLOAD_MAX_BYTES, |mb| {
+                mb * 1024 * 1024
+            })
+    }
+}
+
 /// The most folders `attach_dirs` may name (the engine's limit too).
 pub const MAX_ATTACH_DIRS: usize = 8;
 
@@ -156,6 +174,13 @@ impl AppSettings for TasksSettings {
                     dir.display()
                 ));
             }
+        }
+        if let Some(mb) = self.upload_max_mb
+            && !(1..=MAX_UPLOAD_MB).contains(&mb)
+        {
+            return Err(format!(
+                "upload_max_mb: {mb} is not between 1 and {MAX_UPLOAD_MB}"
+            ));
         }
         if let Some(at) = self.reminders.as_ref().and_then(|r| r.send_at.as_deref())
             && !crate::notices::valid_time(at)
@@ -341,6 +366,20 @@ mod tests {
             "C:\\x",
         ] {
             assert!(areas(&[bad]).validate().is_err(), "{bad:?} was accepted");
+        }
+    }
+
+    #[test]
+    fn the_upload_limit_is_two_gib_unless_set_and_is_a_sane_number_of_mib() {
+        let with = |mb| TasksSettings {
+            upload_max_mb: mb,
+            ..TasksSettings::default()
+        };
+        assert_eq!(with(None).upload_max_bytes(), 2 * 1024 * 1024 * 1024);
+        assert_eq!(with(Some(512)).upload_max_bytes(), 512 * 1024 * 1024);
+        assert!(with(Some(512)).validate().is_ok());
+        for bad in [0, MAX_UPLOAD_MB + 1, u64::MAX] {
+            assert!(with(Some(bad)).validate().is_err(), "{bad}");
         }
     }
 

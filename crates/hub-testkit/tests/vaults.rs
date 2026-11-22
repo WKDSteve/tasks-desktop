@@ -237,6 +237,7 @@ async fn rig(name: &str, with_admin: bool) -> Rig {
                 sheet_run: None,
                 testing: None,
                 upload_dir: None,
+                upload_max_bytes: None,
                 upload_engine: None,
                 attach_dirs: Vec::new(),
                 snapshot_root: None,

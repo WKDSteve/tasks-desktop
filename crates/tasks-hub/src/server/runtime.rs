@@ -28,6 +28,7 @@ pub(super) struct VaultRuntime {
     pub(super) attach_dirs: Arc<Vec<String>>,
     /// The folder a file from the page lies in until the engine has taken it; none: this hub takes no files.
     pub(super) upload_dir: Option<Arc<PathBuf>>,
+    pub(super) upload_max_bytes: u64,
     pub(super) upload_engine: Option<UploadEngine>,
     /// The folder of the plugin checkouts the snapshots of the test sheets are read from.
     pub(super) snapshot_root: Option<Arc<PathBuf>>,
@@ -99,6 +100,7 @@ pub(super) struct AppParts {
     pub(super) streams: Arc<StreamCounter>,
     pub(super) attach_dirs: Arc<Vec<String>>,
     pub(super) upload_dir: Option<Arc<PathBuf>>,
+    pub(super) upload_max_bytes: u64,
     pub(super) upload_engine: Option<UploadEngine>,
     pub(super) snapshot_root: Option<Arc<PathBuf>>,
     pub(super) repos: Option<Arc<crate::repos::Store>>,
@@ -234,6 +236,7 @@ pub(super) fn build_runtime(
         streams: Arc::clone(&app.streams),
         attach_dirs: Arc::clone(&app.attach_dirs),
         upload_dir: app.upload_dir.clone(),
+        upload_max_bytes: app.upload_max_bytes,
         upload_engine: app.upload_engine.clone(),
         snapshot_root: app.snapshot_root.clone(),
         repos: app.repos.clone(),

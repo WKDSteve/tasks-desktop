@@ -185,6 +185,7 @@ row two
         cfg,
         Extras {
             upload_dir: None,
+            upload_max_bytes: None,
             upload_engine: None,
             attach_dirs: Vec::new(),
             snapshot_root: Some(base.join("repos")),

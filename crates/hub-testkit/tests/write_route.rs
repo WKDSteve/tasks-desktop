@@ -43,6 +43,16 @@ async fn rig_with(name: &str, limits: Limits) -> Rig {
 
 /// A rig whose settings name `attach_dirs`.
 async fn rig_full(name: &str, limits: Limits, attach_dirs: Vec<PathBuf>) -> Rig {
+    rig_sized(name, limits, attach_dirs, None).await
+}
+
+/// A rig whose settings also set the largest upload (`upload_max_mb`, here in bytes).
+async fn rig_sized(
+    name: &str,
+    limits: Limits,
+    attach_dirs: Vec<PathBuf>,
+    upload_max_bytes: Option<u64>,
+) -> Rig {
     let dir = Scratch::new(&format!("write-{name}"));
     let vault = dir.to_path_buf();
     std::fs::create_dir_all(vault.join("alpha.nvim").join("ROADMAP").join("tasks")).unwrap();
@@ -95,6 +105,7 @@ async fn rig_full(name: &str, limits: Limits, attach_dirs: Vec<PathBuf>) -> Rig 
             keep_running: None,
             attach_dirs,
             upload_dir: Some(vault.join(".uploads")),
+            upload_max_bytes,
             snapshot_root: None,
             ..Extras::default()
         },
@@ -818,6 +829,29 @@ async fn a_file_over_the_limit_is_refused_before_a_byte_of_it_is_taken() {
         "nothing reached the engine"
     );
     assert_eq!(leftovers(&r), 0);
+}
+
+#[tokio::test]
+async fn the_limit_of_an_upload_is_the_one_the_settings_name() {
+    let _one_at_a_time = ONE_AT_A_TIME.lock().await;
+    let r = rig_sized("upload-limit-set", Limits::default(), Vec::new(), Some(10)).await;
+    // Streamed without a size the hub could believe: counted as it comes.
+    let (status, doc) = upload_raw(
+        &r,
+        "id=alpha.nvim/t1",
+        &[("X-Upload-Name", "a.pdf")],
+        11,
+        b"12345678901",
+    )
+    .await;
+    assert_eq!(
+        (status, doc["error"]["code"].clone()),
+        (413, Value::from("too_large")),
+        "{doc}"
+    );
+    assert!(!r.vault.join(".fake-upload").exists());
+    let (status, doc) = upload(&r, "alpha.nvim/t1", "a.pdf", "1234567890").await;
+    assert_eq!(status, 200, "{doc}");
 }
 
 #[tokio::test]
