@@ -50,6 +50,14 @@ export function snippet(note: string, query: string, max = SNIPPET): { text: str
   return { text: `${from > 0 ? '…' : ''}${part}${from + max < chars.length ? '…' : ''}`, cut: true };
 }
 
+/** The most bytes of the search the engine takes (UTF-8, as the hub counts them). */
+export const QUERY_MAX_BYTES = 200;
+
+/** Whether a search is longer than the engine takes (the hub refuses it before the engine is asked). */
+export function tooLong(query: string): boolean {
+  return new TextEncoder().encode(query.trim()).length > QUERY_MAX_BYTES;
+}
+
 /** What the person narrowed the list to, beyond what the engine was asked. */
 export interface NoteFilter {
   /** The ids of the paths that serve the chosen competence; null: no competence chosen. */

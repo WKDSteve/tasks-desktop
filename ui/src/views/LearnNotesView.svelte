@@ -19,7 +19,7 @@
   import AssetImg from './AssetImg.svelte';
   import ImageViewer from './ImageViewer.svelte';
   import { labelText, openableLink, pointRef } from '../lib/paths';
-  import { imageName, linkTitle, marked, narrowed, NOTE_STATES, snippet, type NoteItem, type NoteKind, type NoteState } from '../lib/learnNotes';
+  import { imageName, linkTitle, marked, narrowed, NOTE_STATES, snippet, tooLong, type NoteItem, type NoteKind, type NoteState } from '../lib/learnNotes';
 
   let { app }: { app: App } = $props();
   // The words of the view come with its chunk (lib/learnNotesTexts.ts); the others are the page's.
@@ -52,6 +52,11 @@
   let asked = 0;
   async function read(): Promise<void> {
     const mine = ++asked;
+    // Too long for the engine: said, not asked (the list stays as it was for the search before).
+    if (tooLong(query)) {
+      reading = false;
+      return;
+    }
     reading = true;
     try {
       const answer = await app.learnNotes({
@@ -241,6 +246,11 @@
       <label class="check" data-hint={t('learnnotes.hint.done')}><input type="checkbox" bind:checked={withDone} />{t('learnnotes.done')}</label>
     </search>
 
+    {#if tooLong(typed)}
+      <p class="note" role="alert">{t('learnnotes.too_long')}</p>
+    {:else if problem && doc}
+      <p class="note" role="alert">{t('learnnotes.failed')} <button type="button" class="link" onclick={() => void read()}>{t('learnnotes.retry')}</button></p>
+    {/if}
     {#if problem && !doc}
       <div class="empty" role="alert">
         <p>{t('learnnotes.failed')}</p>
@@ -276,12 +286,22 @@
             {@const cut = item.note ? snippet(item.note, query) : null}
             {@const isWhole = whole.has(keyOf(item))}
             <li data-path={item.path} data-point={pointRef(item)} data-state={item.state}>
-              <button type="button" class="open" aria-label={t('learnnotes.open', { crumbs: crumbs(item) })} onclick={() => app.openPath(item.path, pointRef(item))}>
-                <span class="crumbs"
-                  >{markHidden(item.title)} <span aria-hidden="true">›</span> {markHidden(labelText({ label: item.stage_label }))} <span aria-hidden="true">›</span></span
-                >
-                <span class="point">{@render hits(point)}</span>
-              </button>
+              {#if item.path_done}
+                <!-- The view of the paths shows the open paths only: a finished one is not opened there. -->
+                <p class="open done">
+                  <span class="crumbs"
+                    >{markHidden(item.title)} <span aria-hidden="true">›</span> {markHidden(labelText({ label: item.stage_label }))} <span aria-hidden="true">›</span></span
+                  >
+                  <span class="point">{@render hits(point)}</span>
+                </p>
+              {:else}
+                <button type="button" class="open" aria-label={t('learnnotes.open', { crumbs: crumbs(item) })} onclick={() => app.openPath(item.path, pointRef(item))}>
+                  <span class="crumbs"
+                    >{markHidden(item.title)} <span aria-hidden="true">›</span> {markHidden(labelText({ label: item.stage_label }))} <span aria-hidden="true">›</span></span
+                  >
+                  <span class="point">{@render hits(point)}</span>
+                </button>
+              {/if}
               <span class="tags">
                 <span class="state {item.state}">{t(`learnnotes.state.${item.state}`)}</span>
                 {#if item.path_done}<span class="sub">· {t('learnnotes.path_done')}</span>{/if}
@@ -418,6 +438,13 @@
     color: var(--text);
     text-align: start;
     cursor: pointer;
+  }
+  .open.done {
+    cursor: default;
+    margin: 0;
+  }
+  .open.done .point {
+    text-decoration: none;
   }
   .open .point {
     font-weight: 600;

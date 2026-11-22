@@ -126,6 +126,9 @@
       <button type="button" class="primary" onclick={() => app.setView('paths')}>{t('learntime.to_paths')}</button>
     </div>
   {:else}
+    {#if problem}
+      <p class="sub" role="alert">{t('learntime.failed')} <button type="button" class="link" onclick={() => void read()}>{t('learntime.retry')}</button></p>
+    {/if}
     {#if projects.length > 0}
       <div class="tools">
         <label class="field" data-hint={t('learntime.hint.project')}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { imageName, linkTitle, marked, narrowed, snippet, type NoteItem } from './learnNotes';
+import { imageName, linkTitle, marked, narrowed, snippet, tooLong, type NoteItem } from './learnNotes';
 import { isLearnNotesKey, learnNotesText } from './learnNotesTexts';
 
 const item = (path: string, state: NoteItem['state']) => ({ path, state }) as NoteItem;
@@ -40,6 +40,14 @@ describe('notes and sources', () => {
     expect(linkTitle('[Manual](https://lua.org/manual)')).toBe('Manual');
     expect(linkTitle('Read [this](https://x.test) first')).toBeNull();
     expect(imageName('assets/images/map.png')).toBe('map.png');
+  });
+
+  it('counts the length of a search in bytes, as the hub does', () => {
+    expect(tooLong('a'.repeat(200))).toBe(false);
+    expect(tooLong('a'.repeat(201))).toBe(true);
+    expect(tooLong('ü'.repeat(100))).toBe(false);
+    expect(tooLong('ü'.repeat(101))).toBe(true);
+    expect(tooLong(`  ${'a'.repeat(200)}  `)).toBe(false);
   });
 
   it('has its words in both languages', () => {

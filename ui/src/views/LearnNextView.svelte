@@ -45,7 +45,9 @@
   let project = $state('');
   let machine = $state<Machine>('');
   // The card whose reason is being written, or whose safety question is open (by path id).
-  let asking = $state<{ path: string; state: StepState; kind: 'reason' | 'confirm'; missing: boolean } | null>(null);
+  // The point it was asked for is kept: a read that brings another next point (another device closed this one) closes
+  // the question, so a reason or a yes never goes to a point the person did not see.
+  let asking = $state<{ path: string; point: string; state: StepState; kind: 'reason' | 'confirm'; missing: boolean } | null>(null);
   let draft = $state('');
   let root: HTMLElement | undefined = $state();
 
@@ -60,7 +62,11 @@
       doc = answer;
       problem = false;
       // A question left open on a card whose path has no step any more closes.
-      if (asking && !answer.items.some((i) => i.path === asking!.path)) asking = null;
+      const open = asking;
+      if (open && !answer.items.some((i) => i.path === open.path && pointRef(i.points[0]) === open.point)) {
+        asking = null;
+        pendingReason = undefined;
+      }
     } catch {
       if (mine !== asked) return;
       problem = true;
@@ -113,12 +119,12 @@
     const point = item.points[0];
     if (stepNeedsReason(state)) {
       draft = '';
-      asking = { path: item.path, state, kind: 'reason', missing: false };
+      asking = { path: item.path, point: pointRef(point), state, kind: 'reason', missing: false };
       void focusCard(item.path, 'textarea, input.reason');
       return;
     }
     if (stepNeedsAck(point, state)) {
-      asking = { path: item.path, state, kind: 'confirm', missing: false };
+      asking = { path: item.path, point: pointRef(point), state, kind: 'confirm', missing: false };
       void focusCard(item.path, 'button.confirm-no');
       return;
     }
@@ -126,7 +132,7 @@
   }
 
   function saveReason(item: LearnNextItem): void {
-    if (!asking || asking.kind !== 'reason') return;
+    if (!asking || asking.kind !== 'reason' || asking.point !== pointRef(item.points[0])) return;
     const reason = cleanReason(draft);
     if (reason === null) {
       asking = { ...asking, missing: true };
@@ -138,7 +144,7 @@
     if (stepNeedsAck(item.points[0], state)) {
       // The reason is kept; the safety question comes next and sends both.
       pendingReason = reason;
-      asking = { path: item.path, state, kind: 'confirm', missing: false };
+      asking = { ...asking, kind: 'confirm', missing: false };
       void focusCard(item.path, 'button.confirm-no');
       return;
     }
@@ -148,7 +154,7 @@
   let pendingReason: string | undefined;
 
   function confirm(item: LearnNextItem): void {
-    if (!asking || asking.kind !== 'confirm' || refused()) return;
+    if (!asking || asking.kind !== 'confirm' || asking.point !== pointRef(item.points[0]) || refused()) return;
     const { state } = asking;
     const reason = pendingReason;
     pendingReason = undefined;
@@ -211,6 +217,9 @@
       <span class="status" role="status">{#if app.saving}{t('learnnext.saving')}{:else if reading && doc}{t('learnnext.reading')}{/if}</span>
     </div>
 
+    {#if problem && doc}
+      <p class="note" role="alert">{t('learnnext.failed')} <button type="button" class="link" onclick={() => void read()}>{t('learnnext.retry')}</button></p>
+    {/if}
     {#if problem && !doc}
       <div class="empty" role="alert">
         <p>{t('learnnext.failed')}</p>

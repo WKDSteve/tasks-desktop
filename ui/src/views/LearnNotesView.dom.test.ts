@@ -225,6 +225,36 @@ describe('LearnNotesView', () => {
     }
   });
 
+  it('does not offer to open a hit of a finished path (the view of the paths has the open ones only)', async () => {
+    const { m, page } = await show(notes([hit('lib/old', 1, { label: 'Done note', note: 'x', path_done: true })]));
+    const li = page.querySelector<HTMLElement>('ul.hits > li')!;
+    expect(li.querySelector('button.open')).toBeNull();
+    expect(li.querySelector('.open.done')?.textContent).toContain('Done note');
+    expect(li.textContent).toContain('finished path');
+    expect(m.app.view).not.toBe('paths');
+  });
+
+  it('says a search that is too long for the engine instead of asking, counted in bytes', async () => {
+    const { m, page } = await show();
+    const input = page.querySelector<HTMLInputElement>('input[type="search"]')!;
+    input.value = 'ü'.repeat(101);
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    await settle();
+    expect(page.querySelector('[role="alert"]')?.textContent).toContain('The search is too long');
+    expect(notesAsked(m).some((q) => (q as { q?: string }).q !== undefined)).toBe(false);
+  });
+
+  it('says a failed read once the hits were shown, and keeps them', async () => {
+    const { m, page } = await show();
+    m.hub.learnDocs.learn_notes = undefined;
+    m.hub.doc = snapshot([], 'rev:2');
+    await m.app.refresh();
+    await settle();
+    await vi.waitFor(() => expect(page.querySelector('.note[role="alert"]')?.textContent).toContain('The notes could not be read.'));
+    expect(hitsShown(page)).toHaveLength(3);
+  });
+
   it('says when the engine cut the list', async () => {
     const doc = { ...notes(), total: 345, truncated: true };
     const { page } = await show(doc as LearnNotes);

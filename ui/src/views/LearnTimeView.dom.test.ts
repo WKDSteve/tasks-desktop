@@ -143,6 +143,18 @@ describe('LearnTimeView', () => {
     expect([...page.querySelectorAll<HTMLElement>('tr[data-path]')].map((r) => r.dataset['path'])).toEqual(['lib/lua']);
   });
 
+  it('says a failed read once the table was shown, and keeps the rows', async () => {
+    const { m, page } = await show();
+    m.hub.paths = async () => {
+      throw new TypeError('the hub is gone');
+    };
+    m.hub.doc = snapshot([], 'rev:2');
+    await m.app.refresh();
+    await settle();
+    await vi.waitFor(() => expect(page.querySelector('[role="alert"]')?.textContent).toContain('The learning paths could not be read.'));
+    expect(row(page, 'lib/lua')).toBeDefined();
+  });
+
   it('says how to plan hours when no path has any, with a button to the paths', async () => {
     const { m, page } = await show([BARE]);
     expect(page.textContent).toContain('No hours planned.');

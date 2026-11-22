@@ -162,6 +162,32 @@ describe('LearnNextView', () => {
     expect(sentOps(m)).toEqual([{ op: 'node_set', id: 'ops/shell', point: 'rm', state: 'seen', reason: 'read the man page', ack: true }]);
   });
 
+  it('closes an open question when another device closed its point, so nothing goes to the next one', async () => {
+    const { m, page } = await show();
+    const lua = () => card(page, 'lib/lua');
+    button(lua(), 'Seen').click();
+    await settle();
+    expect(lua().querySelector('input.reason')).not.toBeNull();
+    // Another device marked the point: the engine names the next one.
+    m.hub.learnDocs.learn_next = next([{ ...LUA, points: LUA.points.slice(1) as typeof LUA.points }, SHELL]);
+    m.hub.doc = snapshot([], 'rev:2');
+    await m.app.refresh();
+    await settle();
+    await vi.waitFor(() => expect(lua().dataset['point']).toBe('gc'));
+    expect(lua().querySelector('input.reason')).toBeNull();
+    expect(sentOps(m)).toEqual([]);
+  });
+
+  it('says a failed read once the steps were shown, and keeps the cards', async () => {
+    const { m, page } = await show();
+    m.hub.learnDocs.learn_next = undefined;
+    m.hub.doc = snapshot([], 'rev:2');
+    await m.app.refresh();
+    await settle();
+    await vi.waitFor(() => expect(page.querySelector('.note[role="alert"]')?.textContent).toContain('The next steps could not be read.'));
+    expect(card(page, 'lib/lua')).toBeDefined();
+  });
+
   it('sends does-not-apply of a safety point with its reason and without a question', async () => {
     const { m, page } = await show();
     const shell = card(page, 'ops/shell');
