@@ -1,4 +1,3 @@
-import { readFileSync } from 'node:fs';
 import { describe, expect, test } from 'vitest';
 
 // Guard for WCAG 2.4.11 (rule ACC-05): a sticky bar must not hide the element the keyboard focus moves to. The browser
@@ -7,7 +6,13 @@ import { describe, expect, test } from 'vitest';
 // The test reads the CSS (and the `style:` directives) of the views; every `position: sticky` of a view must be listed
 // here, so a new sticky bar fails until it is listed with its container.
 
-const VIEWS = new URL('../views/', import.meta.url);
+// The views as text (Vite reads them; no node types needed in the checked sources).
+const SOURCES = import.meta.glob('../views/*.svelte', { query: '?raw', import: 'default', eager: true }) as Record<string, string>;
+function sourceOf(file: string): string {
+  const text = SOURCES[`../views/${file}`];
+  if (text === undefined) throw new Error(`no view ${file}`);
+  return text;
+}
 
 interface Sticky {
   /** The selector of the sticky rule. */
@@ -61,7 +66,7 @@ const norm = (s: string): string => s.replace(/\s+/g, ' ').replace(/"/g, "'").tr
 
 describe('sticky bars and scroll-padding (ACC-05)', () => {
   for (const [file, entries] of Object.entries(STICKY)) {
-    const source = readFileSync(new URL(file, VIEWS), 'utf8');
+    const source = sourceOf(file);
     const rules = rulesOf(source);
 
     test(`${file}: every sticky rule is listed`, () => {
@@ -90,7 +95,7 @@ describe('sticky bars and scroll-padding (ACC-05)', () => {
   }
 
   test('Today: the overview stays in its own grid column', () => {
-    const rules = rulesOf(readFileSync(new URL('Today.svelte', VIEWS), 'utf8'));
+    const rules = rulesOf(sourceOf('Today.svelte'));
     const all = rules.filter((r) => r.selector === '.overview').map((r) => r.body).join(';');
     expect(all).toMatch(/grid-area:\s*overview/);
     expect(rules.some((r) => /grid-template-areas:\s*'main overview'/.test(r.body))).toBe(true);
