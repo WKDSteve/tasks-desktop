@@ -355,7 +355,8 @@ export function finishedPerArea(
   byArea: readonly { area: string; count: number }[],
   areas: readonly string[],
 ): { total: number; counts: Record<string, number> } {
-  const counts: Record<string, number> = {};
+  // Area names are folder names: `__proto__` is a plain key here, so the record has no prototype (WSEC-06).
+  const counts: Record<string, number> = Object.create(null);
   let total = 0;
   for (const { area, count } of byArea) {
     if (areas.length > 0 && !areas.includes(area)) continue;
