@@ -1027,10 +1027,18 @@ async fn a_phone_reads_the_next_steps_and_the_series_of_released_areas_only() {
     assert!(lines[0].contains(r#""areas":["alpha.nvim"]"#), "{calls}");
     assert!(lines[1].contains(r#""areas":[]"#), "{calls}");
     assert!(!calls.contains("secret-area"), "{calls}");
+    // learn_next takes no `areas` (the engine refuses one): asked as asked, cut; a private area asked answers nothing
+    // without asking the engine.
+    let (status, doc) = r
+        .send("GET", "/api/tasks/learn_next?area=secret-area", &phone, "")
+        .await;
+    assert_eq!(status, 200, "{doc}");
+    assert_eq!(doc["items"], json!([]), "{doc}");
     let next =
         std::fs::read_to_string(r._dir.join("vault").join(".fake-calls-learn_next")).unwrap();
+    assert_eq!(next.lines().count(), 1, "{next}");
     assert!(
-        next.contains(r#""areas":["alpha.nvim"]"#) && !next.contains("secret"),
+        !next.contains("areas") && !next.contains("secret"),
         "{next}"
     );
 

@@ -1,9 +1,11 @@
 //! The reads of the tab "Lernpläne" over all learning paths (concept "Reiter Lernpläne" 3-11): what to learn next, the
 //! notes and sources, the evidence, the series of the learning figures and the competences. Each is under `/api/`, so
-//! the guard asked for a session before a handler runs. A paired phone has two of them, for its page Lernen (MOB-02):
-//! `learn_next` and `learn_history`, asked of the engine for the released areas alone (`areas`; none released: none
-//! asked) and cut field by field (`device_cut::learn_next`, `device_cut::learn_history`), so the sums and the streak
-//! of the series are the engine's over what the phone may know. The others are not routes of a phone.
+//! the guard asked for a session before a handler runs. A paired phone has two of them, for its page Lernen (MOB-02),
+//! each cut field by field to the paths of released areas (`device_cut::learn_next`, `device_cut::learn_history`).
+//! `learn_history` is asked of the engine for the released areas alone (`areas`; none released: none asked), so the
+//! sums and the streak of the series are the engine's over what the phone may know. `learn_next` takes no `areas` (its
+//! figures are per path, nothing is summed): it is asked as asked, an area that is not released answers nothing
+//! without asking. The others are not routes of a phone.
 //!
 //! The documents of the engine are passed on as it wrote them; the page draws them and computes nothing (WEB-13). The
 //! hub checks the shape of a parameter (a name, a word of a list, a number in range); what it means is the engine's.
@@ -300,19 +302,41 @@ async fn for_device(st: &Shared, mut request: serde_json::Value) -> serde_json::
     request
 }
 
-/// A read a phone has: asked for its released areas (`for_device`), the answer cut by `cut`.
+/// How a read of a phone is narrowed before the engine is asked: to its released areas (`areas`, for a read whose sums
+/// are over its scope), or only refused for an area asked that is not released (the cut does the rest).
+#[derive(Clone, Copy)]
+enum Narrow {
+    Areas,
+    AskedArea,
+}
+
+/// A read a phone has: narrowed as `narrow` says, the answer cut by `cut`.
 async fn read_for(
     st: &Shared,
     caller: Option<&Caller>,
     method: Method,
     request: Result<serde_json::Value, &'static str>,
+    narrow: Narrow,
     cut: fn(&crate::classes::AreaPolicy, &serde_json::Value) -> serde_json::Value,
 ) -> Response {
     let device = is_device(caller);
-    let request = match request {
-        Ok(r) if device => for_device(st, r).await,
-        Ok(r) => r,
-        Err(why) => return bad_query(why),
+    let request = match (request, narrow) {
+        (Err(why), _) => return bad_query(why),
+        (Ok(r), Narrow::Areas) if device => for_device(st, r).await,
+        (Ok(r), Narrow::AskedArea) if device => {
+            let asked = r.get("area").and_then(|a| a.as_str());
+            if asked.is_some_and(|area| !device_cut::released(&st.rt().classes, area)) {
+                // an area the phone may not know: as if it had no path, the engine is not asked
+                let empty = json!({ "kind": "tasks.learn_next", "items": [], "incomplete": [] });
+                return json_response(
+                    StatusCode::OK,
+                    cut(&st.rt().classes, &empty).to_string(),
+                    None,
+                );
+            }
+            r
+        }
+        (Ok(r), _) => r,
     };
     match ask_as(st, device, method, Some(&request)).await {
         Ok(reply) if device => {
@@ -340,6 +364,7 @@ pub(super) async fn learn_next(
         caller.as_deref(),
         Calls::LearnNext,
         learn_next_request(query.as_deref()),
+        Narrow::AskedArea,
         device_cut::learn_next,
     )
     .await
@@ -385,6 +410,7 @@ pub(super) async fn learn_history(
         caller.as_deref(),
         Calls::LearnHistory,
         learn_history_request(query.as_deref()),
+        Narrow::Areas,
         device_cut::learn_history,
     )
     .await

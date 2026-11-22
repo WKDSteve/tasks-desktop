@@ -943,10 +943,11 @@ only when it is `http://` or `https://`, in a new tab without a referrer (`rel="
 
 Five data routes, each behind a session (in the security matrix). A paired phone has two of them, `learn_next` and
 `learn_history` (released at `read`, for its page Lernen); the other three refuse it before a handler runs. For a phone
-the hub asks the engine for the released areas alone (`areas`: the released ones of the areas the hub holds, narrowed
-to the `area` asked for; an area that is not released, or none known, is an empty list and asks for no path), so the
-sums, the learning days and the streak of the series are the engine's over what the phone may know, never computed in
-the hub. The answers are cut field by field (`device_cut::learn_next`, `device_cut::learn_history`): only paths of a
+the hub asks the engine for the series of the released areas alone (`areas`: the released ones of the areas the hub
+holds, narrowed to the `area` asked for; an area that is not released, or none known, is an empty list and asks for no
+path), so the sums, the learning days and the streak of the series are the engine's over what the phone may know,
+never computed in the hub. `learn_next` takes no `areas` (its figures are per path, nothing is summed): it is asked as
+the phone asked and cut; an `area` asked that is not released answers no path without asking the engine. The answers are cut field by field (`device_cut::learn_next`, `device_cut::learn_history`): only paths of a
 released area; no project a path serves (it may be of another area), no icon that is a file, no line number, a point's
 `link` only as `http://` or `https://`, the task it was promoted to only when its area is released, and which areas or
 lines of the series could not be read only as `partial`. The query is plain (`parse_query`): an area name, a path or competence id
