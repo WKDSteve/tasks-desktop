@@ -773,6 +773,7 @@ pub async fn serve(opts: ServeOptions) -> Result<(), String> {
         .clone()
         .and_then(|nvim| crate::bundle::editor_nvim(nvim, &env));
     let attach_dirs = file.app.attach_dirs.clone();
+    let upload_max_bytes = file.app.upload_max_bytes();
     let send_at = file.app.send_at().to_owned();
     let scheduler = scheduler_of(&file, &env, dir.join("schedule.json"));
     // The people of an `internal` meeting reach a paired phone only when the settings release them.
@@ -855,6 +856,7 @@ pub async fn serve(opts: ServeOptions) -> Result<(), String> {
         past_the_guard: Vec::new(),
         attach_dirs: attach_dirs.clone(),
         upload_dir: Some(upload_dir.clone()),
+        upload_max_bytes: Some(upload_max_bytes),
         upload_engine: Some(Arc::clone(&upload_engine)),
         snapshot_root: snapshot_root.clone(),
         vaults: Some(Arc::clone(&vaults)),

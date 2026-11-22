@@ -9,7 +9,7 @@
 //!
 //! The body is the file as it is, streamed to disk under a name the hub gives it, in a folder of the hub's own below its
 //! configuration; the engine takes it from there (`from: upload`) and the hub removes it afterwards, whatever came of
-//! it. The size is limited ([`MAX_UPLOAD_BYTES`], `413 too_large`, asked up front when the size is known and counted
+//! it. The size is limited ([`DEFAULT_UPLOAD_MAX_BYTES`], `upload_max_mb` of `config.json`, `413 too_large`, asked up front when the size is known and counted
 //! while the body streams in) and so is the type: the ending of the name must be on the allow-list of its kind
 //! ([`extension_allowed`], `415 unsupported_type`); the disk is asked for the room up front when the size is known.
 //! The name the person sees travels in `X-Upload-Name`, percent-encoded; a name with a control character or a `..`
@@ -29,7 +29,7 @@ const LARGE_FOR_GIT: u64 = 100 * 1024 * 1024;
 /// The longest asset name: a file name has room for 255 bytes, and the slug's folder is in the path as well.
 const MAX_NAME_BYTES: usize = 120;
 /// The largest file one upload takes (ASVS 5.0 V5.2.1): a video of the camera fits, a disk image does not.
-pub(super) const MAX_UPLOAD_BYTES: u64 = 2 * 1024 * 1024 * 1024;
+pub const DEFAULT_UPLOAD_MAX_BYTES: u64 = 2 * 1024 * 1024 * 1024;
 /// A file left behind by a hub that was killed is gone after this long.
 const LEFTOVER_AFTER: Duration = Duration::from_secs(24 * 60 * 60);
 
@@ -453,7 +453,7 @@ pub(super) async fn upload(
         Ok(Some(text)) => text.parse::<u64>().ok(),
         _ => None,
     };
-    if size.is_some_and(|size| size > MAX_UPLOAD_BYTES) {
+    if size.is_some_and(|size| size > rt.upload_max_bytes) {
         return too_large();
     }
     if !st.post_limit.allow() {
@@ -499,7 +499,7 @@ pub(super) async fn upload(
             "a phone attaches only to a task, and a photo or a voice note to a meeting",
         );
     }
-    let (incoming, written) = match receive(dir.clone(), size, MAX_UPLOAD_BYTES, body).await {
+    let (incoming, written) = match receive(dir.clone(), size, rt.upload_max_bytes, body).await {
         Ok(done) => done,
         Err(response) => return response,
     };

@@ -75,6 +75,7 @@ mod settings;
 mod setup;
 mod testing;
 mod upload;
+pub use self::upload::DEFAULT_UPLOAD_MAX_BYTES;
 mod vaults;
 
 pub use self::push::HubPush;
@@ -144,6 +145,8 @@ pub struct Extras {
     /// The folder of the hub's own a file from the page lies in until the engine has taken it; none: this hub takes no
     /// files.
     pub upload_dir: Option<std::path::PathBuf>,
+    /// The largest file one upload takes; none: [`DEFAULT_UPLOAD_MAX_BYTES`].
+    pub upload_max_bytes: Option<u64>,
     /// The engine process that copies one upload; none: the engine of the page does it, within its time limit.
     pub upload_engine: Option<UploadEngine>,
     /// The folder of the plugin checkouts (`REPOS_DIR`) the text snapshots of the test sheets are read from; none: the
@@ -194,6 +197,7 @@ pub async fn start_with(cfg: ServerConfig, extras: Extras) -> std::io::Result<Ru
         first_start,
         attach_dirs,
         upload_dir,
+        upload_max_bytes,
         upload_engine,
         snapshot_root,
         repos,
@@ -241,6 +245,7 @@ pub async fn start_with(cfg: ServerConfig, extras: Extras) -> std::io::Result<Ru
         streams: Arc::new(StreamCounter::default()),
         snapshot_root: snapshot_root.map(Arc::new),
         upload_dir: upload_dir.map(Arc::new),
+        upload_max_bytes: upload_max_bytes.unwrap_or(DEFAULT_UPLOAD_MAX_BYTES),
         upload_engine,
         repos,
         repo_status,
@@ -653,6 +658,7 @@ mod tests {
                 snapshot_root: None,
                 attach_dirs: Arc::default(),
                 upload_dir: None,
+                upload_max_bytes: DEFAULT_UPLOAD_MAX_BYTES,
                 upload_engine: None,
                 repos: None,
                 mail: None,
