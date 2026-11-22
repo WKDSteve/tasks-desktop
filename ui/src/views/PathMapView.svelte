@@ -12,6 +12,8 @@
   import type { PathEntry, Paths, PathStage } from '../lib/contract';
   import Info from 'appkit-ui/Info.svelte';
   import ItemIcon from './ItemIcon.svelte';
+  import LearnScopeNote from './LearnScopeNote.svelte';
+  import { learnScope } from '../lib/learnScope';
   import { shownIcon } from '../lib/icons';
   import { markHidden } from '../lib/text';
   import {
@@ -76,21 +78,26 @@
   const openProjects = $derived(new Set((app.snapshot?.projects ?? []).map((p) => p.id)));
   const all = $derived(doc?.items ?? []);
   const paths = $derived(new Map(all.map((p) => [p.id, p] as const)));
+  // The area filter of the page (lib/learnScope.ts): a path of another area is hidden like a finished one, so an arrow
+  // to it still knows its title.
+  const scope = $derived(learnScope(app.filter.areas, app.matchAreas));
   const titleOf = (id: string): string => paths.get(id)?.title ?? projects.find((p) => p.id === id)?.title ?? id;
   // The projects a path of the list belongs to, for the filter.
   const projectChoices = $derived(
-    projects.filter((p) => all.some((path) => path.project === p.id)).toSorted((a, b) => a.title.localeCompare(b.title)),
+    projects.filter((p) => all.some((path) => path.project === p.id && scope.has(path.area))).toSorted((a, b) => a.title.localeCompare(b.title)),
   );
 
   // What is shown: the finished ones hidden on request, one project, or the chain of one box.
   let project = $state('');
   let chainOnly = $state<string | null>(null);
   const hideDone = $derived(app.pathMapHideDone);
-  const shown = $derived(all.filter((p) => (!hideDone || stageOf(p) !== 'done') && (project === '' || p.project === project)));
+  const shown = $derived(all.filter((p) => scope.has(p.area) && (!hideDone || stageOf(p) !== 'done') && (project === '' || p.project === project)));
   const hidden = $derived.by(() => {
     const keep = new Set(shown.map((p) => p.id));
     const out = new Set(all.filter((p) => !keep.has(p.id)).map((p) => p.id));
-    for (const p of projects) if ((hideDone && p.done) || (project !== '' && p.id !== project)) out.add(p.id);
+    // With the area filter, a frame without a path of its areas goes too.
+    const framed = new Set(shown.map((p) => p.project));
+    for (const p of projects) if ((hideDone && p.done) || (project !== '' && p.id !== project) || (scope.active && !framed.has(p.id))) out.add(p.id);
     return out;
   });
   const cycles = $derived(doc?.requires_cycles ?? []);
@@ -470,7 +477,9 @@
       </p>
     {/if}
 
-    {#if shown.length === 0 && hideDone && all.every((p) => stageOf(p) === 'done')}
+    {#if scope.active && !all.some((p) => scope.has(p.area))}
+      <LearnScopeNote {app} {scope} />
+    {:else if shown.length === 0 && hideDone && all.every((p) => stageOf(p) === 'done')}
       <div class="empty">
         <p>{t('pathmap.all_done')}</p>
         <button type="button" onclick={() => app.setPathMapHideDone(false)}>{t('pathmap.show_done')}</button>

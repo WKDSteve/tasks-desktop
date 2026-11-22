@@ -12,6 +12,8 @@
   import { isLearnNotesKey, learnNotesText, type LearnNotesKey } from '../lib/learnNotesTexts';
   import type { Competences, LearnNotes, PathEntry } from '../lib/contract';
   import Info from 'appkit-ui/Info.svelte';
+  import LearnScopeNote from './LearnScopeNote.svelte';
+  import { learnScope } from '../lib/learnScope';
   import Blocks from 'appkit-ui/Blocks.svelte';
   import { hostOf, parseMarkdown } from 'appkit-ui/markdown';
   import { markHidden } from '../lib/text';
@@ -49,6 +51,9 @@
   // The hits whose whole note is shown, by `path#index`.
   let whole = $state<ReadonlySet<string>>(new Set());
 
+  // The area filter of the page (lib/learnScope.ts): the engine searches the paths of its areas.
+  const scope = $derived(learnScope(app.filter.areas, app.matchAreas));
+  const asking = $derived(JSON.stringify(scope.query));
   let asked = 0;
   async function read(): Promise<void> {
     const mine = ++asked;
@@ -64,6 +69,7 @@
         ...(kind !== '' ? { kind } : {}),
         ...(path !== '' ? { path } : {}),
         ...(withDone ? { include_done: true } : {}),
+        ...scope.query,
       });
       if (mine !== asked) return;
       doc = answer;
@@ -82,6 +88,7 @@
     void kind;
     void path;
     void withDone;
+    void asking;
     if (!usable) return;
     untrack(() => void read());
   });
@@ -120,11 +127,12 @@
   const servesCompetence = $derived(
     competence === '' ? null : new Set(paths.filter((p) => served(p).includes(competence)).map((p) => p.id)),
   );
-  const shown = $derived(doc ? narrowed(doc.items, { paths: servesCompetence, state: noteState }) : []);
+  // A name the hub cannot be asked for: the page narrows what the engine found in all areas.
+  const shown = $derived(doc ? narrowed(scope.keep(doc.items), { paths: servesCompetence, state: noteState }) : []);
   const competenceChoices = $derived(
-    (competences?.items ?? []).filter((c) => paths.some((p) => served(p).includes(c.id))).toSorted((a, b) => a.title.localeCompare(b.title)),
+    (competences?.items ?? []).filter((c) => scope.keep(paths).some((p) => served(p).includes(c.id))).toSorted((a, b) => a.title.localeCompare(b.title)),
   );
-  const pathChoices = $derived(paths.toSorted((a, b) => a.title.localeCompare(b.title)));
+  const pathChoices = $derived(scope.keep(paths).toSorted((a, b) => a.title.localeCompare(b.title)));
   const keyOf = (item: NoteItem): string => `${item.path}#${item.index}`;
   const crumbs = (item: NoteItem): string =>
     t('learnnotes.crumbs', { path: markHidden(item.title), stage: markHidden(labelText({ label: item.stage_label })), point: markHidden(labelText(item)) });
@@ -271,7 +279,9 @@
       {#if doc.incomplete.length > 0}
         <p class="note" role="note">{t('learnnotes.incomplete', { list: doc.incomplete.map(markHidden).join(', ') })}</p>
       {/if}
-      {#if shown.length === 0}
+      {#if shown.length === 0 && query.trim() === '' && !filtered && scope.active}
+        <LearnScopeNote {app} {scope} />
+      {:else if shown.length === 0}
         <div class="empty">
           {#if query.trim() !== ''}
             <p>{t('learnnotes.no_hit', { text: markHidden(query.trim()) })}</p>

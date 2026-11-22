@@ -210,4 +210,20 @@ describe('CompetencesView', () => {
     expect(old.page.textContent).toContain('capability competences');
     expect(old.m.hub.learnQueries).toEqual([]);
   });
+  it('follows the area filter of the page: a filter of another area hides the fields, said with a button that clears it', async () => {
+    const { m, page } = await show();
+    m.app.filter = { ...m.app.filter, areas: ['elsewhere'] };
+    await settle();
+    await vi.waitFor(() => expect(page.querySelector('.scope-note p')?.textContent).toBe('The area filter (elsewhere) hides the learning paths here.'));
+    // the engine is asked for the fields and the evidence of that area (it scopes a field by the area of its file)
+    expect(m.hub.learnQueries.filter(([name]) => name === 'competences').at(-1)).toEqual(['competences', { area: 'elsewhere' }]);
+    expect(m.hub.learnQueries.filter(([name]) => name === 'learn_evidence').at(-1)).toEqual(['learn_evidence', { include_done: true, area: 'elsewhere' }]);
+    const clear = page.querySelector<HTMLButtonElement>('.scope-note button')!;
+    expect(clear.textContent).toBe('Clear filter');
+    clear.click();
+    await settle();
+    expect(m.app.filter.areas).toEqual([]);
+    await vi.waitFor(() => expect(page.querySelector('.scope-note')).toBeNull());
+    expect(m.hub.learnQueries.filter(([name]) => name === 'competences').at(-1)).toEqual(['competences', {}]);
+  });
 });

@@ -27,6 +27,20 @@ function area(rules: Rules, q: Map<string, string>, out: Params): string | null 
   return null;
 }
 
+/** The most names `areas` may give (the area filter of the page names a few); as `AREAS_MAX` of the Rust hub. */
+const AREAS_MAX = 32;
+
+/** `areas`: several areas or area groups joined by `/` (no area name holds one), as the engine's `areas` list. */
+function areas(rules: Rules, q: Map<string, string>, out: Params): string | null {
+  const value = q.get('areas');
+  if (value === undefined) return null;
+  const names = value.split('/');
+  if (names.length > AREAS_MAX) return 'areas names at most 32 areas';
+  if (!names.every((name) => rules.validAreaName(name))) return 'areas are names joined by /';
+  out['areas'] = names;
+  return null;
+}
+
 function path(rules: Rules, q: Map<string, string>, out: Params): string | null {
   const value = q.get('path');
   if (value === undefined) return null;
@@ -103,42 +117,44 @@ export function learnRequest(rules: Rules, name: LearnRead, query: string): Para
       const pairs = query === '' ? [] : query.split('&').filter((p) => p !== '');
       const text = searchText(pairs.filter((p) => p.startsWith('q=')));
       if (text !== null && typeof text === 'object') return text.error;
-      const q = rules.parseQuery(pairs.filter((p) => !p.startsWith('q=')).join('&'), ['kind', 'area', 'path', 'include_done', 'limit']);
+      const q = rules.parseQuery(pairs.filter((p) => !p.startsWith('q=')).join('&'), ['kind', 'area', 'areas', 'path', 'include_done', 'limit']);
       if (typeof q === 'string') return q;
       if (text) out['query'] = text;
       return first(out, [
         word(q, 'kind', ['note', 'link', 'image'], 'kind is note, link or image', out),
         area(rules, q, out),
+        areas(rules, q, out),
         path(rules, q, out),
         done(q, out),
         number(q, 'limit', 1, 500, 'limit is 1 to 500', out),
       ]);
     }
     case 'learn_evidence': {
-      const q = rules.parseQuery(query, ['competence', 'area', 'path', 'include_done']);
+      const q = rules.parseQuery(query, ['competence', 'area', 'areas', 'path', 'include_done']);
       if (typeof q === 'string') return q;
       const competence = q.get('competence');
       if (competence !== undefined) {
         if (!rules.validTaskId(competence)) return 'competence must be <area>/<slug>';
         out['competence'] = competence;
       }
-      return first(out, [area(rules, q, out), path(rules, q, out), done(q, out)]);
+      return first(out, [area(rules, q, out), areas(rules, q, out), path(rules, q, out), done(q, out)]);
     }
     case 'learn_history': {
-      const q = rules.parseQuery(query, ['since', 'until', 'step', 'area', 'path']);
+      const q = rules.parseQuery(query, ['since', 'until', 'step', 'area', 'areas', 'path']);
       if (typeof q === 'string') return q;
       return first(out, [
         day(q, 'since', out),
         day(q, 'until', out),
         word(q, 'step', ['day', 'week', 'month'], 'step is day, week or month', out),
         area(rules, q, out),
+        areas(rules, q, out),
         path(rules, q, out),
       ]);
     }
     case 'competences': {
-      const q = rules.parseQuery(query, ['area']);
+      const q = rules.parseQuery(query, ['area', 'areas']);
       if (typeof q === 'string') return q;
-      return first(out, [area(rules, q, out)]);
+      return first(out, [area(rules, q, out), areas(rules, q, out)]);
     }
   }
 }

@@ -9,6 +9,8 @@
   import type { Key } from '../lib/i18n';
   import type { Paths, PathEntryLevel } from '../lib/contract';
   import Info from 'appkit-ui/Info.svelte';
+  import LearnScopeNote from './LearnScopeNote.svelte';
+  import { learnScope } from '../lib/learnScope';
   import BadgeMedal from './BadgeMedal.svelte';
   import { AssetImages } from '../lib/assetImages.svelte';
   import { markHidden } from '../lib/text';
@@ -46,8 +48,12 @@
     untrack(() => void read());
   });
 
-  const rows = $derived(rewardRows(doc?.items ?? []));
-  const none = $derived(rows.open.length + rows.given.length + rows.coming.length === 0);
+  // The paths of the areas the area filter of the page shows (lib/learnScope.ts).
+  const scope = $derived(learnScope(app.filter.areas, app.matchAreas));
+  const rows = $derived(rewardRows(scope.keep(doc?.items ?? [])));
+  const count = (r: ReturnType<typeof rewardRows>): number => r.open.length + r.given.length + r.coming.length;
+  const none = $derived(count(rows) === 0);
+  const hiddenByScope = $derived(none && scope.active && count(rewardRows(doc?.items ?? [])) > 0);
   let givenOpen = $state(true);
 
   // One store of pictures per path that names a badge below `assets/badges/`.
@@ -140,6 +146,8 @@
     <p class="none" role="alert">{t('rewards.failed')} <button type="button" onclick={() => void read()}>{t('paths.retry')}</button></p>
   {:else if doc === null}
     <p class="none" role="status">{t('rewards.reading')}</p>
+  {:else if hiddenByScope}
+    <LearnScopeNote {app} {scope} />
   {:else if none}
     <div class="empty" data-rewards-empty>
       <p>{t('rewards.none')}</p>

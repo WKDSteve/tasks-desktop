@@ -9,6 +9,8 @@
   import type { Key } from '../lib/i18n';
   import type { Competences, LearnEvidence } from '../lib/contract';
   import Info from 'appkit-ui/Info.svelte';
+  import LearnScopeNote from './LearnScopeNote.svelte';
+  import { learnScope } from '../lib/learnScope';
   import Blocks from 'appkit-ui/Blocks.svelte';
   import { hostOf, parseMarkdown } from 'appkit-ui/markdown';
   import { markHidden } from '../lib/text';
@@ -37,12 +39,16 @@
   let doc = $state<LearnEvidence | null>(null);
   let fields = $state<Competences | null>(null);
   let problem = $state(false);
+  // The area filter of the page (lib/learnScope.ts): the evidence of the paths of its areas, read again when it
+  // changes. The fields stay all of them: they only name what a piece of evidence proves.
+  const scope = $derived(learnScope(app.filter.areas, app.matchAreas));
+  const asking = $derived(JSON.stringify(scope.query));
   let asked = 0;
   async function read(): Promise<void> {
     const mine = ++asked;
     const fieldsRead = withFields ? app.competences().catch(() => null) : Promise.resolve(null);
     try {
-      const [answer, fieldDoc] = await Promise.all([app.learnEvidence({ include_done: true }), fieldsRead]);
+      const [answer, fieldDoc] = await Promise.all([app.learnEvidence({ include_done: true, ...scope.query }), fieldsRead]);
       if (mine !== asked) return;
       doc = answer;
       fields = fieldDoc;
@@ -55,6 +61,7 @@
   $effect(() => {
     void app.writes;
     void app.snapshot?.rev;
+    void asking;
     if (!usable) return;
     untrack(() => void read());
   });
@@ -64,7 +71,8 @@
   // Grouped by field where the engine knows fields, else by path.
   let chosenGrouping = $state<EvidenceGrouping | null>(null);
   const grouping = $derived<EvidenceGrouping>(chosenGrouping ?? (withFields ? 'competence' : 'path'));
-  const items = $derived(doc?.items ?? []);
+  // A name the hub cannot be asked for: the page narrows what the engine gave for all areas.
+  const items = $derived(scope.keep(doc?.items ?? []));
   const fieldTitle = (id: string): string => markHidden(fields?.items.find((f) => f.id === id)?.title ?? id);
   /** Groups by name, the fields without one last (as the catalogue orders them). */
   const byGroup = (a: string | undefined, b: string | undefined): number =>
@@ -106,6 +114,8 @@
     <p class="none" role="alert">{t('evidence.failed')} <button type="button" onclick={() => void read()}>{t('paths.retry')}</button></p>
   {:else if doc === null}
     <p class="none" role="status">{t('evidence.reading')}</p>
+  {:else if items.length === 0 && scope.active}
+    <LearnScopeNote {app} {scope} />
   {:else if items.length === 0}
     <div class="empty" data-evidence-empty>
       <p>{t('evidence.none')}</p>

@@ -5,7 +5,7 @@
 // level reached; before the series the finished tasks of the points, marked incomplete; without the series today's
 // state; the tables in the menu View, without the name of a path of a private area.
 import { flushSync, mount, tick, unmount } from 'svelte';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { make, snapshot } from '../lib/appDouble';
 import LearnStatsView from './LearnStatsView.svelte';
 
@@ -325,5 +325,26 @@ describe('LearnStatsView', () => {
     unmount(mounted!);
     mounted = undefined;
     expect(m.app.viewTables).toBeNull();
+  });
+  it('follows the area filter of the page: a filter of another area hides the figures, said with a button that clears it', async () => {
+    const { m, page } = await show();
+    m.app.filter = { ...m.app.filter, areas: ['elsewhere'] };
+    await settle();
+    await vi.waitFor(() => expect(page.querySelector('.scope-note p')?.textContent).toBe('The area filter (elsewhere) hides the learning paths here.'));
+    const clear = page.querySelector<HTMLButtonElement>('.scope-note button')!;
+    expect(clear.textContent).toBe('Clear filter');
+    clear.click();
+    await settle();
+    expect(m.app.filter.areas).toEqual([]);
+    await vi.waitFor(() => expect(page.querySelector('.scope-note')).toBeNull());
+  });
+
+  it('counts the figures of the paths of the areas of the filter only', async () => {
+    const { page, m } = await show();
+    m.app.filter = { ...m.app.filter, areas: ['priv'] };
+    await settle();
+    // the 16th without the two paths of lib: one point of the diary, a quarter of an hour
+    expect(cells(page.querySelector('#learnstats-bars-table tr[data-bar="2026-11-16"]')).slice(0, 5)).toEqual(['Mon, 16 Nov 2026', '1', '0', '0', '0.25']);
+    expect([...page.querySelectorAll<HTMLElement>('section[aria-labelledby="learnstats-paths"] tr[data-path]')].map((r) => r.dataset['path'])).toEqual(['priv/diary']);
   });
 });

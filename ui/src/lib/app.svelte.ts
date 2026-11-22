@@ -1534,7 +1534,7 @@ export class App {
   }
 
   /** The fields of knowledge with their stages and the scale (`tasks.competences`). */
-  competences(query: { area?: string } = {}, signal?: AbortSignal): Promise<Competences> {
+  competences(query: { area?: string; areas?: string } = {}, signal?: AbortSignal): Promise<Competences> {
     return this.env.hub.competences(query, signal);
   }
 

@@ -6,8 +6,9 @@ import { badgeTexts } from './badgeTexts';
 import { rewardTexts } from './rewardTexts';
 import { competenceTexts } from './competenceTexts';
 import { evidenceTexts } from './evidenceTexts';
+import { learnScopeTexts } from './learnScopeTexts';
 
-const ALL: Record<string, ChunkTexts<string>> = { badges: badgeTexts, rewards: rewardTexts, competences: competenceTexts, evidence: evidenceTexts };
+const ALL: Record<string, ChunkTexts<string>> = { badges: badgeTexts, rewards: rewardTexts, competences: competenceTexts, evidence: evidenceTexts, learnScope: learnScopeTexts };
 
 describe('chunkTexts', () => {
   it('fills placeholders and falls back to the words of the page', () => {

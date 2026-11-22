@@ -30,6 +30,32 @@ fn take_area(
     Ok(())
 }
 
+/// The most names `areas` may give (the area filter of the page names a few).
+const AREAS_MAX: usize = 32;
+
+/// `areas` (several areas or area groups, joined by `/`, which no area name holds) as the engine's `areas` list,
+/// refused when a part is not a name; for the reads whose engine method takes a list (the area filter of the page
+/// with several names).
+fn take_areas(
+    params: &Params,
+    request: &mut serde_json::Map<String, serde_json::Value>,
+) -> Result<(), &'static str> {
+    if let Some(list) = params.get("areas") {
+        let names: Vec<&str> = list.split('/').collect();
+        if names.len() > AREAS_MAX {
+            return Err("areas names at most 32 areas");
+        }
+        if names
+            .iter()
+            .any(|name| crate::config::valid_area_name(name).is_err())
+        {
+            return Err("areas are names joined by /");
+        }
+        request.insert("areas".to_owned(), json!(names));
+    }
+    Ok(())
+}
+
 /// `path` (one id of a learning path) as the engine's `paths: [id]`.
 fn take_path(
     params: &Params,
@@ -149,7 +175,7 @@ pub(super) fn learn_notes_request(query: Option<&str>) -> Result<serde_json::Val
         .partition(|p| p.starts_with("q="));
     let params = parse_query(
         Some(&rest.join("&")),
-        &["kind", "area", "path", "include_done", "limit"],
+        &["kind", "area", "areas", "path", "include_done", "limit"],
     )?;
     let mut request = serde_json::Map::new();
     match text.as_slice() {
@@ -180,17 +206,21 @@ pub(super) fn learn_notes_request(query: Option<&str>) -> Result<serde_json::Val
         &mut request,
     )?;
     take_area(&params, &mut request)?;
+    take_areas(&params, &mut request)?;
     take_path(&params, &mut request)?;
     take_done(&params, &mut request)?;
     take_number(&params, "limit", 1..=500, "limit is 1 to 500", &mut request)?;
     Ok(serde_json::Value::Object(request))
 }
 
-/// The question of `learn_evidence` from the query (`competence`, `area`, `path`, `include_done`).
+/// The question of `learn_evidence` from the query (`competence`, `area`, `areas`, `path`, `include_done`).
 pub(super) fn learn_evidence_request(
     query: Option<&str>,
 ) -> Result<serde_json::Value, &'static str> {
-    let params = parse_query(query, &["competence", "area", "path", "include_done"])?;
+    let params = parse_query(
+        query,
+        &["competence", "area", "areas", "path", "include_done"],
+    )?;
     let mut request = serde_json::Map::new();
     if let Some(id) = params.get("competence") {
         if !valid_task_id(id) {
@@ -199,16 +229,17 @@ pub(super) fn learn_evidence_request(
         request.insert("competence".to_owned(), json!(id));
     }
     take_area(&params, &mut request)?;
+    take_areas(&params, &mut request)?;
     take_path(&params, &mut request)?;
     take_done(&params, &mut request)?;
     Ok(serde_json::Value::Object(request))
 }
 
-/// The question of `learn_history` from the query (`since`, `until`, `step`, `area`, `path`).
+/// The question of `learn_history` from the query (`since`, `until`, `step`, `area`, `areas`, `path`).
 pub(super) fn learn_history_request(
     query: Option<&str>,
 ) -> Result<serde_json::Value, &'static str> {
-    let params = parse_query(query, &["since", "until", "step", "area", "path"])?;
+    let params = parse_query(query, &["since", "until", "step", "area", "areas", "path"])?;
     let mut request = serde_json::Map::new();
     take_day(&params, "since", &mut request)?;
     take_day(&params, "until", &mut request)?;
@@ -220,15 +251,17 @@ pub(super) fn learn_history_request(
         &mut request,
     )?;
     take_area(&params, &mut request)?;
+    take_areas(&params, &mut request)?;
     take_path(&params, &mut request)?;
     Ok(serde_json::Value::Object(request))
 }
 
-/// The question of `competences` from the query (`area`).
+/// The question of `competences` from the query (`area`, `areas`).
 pub(super) fn competences_request(query: Option<&str>) -> Result<serde_json::Value, &'static str> {
-    let params = parse_query(query, &["area"])?;
+    let params = parse_query(query, &["area", "areas"])?;
     let mut request = serde_json::Map::new();
     take_area(&params, &mut request)?;
+    take_areas(&params, &mut request)?;
     Ok(serde_json::Value::Object(request))
 }
 
@@ -491,5 +524,38 @@ mod tests {
             Ok(json!({ "area": "ALL" }))
         );
         assert!(competences_request(Some("path=a/b")).is_err());
+    }
+
+    #[test]
+    fn several_areas_are_names_joined_by_a_slash() {
+        let both = json!({ "areas": ["lib.nvim", "ALL"] });
+        assert_eq!(
+            competences_request(Some("areas=lib.nvim/ALL")),
+            Ok(both.clone())
+        );
+        assert_eq!(
+            learn_notes_request(Some("areas=lib.nvim/ALL")),
+            Ok(both.clone())
+        );
+        assert_eq!(
+            learn_evidence_request(Some("areas=lib.nvim/ALL")),
+            Ok(both.clone())
+        );
+        assert_eq!(learn_history_request(Some("areas=lib.nvim/ALL")), Ok(both));
+        // a part that is no name: an empty one (a slash at the end or two in a row), a dot at the start
+        for bad in ["areas=a/", "areas=a//b", "areas=/a", "areas=.git"] {
+            assert_eq!(
+                competences_request(Some(bad)),
+                Err("areas are names joined by /"),
+                "{bad}"
+            );
+        }
+        let many = vec!["a"; 33].join("/");
+        assert_eq!(
+            learn_history_request(Some(&format!("areas={many}"))),
+            Err("areas names at most 32 areas")
+        );
+        // the engine method of paths and learn_next takes no list
+        assert!(learn_next_request(Some("areas=a/b")).is_err());
     }
 }

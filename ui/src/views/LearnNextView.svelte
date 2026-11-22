@@ -11,6 +11,8 @@
   import { isLearnNextKey, learnNextText, type LearnNextKey } from '../lib/learnNextTexts';
   import type { LearnNext, LearnPoint } from '../lib/contract';
   import Info from 'appkit-ui/Info.svelte';
+  import LearnScopeNote from './LearnScopeNote.svelte';
+  import { learnScope } from '../lib/learnScope';
   import { hostOf } from 'appkit-ui/markdown';
   import ItemIcon from './ItemIcon.svelte';
   import { shownIcon } from '../lib/icons';
@@ -83,7 +85,9 @@
     untrack(() => void read());
   });
 
-  const all = $derived(doc?.items ?? []);
+  // The paths of the areas the area filter of the page shows (lib/learnScope.ts); the engine counts per path.
+  const scope = $derived(learnScope(app.filter.areas, app.matchAreas));
+  const all = $derived(scope.keep(doc?.items ?? []));
   const projects = $derived(projectsOf(all));
   const projectTitle = (id: string): string => app.snapshot?.projects?.find((p) => p.id === id)?.title ?? id;
   const shown = $derived(ofProject(all, project));
@@ -227,6 +231,8 @@
       </div>
     {:else if !doc}
       <p class="none" role="status">{t('learnnext.reading')}</p>
+    {:else if all.length === 0 && doc.items.length > 0}
+      <LearnScopeNote {app} {scope} />
     {:else if shown.length === 0}
       <div class="empty">
         {#if all.length > 0}

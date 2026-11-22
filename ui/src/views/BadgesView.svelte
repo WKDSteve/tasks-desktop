@@ -10,6 +10,8 @@
   import type { Key } from '../lib/i18n';
   import type { Paths, PathEntryLevel } from '../lib/contract';
   import Info from 'appkit-ui/Info.svelte';
+  import LearnScopeNote from './LearnScopeNote.svelte';
+  import { learnScope } from '../lib/learnScope';
   import BadgeMedal from './BadgeMedal.svelte';
   import ItemIcon from './ItemIcon.svelte';
   import { AssetImages } from '../lib/assetImages.svelte';
@@ -63,7 +65,10 @@
 
   let filter = $state<BadgeFilter>('all');
   let grouping = $state<BadgeGrouping>('path');
-  const tiles = $derived(badgeTiles(doc?.items ?? []));
+  // The paths of the areas the area filter of the page shows (lib/learnScope.ts).
+  const scope = $derived(learnScope(app.filter.areas, app.matchAreas));
+  const tiles = $derived(badgeTiles(scope.keep(doc?.items ?? [])));
+  const hiddenByScope = $derived(tiles.length === 0 && scope.active && badgeTiles(doc?.items ?? []).length > 0);
   const earned = $derived(tiles.filter((tile) => tile.earned).length);
   const groups = $derived(groupTiles(filterTiles(tiles, filter), grouping));
   const flat = $derived(groups.flatMap((g) => g.tiles));
@@ -222,6 +227,8 @@
     <p class="none" role="alert">{t('badges.failed')} <button type="button" onclick={() => void read()}>{t('paths.retry')}</button></p>
   {:else if doc === null}
     <p class="none" role="status">{t('badges.reading')}</p>
+  {:else if hiddenByScope}
+    <LearnScopeNote {app} {scope} />
   {:else if tiles.length === 0}
     <div class="empty" data-badges-empty>
       <p>{t('badges.none')}</p>

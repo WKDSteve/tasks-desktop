@@ -155,4 +155,20 @@ describe('EvidenceView', () => {
     expect(old.page.textContent).toContain('capability learn_evidence');
     expect(old.m.hub.learnQueries).toEqual([]);
   });
+  it('follows the area filter of the page: a filter of another area hides the evidence, said with a button that clears it', async () => {
+    const { m, page } = await show();
+    m.app.filter = { ...m.app.filter, areas: ['elsewhere'] };
+    await settle();
+    await vi.waitFor(() => expect(page.querySelector('.scope-note p')?.textContent).toBe('The area filter (elsewhere) hides the learning paths here.'));
+    expect(m.hub.learnQueries.filter(([name]) => name === 'learn_evidence').at(-1)).toEqual(['learn_evidence', { include_done: true, area: 'elsewhere' }]);
+    // the fields only name what is proved: asked for all of them
+    expect(m.hub.learnQueries.filter(([name]) => name === 'competences').every(([, q]) => JSON.stringify(q) === '{}')).toBe(true);
+    const clear = page.querySelector<HTMLButtonElement>('.scope-note button')!;
+    expect(clear.textContent).toBe('Clear filter');
+    clear.click();
+    await settle();
+    expect(m.app.filter.areas).toEqual([]);
+    await vi.waitFor(() => expect(page.querySelector('.scope-note')).toBeNull());
+    expect(rows(page)).toContain('lib/os#3');
+  });
 });

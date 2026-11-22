@@ -907,7 +907,7 @@ export class Hub extends HubClient<Snapshot> {
   }
 
   /** The fields of knowledge with their stages and the scale (capability `competences`). */
-  competences(query: { area?: string } = {}, signal?: AbortSignal): Promise<Competences> {
+  competences(query: { area?: string; areas?: string } = {}, signal?: AbortSignal): Promise<Competences> {
     return this.json<Competences>(`/api/tasks/competences${learnQuery(query)}`, signal ? { signal } : undefined);
   }
 
@@ -956,6 +956,8 @@ export interface LearnNotesQuery {
   q?: string;
   kind?: 'note' | 'link' | 'image';
   area?: string;
+  /** Several areas or area groups joined by `/` (no area name holds one). */
+  areas?: string;
   path?: string;
   include_done?: boolean;
   limit?: number;
@@ -965,6 +967,8 @@ export interface LearnNotesQuery {
 export interface LearnEvidenceQuery {
   competence?: string;
   area?: string;
+  /** Several areas or area groups joined by `/` (no area name holds one). */
+  areas?: string;
   path?: string;
   include_done?: boolean;
 }
@@ -975,6 +979,8 @@ export interface LearnHistoryQuery {
   until?: string;
   step?: 'day' | 'week' | 'month';
   area?: string;
+  /** Several areas or area groups joined by `/` (no area name holds one). */
+  areas?: string;
   path?: string;
 }
 

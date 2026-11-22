@@ -10,6 +10,8 @@
   import type { Key } from '../lib/i18n';
   import type { Competences, LearnEvidence, PathEntry, PathStage, Paths } from '../lib/contract';
   import Info from 'appkit-ui/Info.svelte';
+  import LearnScopeNote from './LearnScopeNote.svelte';
+  import { learnScope } from '../lib/learnScope';
   import Blocks from 'appkit-ui/Blocks.svelte';
   import { parseMarkdown } from 'appkit-ui/markdown';
   import { markHidden } from '../lib/text';
@@ -42,17 +44,22 @@
   let paths = $state<PathEntry[]>([]);
   let evidence = $state<LearnEvidence['items'] | null>(null);
   let problem = $state(false);
+  // The area filter of the page (lib/learnScope.ts): the fields of its areas, as the engine scopes them (a field
+  // belongs to the area its file is in), and the evidence of the paths of its areas; read again when it changes.
+  const scope = $derived(learnScope(app.filter.areas, app.matchAreas));
+  const asking = $derived(JSON.stringify(scope.query));
   let asked = 0;
   async function read(): Promise<void> {
     const mine = ++asked;
+    const query = scope.query;
     const pathsRead: Promise<Paths | null> = app.can('paths') ? app.pathsForMap().catch(() => null) : Promise.resolve(null);
-    const evidenceRead: Promise<LearnEvidence | null> = withEvidence ? app.learnEvidence({ include_done: true }).catch(() => null) : Promise.resolve(null);
+    const evidenceRead: Promise<LearnEvidence | null> = withEvidence ? app.learnEvidence({ include_done: true, ...query }).catch(() => null) : Promise.resolve(null);
     try {
-      const [answer, pathDoc, evidenceDoc] = await Promise.all([app.competences(), pathsRead, evidenceRead]);
+      const [answer, pathDoc, evidenceDoc] = await Promise.all([app.competences(query), pathsRead, evidenceRead]);
       if (mine !== asked) return;
       doc = answer;
       paths = pathDoc?.items ?? [];
-      evidence = evidenceDoc?.items ?? null;
+      evidence = evidenceDoc ? scope.keep(evidenceDoc.items) : null;
       problem = false;
     } catch {
       if (mine !== asked) return;
@@ -62,6 +69,7 @@
   $effect(() => {
     void app.writes;
     void app.snapshot?.rev;
+    void asking;
     if (!usable) return;
     untrack(() => void read());
   });
@@ -70,7 +78,8 @@
   let withPath = $state(false);
   let text = $state('');
   let sort = $state<CompetenceSort>('name');
-  const items = $derived(doc?.items ?? []);
+  // A name the hub cannot be asked for: the page narrows what the engine gave for all areas.
+  const items = $derived(scope.keep(doc?.items ?? []));
   const groups = $derived(competenceGroups(items, paths, { withTarget, withPath, text }, sort));
   const counts = $derived(evidenceCounts(evidence ?? []));
   const without = $derived(pathsWithoutCompetence(paths, items));
@@ -161,6 +170,8 @@
     <p class="none" role="alert">{t('competences.failed')} <button type="button" onclick={() => void read()}>{t('paths.retry')}</button></p>
   {:else if doc === null}
     <p class="none" role="status">{t('competences.reading')}</p>
+  {:else if items.length === 0 && scope.active}
+    <LearnScopeNote {app} {scope} />
   {:else if items.length === 0}
     <div class="empty" data-competences-empty>
       <p>{t('competences.none')}</p>

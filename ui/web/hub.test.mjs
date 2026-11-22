@@ -90,6 +90,12 @@ test('a request the Rust hub refuses never reaches the engine', async () => {
     ['learn_history?since=2026-1-01', 400, 'bad_query'],
     ['learn_history?step=year', 400, 'bad_query'],
     ['competences?path=a/b', 400, 'bad_query'],
+    // several areas: names joined by a slash, at most 32, and no list for the methods that take none
+    ['competences?areas=a/', 400, 'bad_query'],
+    ['competences?areas=a//b', 400, 'bad_query'],
+    ['learn_history?areas=.git', 400, 'bad_query'],
+    [`learn_notes?areas=${Array(33).fill('a').join('/')}`, 400, 'bad_query'],
+    ['learn_next?areas=a/b', 400, 'bad_query'],
     ['nothing', 404, 'not_found'],
   ];
   for (const [path, status, code] of cases) {
@@ -153,6 +159,11 @@ test('the reads of the tab Lernpläne pass their question to the engine of the s
   await h.get('learn_evidence?competence=ALL/os&include_done=1');
   await h.get('learn_history?since=2026-11-01&until=2026-11-22&step=week&area=lib.nvim');
   await h.get('competences?area=ALL');
+  // several areas (the area filter of the page names more than one): the engine's list
+  await h.get('learn_notes?areas=lib.nvim/ALL');
+  await h.get('learn_evidence?areas=lib.nvim/ALL');
+  await h.get('learn_history?areas=lib.nvim/ALL');
+  await h.get('competences?areas=lib.nvim/ALL');
   assert.deepEqual(h.calls, [
     ['learn_next', { params: { area: 'lib.nvim', paths: ['lib.nvim/lua'], machine: 'wsl', n: 5 } }],
     ['learn_notes', { params: { query: 'Shell üben', kind: 'link', include_done: true, limit: 50 } }],
@@ -162,6 +173,10 @@ test('the reads of the tab Lernpläne pass their question to the engine of the s
     ['learn_evidence', { params: { competence: 'ALL/os', include_done: true } }],
     ['learn_history', { params: { since: '2026-11-01', until: '2026-11-22', step: 'week', area: 'lib.nvim' } }],
     ['competences', { params: { area: 'ALL' } }],
+    ['learn_notes', { params: { areas: ['lib.nvim', 'ALL'] } }],
+    ['learn_evidence', { params: { areas: ['lib.nvim', 'ALL'] } }],
+    ['learn_history', { params: { areas: ['lib.nvim', 'ALL'] } }],
+    ['competences', { params: { areas: ['lib.nvim', 'ALL'] } }],
   ]);
 });
 

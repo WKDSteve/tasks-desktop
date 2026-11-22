@@ -430,4 +430,18 @@ describe('PathsView', () => {
     m.app.writes += 1;
     await vi.waitFor(() => expect(page.querySelector('[role="alert"]')?.textContent).toContain('Dieser Pfad ließ sich nicht lesen.'));
   });
+  it('follows the area filter of the page: a filter of another area hides the paths, said with a button that clears it', async () => {
+    const { m, page } = await show();
+    m.app.filter = { ...m.app.filter, areas: ['elsewhere'] };
+    await settle();
+    await vi.waitFor(() => expect(page.querySelector('.scope-note p')?.textContent).toBe('Der Bereichs-Filter (elsewhere) blendet die Lernpfade hier aus.'));
+    expect(page.querySelector('button.pick')).toBeNull();
+    const clear = page.querySelector<HTMLButtonElement>('.scope-note button')!;
+    expect(clear.textContent).toBe('Filter aufheben');
+    clear.click();
+    await settle();
+    expect(m.app.filter.areas).toEqual([]);
+    await vi.waitFor(() => expect(page.querySelector('.scope-note')).toBeNull());
+    expect(page.querySelector('button.pick[data-path="lib/lua"]')).not.toBeNull();
+  });
 });

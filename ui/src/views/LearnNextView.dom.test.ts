@@ -295,4 +295,28 @@ describe('LearnNextView', () => {
     await settle();
     expect(card(page, 'lib/lua')).toBeDefined();
   });
+  it('follows the area filter of the page: a filter of another area hides the cards, said with a button that clears it', async () => {
+    const { m, page } = await show();
+    m.app.filter = { ...m.app.filter, areas: ['elsewhere'] };
+    await settle();
+    await vi.waitFor(() => expect(page.querySelector('.scope-note p')?.textContent).toBe('The area filter (elsewhere) hides the learning paths here.'));
+    const clear = page.querySelector<HTMLButtonElement>('.scope-note button')!;
+    expect(clear.textContent).toBe('Clear filter');
+    clear.click();
+    await settle();
+    expect(m.app.filter.areas).toEqual([]);
+    await vi.waitFor(() => expect(page.querySelector('.scope-note')).toBeNull());
+    expect(card(page, 'lib/lua')).toBeDefined();
+  });
+
+  it('shows the cards of the areas of the filter only; an area group stands for its members', async () => {
+    const { m, page } = await show();
+    m.app.filter = { ...m.app.filter, areas: ['ops'] };
+    await settle();
+    expect([...page.querySelectorAll<HTMLElement>('article[data-path]')].map((a) => a.dataset['path'])).toEqual(['ops/shell']);
+    m.app.cachedGroups = [{ name: 'tools', members: ['lib'], open: 1 }];
+    m.app.filter = { ...m.app.filter, areas: ['tools'] };
+    await settle();
+    expect([...page.querySelectorAll<HTMLElement>('article[data-path]')].map((a) => a.dataset['path'])).toEqual(['lib/lua']);
+  });
 });

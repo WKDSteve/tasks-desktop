@@ -184,4 +184,24 @@ describe('LearnTimeView', () => {
     [...page.querySelectorAll('button')].find((b) => b.textContent === 'To the learning paths')!.click();
     expect(m.app.view).toBe('paths');
   });
+  it('follows the area filter of the page: a filter of another area hides the rows, said with a button that clears it', async () => {
+    const { m, page } = await show();
+    m.app.filter = { ...m.app.filter, areas: ['elsewhere'] };
+    await settle();
+    await vi.waitFor(() => expect(page.querySelector('.scope-note p')?.textContent).toBe('The area filter (elsewhere) hides the learning paths here.'));
+    const clear = page.querySelector<HTMLButtonElement>('.scope-note button')!;
+    expect(clear.textContent).toBe('Clear filter');
+    clear.click();
+    await settle();
+    expect(m.app.filter.areas).toEqual([]);
+    await vi.waitFor(() => expect(page.querySelector('.scope-note')).toBeNull());
+    expect(row(page, 'lib/lua')).toBeDefined();
+  });
+
+  it('shows the rows of the areas of the filter only', async () => {
+    const { m, page } = await show();
+    m.app.filter = { ...m.app.filter, areas: ['lib'] };
+    await settle();
+    expect([...page.querySelectorAll<HTMLElement>('tr[data-path]')].map((r) => r.dataset['path'])).toEqual(['lib/lua']);
+  });
 });

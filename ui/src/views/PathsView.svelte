@@ -16,6 +16,8 @@
   import ImageViewer from './ImageViewer.svelte';
   import ItemIcon from './ItemIcon.svelte';
   import Lazy from './Lazy.svelte';
+  import LearnScopeNote from './LearnScopeNote.svelte';
+  import { learnScope } from '../lib/learnScope';
   import { AssetImages } from '../lib/assetImages.svelte';
   import { shownIcon } from '../lib/icons';
   import { markHidden } from '../lib/text';
@@ -133,8 +135,6 @@
       list = answer.items;
       app.rememberPaths(answer.items);
       listProblem = false;
-      // Nothing chosen yet (or the chosen one is gone): the first path, so the view never stands empty beside a list.
-      if (answer.items.length > 0 && !answer.items.some((p) => p.id === app.pathChoice)) app.pathChoice = answer.items[0]!.id;
     } catch {
       if (mine !== askedList) return;
       listProblem = true;
@@ -170,6 +170,15 @@
     void app.snapshot?.rev;
     if (!usable) return;
     untrack(() => void readList());
+  });
+  // The paths of the areas the area filter of the page shows (lib/learnScope.ts).
+  const scope = $derived(learnScope(app.filter.areas, app.matchAreas));
+  const shownList = $derived(list === null ? null : scope.keep(list));
+  // Nothing chosen yet (or the chosen one is gone or hidden by the filter): the first path shown, so the view never
+  // stands empty beside a list.
+  $effect(() => {
+    const first = shownList?.[0];
+    if (first && !shownList.some((p) => p.id === app.pathChoice)) untrack(() => (app.pathChoice = first.id));
   });
   $effect(() => {
     void app.writes;
@@ -507,11 +516,13 @@
     <p class="none" role="status">{t('paths.loading')}</p>
   {:else if list.length === 0}
     <p class="none">{t('paths.none')}</p>
+  {:else if shownList === null || shownList.length === 0}
+    <LearnScopeNote {app} {scope} />
   {:else}
     <div class="split">
       <nav class="list" aria-label={t('paths.list')}>
         <ul>
-          {#each list as entry (entry.id)}
+          {#each shownList as entry (entry.id)}
             <li>
               <button
                 type="button"

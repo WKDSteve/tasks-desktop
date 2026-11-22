@@ -207,4 +207,16 @@ describe('PathMapView', () => {
     expect(rows.sort()).toEqual(['lib/frei', 'lib/gatter', 'lib/ohm']);
     expect(page.querySelector('[data-row="lib/ohm"]')!.textContent).toContain('Frei (weich)');
   });
+  it('follows the area filter of the page: a filter of another area hides the map, said with a button that clears it', async () => {
+    const { m, page } = await show();
+    m.app.filter = { ...m.app.filter, areas: ['elsewhere'] };
+    await settle();
+    await vi.waitFor(() => expect(page.querySelector('.scope-note p')?.textContent).toBe('Der Bereichs-Filter (elsewhere) blendet die Lernpfade hier aus.'));
+    const clear = page.querySelector<HTMLButtonElement>('.scope-note button')!;
+    expect(clear.textContent).toBe('Filter aufheben');
+    clear.click();
+    await settle();
+    expect(m.app.filter.areas).toEqual([]);
+    await vi.waitFor(() => expect(page.querySelector('.scope-note')).toBeNull());
+  });
 });

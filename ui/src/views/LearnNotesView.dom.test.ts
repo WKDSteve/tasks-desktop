@@ -289,4 +289,30 @@ describe('LearnNotesView', () => {
     expect(optionTexts('Competence')).toContain('New competence');
     expect(optionTexts('Competence')).not.toContain('Old competence');
   });
+  it('follows the area filter of the page: a filter of another area hides the notes, said with a button that clears it', async () => {
+    const { m, page } = await show();
+    m.app.filter = { ...m.app.filter, areas: ['elsewhere'] };
+    await settle();
+    await vi.waitFor(() => expect(page.querySelector('.scope-note p')?.textContent).toBe('The area filter (elsewhere) hides the learning paths here.'));
+    expect(notesAsked(m).at(-1)).toEqual({ area: 'elsewhere' });
+    const clear = page.querySelector<HTMLButtonElement>('.scope-note button')!;
+    expect(clear.textContent).toBe('Clear filter');
+    clear.click();
+    await settle();
+    expect(m.app.filter.areas).toEqual([]);
+    await vi.waitFor(() => expect(page.querySelector('.scope-note')).toBeNull());
+    expect(notesAsked(m).at(-1)).toEqual({});
+  });
+
+  it('asks the engine for the areas of the filter, several as a list, and lists those only', async () => {
+    const { m, page } = await show();
+    m.app.filter = { ...m.app.filter, areas: ['ops'] };
+    await settle();
+    await vi.waitFor(() => expect(notesAsked(m).at(-1)).toEqual({ area: 'ops' }));
+    expect(hitsShown(page)).toEqual(['ops/shell#2']);
+    expect([...select(page, 'Path').querySelectorAll('option')].map((o) => o.textContent)).toEqual(['All paths', 'Shell']);
+    m.app.filter = { ...m.app.filter, areas: ['ops', 'lib'] };
+    await settle();
+    await vi.waitFor(() => expect(notesAsked(m).at(-1)).toEqual({ areas: 'ops/lib' }));
+  });
 });

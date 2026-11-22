@@ -12,6 +12,8 @@
   import type { FinishedItem, LearnHistory, Paths } from '../lib/contract';
   import type { ViewTables } from '../lib/export';
   import Info from 'appkit-ui/Info.svelte';
+  import LearnScopeNote from './LearnScopeNote.svelte';
+  import { learnScope } from '../lib/learnScope';
   import LearnBars from './LearnBars.svelte';
   import { markHidden } from '../lib/text';
   import { addDays } from '../lib/calendar';
@@ -166,7 +168,11 @@
     return out;
   }
 
-  const entries = $derived(doc?.items ?? []);
+  // The area filter of the page (lib/learnScope.ts): the paths of its areas, and of the series the figures of those
+  // (the area of a path is the part of its id before the slash, so a finished path no list names counts as well).
+  const scope = $derived(learnScope(app.filter.areas, app.matchAreas));
+  const entries = $derived(scope.keep(doc?.items ?? []));
+  const hiddenByScope = $derived(scope.active && entries.length === 0 && (doc?.items.length ?? 0) > 0);
   const projects = $derived([...new Set(entries.map((p) => p.project).filter((p): p is string => p !== undefined))].sort());
   const pathChoices = $derived(
     entries.filter((p) => project === '' || p.project === project).toSorted((a, b) => a.title.localeCompare(b.title)),
@@ -177,9 +183,9 @@
   });
   // A path is asked of the engine; a project is a filter of the paths of the series.
   const keep = $derived.by((): Keep => {
-    if (path !== '' || project === '') return null;
-    const ids = new Set(entries.filter((p) => p.project === project).map((p) => p.id));
-    return (id: string) => ids.has(id);
+    if (path !== '' || (project === '' && !scope.active)) return null;
+    const ids = project === '' ? null : new Set(entries.filter((p) => p.project === project).map((p) => p.id));
+    return (id: string) => (ids === null || ids.has(id)) && scope.has(id.slice(0, id.indexOf('/')));
   });
 
   // The finished tasks before the series: of the path chosen alone (the engine asked for it alone), else as the paths.
@@ -377,7 +383,9 @@
       >
     </div>
 
-    {#if notBegun}
+    {#if hiddenByScope}
+      <LearnScopeNote {app} {scope} />
+    {:else if notBegun}
       <p class="note" role="note">{t('learnstats.not_begun')}</p>
     {:else if problem && !history}
       <div class="empty" role="alert">
