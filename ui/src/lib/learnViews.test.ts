@@ -55,7 +55,8 @@ describe('learnViews', () => {
   it('knows a view of the tab, and a link to one the page does not have yet', () => {
     expect(isLearnView('paths')).toBe(true);
     expect(isLearnView('list')).toBe(false);
-    expect(missingLearnView('#view=learnnotes')).toBe('learnnotes');
+    expect(missingLearnView('#view=learnstats')).toBe('learnstats');
+    expect(missingLearnView('#view=learnnotes')).toBeNull();
     expect(missingLearnView('#open=a%2Fb&view=learn')).toBe('learn');
     expect(missingLearnView('#view=paths')).toBeNull();
     expect(missingLearnView('#view=list')).toBeNull();
