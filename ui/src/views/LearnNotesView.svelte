@@ -3,7 +3,8 @@
   // learning points of all paths. The engine searches (`tasks.learn_notes` with `query` and `kind`, capability
   // `learn_notes`; WEB-13); the page narrows by path (asked of the engine), competence and state (of the list it got)
   // and marks the hits. A note is untrusted Markdown: cut as text with its hits marked, and whole through the kit's
-  // Markdown reader on "more". A link shows its domain and title; an image its file name (opened in the path). A hit
+  // Markdown reader on "more". A link shows its domain and title; an image a small preview, read only once the hit comes
+  // into sight and only as an image (the store of its path, as in the view of the paths), larger on a click. A hit
   // is a button: Enter (or a click) opens the point in the view of the paths. `/` puts the focus into the search.
   import { untrack } from 'svelte';
   import type { App } from '../lib/app.svelte';
@@ -14,6 +15,9 @@
   import Blocks from 'appkit-ui/Blocks.svelte';
   import { hostOf, parseMarkdown } from 'appkit-ui/markdown';
   import { markHidden } from '../lib/text';
+  import { AssetImages } from '../lib/assetImages.svelte';
+  import AssetImg from './AssetImg.svelte';
+  import ImageViewer from './ImageViewer.svelte';
   import { labelText, openableLink, pointRef } from '../lib/paths';
   import { imageName, linkTitle, marked, narrowed, NOTE_STATES, snippet, type NoteItem, type NoteKind, type NoteState } from '../lib/learnNotes';
 
@@ -122,6 +126,44 @@
     else next.add(k);
     whole = next;
   }
+
+  // The images of the hits: one store per path (its folder), made when a hit of it is first in sight, given back when
+  // the view goes. A hit is read only once it comes near the visible part of the page (no observer: at once).
+  const stores = new Map<string, AssetImages>();
+  function storeOf(id: string): AssetImages {
+    let store = stores.get(id);
+    if (!store) {
+      store = new AssetImages((k, owner, file, held) => app.asset(k, owner, file, held), 'path', id);
+      stores.set(id, store);
+    }
+    return store;
+  }
+  $effect(() => () => {
+    for (const store of stores.values()) store.dispose();
+    stores.clear();
+  });
+  let inSight = $state<ReadonlySet<string>>(new Set());
+  function sight(node: HTMLElement, key: string) {
+    const show = () => {
+      if (!inSight.has(key)) inSight = new Set(inSight).add(key);
+    };
+    if (typeof IntersectionObserver === 'undefined') {
+      show();
+      return {};
+    }
+    const watch = new IntersectionObserver(
+      (entries) => {
+        if (!entries.some((e) => e.isIntersecting)) return;
+        show();
+        watch.disconnect();
+      },
+      { rootMargin: '200px' },
+    );
+    watch.observe(node);
+    return { destroy: () => watch.disconnect() };
+  }
+  // An image, larger (a click on its preview).
+  let viewing = $state<{ url: string; alt: string } | null>(null);
 
   /** `/` puts the focus into the search, unless a field or a dialog has the keys. */
   function onWindowKey(event: KeyboardEvent): void {
@@ -265,7 +307,19 @@
                 </p>
               {/if}
               {#if item.image}
-                <p class="source"><span aria-hidden="true">🖼</span> {t('learnnotes.image', { name: markHidden(imageName(item.image)) })}</p>
+                {@const image = item.image}
+                <div class="image" use:sight={keyOf(item)}>
+                  {#if inSight.has(keyOf(item))}
+                    <AssetImg
+                      images={storeOf(item.path)}
+                      file={image}
+                      alt={labelText(item) || imageName(image)}
+                      missing={t('image.missing')}
+                      onopen={(url, alt) => (viewing = { url, alt })}
+                    />
+                  {/if}
+                  <span class="sub">{t('learnnotes.image', { name: markHidden(imageName(image)) })}</span>
+                </div>
               {/if}
             </li>
           {/each}
@@ -277,6 +331,8 @@
     {/if}
   {/if}
 </section>
+
+<ImageViewer image={viewing} close={() => (viewing = null)} label={{ close: t('image.close'), view: t('image.view') }} />
 
 <style>
   .learnnotes {
@@ -384,6 +440,18 @@
   }
   .whole :global(p) {
     margin: 0.2rem 0;
+  }
+  .image {
+    display: flex;
+    align-items: flex-end;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+  .image :global(img) {
+    max-block-size: 6rem;
+    max-inline-size: 12rem;
+    object-fit: contain;
+    border-radius: var(--radius);
   }
   .source a {
     color: var(--accent);

@@ -194,6 +194,37 @@ describe('LearnNotesView', () => {
     expect(page.textContent).toContain('Nothing matches "zzz".');
   });
 
+  it('shows a small preview of an image hit, read from its path only as an image, larger on a click', async () => {
+    vi.stubGlobal(
+      'URL',
+      Object.assign(globalThis.URL, { createObjectURL: () => 'blob:http://localhost/i1', revokeObjectURL: () => undefined }),
+    );
+    try {
+      const m = make({ token: 't' });
+      m.hub.assetAnswers.set('assets/images/pipes.png', new Blob(['png'], { type: 'image/png' }));
+      made = m;
+      m.hub.capabilities = null;
+      m.hub.doc = snapshot([], 'rev:1');
+      m.hub.learnDocs.learn_notes = notes();
+      await m.app.start(null);
+      await m.app.setLang('en');
+      const page = document.createElement('div');
+      document.body.append(page);
+      mounted = mount(LearnNotesView, { target: page, props: { app: m.app } });
+      await settle();
+      await vi.waitFor(() => expect(page.querySelector('ul.hits img')).not.toBeNull());
+      expect(m.hub.assetReads).toEqual(['path ops/shell assets/images/pipes.png']);
+      const img = page.querySelector<HTMLImageElement>('ul.hits img')!;
+      expect(img.getAttribute('src')).toBe('blob:http://localhost/i1');
+      expect(img.alt).toBe('Diagram');
+      img.closest('button')!.click();
+      await settle();
+      expect(document.querySelector('dialog img')?.getAttribute('src')).toBe('blob:http://localhost/i1');
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('says when the engine cut the list', async () => {
     const doc = { ...notes(), total: 345, truncated: true };
     const { page } = await show(doc as LearnNotes);
