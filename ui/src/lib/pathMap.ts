@@ -31,6 +31,14 @@ export interface MapInput {
 
 export type BoxKind = 'path' | 'ghost';
 
+/** What a ghost box stands for; every kind but `missing` is a fault of a file (a red arrow). */
+export type GhostKind = 'unknown' | 'foreign' | 'bad' | 'missing';
+
+/** The ghost a requirement of a kind the map has no box for becomes. */
+function ghostOf(kind: string): GhostKind | null {
+  return kind === 'unknown' || kind === 'foreign' || kind === 'bad' ? kind : null;
+}
+
 /** A box: a path, or a ghost for a requirement the map has no box for. Keys: `p:<id>` (path), `g:<id>` (ghost). */
 export interface MapBox {
   key: string;
@@ -47,8 +55,11 @@ export interface MapBox {
   project?: string;
   cycle: boolean;
   entry?: PathEntry;
-  /** A ghost: `unknown` (no path or project of that id) or `missing` (one the answer did not hold). */
-  ghost?: 'unknown' | 'missing';
+  /**
+   * A ghost: `unknown` (no path or project of that id), `foreign` (an id of another vault), `bad` (a broken entry of
+   * the file) or `missing` (one the answer did not hold). The engine says which (`requires[].kind`).
+   */
+  ghost?: GhostKind;
 }
 
 /** A frame around the paths of a project (`j:<id>`); a project without a path on the map is a frame of its own. */
@@ -133,10 +144,11 @@ export function stageOf(entry: PathEntry): PathStage {
 
 /**
  * A requirement of the path that is soft and not met: the box keeps its stage and carries a hint ("!"). One that
- * names nothing is no hint but a fault of the file (a ghost with a red arrow).
+ * names nothing, an id of another vault or a broken entry is no hint but a fault of the file (a ghost with a red
+ * arrow).
  */
 export function softOpen(entry: PathEntry): boolean {
-  return (entry.requires ?? []).some((r) => r.gate === 'soft' && !r.met && r.kind !== 'unknown');
+  return (entry.requires ?? []).some((r) => r.gate === 'soft' && !r.met && ghostOf(r.kind) === null);
 }
 
 interface Unit {
@@ -169,7 +181,7 @@ export function layoutPathMap(input: MapInput): PathMap {
   const projectOf = (p: PathEntry): string | undefined => (p.project && members.has(p.project) ? p.project : undefined);
   // A project named by an arrow gets a frame even without a path on the map; its own requirements are followed too.
   const frameIds = new Set<string>(members.keys());
-  const ghosts = new Map<string, 'unknown' | 'missing'>();
+  const ghosts = new Map<string, GhostKind>();
   const todo: string[] = [];
   const visit = (reqs: Requires | undefined) => {
     for (const r of reqs ?? []) {
@@ -179,7 +191,7 @@ export function layoutPathMap(input: MapInput): PathMap {
           frameIds.add(r.id);
           todo.push(r.id);
         }
-      } else if (r.kind !== 'path' || !paths.has(r.id)) ghosts.set(r.id, r.kind === 'unknown' ? 'unknown' : (ghosts.get(r.id) ?? 'missing'));
+      } else if (r.kind !== 'path' || !paths.has(r.id)) ghosts.set(r.id, ghostOf(r.kind) ?? ghosts.get(r.id) ?? 'missing');
     }
   };
   for (const p of input.paths) visit(p.requires);
@@ -450,7 +462,7 @@ export function layoutPathMap(input: MapInput): PathMap {
       seenEdge.add(key);
       const a = rects.get(from)!;
       const b = rects.get(to)!;
-      edges.push({ key, from, to, gate: r.gate, met: r.met, bad: r.kind === 'unknown' || from.startsWith('g:') || (a.cycle && b.cycle), d: curve(a, b) });
+      edges.push({ key, from, to, gate: r.gate, met: r.met, bad: ghostOf(r.kind) !== null || from.startsWith('g:') || (a.cycle && b.cycle), d: curve(a, b) });
     }
   };
   for (const p of input.paths) arrow(pathKey(p.id), p.requires);

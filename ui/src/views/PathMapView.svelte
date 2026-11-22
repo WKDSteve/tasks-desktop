@@ -359,7 +359,7 @@
     return (dependents.get(id) ?? []).map((d) => t('pathmap.for_item', { title: markHidden(titleOf(d.id)), gate: t(d.gate === 'hard' ? 'pathmap.hard' : 'pathmap.soft') }));
   }
   function boxName(box: MapBox): string {
-    if (box.kind === 'ghost') return `${box.id}, ${t(box.ghost === 'unknown' ? 'pathmap.ghost.unknown' : 'pathmap.ghost.missing')}`;
+    if (box.kind === 'ghost') return `${box.id}, ${t(`pathmap.ghost.${box.ghost ?? 'missing'}`)}`;
     const entry = box.entry!;
     const parts = [markHidden(entry.title), stageWord(entry), progressWord(entry)];
     if (softOpen(entry)) parts.push(t('pathmap.soft_open'));
@@ -606,7 +606,7 @@
               >
                 {#if box.kind === 'ghost'}
                   <span class="line1"><span class="sym" aria-hidden="true">?</span><span class="title">{box.id}</span></span>
-                  {#if !compact}<span class="line2">{t(box.ghost === 'unknown' ? 'pathmap.ghost.unknown' : 'pathmap.ghost.missing')}</span>{/if}
+                  {#if !compact}<span class="line2">{t(`pathmap.ghost.${box.ghost ?? 'missing'}`)}</span>{/if}
                 {:else if entry && stage}
                   <span class="line1"
                     >{#if compact}<span class="sym">{@render stageMark(stage)}</span>{:else}<ItemIcon

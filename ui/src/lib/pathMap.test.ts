@@ -93,6 +93,21 @@ describe('layoutPathMap', () => {
     expect(map.edges).toEqual([expect.objectContaining({ from: 'g:a/nothing', to: 'p:a/p', bad: true })]);
   });
 
+  it('draws a ghost for an id of another vault and for a broken entry, each with its kind and a red arrow', () => {
+    const map = layoutPathMap({
+      paths: [path('a/p', { requires: [req('work:a/x', { kind: 'foreign', gate: 'hard' }), req('kein id', { kind: 'bad' })] })],
+      projects: [],
+    });
+    expect(map.boxes.filter((b) => b.kind === 'ghost').map((b) => [b.key, b.ghost]).sort()).toEqual([
+      ['g:kein id', 'bad'],
+      ['g:work:a/x', 'foreign'],
+    ]);
+    expect(map.edges.map((e) => [e.from, e.bad]).sort()).toEqual([
+      ['g:kein id', true],
+      ['g:work:a/x', true],
+    ]);
+  });
+
   it('draws no arrow and no ghost for a requirement left out on purpose (finished ones hidden)', () => {
     const map = layoutPathMap({ paths: [path('a/p', { requires: [req('a/done', { met: true })] })], projects: [], hidden: new Set(['a/done']) });
     expect(map.boxes.map((b) => b.key)).toEqual(['p:a/p']);
@@ -229,6 +244,8 @@ describe('stage and hints', () => {
     expect(softOpen(path('a/p', { requires: [req('a/x', { gate: 'hard' })] }))).toBe(false);
     // a requirement that names nothing is a fault, drawn as a ghost: no hint
     expect(softOpen(path('a/p', { requires: [req('a/nothing', { kind: 'unknown' })] }))).toBe(false);
+    expect(softOpen(path('a/p', { requires: [req('work:a/x', { kind: 'foreign' })] }))).toBe(false);
+    expect(softOpen(path('a/p', { requires: [req('kein id', { kind: 'bad' })] }))).toBe(false);
   });
   it('turns the arrows round: what each path or project is a requirement for', () => {
     const deps = dependentsOf([path('a/p', { requires: [req('a/x', { gate: 'hard' })] })], [{ id: 'a/j', title: 'J', requires: [req('a/x', { kind: 'path' })] }]);

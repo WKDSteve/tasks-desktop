@@ -79,12 +79,12 @@ async function settle(): Promise<void> {
   flushSync();
 }
 
-async function show(opts: { requires?: boolean; prefs?: Map<string, string>; openWindow?: (route: string) => boolean } = {}) {
+async function show(opts: { requires?: boolean; prefs?: Map<string, string>; openWindow?: (route: string) => boolean; items?: PathEntry[] } = {}) {
   const m = make({ token: 't', ...(opts.prefs ? { prefs: opts.prefs } : {}), ...(opts.openWindow ? { openWindow: opts.openWindow } : {}) });
   made = m;
   m.hub.capabilities = ['paths', 'path', ...(opts.requires === false ? [] : ['requires'])];
   m.hub.doc = withProjects();
-  m.hub.pathsDoc = { kind: 'tasks.paths', rev: 'p1', digest: 'd', items: ITEMS, incomplete: [] };
+  m.hub.pathsDoc = { kind: 'tasks.paths', rev: 'p1', digest: 'd', items: opts.items ?? ITEMS, incomplete: [] };
   await m.app.start(null);
   const page = document.createElement('div');
   document.body.append(page);
@@ -137,6 +137,22 @@ describe('PathMapView', () => {
     const gatter = box(page, 'lib/gatter')!.getAttribute('aria-label')!;
     expect(gatter).toContain('wartet auf Basis');
     expect(gatter).not.toContain('Oben');
+  });
+
+  it('draws an id of another vault and a broken entry as ghosts with their own words and a red arrow', async () => {
+    const odd = entry('odd', 'Seltsam', {
+      requires: [
+        { id: 'work:lib/x', gate: 'hard', kind: 'foreign', met: false },
+        { id: 'kein id', gate: 'soft', kind: 'bad', met: false },
+      ],
+    });
+    const { page } = await show({ items: [...ITEMS, odd] });
+    expect(box(page, 'work:lib/x')!.getAttribute('aria-label')).toBe('work:lib/x, aus einem anderen Vault');
+    expect(box(page, 'kein id')!.getAttribute('aria-label')).toBe('kein id, kaputter Eintrag');
+    expect(box(page, 'kein id')!.textContent).toContain('kaputter Eintrag');
+    expect(page.querySelector('[data-edge="g:work:lib/x>p:lib/odd"]')!.getAttribute('class')).toContain('bad');
+    // a broken soft entry is a fault, not a hint on the box
+    expect(box(page, 'lib/odd')!.querySelector('.hint')).toBeNull();
   });
 
   it('an engine without requires: the plain paths, no arrows, and a note that says why', async () => {
