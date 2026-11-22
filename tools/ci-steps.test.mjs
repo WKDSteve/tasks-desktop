@@ -45,6 +45,15 @@ test("rust: every step after the web steps runs even when a web step was red", (
   for (const step of after) assert.match(condition(step), /!cancelled\(\)/, `step without !cancelled():\n${step}`);
 });
 
+test("rust: the builds the Rust tests need do not wait for the checks before them", () => {
+  const list = steps("rust");
+  for (const text of ["Build the interface", "Build the phone page"]) {
+    const step = condition(list[find(list, text)]);
+    assert.match(step, /!cancelled\(\)/, `${text} waits for the checks before it`);
+    assert.ok(step.includes("steps.engine.outcome == 'success'"), `${text} does not wait for the engine`);
+  }
+});
+
 test("rust: what builds the hub waits for the engine, the interface and the phone page", () => {
   const list = steps("rust");
   for (const text of ["cargo clippy", "cargo test --workspace", "cargo test --locked -p hub-testkit", "--test window_program", "Temp dir of this job"]) {

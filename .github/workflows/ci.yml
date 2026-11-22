@@ -81,6 +81,9 @@ jobs:
       # The interface is part of the binary: it is built first.
       - name: Build the interface
         id: ui_build
+        # Not after the checks above (the contract types, the golden sheet block, which fetches from GitHub): one of
+        # them red must not hide the Rust tests either, which need the interface.
+        if: ${{ !cancelled() && steps.engine.outcome == 'success' }}
         working-directory: ui
         run: |
           pnpm install --frozen-lockfile
@@ -89,6 +92,7 @@ jobs:
       # fails (TASKS_HUB_REQUIRE_MOBILE), so no hub ships without its phone page.
       - name: Build the phone page
         id: mobile
+        if: ${{ !cancelled() && steps.engine.outcome == 'success' }}
         run: python tools/build-mobile.py
       # The engine of the web variant: tasks.nvim in wasmoon (Lua 5.4) must answer every read method byte for byte as
       # nvim does on the pinned commits (ui/web/engine.test.mjs).
