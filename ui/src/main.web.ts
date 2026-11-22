@@ -270,4 +270,9 @@ async function begin(folder: string | null, name: string, readOnly: boolean): Pr
   mount(App, { target, props: { app: state, code: CODE } });
   trackHistory(state, window);
   followTaskRoute(state, window);
+  // A link to a view of the tab Learning plans not built yet, pasted into the open page: the history leaves it.
+  window.addEventListener('hashchange', () => {
+    const missing = missingLearnView(window.location.hash);
+    if (missing !== null) state.openMissingLearnView(missing);
+  });
 }

@@ -74,6 +74,20 @@ describe('App, a link to a view of the tab that is not built yet', () => {
     });
     app.stop();
   });
+
+  it('in a page that is already shown: the learning paths and the words at once', async () => {
+    const { app, hub } = make({ token: 't' });
+    hub.capabilities = ['paths', 'path'];
+    await app.start(null);
+    app.setView('list');
+    app.openMissingLearnView('rewards');
+    expect(app.view).toBe('paths');
+    expect(app.toast).toMatchObject({
+      kind: 'ok',
+      text: translate('de', 'learn.missing', { view: 'rewards', target: translate('de', 'nav.paths') }),
+    });
+    app.stop();
+  });
 });
 
 describe('the palette, the views of the tab', () => {

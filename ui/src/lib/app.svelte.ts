@@ -4959,6 +4959,12 @@ export class App {
    * where such a link lands, and says so once the list is there (the words of the page are loaded by then).
    */
   openMissingLearnView(view: string): void {
+    // A link pasted into a page that is already shown: the view and the words at once.
+    if (this.phase === 'ready') {
+      this.setView(learnFallback() as View);
+      this.say('ok', 'learn.missing', { view, target: translate(this.lang, `nav.${this.view}` as Key) });
+      return;
+    }
     this.view = learnFallback() as View;
     this.#learnMissing = view;
   }

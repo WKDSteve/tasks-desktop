@@ -122,4 +122,7 @@ window.addEventListener('hashchange', () => {
   // A place typed into the address is not the pairing's: it stays (the history goes to it).
   const later = takePairingCode(window.location, window.history, undefined, { keepRoute: true });
   if (later) state.offerCode(later);
+  // A link to a view of the tab Learning plans not built yet: the history knows no such place and leaves it.
+  const missing = missingLearnView(window.location.hash);
+  if (missing !== null) state.openMissingLearnView(missing);
 });

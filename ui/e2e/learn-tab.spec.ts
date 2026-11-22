@@ -92,6 +92,15 @@ test('a link to a view of the tab not built yet shows the learning paths and say
   await page.keyboard.press('Enter');
   await expect(page.getByRole('menuitem', { name: 'Learning plans, current: Learning paths' })).toBeVisible();
 
+  // The same link pasted into the open page (only the fragment changes): the same landing and words.
+  await bar(page).getByRole('menuitem', { name: 'View', exact: true }).click();
+  await page.getByRole('menuitemradio', { name: 'List' }).click();
+  await page.evaluate(() => {
+    location.hash = '#view=rewards';
+  });
+  await expect(page.getByText('The learning view “rewards” is not in this version yet; showing Learning paths.')).toBeVisible();
+  await expect(page.getByRole('menuitem', { name: 'Learning plans, current: Learning paths' })).toBeVisible();
+
   expect(problems).toEqual([]);
   expect(await violations(page)).toEqual([]);
 });
