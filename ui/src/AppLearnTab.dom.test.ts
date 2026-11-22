@@ -47,15 +47,16 @@ it('stands after View with its sections, and View has no learning paths any more
   expect(trigger('learn')!.textContent).toBe('Lernpläne');
   const learn = open('learn');
   expect(learn.getAttribute('aria-label')).toBe('Lernpläne');
-  // Only the views the page has: the section Pfade with Lernpfade and Kompetenzkarte; the sections without a view are
-  // left out.
-  expect([...learn.querySelectorAll('[role="group"]')].map((g) => g.getAttribute('aria-labelledby') !== null)).toEqual([true]);
+  // Only the views the engine serves with the learning paths alone: the overview, the paths and the competence map, the
+  // statistics; a section without a view (Wissen) is left out.
+  expect([...learn.querySelectorAll('[role="group"]')].map((g) => g.getAttribute('aria-labelledby') !== null)).toEqual([true, true, true]);
+  expect(learn.textContent).toContain('Überblick');
   expect(learn.textContent).toContain('Pfade');
-  expect(learn.textContent).not.toContain('Überblick');
-  expect(labels(learn)).toEqual(['Lernpfade', 'Kompetenzkarte']);
+  expect(learn.textContent).not.toContain('Wissen');
+  expect(labels(learn)).toEqual(['Übersicht', 'Lernpfade', 'Kompetenzkarte', 'Lern-Statistik']);
   const item = learn.querySelector<HTMLAnchorElement>('.mb-item')!;
   expect(item.getAttribute('role')).toBe('menuitemradio');
-  expect(item.getAttribute('href')).toContain('#view=paths');
+  expect(item.getAttribute('href')).toContain('#view=learn');
   const inView = labels(open('view'));
   expect(inView).not.toContain('Lernpfade');
   expect(inView).not.toContain('Kompetenzkarte');
@@ -65,7 +66,7 @@ it('carries the dot and says the view shown, and View then has nothing checked a
   const { app } = await start(['paths', 'path']);
   expect(trigger('learn')!.hasAttribute('aria-label')).toBe(false);
   expect(trigger('learn')!.querySelector('.mb-current')).toBeNull();
-  open('learn').querySelector<HTMLElement>('.mb-item')!.click();
+  [...open('learn').querySelectorAll<HTMLElement>('.mb-item')].find((el) => el.textContent?.includes('Lernpfade'))!.click();
   flushSync();
   expect(app.view).toBe('paths');
   expect(trigger('learn')!.getAttribute('aria-label')).toBe('Lernpläne, aktuell: Lernpfade');

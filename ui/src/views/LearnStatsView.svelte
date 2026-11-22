@@ -347,11 +347,11 @@
         {/each}
       </fieldset>
       {#if period === 'custom'}
-        <span class="field">
+        <span class="field" data-hint={t('learnstats.hint.since')}>
           <label for="learnstats-since">{t('learnstats.since')}</label>
           <input id="learnstats-since" type="date" value={custom.since} max={custom.until || undefined} onchange={(e) => setDay('since', e.currentTarget.value)} />
         </span>
-        <span class="field">
+        <span class="field" data-hint={t('learnstats.hint.until')}>
           <label for="learnstats-until">{t('learnstats.until')}</label>
           <input id="learnstats-until" type="date" value={custom.until} min={custom.since || undefined} onchange={(e) => setDay('until', e.currentTarget.value)} />
         </span>
