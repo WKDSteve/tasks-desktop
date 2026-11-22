@@ -128,6 +128,8 @@ export type Op =
       /** The point's own XP `{xp=N}` (capability `xp`); `xp_clear` removes them. */
       xp?: number;
       xp_clear?: true;
+      /** Closing a point on or under `{safety}` (capability `path_marks`): the person confirmed it. */
+      ack?: true;
       if_match?: string;
     }
   /** The reward of a level of a path (`level`: its number or `done`) granted or not (capability `path_reward`). */

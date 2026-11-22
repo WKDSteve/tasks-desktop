@@ -43,6 +43,11 @@ import type {
   Next,
   PathDocument,
   Paths,
+  Competences,
+  LearnEvidence,
+  LearnHistory,
+  LearnNext,
+  LearnNotes,
   PathEntry,
   PlanCompare,
   Result,
@@ -54,7 +59,7 @@ import type {
   Waits,
 } from './contract';
 import { expandAreas, isAreaGroup, NO_AREA, type AreaGroupInfo } from './areaGroups';
-import type { AssetAnswer, AssetOwner, FinishedQuery, Op } from './api';
+import type { AssetAnswer, AssetOwner, FinishedQuery, LearnEvidenceQuery, LearnHistoryQuery, LearnNextQuery, LearnNotesQuery, Op } from './api';
 import { adoptOps, followUpOp, runAnswer, type Answer, type AnswerKind } from './agentAnswer';
 
 /** The note an inverse of `node_set` carries (capability `node_note`), as a part of the operation; none: `{}`. */
@@ -1507,6 +1512,36 @@ export class App {
     return this.env.hub.paths(signal);
   }
 
+  /** For every running learning path the next points to learn (`tasks.learn_next`): the engine chooses (WEB-13). */
+  learnNext(query: LearnNextQuery = {}, signal?: AbortSignal): Promise<LearnNext> {
+    return this.env.hub.learnNext(query, signal);
+  }
+
+  /** The notes, links and images of the learning points of all paths (`tasks.learn_notes`): the engine searches. */
+  learnNotes(query: LearnNotesQuery = {}, signal?: AbortSignal): Promise<LearnNotes> {
+    return this.env.hub.learnNotes(query, signal);
+  }
+
+  /** The evidence of all learning paths (`tasks.learn_evidence`). */
+  learnEvidence(query: LearnEvidenceQuery = {}, signal?: AbortSignal): Promise<LearnEvidence> {
+    return this.env.hub.learnEvidence(query, signal);
+  }
+
+  /** The series of the learning figures over a window (`tasks.learn_history`): every figure is the engine's. */
+  learnHistory(query: LearnHistoryQuery = {}, signal?: AbortSignal): Promise<LearnHistory> {
+    return this.env.hub.learnHistory(query, signal);
+  }
+
+  /** The fields of knowledge with their stages and the scale (`tasks.competences`). */
+  competences(query: { area?: string } = {}, signal?: AbortSignal): Promise<Competences> {
+    return this.env.hub.competences(query, signal);
+  }
+
+  /** The open learning paths with every level of each (`tasks.paths` with `levels`, capability `paths_levels`). */
+  pathsWithLevels(signal?: AbortSignal): Promise<Paths> {
+    return this.env.hub.pathsWithLevels(signal);
+  }
+
   /** Every learning path for the competence map: the open ones, and the finished ones where the engine has `requires`. */
   pathsForMap(signal?: AbortSignal): Promise<Paths> {
     return this.env.hub.paths(signal, this.can('requires'));
@@ -1720,9 +1755,16 @@ export class App {
     this.setView('plan');
   }
 
-  /** Show learning path `id` in the view of the paths. */
-  openPath(id: string): void {
+  /**
+   * The point of a learning path the view of the paths shows and focuses once the path is read (its key or
+   * `#<index>`), then forgets; null: none.
+   */
+  pathPoint = $state<string | null>(null);
+
+  /** Show learning path `id` in the view of the paths; with `point` (its key or `#<index>`) that point of it. */
+  openPath(id: string, point?: string): void {
     this.pathChoice = id;
+    this.pathPoint = point ?? null;
     this.setView('paths');
   }
 

@@ -32,6 +32,7 @@
     openableLink,
     parentIndices,
     pointIds,
+    pointRef,
     parseXp,
     progressParts,
     promoteOp,
@@ -196,6 +197,36 @@
     editing = null;
     app.tell('error', 'paths.conflict');
   }
+
+  /**
+   * The point another view asked to be shown (`app.pathPoint`, "Open in the path"): its parents are unfolded, it is
+   * scrolled to and takes the focus; then it is forgotten. A point the path no longer has is forgotten all the same.
+   */
+  function showAskedPoint(read: PathDocument): void {
+    const asked = app.pathPoint;
+    if (asked === null || read.path.id !== app.pathChoice) return;
+    app.pathPoint = null;
+    const node = read.nodes.find((n) => pointRef(n) === asked);
+    if (!node) return;
+    const names = pointIds(read.nodes);
+    const open = new Set(folded);
+    for (let at = node.parent; at !== undefined; at = read.nodes.find((n) => n.index === at)?.parent) {
+      const name = names.get(at);
+      if (name !== undefined) open.delete(name);
+    }
+    folded = open;
+    void tick().then(() => {
+      root?.querySelector<HTMLElement>(`li[data-index="${node.index}"]`)?.scrollIntoView({ block: 'center' });
+      void focusPoint(node);
+    });
+  }
+
+  // A point asked for while its path is shown, or once it is read.
+  $effect(() => {
+    const read = doc;
+    if (app.pathPoint === null || read === null) return;
+    untrack(() => showAskedPoint(read));
+  });
 
   /** Whether a change must wait (a write on its way, or the path being read again): then it is said, not sent. */
   function refused(): boolean {

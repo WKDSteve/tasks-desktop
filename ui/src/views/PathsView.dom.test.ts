@@ -130,6 +130,25 @@ describe('PathsView', () => {
     expect(point(page, 'cc').querySelector('.promoted')?.textContent).toContain('lib/c-compiler');
   });
 
+  it('shows a point another view asks for: its parent unfolds, it takes the focus, and the wish is forgotten', async () => {
+    // jsdom has no layout: the scroll is only counted.
+    const scrolled = vi.fn();
+    Element.prototype.scrollIntoView = scrolled;
+    const { m, page } = await show();
+    point(page, 'lua').querySelector<HTMLButtonElement>('button.fold')!.click();
+    await settle();
+    expect(page.querySelector('[data-point="meta"]')).toBeNull();
+    m.app.openPath('lib/lua', 'meta');
+    await settle();
+    await vi.waitFor(() => expect(document.activeElement?.closest('[data-point]')?.getAttribute('data-point')).toBe('meta'));
+    expect(m.app.pathPoint).toBeNull();
+    expect(scrolled).toHaveBeenCalledWith({ block: 'center' });
+    // A point the path does not have is forgotten all the same, nothing else moves.
+    m.app.openPath('lib/lua', 'gone');
+    await settle();
+    expect(m.app.pathPoint).toBeNull();
+  });
+
   it('folds a parent: its points go, and come back', async () => {
     const { page } = await show();
     const fold = point(page, 'lua').querySelector<HTMLButtonElement>('button.fold')!;
