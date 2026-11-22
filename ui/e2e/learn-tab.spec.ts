@@ -49,7 +49,18 @@ test('the tab Learning plans: after View, the learning paths with the dot of the
   await expect(paths).toHaveAttribute('aria-checked', 'false');
   await expect(paths).toHaveAttribute('href', /#view=paths/);
   await expect(menu.getByRole('group', { name: 'Paths' })).toBeVisible();
-  await expect(menu.getByRole('menuitemradio')).toHaveText(['Learning paths', 'Competence map', 'Competence catalogue', 'Badges', 'Rewards', 'Evidence']);
+  // In the order of the concept: what is next, the paths, the progress, the knowledge; only what the engine serves.
+  await expect(menu.getByRole('menuitemradio')).toHaveText([
+    'Next learning step',
+    'Learning paths',
+    'Competence map',
+    'Competence catalogue',
+    'Learning time',
+    'Badges',
+    'Rewards',
+    'Evidence',
+    'Notes & sources',
+  ]);
   await expect(menu.getByRole('menuitemradio', { name: 'Competence map' })).toHaveAttribute('href', /#view=pathmap/);
   await expectAccessible(page, 'the open tab Learning plans');
   await paths.click();
@@ -58,12 +69,12 @@ test('the tab Learning plans: after View, the learning paths with the dot of the
   await expect(bar(page).locator('button.mb-trigger[data-for="learn"] .mb-current')).toHaveText('●');
   await expect(page).toHaveURL(/#view=paths/);
 
-  // By keys: from View, Right goes to the tab; Down opens it on its first item, which is checked now.
+  // By keys: from View, Right goes to the tab; Down opens it on its first item; the view shown is checked.
   await bar(page).getByRole('menuitem', { name: 'View', exact: true }).focus();
   await page.keyboard.press('ArrowRight');
   await expect(page.getByRole('menuitem', { name: 'Learning plans, current: Learning paths' })).toBeFocused();
   await page.keyboard.press('ArrowDown');
-  await expect(menu.getByRole('menuitemradio', { name: 'Learning paths' })).toBeFocused();
+  await expect(menu.getByRole('menuitemradio', { name: 'Next learning step' })).toBeFocused();
   await expect(menu.getByRole('menuitemradio', { name: 'Learning paths' })).toHaveAttribute('aria-checked', 'true');
   await expectAccessible(page, 'the tab with the view shown');
   await page.keyboard.press('Escape');
