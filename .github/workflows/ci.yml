@@ -52,6 +52,7 @@ jobs:
           persist-credentials: false
       # The pins must exist: a typo in engine.lock fails here, not later.
       - name: Fetch the pinned engine (tasks.nvim) and lib.nvim
+        id: engine
         run: |
           commit="$(sed -n 's/^commit *= *//p' engine.lock)"
           lib_commit="$(sed -n 's/^lib_commit *= *//p' engine.lock)"
@@ -79,6 +80,7 @@ jobs:
 
       # The interface is part of the binary: it is built first.
       - name: Build the interface
+        id: ui_build
         working-directory: ui
         run: |
           pnpm install --frozen-lockfile
@@ -86,6 +88,7 @@ jobs:
       # The phone page (tasks-mobile, pinned in mobile.lock) is part of the binary too, under /m/; a build without it
       # fails (TASKS_HUB_REQUIRE_MOBILE), so no hub ships without its phone page.
       - name: Build the phone page
+        id: mobile
         run: python tools/build-mobile.py
       # The engine of the web variant: tasks.nvim in wasmoon (Lua 5.4) must answer every read method byte for byte as
       # nvim does on the pinned commits (ui/web/engine.test.mjs).
@@ -127,14 +130,23 @@ jobs:
       # there already, so "empty at the start" is checked, not assumed. The check that counts what is in it runs after
       # `cargo test`. It starts after the web steps above, which have temp dirs of their own (see there): those run Node
       # tools and Chrome with caches in the temp dir, and a strict count would take them for the tests' leftovers.
+      #
+      # From here on the steps do not wait for the web steps above: a red web step must not hide the Rust tests (a test
+      # of hub-testkit went stale unseen behind one, run 45029064794). A step runs unless the run was cancelled, as long
+      # as what it needs succeeded: the engine, the interface and the phone page for everything that builds the hub
+      # (build.rs embeds both), the tests for the checks that read what they left. The job is still red when any step was.
       - name: Temp dir of this job
+        id: job_temp
+        if: ${{ !cancelled() && steps.engine.outcome == 'success' && steps.ui_build.outcome == 'success' && steps.mobile.outcome == 'success' }}
         shell: pwsh
         run: |
           $dir = Join-Path $env:RUNNER_TEMP "job-temp-$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT"
           New-Item -ItemType Directory -Path $dir -ErrorAction Stop | Out-Null
           "TEMP=$dir", "TMP=$dir", "TMPDIR=$dir", "JOB_TEMP=$dir" | Add-Content -Path $env:GITHUB_ENV
-      - run: cargo fmt --all --check
-      - run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - if: ${{ !cancelled() }}
+        run: cargo fmt --all --check
+      - if: ${{ !cancelled() && steps.engine.outcome == 'success' && steps.ui_build.outcome == 'success' && steps.mobile.outcome == 'success' }}
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
       # The tests of hub-testkit start hubs with a real or a fake engine and wait bounded times for answers and events;
       # side by side on the busy runner they took the time from each other and failed now and then (the timing family of
       # tasks-desktop/write-route-tests-flackern-auf-dem-runner-the-hub-did-not-an, 2026-11-08). They run one at a time
@@ -143,18 +155,26 @@ jobs:
       # at once on a busy runner did not come up within the 20 s `start` waits (run 43630294438, six tests; the same
       # family as the eleven Neovims of testing-desktop, 7622df3). Measured on a quiet machine: 14.0 s with four
       # threads, 13.8 s with twelve (the tests wait, they do not compute).
-      - run: cargo test --workspace --locked --exclude hub-testkit
+      - id: test_workspace
+        if: ${{ !cancelled() && steps.engine.outcome == 'success' && steps.ui_build.outcome == 'success' && steps.mobile.outcome == 'success' }}
+        run: cargo test --workspace --locked --exclude hub-testkit
         env:
           RUST_TEST_THREADS: "4"
-      - run: cargo test --locked -p hub-testkit -- --test-threads=1
+      - id: test_testkit
+        if: ${{ !cancelled() && steps.engine.outcome == 'success' && steps.ui_build.outcome == 'success' && steps.mobile.outcome == 'success' }}
+        run: cargo test --locked -p hub-testkit -- --test-threads=1
       # The release build is a window program (no console window for the link, the login entry or a double click); a
       # debug build stays a console program, so only a release test run proves the attribute.
       - name: The release build is a window program
+        id: window_program
+        if: ${{ !cancelled() && steps.engine.outcome == 'success' && steps.ui_build.outcome == 'success' && steps.mobile.outcome == 'success' }}
         run: cargo test --release --locked -p tasks-hub --test window_program
       # No test leaves a folder in the temp dir of this job (a test makes its folder with `Scratch`, which removes it
       # also after a failure). Strict: whatever name a test gave its folder counts; `nvim` and `nvim.0` are what the real
       # Neovim of the engine tests makes itself. The browser tests (job browser) have their own check (run-with-temp.mjs).
+      # Only after the tests ran through: a test that failed half way may leave its folder, and the count says nothing then.
       - name: The tests left nothing in the temp dir
+        if: ${{ !cancelled() && steps.job_temp.outcome == 'success' && steps.test_workspace.outcome == 'success' && steps.test_testkit.outcome == 'success' && steps.window_program.outcome == 'success' }}
         run: node tools/check-temp-leftovers.mjs --dir "$JOB_TEMP" --strict --allow nvim --allow nvim.0
       # The install and uninstall scripts (NREL-16) against this build, in folders of their own:
       # the login entry and the link of the runner are left alone, nothing is downloaded. Each script makes a folder of its
@@ -162,10 +182,12 @@ jobs:
       # tools/run-with-temp.mjs, so a folder that stays (a failed removal) fails the step. The strict count of the job
       # above ran before them and would never have seen it.
       - name: Install and uninstall scripts (PowerShell and sh)
+        if: ${{ !cancelled() && steps.test_workspace.outcome == 'success' }}
         run: |
           node tools/run-with-temp.mjs -- pwsh -NoProfile -File scripts/test-install.ps1 target/debug/tasks-hub.exe
           node tools/run-with-temp.mjs -- sh scripts/test-install.sh target/debug/tasks-hub.exe
       - name: PSScriptAnalyzer on the scripts
+        if: ${{ !cancelled() }}
         shell: pwsh
         run: |
           # Installed only when the pinned version cannot be loaded: the runners of this machine share the user's module
@@ -184,13 +206,17 @@ jobs:
           $found | Format-Table -AutoSize | Out-String | Write-Output
           if ($found) { exit 1 }
       # The supply chain (concept 7.4): known advisories, licenses, sources.
-      - run: cargo audit
-      - run: cargo deny check
+      - if: ${{ !cancelled() }}
+        run: cargo audit
+      - if: ${{ !cancelled() }}
+        run: cargo deny check
       # No crate version younger than a week (a hijacked release is caught
       # within hours, usually; see tools/check-lock-age.py).
-      - run: python tools/check-lock-age.py --min-days 7
+      - if: ${{ !cancelled() }}
+        run: python tools/check-lock-age.py --min-days 7
       # appkit is the one git source: the commit Cargo.lock pins must be the one its tag names now.
-      - run: python tools/check-appkit-pin.py
+      - if: ${{ !cancelled() }}
+        run: python tools/check-appkit-pin.py
 
   # The browser tests of the hub, a job of their own. They are the longest part by far: 11 of the 20 minutes the rust
   # job took on a quiet runner, 21 minutes when other programs of the machine build at the same time, and together
@@ -252,17 +278,27 @@ jobs:
           persist-credentials: false
       # The lockfile is the truth; the age and trust policy are in
       # ui/pnpm-workspace.yaml. pnpm is the runner's own (a global install would change this machine on every run).
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm check
+      # After the install the checks do not wait for each other: a red `pnpm check` must not hide the unit tests, nor a
+      # red unit test the build and its budget.
+      - id: install
+        run: pnpm install --frozen-lockfile
+      - if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: pnpm check
       # The same temp dir of its own and the same count as for the browser tests of the other jobs (tools/run-with-temp.mjs).
-      - run: node ../tools/run-with-temp.mjs -- pnpm test
-      - run: pnpm build
-      - run: python ../tools/check-bundle-size.py --dist dist
-      - run: pnpm audit --audit-level high
+      - if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: node ../tools/run-with-temp.mjs -- pnpm test
+      - id: build
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: pnpm build
+      - if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: python ../tools/check-bundle-size.py --dist dist
+      - if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: pnpm audit --audit-level high
       # Informative only: older web patterns in the page (modern-web-guidance, no telemetry). The scanner is an exact
       # devDependency, so the supply-chain policy of pnpm-workspace.yaml applies to it. The support matrix (README,
       # CLAUDE.md "Web-Plattform") decides what may change; this step never fails the job.
       - name: Legacy web patterns (informative)
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
         continue-on-error: true
         env:
           DISABLE_TELEMETRY: "1"
@@ -277,14 +313,20 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0 (node24)
         with:
           persist-credentials: false
-      - run: python -m unittest discover tools
+      - if: ${{ !cancelled() }}
+        run: python -m unittest discover tools
       # The leftover check of the temp dir (tools/check-temp-leftovers.mjs) tests itself, and ci.yml is held to run it.
-      - run: node --test "tools/*.test.mjs"
-      - run: python tools/check-control-chars.py
+      - if: ${{ !cancelled() }}
+        run: node --test "tools/*.test.mjs"
+      - if: ${{ !cancelled() }}
+        run: python tools/check-control-chars.py
       # No process is started by hand: only through appkit_core::child and appkit_hub::launch (docs/PROCESSES.md of
       # appkit); tools/process-starts.allow names what may.
-      - run: python tools/check-process-starts.py
+      - if: ${{ !cancelled() }}
+        run: python tools/check-process-starts.py
       # A colour the CSS of the page states is a token of appkit-ui (the same check runs in appkit).
-      - run: python tools/check-color-literals.py --root ui/src --tokens ui/src/palette.css
+      - if: ${{ !cancelled() }}
+        run: python tools/check-color-literals.py --root ui/src --tokens ui/src/palette.css
       # The shell scripts of the repository (NREL-16): ShellCheck is on the runner (`scoop install shellcheck`).
-      - run: shellcheck scripts/*.sh
+      - if: ${{ !cancelled() }}
+        run: shellcheck scripts/*.sh
