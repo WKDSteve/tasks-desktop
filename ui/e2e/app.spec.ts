@@ -7067,17 +7067,30 @@ test('the open questions of a task are shown with their options and answered wit
   await expect(section).toHaveAttribute('aria-pressed', 'false');
   await expectAccessible(page, 'the questions of a task');
 
+  // The task is read again after every answer; a slow read (a busy runner) must not let the next click act on the state
+  // before it. A click decides by what the page shows (choose, or take back) and sends the version it shows: each step
+  // waits until the page shows what the file says. Without that wait this test went red on the runner (run
+  // 45068729036): the read of the task took 252 ms, the click that should take the answer back came before it was there
+  // and chose the option again, with the version from before.
+  await page.route((url) => url.pathname === '/api/tasks/task', async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    await route.continue().catch(() => undefined);
+  });
+
   // A click answers: the file says so, and the page shows what the file says.
   await write(page, () => section.click());
   await expect.poll(() => readFileSync(file, 'utf8'), { timeout: WRITE_BUDGET }).toContain('- [x] Section in the body (empfohlen)');
-  await expect(section).toHaveAttribute('aria-pressed', 'true');
+  await expect(section).toHaveAttribute('aria-pressed', 'true', { timeout: WRITE_BUDGET });
   expect(readFileSync(file, 'utf8')).toContain('- [ ] List in the frontmatter');
 
   // Another option replaces the answer; the same one again takes it back.
-  await write(page, () => first.getByRole('button', { name: /List in the frontmatter/ }).click());
+  const list = first.getByRole('button', { name: /List in the frontmatter/ });
+  await write(page, () => list.click());
   await expect.poll(() => readFileSync(file, 'utf8'), { timeout: WRITE_BUDGET }).toContain('- [x] List in the frontmatter');
-  await write(page, () => first.getByRole('button', { name: /List in the frontmatter/ }).click());
+  await expect(list).toHaveAttribute('aria-pressed', 'true', { timeout: WRITE_BUDGET });
+  await write(page, () => list.click());
   await expect.poll(() => readFileSync(file, 'utf8'), { timeout: WRITE_BUDGET }).toContain('- [ ] List in the frontmatter');
+  await expect(list).toHaveAttribute('aria-pressed', 'false', { timeout: WRITE_BUDGET });
 
   // A question written without a key is answered too, and gets its key.
   const second = detail.getByRole('region', { name: 'Written without a key' });
