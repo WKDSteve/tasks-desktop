@@ -292,6 +292,8 @@ const en = {
   'paths.no_engine': 'The engine of this hub knows no learning paths yet (tasks.nvim with the capabilities paths and path).',
   'nav.pathmap': 'Competence map',
   'hint.item.nav.pathmap': 'The learning paths as a map: each path a box coloured by its stage, each project a frame around its paths, an arrow from a requirement to what builds on it.',
+  'nav.badges': 'Badges',
+  'hint.item.nav.badges': 'All earned and open badges of all learning paths, with level, path and day.',
   'paths.loading': 'Reading the learning paths…',
   'paths.reading': 'Reading the path…',
   'paths.failed': 'The learning paths could not be read.',

@@ -438,8 +438,8 @@ export class FakeHub {
   }
   /** `paths` with `levels: true` (capability `paths_levels`): `pathsLevelsDoc`, else `pathsDoc`. */
   pathsLevelsDoc: unknown = null;
-  async pathsWithLevels() {
-    this.pathCalls.push('paths levels');
+  async pathsWithLevels(_signal?: AbortSignal, includeDone = false) {
+    this.pathCalls.push(includeDone ? 'paths include_done levels' : 'paths levels');
     return (this.pathsLevelsDoc ?? this.pathsDoc) as never;
   }
   /**

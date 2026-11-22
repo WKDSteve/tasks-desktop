@@ -911,9 +911,12 @@ export class Hub extends HubClient<Snapshot> {
     return this.json<Competences>(`/api/tasks/competences${learnQuery(query)}`, signal ? { signal } : undefined);
   }
 
-  /** The open learning paths with every line of `## Level` of each (capability `paths_levels`). */
-  pathsWithLevels(signal?: AbortSignal): Promise<Paths> {
-    return this.json<Paths>('/api/tasks/paths?levels=1', signal ? { signal } : undefined);
+  /**
+   * The open learning paths with every line of `## Level` of each (capability `paths_levels`); with `includeDone` the
+   * finished ones too (capability `requires`): their badges are earned, their rewards may be open.
+   */
+  pathsWithLevels(signal?: AbortSignal, includeDone = false): Promise<Paths> {
+    return this.json<Paths>(includeDone ? '/api/tasks/paths?include_done=1&levels=1' : '/api/tasks/paths?levels=1', signal ? { signal } : undefined);
   }
 
   /** One learning path with its tree, a flat list in document order (capability `path`). */

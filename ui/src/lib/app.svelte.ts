@@ -1538,9 +1538,12 @@ export class App {
     return this.env.hub.competences(query, signal);
   }
 
-  /** The open learning paths with every level of each (`tasks.paths` with `levels`, capability `paths_levels`). */
+  /**
+   * The learning paths with every level of each (`tasks.paths` with `levels`, capability `paths_levels`), the finished
+   * ones too where the engine has `requires`: the badges and the rewards of all paths.
+   */
   pathsWithLevels(signal?: AbortSignal): Promise<Paths> {
-    return this.env.hub.pathsWithLevels(signal);
+    return this.env.hub.pathsWithLevels(signal, this.can('requires'));
   }
 
   /** Every learning path for the competence map: the open ones, and the finished ones where the engine has `requires`. */
