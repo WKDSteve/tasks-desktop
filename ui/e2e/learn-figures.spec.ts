@@ -156,10 +156,11 @@ test('the statistics: one path over days of its own, the charts as tables, the e
     await page.locator('section[aria-labelledby="learnstats-hours"]').getByRole('button', { name: 'As table' }).click();
     await expect(page.getByRole('region', { name: 'Hours per week, stacked by path' })).toBeVisible();
 
-    // the menu View saves the tables of the view
+    // the menu View saves the tables of the view, and says tables, not tasks
     await page.getByRole('menubar').getByRole('menuitem', { name: 'View', exact: true }).click();
+    await expect(page.getByRole('menuitem', { name: 'Save tasks as CSV file ...' })).toHaveCount(0);
     const download = page.waitForEvent('download');
-    await page.getByRole('menuitem', { name: 'Save tasks as CSV file ...' }).click();
+    await page.getByRole('menuitem', { name: 'Save tables as CSV file ...' }).click();
     const file = await download;
     expect(file.suggestedFilename()).toBe(`tasks-learnstats-${dayFrom(0)}.csv`);
     const csv = readFileSync(await file.path(), 'utf8');
