@@ -164,7 +164,7 @@
           <label data-hint={t('hint.form.meeting.title')}>
             <span>{t('meeting.field.title')}</span>
             <!-- svelte-ignore a11y_autofocus -->
-            <input type="text" bind:value={form.title} maxlength="300" required autofocus />
+            <input type="text" bind:value={form.title} maxlength="300" required autofocus data-meeting-title />
           </label>
           <label data-hint={t('hint.form.meeting.area')}>
             <span>{t('meeting.field.area')}</span>
@@ -369,7 +369,7 @@
             <PendingAttachments {app} bind:files bind:screenshot />
             {#if hasImage}
               <label class="check" data-hint={t('hint.form.meeting.cover_first')}>
-                <input type="checkbox" bind:checked={coverFirst} />
+                <input type="checkbox" bind:checked={coverFirst} data-cover-first />
                 <span>{t('meeting.field.cover_first')}</span>
               </label>
             {/if}
@@ -389,7 +389,7 @@
 
       <div class="actions">
         <button type="button" onclick={() => app.closeMeetingForm()}>{t('dialog.cancel')}</button>
-        <button type="submit" class="primary" disabled={busy || app.locked || !canCreate}>{t('capture.create')}</button>
+        <button type="submit" class="primary" disabled={busy || app.locked || !canCreate} data-meeting-create>{t('capture.create')}</button>
       </div>
     </form>
   {/if}

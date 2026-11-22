@@ -80,7 +80,7 @@
           <ul>
             {#each list as m (m.id)}
               <li class:cancelled={m.status === 'cancelled'}>
-                <button type="button" class="link" onclick={() => app.openMeeting(m.id)}>{markHidden(m.title)}</button>
+                <button type="button" class="link" data-meeting={m.id} onclick={() => app.openMeeting(m.id)}>{markHidden(m.title)}</button>
                 <span class="when">{whenText(m, t('meeting.all_day'))}</span>
                 {#if m.series}<span class="chip" data-series={m.series}>↻ {seriesNote(app.lang, m)}</span>{/if}
                 {#if m.online_service}<span class="chip">{t(`meeting.service.${m.online_service}` as Key)}</span>{/if}

@@ -291,6 +291,7 @@
                     disabled={!canWrite}
                     aria-disabled={busy ? 'true' : undefined}
                     aria-label={t('meeting.agenda.item', { n: item.n })}
+                    data-agenda={item.n}
                     onclick={(e) => {
                       // The box shows what the file says: a click asks the engine and the meeting is read again.
                       e.preventDefault();
@@ -325,6 +326,7 @@
                     disabled={!canWrite}
                     aria-disabled={busy ? 'true' : undefined}
                     aria-label={t('meeting.participants.tick', { name: markHidden(p.name) })}
+                    data-present={p.n}
                     onclick={(e) => {
                       e.preventDefault();
                       if (id) void send({ op: 'meeting_attend', id, n: p.n, present: !p.present, ...guard() });
@@ -388,7 +390,7 @@
           {#if canWrite && doc.body_truncated}
             <p class="muted" role="status">{t('meeting.documents.cut')}</p>
           {:else if canWrite}
-            <form class="row" onsubmit={addDocument}>
+            <form class="row" onsubmit={addDocument} data-document-add>
               <label data-hint={t('hint.form.meeting.document')}>
                 <span>{t('meeting.documents.add')}</span>
                 <input type="text" bind:value={documentText} maxlength="2000" />
@@ -440,7 +442,7 @@
                 <li>
                   <span>{markHidden(path)}</span>
                   {#if canWrite && path !== cover}
-                    <button type="button" disabled={busy} onclick={() => id && send({ op: 'meeting_set', id, patch: { cover: path }, ...guard() })}
+                    <button type="button" data-cover-use={path} disabled={busy} onclick={() => id && send({ op: 'meeting_set', id, patch: { cover: path }, ...guard() })}
                       >{t('meeting.cover.use')}</button
                     >
                   {/if}
@@ -512,7 +514,7 @@
           {/if}
         </section>
         {#if canWrite && m.status === 'planned'}
-          <div class="actions"><button type="button" class="primary" disabled={busy} onclick={close}>{t('meeting.close')}</button></div>
+          <div class="actions"><button type="button" class="primary" disabled={busy} onclick={close} data-meeting-close>{t('meeting.close')}</button></div>
         {/if}
       {/if}
     </div>

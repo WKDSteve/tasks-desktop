@@ -9,6 +9,11 @@ return {
     docs = "README.md",
   },
   {
+    id = "tasks.meetings-make",
+    title = "A meeting from a quick line of the palette: nothing written before Create, its cover, a recording, a document; a meeting that is over opens on its result, is ticked and done",
+    docs = "README.md",
+  },
+  {
     id = "tasks.path-levels",
     title = "The levels of a learning path set in a form: written to ## Level with a badge and rewards, refused by the engine, the XP of a promoted task",
     docs = "README.md",
