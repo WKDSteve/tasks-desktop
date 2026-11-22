@@ -36,7 +36,7 @@ async function board(tasks: TaskEntry[]) {
   flushSync();
   const bar = () => target.querySelector('[data-move-bar]') as HTMLElement;
   const button = (name: string) => bar().querySelector<HTMLButtonElement>(`[data-move="${name}"]`);
-  return { m: made, bar, button };
+  return { m: made, bar, button, target };
 }
 
 describe('the move bar of the board', () => {
@@ -95,5 +95,25 @@ describe('the move bar of the board', () => {
       saidWith: { title: 'Card pub/a' },
     });
     expect(m.app.toast?.text).toBe(translate(m.app.lang, 'board.moved', { title: 'Card pub/a' }));
+  });
+});
+
+describe('focus is selection on the board', () => {
+  it('selects the card the focus moves to, so the keys and the move bar act on it', async () => {
+    const { m, target } = await board([
+      card('pub/a', 'doing', 'doing|1', 'e1'),
+      card('pub/b', 'doing', 'doing|1', 'e2'),
+    ]);
+    const cardEl = (id: string) => target.querySelector<HTMLButtonElement>(`[data-card="${id}"]`)!;
+    expect(m.app.selectedId).toBeNull();
+    cardEl('pub/a').focus();
+    flushSync();
+    expect(m.app.selectedId).toBe('pub/a');
+    expect(cardEl('pub/a').getAttribute('aria-current')).toBe('true');
+    cardEl('pub/b').focus();
+    flushSync();
+    expect(m.app.selectedId).toBe('pub/b');
+    expect(cardEl('pub/a').getAttribute('aria-current')).toBeNull();
+    expect(cardEl('pub/b').getAttribute('aria-current')).toBe('true');
   });
 });

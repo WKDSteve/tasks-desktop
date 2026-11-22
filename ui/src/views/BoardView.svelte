@@ -303,6 +303,11 @@
                 class:before={over?.id === card.id && over.place === 'before'}
                 class:after={over?.id === card.id && over.place === 'after'}
                 aria-current={card.id === app.selectedId ? 'true' : undefined}
+                onfocus={() => {
+                  // Focus is selection: Tab to a card selects it, so the keys (Shift+J/K/H/L) and the move bar act on the
+                  // card the person is on (a screen reader says the focused card).
+                  if (app.selectedId !== card.id) app.select(card.id);
+                }}
                 draggable={!app.locked}
                 ondragstart={(e) => onDragStart(e, card.id)}
                 ondragend={onDragEnd}
