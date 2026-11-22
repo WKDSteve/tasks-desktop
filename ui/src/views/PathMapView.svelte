@@ -8,6 +8,7 @@
   import { tick, untrack } from 'svelte';
   import type { App } from '../lib/app.svelte';
   import { translate, type Key } from '../lib/i18n';
+  import { isPathMapKey, pathMapText, type PathMapKey } from '../lib/pathMapTexts';
   import type { PathEntry, Paths, PathStage } from '../lib/contract';
   import Info from 'appkit-ui/Info.svelte';
   import ItemIcon from './ItemIcon.svelte';
@@ -29,7 +30,9 @@
   } from '../lib/pathMap';
 
   let { app }: { app: App } = $props();
-  const t = (key: Key, params: Record<string, string | number> = {}) => translate(app.lang, key, params);
+  // The words of the map come with its chunk (lib/pathMapTexts.ts); the others are the page's.
+  const t = (key: Key | PathMapKey, params: Record<string, string | number> = {}) =>
+    isPathMapKey(key) ? pathMapText(app.lang, key, params) : translate(app.lang, key, params);
 
   const usable = $derived(app.can('paths') && app.can('path'));
   const withRequires = $derived(app.can('requires'));
