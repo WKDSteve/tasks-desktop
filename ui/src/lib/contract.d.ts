@@ -282,6 +282,7 @@ export type Snapshot = Head & {
     requires?: Requires;
     requires_gate?: RequiresGate;
     waiting_on?: WaitingOn;
+    stage?: PathStage;
     valid: boolean;
     links?: PlanLinks;
     icon?: Icon;
@@ -356,12 +357,12 @@ export type PlanAssetsTruncated = true;
  */
 export type RequiresGate = "soft" | "hard";
 /**
- * What this path or project builds on (`requires:`), in the order of the file: `id`, `gate` (the file's `requires_gate`), `kind` (`path`, `project`, or `unknown`: no learning path or project of that id, `check` says `requires-unknown`) and `met` (the requirement is finished, closed into a Backlog). Only when the file names some. Capability `requires`.
+ * What this path or project builds on (`requires:`), in the order of the file: `id`, `gate` (the file's `requires_gate`), `kind` (`path`, `project`; `unknown`: no learning path or project of that id, `check` says `requires-unknown`; `foreign`: an id of another vault, `<vault>:<area>/<slug>` or `<vault>/<area>/<slug>`, `id` as written; `bad`: a broken entry, `id` the text as written; the last two are the file's fault `path-bad-requires` / `project-bad-requires`, never met, never in `waiting_on`) and `met` (the requirement is finished, closed into a Backlog). Only when the file names some. Capability `requires`.
  */
 export type Requires = {
   id: string;
   gate: RequiresGate;
-  kind: "path" | "project" | "unknown";
+  kind: "path" | "project" | "unknown" | "foreign" | "bad";
   met: boolean;
 }[];
 /**
@@ -371,6 +372,10 @@ export type WaitingOn = {
   id: string;
   via?: string;
 }[];
+/**
+ * The stage of a path or project for a map of them: `done` (finished), `parked`, `waiting` (`waiting_on` not empty), `doing` (`status: doing`; a path: a point learned or seen; a project: a plan or task of it finished), else `idle`. An open soft requirement never makes it wait. Capability `requires`.
+ */
+export type PathStage = "done" | "parked" | "waiting" | "doing" | "idle";
 /**
  * The CI state of a task's commits beside `commits` (capability `ci`): pending (pushed, no verdict yet), green (the CI passed on every system) or red (it failed). Absent: not known.
  */
@@ -1098,10 +1103,6 @@ export type Paths = Head & {
   }[];
 };
 /**
- * The stage of a path for a map of them: `done` (finished), `parked`, `waiting` (`waiting_on` not empty), `doing` (`status: doing`, or a point learned or seen), else `idle`. An open soft requirement never makes it wait. Capability `requires`.
- */
-export type PathStage = "done" | "parked" | "waiting" | "doing" | "idle";
-/**
  * A stage of the scale of the competences, 0 (unknown) to 8 (mastermind), in halves (3.5: the evidence for 4 begun).
  */
 export type CompetenceLevel = number;
@@ -1177,6 +1178,10 @@ export type LearnNext = Head & {
     project?: string;
     stage: "doing" | "idle";
     /**
+     * The version of a file: `sha256:` and 16 hex digits of the hash of its bytes.
+     */
+    etag?: string;
+    /**
      * @minItems 1
      */
     points: [LearnPoint, ...LearnPoint[]];
@@ -1198,6 +1203,10 @@ export type LearnNotes = Head & {
      * The path is finished (from a Backlog, `include_done`).
      */
     path_done?: true;
+    /**
+     * The version of a file: `sha256:` and 16 hex digits of the hash of its bytes.
+     */
+    etag?: string;
     index: number;
     key?: string;
     /**
@@ -2442,6 +2451,16 @@ export interface PathEntry {
   xp?: PathXp;
   level?: PathLevelState;
   optional?: PathOptional;
+  /**
+   * How many leaves are `{safety}` or below one; only when there are some. Capability `path_marks`.
+   */
+  safety?: number;
+  /**
+   * How many leaves are for each machine (`{machine=…}` on the leaf or the nearest parent; a leaf for two machines counts for both); only when a leaf names one. Capability `path_marks`.
+   */
+  machines?: {
+    [k: string]: number;
+  };
   requires?: Requires;
   requires_gate?: RequiresGate;
   waiting_on?: WaitingOn;
