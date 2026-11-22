@@ -1,10 +1,11 @@
 // The words of the views that are chunks of their own: both languages fill the same placeholders, a key of the page is
 // not taken for one of the view, and a view's `t` falls back to the page's words.
 import { describe, expect, it } from 'vitest';
-import { chunkTexts, placeholders } from './chunkTexts';
+import { chunkTexts, placeholders, type ChunkTexts } from './chunkTexts';
 import { badgeTexts } from './badgeTexts';
+import { rewardTexts } from './rewardTexts';
 
-const ALL = { badges: badgeTexts };
+const ALL: Record<string, ChunkTexts<string>> = { badges: badgeTexts, rewards: rewardTexts };
 
 describe('chunkTexts', () => {
   it('fills placeholders and falls back to the words of the page', () => {

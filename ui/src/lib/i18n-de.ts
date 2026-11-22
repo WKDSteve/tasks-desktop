@@ -295,6 +295,8 @@ const de: Record<PageKey, string> = {
   'hint.item.nav.pathmap': 'Die Lernpfade als Karte: jeder Pfad eine Box in der Farbe seines Stands, jedes Projekt ein Rahmen um seine Pfade, ein Pfeil von einer Voraussetzung zu dem, was darauf aufbaut.',
   'nav.badges': 'Abzeichen',
   'hint.item.nav.badges': 'Alle verdienten und offenen Abzeichen aller Lernpfade, mit Level, Pfad und Datum.',
+  'nav.rewards': 'Belohnungen',
+  'hint.item.nav.rewards': 'Offene und gegönnte Belohnungen aller Lernpfade an einem Ort, und die, die noch kommen.',
   'paths.loading': 'Lese die Lernpfade…',
   'paths.reading': 'Lese den Pfad…',
   'paths.failed': 'Die Lernpfade ließen sich nicht lesen.',
