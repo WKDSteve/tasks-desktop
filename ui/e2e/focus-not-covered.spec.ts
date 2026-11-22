@@ -1,4 +1,5 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { violations, watchViolations } from './a11y';
@@ -11,7 +12,33 @@ import { STATE } from './global';
 
 test.use({ locale: 'en-US', viewport: { width: 1100, height: 700 } });
 
-const state = (): { token: string } => JSON.parse(readFileSync(STATE, 'utf8')) as { token: string };
+const state = (): { token: string; vault: string } => JSON.parse(readFileSync(STATE, 'utf8')) as { token: string; vault: string };
+
+/** The day `days` from today, as the engine writes a date. */
+const day = (days: number): string => new Date(Date.now() + days * 86_400_000).toISOString().slice(0, 10);
+
+/**
+ * Tasks with a start and a due date around today, so that the timeline has rows of its own: the fixture vault has none,
+ * and a test must not rely on the tasks of another one (the fixture takes these away after the test).
+ */
+function datedTasks(count: number): void {
+  const dir = join(state().vault, 'lib.nvim', 'ROADMAP', 'tasks');
+  for (let n = 0; n < count; n++) {
+    const slug = `focus-timeline-e2e-${String(n).padStart(3, '0')}`;
+    const text = `---
+title: Focus timeline e2e ${String(n).padStart(3, '0')}
+status: open
+start: ${day(n - 3)}
+due: ${day(n + 2)}
+created: ${day(0)}
+updated: ${day(0)}
+---
+
+A dated task of the timeline case of focus-not-covered.
+`;
+    writeFileSync(join(dir, `${slug}.md`), text);
+  }
+}
 
 async function pair(page: Page, path: string): Promise<void> {
   await watchViolations(page);
@@ -62,8 +89,9 @@ for (const [name, path, ready] of [
   ['the timeline', '/#view=timeline', '.scroll .row.top'],
 ] as const) {
   test(`Tab through ${name} never leaves the focus under a sticky bar`, async ({ page }) => {
+    if (name === 'the timeline') datedTasks(12);
     await pair(page, path);
-    await expect(page.locator(ready).first()).toBeVisible();
+    await expect(page.locator(ready).first()).toBeVisible({ timeout: 15_000 });
     // Enough steps to run past the menu bar and through the rows of the fixture (the hostile ones of other tests too).
     const { visited, covered } = await tabAndCollect(page, 80);
     expect(visited).toBeGreaterThan(20);
