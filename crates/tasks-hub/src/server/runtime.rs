@@ -291,6 +291,12 @@ impl Details {
             .map(|(_, doc)| doc.clone())
     }
 
+    /// Drop every document held: a write changed something the state of the vault may not show.
+    pub(super) fn forget(&mut self) {
+        self.docs.clear();
+        self.order.clear();
+    }
+
     pub(super) fn put(&mut self, rev: &str, id: &str, doc: Bytes) {
         if self.rev.as_deref() != Some(rev) {
             self.rev = Some(rev.to_owned());

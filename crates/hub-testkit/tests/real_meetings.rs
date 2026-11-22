@@ -520,8 +520,21 @@ b"}"#,
     };
     let picture = upload("image", "photo.png").await;
     assert_eq!(picture, "assets/images/photo.png");
+    // The page reads the meeting (the hub holds that answer), then attaches a recording: the meeting's file is not
+    // written, so the state of the vault stays the same, and yet the next read names the recording (the page offers it
+    // at once, not after the 30 s the hub believes a held answer).
+    let held = hub.get(&format!("/api/tasks/meeting?id={formed}")).await;
+    assert_eq!(held.status, 200, "{}", held.body);
     let recording = upload("audio", "note.m4a").await;
     assert_eq!(recording, "assets/audio/note.m4a");
+    let r = hub.get(&format!("/api/tasks/meeting?id={formed}")).await;
+    let doc: Value = serde_json::from_str(&r.body).unwrap();
+    assert!(
+        doc["meeting"]["assets"]
+            .as_array()
+            .is_some_and(|a| a.contains(&json!(recording))),
+        "the read after the upload names the recording: {doc}"
+    );
     hub.ops(json!([{ "op": "meeting_set", "id": formed, "patch": { "cover": picture } }]))
         .await;
     let r = hub.get(&format!("/api/tasks/meeting?id={formed}")).await;

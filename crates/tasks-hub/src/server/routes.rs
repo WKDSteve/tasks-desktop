@@ -749,6 +749,12 @@ pub(super) async fn settle_write(st: &Shared, reply: &str) {
         .unwrap_or(false);
     if wrote || conflict {
         let _ = st.rt().store.refresh("ops").await;
+        // The documents held for the state (a task's, a meeting's) are dropped too: the state of the vault is its
+        // Markdown files, and a write can change a document without them (a file attached to a folder lists a new
+        // asset, the Markdown stays as it was), so the same state would still answer with the document of before.
+        if let Ok(mut details) = st.rt().details.lock() {
+            details.forget();
+        }
     }
     if let Some(usage) = &st.rt().usage {
         usage.touched();
