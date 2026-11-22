@@ -4,8 +4,9 @@ import { describe, expect, it } from 'vitest';
 import { chunkTexts, placeholders, type ChunkTexts } from './chunkTexts';
 import { badgeTexts } from './badgeTexts';
 import { rewardTexts } from './rewardTexts';
+import { competenceTexts } from './competenceTexts';
 
-const ALL: Record<string, ChunkTexts<string>> = { badges: badgeTexts, rewards: rewardTexts };
+const ALL: Record<string, ChunkTexts<string>> = { badges: badgeTexts, rewards: rewardTexts, competences: competenceTexts };
 
 describe('chunkTexts', () => {
   it('fills placeholders and falls back to the words of the page', () => {

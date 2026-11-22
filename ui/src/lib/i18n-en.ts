@@ -296,6 +296,8 @@ const en = {
   'hint.item.nav.badges': 'All earned and open badges of all learning paths, with level, path and day.',
   'nav.rewards': 'Rewards',
   'hint.item.nav.rewards': 'Open and granted rewards of all learning paths in one place, and those still to come.',
+  'nav.competences': 'Competence catalogue',
+  'hint.item.nav.competences': 'The fields of knowledge with their stage in theory and practice, their target and the paths that lead there.',
   'paths.loading': 'Reading the learning paths…',
   'paths.reading': 'Reading the path…',
   'paths.failed': 'The learning paths could not be read.',
