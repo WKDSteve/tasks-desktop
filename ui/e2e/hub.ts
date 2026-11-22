@@ -331,6 +331,10 @@ export function env(config: string): NodeJS.ProcessEnv {
     TASKS_DESKTOP_PORT: String(port()),
     // The repo status never asks GitHub in a test (the checkouts are still read with git).
     TASKS_DESKTOP_NO_GH: '1',
+    // Pairing, challenge and device session share one guard of 10 a minute; nearly every test of mobile.spec.ts pairs a
+    // phone, and the file run on its own went past it (429 instead of 401 for a revoked phone). Read by a debug build
+    // only (app.rs `test_exchange_max`): the hub of these tests is one.
+    TASKS_DESKTOP_TEST_EXCHANGE_MAX: '500',
     // Where the text snapshots of the test sheets are read from (see `prepareVault`).
     REPOS_DIR: join(config, '..', 'repos'),
     // The family of this run, not of this machine: an ai-desktop installed or running here is not found (folders that

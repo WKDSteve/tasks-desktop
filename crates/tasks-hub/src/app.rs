@@ -676,6 +676,19 @@ async fn area_names(engine: &dyn Engine) -> Result<Vec<String>, String> {
 /// # Errors
 ///
 /// A text for the person at the terminal: what is missing or in the way.
+/// The browser tests pair a phone in nearly every test of `ui/e2e/mobile.spec.ts`, and pairing, challenge and device
+/// session share one guard of appkit (`exchange_max`, 10 per minute): a file of them run on its own went past it, and
+/// the last phone got 429 instead of the 401 of its revoked key. A debug build, which is never shipped (the browser
+/// tests run one), takes a larger number from `TASKS_DESKTOP_TEST_EXCHANGE_MAX`; a release build ignores it, and the
+/// guard of an installed hub stays as it is.
+fn test_exchange_max(env: &Env) -> Option<usize> {
+    if !cfg!(debug_assertions) {
+        return None;
+    }
+    let value = env.get("TASKS_DESKTOP_TEST_EXCHANGE_MAX")?.to_str()?;
+    value.parse().ok().filter(|n| (1..=10_000).contains(n))
+}
+
 pub async fn serve(opts: ServeOptions) -> Result<(), String> {
     let env = Env::from_process();
     let dir = app_dir(&env)?;
@@ -746,6 +759,7 @@ pub async fn serve(opts: ServeOptions) -> Result<(), String> {
         // is left is a net, not the way a change is seen.
         limits: Limits {
             snapshot_max_age: state.vault.as_ref().map(|_| Duration::from_secs(120)),
+            exchange_max: test_exchange_max(&env).unwrap_or(Limits::default().exchange_max),
             ..Limits::default()
         },
         clock: Arc::new(SystemClock::new()),
@@ -1547,6 +1561,21 @@ mod tests {
                 assert!(got.is_err(), "{bad:?}");
             }
         }
+    }
+
+    #[test]
+    fn the_limit_of_pairings_is_raised_for_the_browser_tests_in_a_debug_build_only() {
+        let env = |v: &str| Env::from_pairs([("TASKS_DESKTOP_TEST_EXCHANGE_MAX", v)]);
+        let raised = test_exchange_max(&env("200"));
+        if cfg!(debug_assertions) {
+            assert_eq!(raised, Some(200));
+        } else {
+            assert_eq!(raised, None, "a release build keeps the guard of appkit");
+        }
+        for bad in ["0", "abc", "-1", "", "100000"] {
+            assert_eq!(test_exchange_max(&env(bad)), None, "{bad:?}");
+        }
+        assert_eq!(test_exchange_max(&Env::default()), None);
     }
 }
 
