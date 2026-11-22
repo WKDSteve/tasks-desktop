@@ -264,7 +264,9 @@ A lost phone: revoke it here (and, with a tunnel over Tailscale, remove it from 
 A paired phone reaches only what the phone page asks (fail closed, appkit's `MOB-02`): the list (`snapshot`,
 `areas`, `next`), a task (`task`), what finishing it sets off (`done_preview`), the writes (`ops`), its photos and
 voice notes (`upload`), its own level (`device`: what it may do now, so the page offers only that) and the learning
-paths (`paths`, `path`, cut to what is a path's own; a point is ticked with `node_set`) and the meetings (`meetings`,
+paths (`paths`, `path`, cut to what is a path's own; a point is ticked with `node_set`), the next learning steps and
+the series of the learning figures for its page Lernen (`learn_next`, `learn_history`, asked of the engine for the
+released areas alone and cut) and the meetings (`meetings`,
 `meeting`, cut by the class of their area; a line of the minutes is written with `meeting_capture`). Everything else, the choice of vault among it, answers a phone `403 not_for_devices`.
 
 The hub also cuts what these routes tell a phone (`MOB-02`, the hub cuts, never the phone): only the areas of the

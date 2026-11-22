@@ -643,6 +643,164 @@ pub(crate) fn paths(classes: &AreaPolicy, doc: &Value) -> Value {
     Value::Object(out)
 }
 
+/// The fields of a next point to learn a phone is given. Left out: a link that is no web address and a task it was
+/// promoted to of an area not released (both added below when they may go).
+const LEARN_POINT_FIELDS: &[&str] = &[
+    "index",
+    "key",
+    "label",
+    "stage_index",
+    "stage_label",
+    "h_min",
+    "h_max",
+    "xp",
+    "safety",
+    "machine",
+];
+
+/// Was the engine's document read from every area it was asked for? Which one was not is told only as `partial`.
+fn partial(doc: &Value) -> Value {
+    Value::Bool(
+        doc["incomplete"]
+            .as_array()
+            .is_some_and(|list| !list.is_empty()),
+    )
+}
+
+/// `tasks.learn_next` for a phone: the paths of released areas with their next points, each field by field; the
+/// project a path serves (it may be of another area) stays on the PC.
+pub(crate) fn learn_next(classes: &AreaPolicy, doc: &Value) -> Value {
+    let mut out = copy(
+        doc,
+        &[
+            "kind",
+            "schema",
+            "plugin",
+            "engine",
+            "generated_at",
+            "machine",
+        ],
+    );
+    let items: Vec<Value> = doc["items"]
+        .as_array()
+        .map_or(&[][..], Vec::as_slice)
+        .iter()
+        .filter(|item| {
+            item["path"]
+                .as_str()
+                .is_some_and(|id| released_id(classes, id) && item["area"].as_str() == area_of(id))
+        })
+        .map(|item| {
+            let mut cut = copy(item, &["path", "area", "title", "stage"]);
+            if let Some(icon) = plain_icon(&item["icon"]) {
+                cut.insert("icon".to_owned(), icon);
+            }
+            let points: Vec<Value> = item["points"]
+                .as_array()
+                .map_or(&[][..], Vec::as_slice)
+                .iter()
+                .map(|point| {
+                    let mut p = copy(point, LEARN_POINT_FIELDS);
+                    if let Some(link) = point["link"]
+                        .as_str()
+                        .filter(|l| l.starts_with("https://") || l.starts_with("http://"))
+                    {
+                        p.insert("link".to_owned(), json_str(link));
+                    }
+                    if let Some(task) = point["promoted"]
+                        .as_str()
+                        .filter(|id| released_id(classes, id))
+                    {
+                        p.insert("promoted".to_owned(), json_str(task));
+                    }
+                    Value::Object(p)
+                })
+                .collect();
+            cut.insert("points".to_owned(), Value::Array(points));
+            Value::Object(cut)
+        })
+        .collect();
+    out.insert("items".to_owned(), Value::Array(items));
+    out.insert("partial".to_owned(), partial(doc));
+    Value::Object(out)
+}
+
+/// The figures of a step of the series, and of a path in it.
+const STEP_FIELDS: &[&str] = &["learned", "seen", "dropped", "xp", "done_h"];
+
+/// `tasks.learn_history` for a phone (asked for the released areas alone, so its sums and streak are over those): the
+/// steps with the paths of released areas in them, and those paths with their days; field by field.
+pub(crate) fn learn_history(classes: &AreaPolicy, doc: &Value) -> Value {
+    let mut out = copy(
+        doc,
+        &[
+            "kind",
+            "schema",
+            "plugin",
+            "engine",
+            "generated_at",
+            "since",
+            "until",
+            "step",
+            "first",
+            "streak",
+        ],
+    );
+    let points: Vec<Value> = doc["points"]
+        .as_array()
+        .map_or(&[][..], Vec::as_slice)
+        .iter()
+        .map(|step| {
+            let mut cut = copy(step, STEP_FIELDS);
+            cut.extend(copy(step, &["date", "days"]));
+            let paths: Vec<Value> = step["paths"]
+                .as_array()
+                .map_or(&[][..], Vec::as_slice)
+                .iter()
+                .filter(|p| p["id"].as_str().is_some_and(|id| released_id(classes, id)))
+                .map(|p| {
+                    let mut one = copy(p, STEP_FIELDS);
+                    one.extend(copy(p, &["id", "level"]));
+                    Value::Object(one)
+                })
+                .collect();
+            cut.insert("paths".to_owned(), Value::Array(paths));
+            Value::Object(cut)
+        })
+        .collect();
+    out.insert("points".to_owned(), Value::Array(points));
+    let paths: Vec<Value> = doc["paths"]
+        .as_array()
+        .map_or(&[][..], Vec::as_slice)
+        .iter()
+        .filter(|p| {
+            p["id"]
+                .as_str()
+                .is_some_and(|id| released_id(classes, id) && p["area"].as_str() == area_of(id))
+        })
+        .map(|p| {
+            Value::Object(copy(
+                p,
+                &[
+                    "id",
+                    "area",
+                    "title",
+                    "first",
+                    "last_active",
+                    "level",
+                    "levels",
+                    "rewards",
+                    "pace",
+                    "forecast_weeks",
+                ],
+            ))
+        })
+        .collect();
+    out.insert("paths".to_owned(), Value::Array(paths));
+    out.insert("partial".to_owned(), partial(doc));
+    Value::Object(out)
+}
+
 /// `tasks.path` for a phone, or `None` (the hub answers `not_found`) when the path is not of a released area.
 pub(crate) fn path(classes: &AreaPolicy, doc: &Value) -> Option<Value> {
     let entry = path_entry(classes, &doc["path"])?;

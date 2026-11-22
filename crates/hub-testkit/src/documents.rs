@@ -71,8 +71,10 @@ fn tasks_before(call: &Call<'_>) {
     // a test that counts sets one up. Any other folder the engine is pointed at (no vault, or the
     // working folder, which in CI is the job's temp folder) gets no file, so
     // tools/check-temp-leftovers.mjs finds nothing there.
-    if matches!(call.method, "areas" | "next")
-        && state(base).is_some()
+    if matches!(
+        call.method,
+        "areas" | "next" | "learn_next" | "learn_history"
+    ) && state(base).is_some()
         && let Ok(mut calls) = std::fs::OpenOptions::new()
             .create(true)
             .append(true)

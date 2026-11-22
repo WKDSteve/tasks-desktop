@@ -934,6 +934,102 @@ async fn a_phone_reads_the_paths_of_released_areas_and_ticks_a_point() {
     assert!(refused(status, &doc, "level_too_low"), "{status} {doc}");
 }
 
+/// The page Lernen of a phone (MOB-02): the next steps and the series of the learning figures are asked of the engine
+/// for the released areas alone, so its sums and its streak are over what the phone may know, and come cut field by
+/// field: no path of a private area, no project of another, no file, no link that is no web address.
+#[tokio::test]
+async fn a_phone_reads_the_next_steps_and_the_series_of_released_areas_only() {
+    let _one = ONE_AT_A_TIME.lock().await;
+    let r = Rig::new("learn").await;
+    let point = json!({ "index": 1, "key": "a", "label": "A", "stage_index": 0, "stage_label": "S", "line": 4,
+                        "link": "file:///E:/secret.pdf", "promoted": "secret-area/t", "xp": 10 });
+    r.merge(
+        "learn_next",
+        &json!({ "items": [
+            { "path": "alpha.nvim/p1", "area": "alpha.nvim", "title": "P1", "stage": "doing",
+              "project": "secret-area/proj", "icon": { "kind": "file", "file": "E:/v/x.svg" }, "points": [point] },
+            { "path": "secret-area/p9", "area": "secret-area", "title": "Secret", "stage": "doing", "points": [point] }
+          ], "incomplete": ["secret-area"] }),
+    );
+    r.merge(
+        "learn_history",
+        &json!({ "since": "2026-11-01", "until": "2026-11-22", "step": "day", "first": "2026-11-01",
+                 "streak": { "current": 1, "longest": 2 },
+                 "points": [{ "date": "2026-11-02", "learned": 1, "seen": 0, "dropped": 0, "xp": 10, "done_h": 1, "days": 1,
+                              "paths": [{ "id": "alpha.nvim/p1", "learned": 1, "seen": 0, "dropped": 0, "xp": 10, "done_h": 1 },
+                                        { "id": "secret-area/p9", "learned": 5, "seen": 0, "dropped": 0, "xp": 0, "done_h": 0 }] }],
+                 "paths": [{ "id": "alpha.nvim/p1", "area": "alpha.nvim", "title": "P1", "first": "2026-11-01", "levels": [], "rewards": [] },
+                           { "id": "secret-area/p9", "area": "secret-area", "title": "Secret", "first": "2026-11-01", "levels": [], "rewards": [] }],
+                 "incomplete": ["E:/v/_Telemetry/history/learn-2026-11.jsonl"] }),
+    );
+    let (_device, phone) = r.phone().await;
+    // the hub holds a snapshot: it knows the areas of the vault
+    let (status, _) = r.send("GET", "/api/tasks/snapshot", &phone, "").await;
+    assert_eq!(status, 200);
+
+    let (status, doc) = r.send("GET", "/api/tasks/learn_next", &phone, "").await;
+    assert_eq!(status, 200, "{doc}");
+    let ids: Vec<&str> = doc["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|i| i["path"].as_str())
+        .collect();
+    assert_eq!(ids, ["alpha.nvim/p1"], "{doc}");
+    assert!(!doc.to_string().contains("secret"), "{doc}");
+    assert!(!doc.to_string().contains("E:/"), "{doc}");
+    assert!(doc["items"][0].get("project").is_none(), "{doc}");
+    assert!(doc["items"][0].get("icon").is_none(), "{doc}");
+    assert!(doc["items"][0]["points"][0].get("line").is_none(), "{doc}");
+    assert_eq!(doc["items"][0]["points"][0]["xp"], 10);
+    assert_eq!(doc["partial"], true);
+
+    let (status, doc) = r
+        .send("GET", "/api/tasks/learn_history?step=day", &phone, "")
+        .await;
+    assert_eq!(status, 200, "{doc}");
+    assert_eq!(doc["paths"].as_array().unwrap().len(), 1, "{doc}");
+    assert_eq!(
+        doc["points"][0]["paths"].as_array().unwrap().len(),
+        1,
+        "{doc}"
+    );
+    assert_eq!(doc["streak"]["longest"], 2);
+    assert!(!doc.to_string().contains("secret"), "{doc}");
+    assert!(!doc.to_string().contains("E:/"), "{doc}");
+    assert_eq!(doc["partial"], true);
+
+    // Asked of the engine for the released areas alone; a private area asked for is none.
+    let (status, _) = r
+        .send(
+            "GET",
+            "/api/tasks/learn_history?step=day&area=secret-area",
+            &phone,
+            "",
+        )
+        .await;
+    assert_eq!(status, 200);
+    let calls =
+        std::fs::read_to_string(r._dir.join("vault").join(".fake-calls-learn_history")).unwrap();
+    let lines: Vec<&str> = calls.lines().collect();
+    assert_eq!(lines.len(), 2, "{calls}");
+    assert!(lines[0].contains(r#""areas":["alpha.nvim"]"#), "{calls}");
+    assert!(lines[1].contains(r#""areas":[]"#), "{calls}");
+    assert!(!calls.contains("secret-area"), "{calls}");
+    let next =
+        std::fs::read_to_string(r._dir.join("vault").join(".fake-calls-learn_next")).unwrap();
+    assert!(
+        next.contains(r#""areas":["alpha.nvim"]"#) && !next.contains("secret"),
+        "{next}"
+    );
+
+    // The PC asks as it asked, and is given the whole document.
+    let pc = r.pc().await;
+    let (status, doc) = r.send("GET", "/api/tasks/learn_next", &pc, "").await;
+    assert_eq!(status, 200, "{doc}");
+    assert_eq!(doc["items"].as_array().unwrap().len(), 2, "{doc}");
+}
+
 /// The meetings reach a phone cut (MOB-02): those of released areas; of an internal area without the people and,
 /// unless the settings say so, without the address to join; a meeting of a private area is not there. A phone writes
 /// a line of the minutes (text, a task, a decision, a question), never a file and never a field more.

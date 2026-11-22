@@ -940,8 +940,15 @@ only when it is `http://` or `https://`, in a new tab without a referrer (`rel="
 
 ## The reads of the tab Lernpläne (`learn_next`, `learn_notes`, `learn_evidence`, `learn_history`, `competences`)
 
-Five data routes, each behind a session (in the security matrix) and none for a paired phone (no `with_device_route`:
-a phone is refused before a handler runs). The query is plain (`parse_query`): an area name, a path or competence id
+Five data routes, each behind a session (in the security matrix). A paired phone has two of them, `learn_next` and
+`learn_history` (released at `read`, for its page Lernen); the other three refuse it before a handler runs. For a phone
+the hub asks the engine for the released areas alone (`areas`: the released ones of the areas the hub holds, narrowed
+to the `area` asked for; an area that is not released, or none known, is an empty list and asks for no path), so the
+sums, the learning days and the streak of the series are the engine's over what the phone may know, never computed in
+the hub. The answers are cut field by field (`device_cut::learn_next`, `device_cut::learn_history`): only paths of a
+released area; no project a path serves (it may be of another area), no icon that is a file, no line number, a point's
+`link` only as `http://` or `https://`, the task it was promoted to only when its area is released, and which areas or
+lines of the series could not be read only as `partial`. The query is plain (`parse_query`): an area name, a path or competence id
 `<area>/<slug>`, a word of a fixed list (`machine`, `kind`, `step`), a whole number in range (`n` 1..20, `limit`
 1..500), a day `YYYY-MM-DD`, a flag `1`; anything else is `400` before the engine is asked (`server/learn.rs`, the web
 variant `ui/src/web/learnQuery.ts` with the same rules). The one free text, the search of `learn_notes`, is `q` escaped

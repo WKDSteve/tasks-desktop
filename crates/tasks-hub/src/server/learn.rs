@@ -1,7 +1,9 @@
 //! The reads of the tab "Lernpläne" over all learning paths (concept "Reiter Lernpläne" 3-11): what to learn next, the
 //! notes and sources, the evidence, the series of the learning figures and the competences. Each is under `/api/`, so
-//! the guard asked for a session before a handler runs; none is a route of a paired phone (`with_device_route` names
-//! none of them), the phone page has no such view yet.
+//! the guard asked for a session before a handler runs. A paired phone has two of them, for its page Lernen (MOB-02):
+//! `learn_next` and `learn_history`, asked of the engine for the released areas alone (`areas`; none released: none
+//! asked) and cut field by field (`device_cut::learn_next`, `device_cut::learn_history`), so the sums and the streak
+//! of the series are the engine's over what the phone may know. The others are not routes of a phone.
 //!
 //! The documents of the engine are passed on as it wrote them; the page draws them and computes nothing (WEB-13). The
 //! hub checks the shape of a parameter (a name, a word of a list, a number in range); what it means is the engine's.
@@ -243,13 +245,68 @@ async fn read(
     }
 }
 
+/// The question of a phone: the areas it asked for (`area`), or all of them, narrowed to the released ones, as `areas`;
+/// an area it may not know is as if it were not there. An empty list asks for no path at all (the engine's scope).
+async fn for_device(st: &Shared, mut request: serde_json::Value) -> serde_json::Value {
+    let released = device_areas(st).await;
+    let asked = request
+        .get("area")
+        .and_then(|a| a.as_str())
+        .map(str::to_owned);
+    let areas: Vec<String> = match asked {
+        Some(area) => released.into_iter().filter(|a| *a == area).collect(),
+        None => released,
+    };
+    if let Some(map) = request.as_object_mut() {
+        map.remove("area");
+        map.insert("areas".to_owned(), json!(areas));
+    }
+    request
+}
+
+/// A read a phone has: asked for its released areas (`for_device`), the answer cut by `cut`.
+async fn read_for(
+    st: &Shared,
+    caller: Option<&Caller>,
+    method: Method,
+    request: Result<serde_json::Value, &'static str>,
+    cut: fn(&crate::classes::AreaPolicy, &serde_json::Value) -> serde_json::Value,
+) -> Response {
+    let device = is_device(caller);
+    let request = match request {
+        Ok(r) if device => for_device(st, r).await,
+        Ok(r) => r,
+        Err(why) => return bad_query(why),
+    };
+    match ask_as(st, device, method, Some(&request)).await {
+        Ok(reply) if device => {
+            let doc = serde_json::from_str::<serde_json::Value>(&reply.text).unwrap_or_default();
+            json_response(
+                StatusCode::OK,
+                cut(&st.rt().classes, &doc).to_string(),
+                None,
+            )
+        }
+        Ok(reply) => json_response(StatusCode::OK, reply.text, None),
+        Err(response) => response,
+    }
+}
+
 /// `GET /api/tasks/learn_next?area=&path=&machine=&n=`: for every running learning path the next points to learn
-/// (`tasks.learn_next`, capability `learn_next`).
+/// (`tasks.learn_next`, capability `learn_next`); for a phone those of the released areas, cut.
 pub(super) async fn learn_next(
     State(st): State<Arc<Shared>>,
+    caller: Option<axum::Extension<Caller>>,
     RawQuery(query): RawQuery,
 ) -> Response {
-    read(&st, Calls::LearnNext, learn_next_request(query.as_deref())).await
+    read_for(
+        &st,
+        caller.as_deref(),
+        Calls::LearnNext,
+        learn_next_request(query.as_deref()),
+        device_cut::learn_next,
+    )
+    .await
 }
 
 /// `GET /api/tasks/learn_notes?q=&kind=&area=&path=&include_done=1&limit=`: the notes, links and images of the learning
@@ -281,15 +338,18 @@ pub(super) async fn learn_evidence(
 }
 
 /// `GET /api/tasks/learn_history?since=&until=&step=&area=&path=`: the series of the learning figures over a window
-/// (`tasks.learn_history`, capability `learn_history`).
+/// (`tasks.learn_history`, capability `learn_history`); for a phone over the released areas, cut.
 pub(super) async fn learn_history(
     State(st): State<Arc<Shared>>,
+    caller: Option<axum::Extension<Caller>>,
     RawQuery(query): RawQuery,
 ) -> Response {
-    read(
+    read_for(
         &st,
+        caller.as_deref(),
         Calls::LearnHistory,
         learn_history_request(query.as_deref()),
+        device_cut::learn_history,
     )
     .await
 }

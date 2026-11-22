@@ -383,7 +383,8 @@ fn app_routes(core: &Arc<Shared>) -> Router<Arc<Shared>> {
         // The learning paths (concept "Lernplan" 11.3): the open paths, one path with its tree; the writes are `ops`.
         .route(&r("paths"), get(self::paths::paths))
         .route(&r("path"), get(self::paths::path))
-        // The reads of the tab "Lernpläne" over all paths (concept "Reiter Lernpläne"); a phone has none of them.
+        // The reads of the tab "Lernpläne" over all paths (concept "Reiter Lernpläne"); a phone has the first and the
+        // fourth, for its released areas (`learn::read_for`).
         .route(&r("learn_next"), get(self::learn::learn_next))
         .route(&r("learn_notes"), get(self::learn::learn_notes))
         .route(&r("learn_evidence"), get(self::learn::learn_evidence))

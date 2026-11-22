@@ -151,6 +151,28 @@ pub(super) fn is_device(caller: Option<&Caller>) -> bool {
     !matches!(caller, Some(Caller::Pc))
 }
 
+/// The areas a phone may know: the areas of the vault (the answer of `areas` the hub holds, as the route `areas` gives
+/// it) that are released; none when the engine cannot tell them (fail closed).
+pub(super) async fn device_areas(st: &Shared) -> Vec<String> {
+    let Ok(text) = ask_held(st, false, AREAS_KEY, Calls::Areas, None).await else {
+        return Vec::new();
+    };
+    let classes = Arc::clone(&st.rt().classes);
+    serde_json::from_str::<serde_json::Value>(&text)
+        .ok()
+        .map(|doc| {
+            doc["areas"]
+                .as_array()
+                .map_or(&[][..], Vec::as_slice)
+                .iter()
+                .filter_map(|a| a["name"].as_str())
+                .filter(|name| device_cut::released(&classes, name))
+                .map(str::to_owned)
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
 /// The ids of the plans and projects a phone may know, from the snapshot the hub holds.
 pub(super) fn device_plans(st: &Shared) -> Vec<String> {
     let rt = st.rt();
@@ -2395,6 +2417,9 @@ pub(super) fn guard_rules() -> GuardRules {
     .with_device_route(crate::IDENTITY.route("meetings"), Level::Read)
     .with_device_route(crate::IDENTITY.route("meeting"), Level::Read)
     .with_device_route(crate::IDENTITY.route("path"), Level::Read)
+    // The page Lernen of the phone: the next steps and the series of the released areas (`learn::read_for`).
+    .with_device_route(crate::IDENTITY.route("learn_next"), Level::Read)
+    .with_device_route(crate::IDENTITY.route("learn_history"), Level::Read)
     .with_device_route(crate::IDENTITY.route("ops"), Level::Create)
     .with_device_route(crate::IDENTITY.route("upload"), Level::Change)
     // A new phone reads, creates and changes; it never triggers (the PC raises one device at a time, if ever).
