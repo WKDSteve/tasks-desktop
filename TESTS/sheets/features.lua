@@ -24,6 +24,11 @@ return {
     docs = "README.md",
   },
   {
+    id = "tasks.learn-steps",
+    title = "Three views of the tab Lernpläne: the next learning step (cards, keys, the safety question, the machine filter), the learning time (planned against done hours, the sessions) and notes & sources (the engine's search, a hit opens its point)",
+    docs = "README.md",
+  },
+  {
     id = "tasks.pathmap",
     title = "The competence map of the learning paths: boxes by stage, frames of projects, the arrows of requires, a circle and a ghost; finished ones hidden, the list, a box opens its path",
     docs = "README.md",
