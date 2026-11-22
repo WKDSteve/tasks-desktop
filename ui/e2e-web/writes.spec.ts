@@ -63,6 +63,17 @@ test('a task is made, a field is set and the task is finished: the files on the 
   await expect(done).toBeVisible();
   await done.getByRole('button', { name: /^(Finish|Erledigen)$/ }).click();
   await expect(done).toHaveCount(0, { timeout: 30_000 });
+  // The page closes the dialog when the engine has answered; the files go back into the folder after that, in no
+  // fixed order: wait until the task left ROADMAP and the Backlog names it.
+  await expect
+    .poll(
+      async () => {
+        const now = await disk(page);
+        return now[file] === undefined && (now['lib.nvim/Backlog/README.md'] ?? '').includes('web-write-e2e');
+      },
+      { timeout: 15_000 },
+    )
+    .toBe(true);
   const finished = await disk(page);
   expect(finished[file]).toBeUndefined();
   const moved = Object.keys(finished).filter((p) => p.startsWith('lib.nvim/Backlog/') && p.endsWith('_web-write-e2e.md'));
