@@ -82,7 +82,11 @@
   });
 
   // The series by day over the period and the one before: asked again for another period and after a change.
-  let history = $state<LearnHistory | null>(null);
+  // Kept with the window it answers: until the answer for another period is there, no figures (the old series over the
+  // new window would add up wrong and the live region would say so).
+  let got = $state<{ key: string; doc: LearnHistory } | null>(null);
+  const askKey = $derived(`${frame.ask.since}..${frame.ask.until}`);
+  const history = $derived(got !== null && got.key === askKey ? got.doc : null);
   let historyFailed = $state(false);
   let askedHistory = 0;
   $effect(() => {
@@ -96,12 +100,12 @@
         .learnHistory({ since, until, step: 'day' })
         .then((answer) => {
           if (mine !== askedHistory) return;
-          history = answer;
+          got = { key: `${since}..${until}`, doc: answer };
           historyFailed = false;
         })
         .catch(() => {
           if (mine !== askedHistory) return;
-          history = null;
+          got = null;
           historyFailed = true;
         });
     });
@@ -251,7 +255,7 @@
             </div>
           </dl>
           <p class="note" role="note">
-            {#if !withHistory}{t('learnov.no_history')}{:else if historyFailed}{t('learnov.history_failed')}{:else if history}{t('learnov.series_none')}{/if}
+            {#if !withHistory}{t('learnov.no_history')}{:else if historyFailed}{t('learnov.history_failed')}{:else if history}{t('learnov.series_none')}{:else}{t('learnov.reading_history')}{/if}
           </p>
         {:else}
           {@const learned = compare((f) => f.learned)}

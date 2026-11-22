@@ -65,6 +65,25 @@ describe('App, the tables of a view of figures', () => {
     app.stop();
   });
 
+  it('says a failure of the way out instead of leaving it unhandled', async () => {
+    const { app, files } = await shown();
+    app.viewTables = {
+      view: 'learn',
+      title: 'Figures',
+      words,
+      tables: () => {
+        throw new Error('broken');
+      },
+    };
+    await app.exportView('csv', 'save');
+    expect(files).toHaveLength(0);
+    expect(app.toast).toMatchObject({ kind: 'error', text: 'save_failed 0' });
+    app.printView();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(app.toast).toMatchObject({ kind: 'error' });
+    app.stop();
+  });
+
   it('prints a section per table, each with its own heads', async () => {
     const { app, printed } = await shown();
     app.viewTables = tables();

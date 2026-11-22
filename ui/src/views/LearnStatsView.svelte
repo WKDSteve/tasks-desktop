@@ -26,6 +26,7 @@
     parseStatsPeriod,
     parseStatsSpan,
     pathRows,
+    MAX_DAYS,
     STATS_PERIODS,
     statsFrame,
     weekHours,
@@ -63,32 +64,43 @@
 
   // The paths: for the choice of a project or path, the titles, and the numbers of their levels.
   let doc = $state<Paths | null>(null);
+  let askedPaths = 0;
   $effect(() => {
     void app.writes;
     void app.snapshot?.rev;
     if (!usable) return;
+    const mine = ++askedPaths;
     untrack(() => {
       (withLevels ? app.pathsWithLevels() : app.pathsForMap())
-        .then((answer) => (doc = answer))
+        .then((answer) => {
+          // an older answer that comes late does not cover a newer one
+          if (mine === askedPaths) doc = answer;
+        })
         .catch(() => undefined);
     });
   });
 
-  // The series by day over the window, of one path where one is chosen.
-  let history = $state<LearnHistory | null>(null);
+  // The series by day over the window, of one path where one is chosen; kept with the question it answers: until the
+  // answer for another window or path is there, no figures (the old series under the new choice would be wrong).
+  let got = $state<{ key: string; doc: LearnHistory } | null>(null);
+  const askKey = $derived(`${frame.ask.since}..${frame.ask.until}|${path}`);
+  const history = $derived(got !== null && got.key === askKey ? got.doc : null);
+  /** A window that has not begun yet: nothing to ask. */
+  const notBegun = $derived(frame.ask.since > frame.ask.until);
   let problem = $state(false);
   let reading = $state(false);
   let asked = 0;
   function readHistory(): void {
     const { since, until } = frame.ask;
     const chosen = path;
+    const key = askKey;
     const mine = ++asked;
     reading = true;
     app
       .learnHistory({ since, until, step: 'day', ...(chosen !== '' ? { path: chosen } : {}) })
       .then((answer) => {
         if (mine !== asked) return;
-        history = answer;
+        got = { key, doc: answer };
         problem = false;
         reading = false;
       })
@@ -104,7 +116,7 @@
     void frame.ask.since;
     void frame.ask.until;
     void path;
-    if (!usable || !withHistory) return;
+    if (!usable || !withHistory || notBegun) return;
     untrack(readHistory);
   });
 
@@ -170,13 +182,21 @@
     return (id: string) => ids.has(id);
   });
 
+  // The finished tasks before the series: of the path chosen alone (the engine asked for it alone), else as the paths.
+  const keepTasks = $derived.by((): Keep => {
+    if (path === '') return keep;
+    const chosen = path;
+    return (id: string) => id === chosen;
+  });
   const days = $derived(byDate(history));
-  const bars = $derived(history ? withFinished(barsOf(days, frame, app.today, first, keep), first, finished, keep) : []);
+  const bars = $derived(history ? withFinished(barsOf(days, frame, app.today, first, keep), first, finished, keepTasks) : []);
   const pick = (f: { xp: number; learned: number }): number => (game ? f.xp : f.learned);
   const line = $derived(cumulative(bars, pick));
   const hours = $derived(history ? weekHours(days, frame.current, app.today, first, keep) : null);
   const calendar = $derived(history ? calendarWeeks(days, frame.current, app.today, first, keep) : []);
   const rows = $derived(pathRows(history, frame.current, app.today, keep));
+  // The drawing holds a year of weeks (54: a year can touch 54 of them); the table and the export hold every day.
+  const drawnWeeks = $derived(calendar.slice(-54));
   const knownCells = $derived(calendar.flat().filter((cell): cell is CalendarDay & { count: number } => cell !== null && cell.count !== null));
 
   // Names: the titles of the paths, the numbers of their levels.
@@ -195,6 +215,8 @@
   const at = (day: string): Date => new Date(`${day}T12:00:00Z`);
   const h = (n: number): string => t('learnstats.h', { n: number.format(n) });
   const weekName = (since: string): string => bt('bars.week', { n: isoWeek(since) });
+  /** A week in a table: its number and its Monday (the same number comes again in a window over a year). */
+  const weekLabel = (since: string): string => `${weekName(since)} (${shortDay.format(at(since))})`;
   const barName = (bar: Bar): string =>
     frame.bucket === 'month' ? monthLong.format(at(bar.since)) : frame.bucket === 'week' ? `${weekName(bar.since)} (${longDay.format(at(bar.since))})` : longDay.format(at(bar.since));
   const dayCount = (n: number): string => (n === 1 ? t('learnstats.day_one') : t('learnstats.days_n', { n }));
@@ -215,16 +237,18 @@
   const seriesNames = $derived([...(hours?.paths ?? []).map((id) => markHidden(titleOf(id))), t('learnstats.rest')]);
   const anyRest = $derived((hours?.weeks ?? []).some((w) => w.rest > 0));
   const anyHours = $derived((hours?.weeks ?? []).some((w) => w.total > 0));
+  // The engine's streak ends on the last day asked: it is today's only when the window reaches today.
   const streakWords = $derived(
-    history?.streak
+    history?.streak && frame.ask.until === app.today
       ? t(keep !== null ? 'learnstats.streak_all' : 'learnstats.streak', { current: dayCount(history.streak.current), longest: dayCount(history.streak.longest) })
       : null,
   );
 
   // The tables of the view, for the menu View; a path of an area that may not leave is not named.
   function exportName(id: string): string {
+    // an area not known is held back as a private one
     const area = areas.get(id);
-    return area !== undefined && !app.areaMayLeave(area) ? t('learnstats.private') : titleOf(id);
+    return area === undefined || !app.areaMayLeave(area) ? t('learnstats.private') : titleOf(id);
   }
   function tables(): ReturnType<ViewTables['tables']> {
     const out: ReturnType<ViewTables['tables']> = [];
@@ -243,7 +267,7 @@
       out.push({
         title: t('learnstats.hours_title'),
         headers: [t('learnstats.col.week'), ...hours.paths.map(exportName), t('learnstats.rest'), t('learnstats.col.total')],
-        rows: hours.weeks.filter((w) => w.known).map((w) => [weekName(w.since), ...w.values.map((v) => number.format(v)), number.format(w.rest), number.format(w.total)]),
+        rows: hours.weeks.filter((w) => w.known).map((w) => [weekLabel(w.since), ...w.values.map((v) => number.format(v)), number.format(w.rest), number.format(w.total)]),
       });
     }
     out.push({
@@ -260,6 +284,8 @@
   }
   $effect(() => {
     if (!usable || !withHistory) return;
+    // the part that writes the tables out, loaded now: the copy then follows the click without waiting
+    void import('../lib/viewTablesOut');
     const own: ViewTables = {
       view: 'learnstats',
       title: t('nav.learnstats'),
@@ -351,7 +377,9 @@
       >
     </div>
 
-    {#if problem && !history}
+    {#if notBegun}
+      <p class="note" role="note">{t('learnstats.not_begun')}</p>
+    {:else if problem && !history}
       <div class="empty" role="alert">
         <p>{t('learnstats.failed')}</p>
         <button type="button" onclick={readHistory}>{t('learnstats.retry')}</button>
@@ -359,6 +387,11 @@
     {:else if !history}
       <p class="none" role="status">{t('learnstats.reading')}</p>
     {:else}
+      {#if frame.clamped}
+        <p class="note" role="note">{t('learnstats.clamped', { n: MAX_DAYS, date: fullDay.format(at(frame.current.since)) })}</p>
+      {:else if period === 'custom' && (frame.current.since !== custom.since || frame.current.until !== custom.until)}
+        <p class="note" role="note">{t('learnstats.custom_month')}</p>
+      {/if}
       {#if problem}
         <p class="note" role="alert">{t('learnstats.failed')} <button type="button" class="link" onclick={readHistory}>{t('learnstats.retry')}</button></p>
       {/if}
@@ -432,7 +465,7 @@
                 <tbody>
                   {#each hours.weeks as w (w.since)}
                     <tr data-week={w.since}>
-                      <th scope="row">{weekName(w.since)}</th>
+                      <th scope="row">{weekLabel(w.since)}</th>
                       {#if w.known}
                         {#each w.values as v, i (i)}<td class="num">{h(v)}</td>{/each}
                         {#if anyRest}<td class="num">{h(w.rest)}</td>{/if}
@@ -460,7 +493,7 @@
             <div class="calendar-wrap" aria-hidden="true">
               <div class="weekdays">{#each weekdays as d, i (i)}<span>{i % 2 === 0 ? d : ''}</span>{/each}</div>
               <div class="calendar" style:--weeks={calendar.length}>
-                {#each calendar as week, wi (wi)}
+                {#each drawnWeeks as week, wi (wi)}
                   {#each week as cell, di (di)}
                     {#if cell}
                       <span class="cell lv-{cell.level}" class:unk={cell.count === null} title={cellText(cell)} data-day={cell.day}></span>

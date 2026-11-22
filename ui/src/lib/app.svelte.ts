@@ -2961,7 +2961,7 @@ export class App {
    */
   async exportView(format: ExportFormat, how: 'save' | 'copy'): Promise<void> {
     const own = this.ownTables;
-    if (own) return this.exportTables(own, format, how);
+    if (own) return this.exportTables(own, format, how).catch(() => this.sayTables(own, 'error', how === 'save' ? 'save_failed' : 'copy_failed'));
     const { view, text, count, kept } = this.exportTasks(format);
     if (count === 0) {
       this.sayNothingExported(kept);
@@ -3025,9 +3025,11 @@ export class App {
   printView(): void {
     const own = this.ownTables;
     if (own) {
-      void this.tablesSheet(own).then((made) => {
-        if (made && !this.env.out.print(made.sheet)) this.say('error', 'print.failed');
-      });
+      void this.tablesSheet(own)
+        .then((made) => {
+          if (made && !this.env.out.print(made.sheet)) this.say('error', 'print.failed');
+        })
+        .catch(() => this.say('error', 'print.failed'));
       return;
     }
     const sheet = this.viewSheet();
@@ -3042,7 +3044,7 @@ export class App {
   /** The sheet of `printView` as one long picture. */
   async pngView(): Promise<void> {
     const own = this.ownTables;
-    const made = own ? await this.tablesSheet(own) : this.viewSheet();
+    const made = own ? await this.tablesSheet(own).catch(() => null) : this.viewSheet();
     if (!made || !this.env.out.png) return;
     const result = await this.env.out.png(made.sheet, exportFileName(this.view, this.localDay(), 'markdown').replace(/\.[a-z]+$/, '.png'));
     if (result === 'saved' && own) this.sayTables(own, 'ok', 'png_saved', made.count);

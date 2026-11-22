@@ -75,6 +75,7 @@ const EN = {
   'learnov.history_failed': 'The history could not be read; the figures show today’s state.',
   'learnov.retry': 'Read again',
   'learnov.reading': 'Reading the learning paths …',
+  'learnov.reading_history': 'Reading the history …',
   'learnov.hint.period': 'The period of the figures, kept on this device. Each figure is compared with the whole period before.',
   // the bars, shared with the statistics
   'bars.as_table': 'As table',
@@ -170,6 +171,7 @@ const DE: Record<keyof typeof EN, string> = {
   'learnov.history_failed': 'Der Verlauf ließ sich nicht lesen; die Zahlen zeigen den Stand heute.',
   'learnov.retry': 'Neu lesen',
   'learnov.reading': 'Die Lernpfade werden gelesen …',
+  'learnov.reading_history': 'Der Verlauf wird gelesen …',
   'learnov.hint.period': 'Der Zeitraum der Zahlen, auf diesem Gerät gemerkt. Jede Zahl wird mit dem ganzen Zeitraum davor verglichen.',
   'bars.as_table': 'Als Tabelle',
   'bars.as_chart': 'Als Diagramm',

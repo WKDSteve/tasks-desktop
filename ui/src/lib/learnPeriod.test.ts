@@ -69,6 +69,14 @@ describe('statsFrame', () => {
     expect(statsFrame('custom', '2026-11-22', { since: '2026-02-30', until: '2026-03-01' }).current.since).toBe('2026-11-01');
     expect(statsFrame('custom', '2026-11-22', { since: '2026-05-01', until: '2026-04-01' }).current.since).toBe('2026-11-01');
   });
+  it('cuts a window of its own to the last 800 days the engine answers by day', () => {
+    const long = statsFrame('custom', '2026-11-22', { since: '2023-01-01', until: '2026-11-22' });
+    expect(long).toMatchObject({ clamped: true, current: { since: '2024-09-14', until: '2026-11-22' }, ask: { since: '2024-09-14', until: '2026-11-22' } });
+    expect(statsFrame('custom', '2026-11-22', { since: '2024-09-14', until: '2026-11-22' }).clamped).toBeUndefined();
+  });
+  it('a window not begun yet asks for a since after its until (the view asks nothing then)', () => {
+    expect(statsFrame('custom', '2026-11-22', { since: '2026-12-01', until: '2026-12-31' }).ask).toEqual({ since: '2026-12-01', until: '2026-11-22' });
+  });
 });
 
 describe('sums', () => {
@@ -153,6 +161,12 @@ describe('before the series: the finished tasks of the points', () => {
     expect(out[2]!.partial).toBeUndefined();
     expect(withFinished(bars, '2026-11-03', finished, (id) => id === 'a/x')[1]!.figures).toBeNull();
   });
+
+  it('counts no XP of a task only seen: the engine counts part of it by its rule', () => {
+    const bars = barsOf(new Map(), { chart: { since: '2026-11-01', until: '2026-11-01' }, bucket: 'day' }, '2026-11-04', '2026-11-03', null);
+    const out = withFinished(bars, '2026-11-03', [task('a/x#k1', '2026-11-01', 'seen', 10)], null);
+    expect(out[0]!.figures).toMatchObject({ learned: 0, seen: 1, xp: 0 });
+  });
 });
 
 describe('hours per week, the calendar, the rows per path', () => {
@@ -200,6 +214,13 @@ describe('hours per week, the calendar, the rows per path', () => {
     expect(weeks[2]![1]).toEqual({ day: '2026-11-17', count: 8, level: 4 });
     // not begun yet
     expect(weeks[2]![2]).toEqual({ day: '2026-11-18', count: null, level: 0 });
+  });
+
+  it('a calendar of every week of a span, also the 54 weeks a year can touch', () => {
+    const year = calendarWeeks(new Map(), { since: '2040-01-01', until: '2040-12-31' }, '2041-01-01', '2039-01-01', null);
+    expect(year).toHaveLength(54);
+    expect(year[0]![6]).toMatchObject({ day: '2040-01-01' });
+    expect(calendarWeeks(new Map(), { since: '2024-01-01', until: '2026-11-22' }, '2026-11-22', '2024-01-01', null).length).toBeGreaterThan(53);
   });
 
   it('a row per path that moved or reached a level, its last level of the window', () => {

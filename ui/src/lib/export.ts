@@ -172,11 +172,6 @@ export function exportFileName(view: string, day: string, format: ExportFormat):
   return `tasks-${safe}-${day}.${EXPORT_FILES[format].ext}`;
 }
 
-/**
- * The page for the printer (or "Save as PDF" of its dialog): a title, the facts under it (the view, the day, the count,
- * the filters), and the tasks as tables, one section for each group the view has, in its order. Text only: the page that
- * puts it into the document sets text, never markup.
- */
 /** The tables of a view that draws figures, not tasks: what the menu View exports and prints while it is shown. */
 export interface ViewTables {
   /** The view that gave them (`App.view`). */
@@ -188,6 +183,11 @@ export interface ViewTables {
   words(what: 'saved' | 'copied' | 'save_failed' | 'copy_failed' | 'empty' | 'png_saved', n: number): string;
 }
 
+/**
+ * The page for the printer (or "Save as PDF" of its dialog): a title, the facts under it (the view, the day, the count,
+ * the filters), and the tasks as tables, one section for each group the view has, in its order. Text only: the page that
+ * puts it into the document sets text, never markup.
+ */
 export interface PrintSheet {
   title: string;
   facts: string[];

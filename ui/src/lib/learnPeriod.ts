@@ -32,7 +32,12 @@ export interface PeriodFrame {
   bucket: Bucket;
   /** What the engine is asked for, by day: from the first day needed up to today (never later). */
   ask: Span;
+  /** A window of one's own longer than the engine answers by day: cut to its last `MAX_DAYS` days. */
+  clamped?: true;
 }
+
+/** The most days the engine answers in steps of a day (`tasks.learn_history`: at most 800 steps). */
+export const MAX_DAYS = 800;
 
 /** The figures of a day, a bar or a period: the differences of the series added up. */
 export interface Figures {
@@ -137,8 +142,17 @@ export function statsFrame(period: StatsPeriod, today: string, custom: Span): Pe
     const frame = periodFrame(period === 'custom' ? 'month' : period, today);
     return { ...frame, previous: null, ask: { since: frame.current.since, until: min(frame.current.until, today) } };
   }
-  const span = { since: custom.since, until: custom.until };
-  return { current: span, previous: null, chart: span, bucket: bucketOf(span), ask: { since: span.since, until: min(span.until, today) } };
+  // Longer than the engine answers by day: its last days. A window that has not begun asks nothing (since after until).
+  const clamped = dayCount(custom.since, custom.until) > MAX_DAYS;
+  const span = { since: clamped ? addDays(custom.until, -(MAX_DAYS - 1)) : custom.since, until: custom.until };
+  return {
+    current: span,
+    previous: null,
+    chart: span,
+    bucket: bucketOf(span),
+    ask: { since: span.since, until: min(span.until, today) },
+    ...(clamped ? { clamped: true as const } : {}),
+  };
 }
 
 /** Whether the series knows the days of a span: not at all, from a day inside it on, or all of them. */
@@ -238,7 +252,8 @@ export function learnedTask(item: FinishedItem): { path: string; day: string; le
   const day = String(item.done).slice(0, 10);
   if (!isDay(day)) return null;
   const seen = item.outcome === 'seen' ? 1 : 0;
-  return { path: item.point.slice(0, hash), day, learned: 1 - seen, seen, xp: item.xp ?? 0 };
+  // A point only seen earns a part of its XP by the engine's rule: the page shows none rather than reckon that part.
+  return { path: item.point.slice(0, hash), day, learned: 1 - seen, seen, xp: seen ? 0 : (item.xp ?? 0) };
 }
 
 /**
@@ -326,9 +341,9 @@ export function calendarLevel(count: number): CalendarDay['level'] {
   return count <= 0 ? 0 : count === 1 ? 1 : count <= 3 ? 2 : count <= 6 ? 3 : 4;
 }
 
-/** The weeks (Monday first) of the calendar of a span, the last 53 at most; a day outside the span is null. */
+/** The weeks (Monday first) of the calendar of a span, every one of them; a day outside the span is null. */
 export function calendarWeeks(days: ReadonlyMap<string, Day>, span: Span, today: string, first: string | undefined, keep: Keep): (CalendarDay | null)[][] {
-  const weeks = bucketStarts(span, 'week').slice(-53);
+  const weeks = bucketStarts(span, 'week');
   return weeks.map((w) => {
     const monday = startOfWeek(w.since);
     return Array.from({ length: 7 }, (_, i) => {

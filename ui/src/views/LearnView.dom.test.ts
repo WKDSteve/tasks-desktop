@@ -159,6 +159,19 @@ describe('LearnView, the tile My learning', () => {
     expect(page.querySelector('[role="note"]')?.textContent).toContain('9 November 2026');
   });
 
+  it('draws no figures of the old period under the new one while the new one is read', async () => {
+    const { m, page } = await show();
+    let open: () => void = () => undefined;
+    m.hub.learnGates.push(new Promise<void>((r) => (open = r)));
+    page.querySelector<HTMLInputElement>('input[value="year"]')!.click();
+    await settle();
+    expect(fig(page, 'learned')).toBeNull();
+    expect(text(page.querySelector('[role="note"]'))).toBe('Reading the history …');
+    open();
+    await settle();
+    expect(text(fig(page, 'learned'))).toContain('Points learned 5');
+  });
+
   it('starts with the period kept on the device; the radios are one group with a name', async () => {
     const { page } = await show({ period: 'day' });
     expect(page.querySelector<HTMLInputElement>('input[value="day"]')!.checked).toBe(true);

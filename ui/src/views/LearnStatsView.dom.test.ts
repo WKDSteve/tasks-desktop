@@ -52,6 +52,7 @@ const HISTORY = {
       { id: 'lib/lua', learned: 1, xp: 10, done_h: 2 },
       { id: 'lib/shell', seen: 1, xp: 5, done_h: 0.5 },
       { id: 'priv/diary', learned: 1, done_h: 0.25 },
+      { id: 'gone/ghost', done_h: 0.1 },
     ]),
     day('2026-11-17', [{ id: 'lib/shell', learned: 3, xp: 30 }]),
   ],
@@ -136,7 +137,7 @@ describe('LearnStatsView', () => {
     expect(text(page.querySelector('#learnstats-points'))).toBe('XP over time');
     const rows = [...page.querySelectorAll('#learnstats-bars-table tr[data-bar]')];
     expect(rows).toHaveLength(30);
-    expect(cells(page.querySelector('#learnstats-bars-table tr[data-bar="2026-11-16"]'))).toEqual(['Mon, 16 Nov 2026', '2', '1', '15', '2.75', '50']);
+    expect(cells(page.querySelector('#learnstats-bars-table tr[data-bar="2026-11-16"]'))).toEqual(['Mon, 16 Nov 2026', '2', '1', '15', '2.85', '50']);
     expect(cells(page.querySelector('#learnstats-bars-table tr[data-bar="2026-11-17"]'))).toEqual(['Tue, 17 Nov 2026', '3', '0', '30', '0', '80']);
     expect(text(page.querySelector('#learnstats-bars-table tr[data-bar="2026-11-20"] td'))).toBe('not yet');
   });
@@ -165,10 +166,10 @@ describe('LearnStatsView', () => {
   it('stacks the hours of each week by path, the paths named in the legend and the table', async () => {
     const { page } = await show();
     const heads = [...page.querySelectorAll('#learnstats-hours-table thead th')].map(text);
-    expect(heads).toEqual(['Week', 'Lua lernen', 'Shell', 'Tagebuch', 'Total']);
-    expect(cells(page.querySelector('#learnstats-hours-table tr[data-week="2026-11-16"]'))).toEqual(['Wk 47', '2 h', '0.5 h', '0.25 h', '2.75 h']);
+    expect(heads).toEqual(['Week', 'Lua lernen', 'Shell', 'Tagebuch', 'gone/ghost', 'Total']);
+    expect(cells(page.querySelector('#learnstats-hours-table tr[data-week="2026-11-16"]'))).toEqual(['Wk 47 (16/11)', '2 h', '0.5 h', '0.25 h', '0.1 h', '2.85 h']);
     expect(text(page.querySelector('#learnstats-hours-table tr[data-week="2026-10-26"]'))).toBe('');
-    expect([...page.querySelectorAll('.legend li')].map(text)).toEqual(['Lua lernen', 'Shell', 'Tagebuch']);
+    expect([...page.querySelectorAll('.legend li')].map(text)).toEqual(['Lua lernen', 'Shell', 'Tagebuch', 'gone/ghost']);
   });
 
   it('a calendar of the learning days with the streak in words; the days as a table', async () => {
@@ -209,6 +210,75 @@ describe('LearnStatsView', () => {
     expect(m.hub.learnQueries.at(-1)).toEqual(['learn_history', { since: '2026-11-01', until: '2026-11-18', step: 'day', path: 'lib/lua' }]);
   });
 
+  it('with one path chosen the bars before the series count the tasks of that path alone', async () => {
+    const { m, page } = await show();
+    const path = page.querySelectorAll('select')[1]!;
+    path.value = 'lib/shell';
+    path.dispatchEvent(new Event('change', { bubbles: true }));
+    await settle();
+    expect(m.hub.learnQueries.at(-1)![1]).toMatchObject({ path: 'lib/shell' });
+    // the task of Lua finished on the 3rd is not Shell's
+    expect(text(page.querySelector('#learnstats-bars-table tr[data-bar="2026-11-03"] td'))).toBe('not known');
+  });
+
+  it('draws nothing of the old window under the new one while the new one is read', async () => {
+    const { m, page } = await show();
+    let open: () => void = () => undefined;
+    m.hub.learnGates.push(new Promise<void>((r) => (open = r)));
+    page.querySelector<HTMLInputElement>('input[value="year"]')!.click();
+    await settle();
+    expect(page.querySelector('#learnstats-bars-table')).toBeNull();
+    expect(text(page.querySelector('[role="status"].none'))).toBe('Reading the history …');
+    open();
+    await settle();
+    expect(page.querySelectorAll('#learnstats-bars-table tr[data-bar]')).toHaveLength(12);
+  });
+
+  it('a window not begun yet asks nothing and says so', async () => {
+    const { m, page } = await show({ prefs: { 'learnstats-period': 'custom', 'learnstats-span': '2026-12-01..2026-12-31' } });
+    expect(m.hub.learnQueries).toEqual([]);
+    expect(text(page.querySelector('[role="note"]'))).toBe('This period has not begun yet.');
+    expect(page.querySelector('[role="alert"]')).toBeNull();
+  });
+
+  it('a window longer than 800 days shows its last 800 and says so', async () => {
+    const { m, page } = await show({ prefs: { 'learnstats-period': 'custom', 'learnstats-span': '2023-01-01..2026-11-18' } });
+    expect(m.hub.learnQueries[0]).toEqual(['learn_history', { since: '2024-09-10', until: '2026-11-18', step: 'day' }]);
+    expect(text(page.querySelector('[role="note"]'))).toContain('At most 800 days at once: shown from 10 September 2024.');
+  });
+
+  it('a window in the past shows no streak: the engine’s ends on its last day, not today', async () => {
+    const { page } = await show({ prefs: { 'learnstats-period': 'custom', 'learnstats-span': '2026-11-09..2026-11-17' } });
+    expect(page.querySelector('#learnstats-days')).not.toBeNull();
+    expect(page.querySelector('[data-streak]')).toBeNull();
+  });
+
+  it('an older answer of the paths that comes late does not cover a newer one', async () => {
+    const { m, page } = await show();
+    let open: () => void = () => undefined;
+    const gate = new Promise<void>((r) => (open = r));
+    const old = { kind: 'tasks.paths', rev: 'p1', digest: 'd', items: [LUA, SHELL, SECRET], incomplete: [] };
+    const fresh = { ...old, rev: 'p2', items: [LUA, SHELL, SECRET, entry('lib/new', 'Neu')] };
+    let calls = 0;
+    m.hub.pathsWithLevels = async () => {
+      calls += 1;
+      if (calls === 1) {
+        await gate;
+        return old as never;
+      }
+      return fresh as never;
+    };
+    m.hub.doc = snapshot([], 'rev:2');
+    await m.app.focused();
+    await settle();
+    m.hub.doc = snapshot([], 'rev:3');
+    await m.app.focused();
+    await settle();
+    open();
+    await settle();
+    expect([...page.querySelectorAll('select')[1]!.querySelectorAll('option')].map((o) => o.value)).toContain('lib/new');
+  });
+
   it('a period of its own asks for its days and is kept', async () => {
     const { m, page } = await show({ prefs: { 'learnstats-period': 'custom', 'learnstats-span': '2026-10-01..2026-10-31' } });
     expect(m.hub.learnQueries[0]).toEqual(['learn_history', { since: '2026-10-01', until: '2026-10-31', step: 'day' }]);
@@ -226,7 +296,7 @@ describe('LearnStatsView', () => {
   it('counts points instead of XP without gamification', async () => {
     const { page } = await show({ game: false });
     expect(text(page.querySelector('#learnstats-points'))).toBe('Points over time');
-    expect(cells(page.querySelector('#learnstats-bars-table tr[data-bar="2026-11-16"]'))).toEqual(['Mon, 16 Nov 2026', '2', '1', '2.75', '5']);
+    expect(cells(page.querySelector('#learnstats-bars-table tr[data-bar="2026-11-16"]'))).toEqual(['Mon, 16 Nov 2026', '2', '1', '2.85', '5']);
     expect(cells(pathRow(page, 'lib/lua'))).toEqual(['Lua lernen', '3', '3 h', 'Lv 2 on 16/11']);
   });
 
@@ -249,6 +319,8 @@ describe('LearnStatsView', () => {
     expect(md).toContain('| Lua lernen | 3 | 30 | 3 | Lv 2 on 16/11 |');
     expect(md).toContain('a path of a private area');
     expect(md).not.toContain('Tagebuch');
+    // a path the vault no longer names (no area known) is held back as well
+    expect(md).not.toContain('gone/ghost');
     // gone with the view
     unmount(mounted!);
     mounted = undefined;
