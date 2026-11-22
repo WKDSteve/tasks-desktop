@@ -225,3 +225,4 @@ pnpm web:build && PLAYWRIGHT_BROWSERS_PATH="$PWD/node_modules/.cache/ms-playwrig
   (`tasks-hub install|start|autostart`): die Claude-App leitet AppData und HKCU um.
 - Keine Pull Requests: fertig, committen, pullen, auf `main` pushen. Vor dem Push
   `git log origin/main..HEAD` ansehen. Keine Co-Autorenschaft von Claude.
+- Git: In einer Cloud-Sitzung (`CLAUDE_CODE_REMOTE` gesetzt) nie auf `main` pushen, nur auf den eigenen Branch `claude/…`; gelandet wird lokal per Rebase, der Geräteschlüssel signiert dabei (`GIT-09`). Das „auf main pushen“ (`GIT-01`) gilt nur lokal.
