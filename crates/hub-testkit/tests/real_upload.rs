@@ -155,7 +155,8 @@ async fn a_second_upload_of_the_same_name_is_exists_and_the_task_keeps_one_asset
         .unwrap()
         .to_owned();
     let session = format!("Bearer {token}");
-    let upload = |path: &'static str, body: &'static str| {
+    // The name of the file: a kind takes only the endings of its own (a `.txt` is no video, `95e6ad0`).
+    let upload = |path: &'static str, name: &'static str, body: &'static str| {
         let session = session.clone();
         let origin = origin.clone();
         async move {
@@ -167,7 +168,7 @@ async fn a_second_upload_of_the_same_name_is_exists_and_the_task_keeps_one_asset
                     ("Authorization", &session),
                     ("Origin", &origin),
                     ("Content-Type", "application/octet-stream"),
-                    ("X-Upload-Name", "note.txt"),
+                    ("X-Upload-Name", name),
                 ],
                 body,
             )
@@ -178,7 +179,7 @@ async fn a_second_upload_of_the_same_name_is_exists_and_the_task_keeps_one_asset
         }
     };
     let exact = "/api/tasks/upload?id=lib.nvim/alpha&exact=1";
-    let first = upload(exact, "first").await;
+    let first = upload(exact, "note.txt", "first").await;
     assert_eq!(first["results"][0]["ok"], true, "{first}");
     let assets = |vault: &Path| -> Vec<String> {
         let mut names = Vec::new();
@@ -188,9 +189,10 @@ async fn a_second_upload_of_the_same_name_is_exists_and_the_task_keeps_one_asset
                 let path = entry.path();
                 if path.is_dir() {
                     stack.push(path);
-                } else if path.file_name().is_some_and(|n| {
-                    n.to_string_lossy().starts_with("note") && n.to_string_lossy().ends_with(".txt")
-                }) {
+                } else if path
+                    .file_name()
+                    .is_some_and(|n| n.to_string_lossy().starts_with("note"))
+                {
                     names.push(path.to_string_lossy().into_owned());
                 }
             }
@@ -198,26 +200,53 @@ async fn a_second_upload_of_the_same_name_is_exists_and_the_task_keeps_one_asset
         names
     };
     assert_eq!(assets(&vault).len(), 1, "{:?}", assets(&vault));
-    let second = upload(exact, "second").await;
+    let second = upload(exact, "note.txt", "second").await;
     assert_eq!(second["results"][0]["ok"], false, "{second}");
     assert_eq!(second["results"][0]["error"]["code"], "exists", "{second}");
     let found = assets(&vault);
     assert_eq!(found.len(), 1, "no second asset under a counter: {found:?}");
     assert_eq!(std::fs::read_to_string(&found[0]).unwrap(), "first");
     // Without `exact` the same name gets a counter.
-    let third = upload("/api/tasks/upload?id=lib.nvim/alpha", "third").await;
+    let third = upload("/api/tasks/upload?id=lib.nvim/alpha", "note.txt", "third").await;
     assert_eq!(third["results"][0]["ok"], true, "{third}");
     assert_eq!(assets(&vault).len(), 2, "{:?}", assets(&vault));
     // `kind`: the asset lies in the folder of its kind below `assets/`, and the answer names that folder.
     let before: std::collections::BTreeSet<String> = assets(&vault).into_iter().collect();
-    let video = upload("/api/tasks/upload?id=lib.nvim/alpha&kind=video", "video").await;
+    // A text file is no video: refused before anything is taken.
+    let refused = patient::request(
+        port,
+        "POST",
+        "/api/tasks/upload?id=lib.nvim/alpha&kind=video",
+        &[
+            ("Authorization", session.as_str()),
+            ("Origin", origin.as_str()),
+            ("Content-Type", "application/octet-stream"),
+            ("X-Upload-Name", "note.txt"),
+        ],
+        "not a video",
+    )
+    .await
+    .unwrap();
+    assert_eq!(refused.status, 415, "{}", refused.body);
+    assert!(
+        refused.body.contains("unsupported_type"),
+        "{}",
+        refused.body
+    );
+    assert_eq!(assets(&vault).len(), 2, "{:?}", assets(&vault));
+    let video = upload(
+        "/api/tasks/upload?id=lib.nvim/alpha&kind=video",
+        "note.mp4",
+        "video",
+    )
+    .await;
     assert_eq!(video["results"][0]["ok"], true, "{video}");
     assert_eq!(
-        video["results"][0]["asset"], "assets/videos/note.txt",
+        video["results"][0]["asset"], "assets/videos/note.mp4",
         "{video}"
     );
     assert_eq!(
-        video["results"][0]["link"], "[note.txt](assets/videos/note.txt)",
+        video["results"][0]["link"], "[note.mp4](assets/videos/note.mp4)",
         "{video}"
     );
     let added: Vec<String> = assets(&vault)
@@ -228,15 +257,20 @@ async fn a_second_upload_of_the_same_name_is_exists_and_the_task_keeps_one_asset
     assert!(
         added[0]
             .replace('\\', "/")
-            .ends_with("/assets/videos/note.txt"),
+            .ends_with("/assets/videos/note.mp4"),
         "{added:?}"
     );
     assert_eq!(std::fs::read_to_string(&added[0]).unwrap(), "video");
     // A recording (a meeting's, a dictation) has its own folder.
-    let audio = upload("/api/tasks/upload?id=lib.nvim/alpha&kind=audio", "audio").await;
+    let audio = upload(
+        "/api/tasks/upload?id=lib.nvim/alpha&kind=audio",
+        "note.m4a",
+        "audio",
+    )
+    .await;
     assert_eq!(audio["results"][0]["ok"], true, "{audio}");
     assert_eq!(
-        audio["results"][0]["asset"], "assets/audio/note.txt",
+        audio["results"][0]["asset"], "assets/audio/note.m4a",
         "{audio}"
     );
     // A word that is no kind is refused before anything is taken: the page names no folder.
