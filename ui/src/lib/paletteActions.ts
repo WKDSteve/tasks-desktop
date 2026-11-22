@@ -57,7 +57,8 @@ export function paletteActions(app: App): PaletteAction[] {
   if (app.machineActions) add('go.repostatus', t('palette.go', { view: t('nav.repostatus') }), () => app.setView('repostatus'));
   // The views of the tab Learning plans that are offered now, each by its name (learnViews.ts).
   for (const { views } of learnMenu({ can: (c) => app.can(c), gamification: app.gamification })) {
-    for (const id of views) add(`go.${id}`, t('palette.go', { view: t(`nav.${id}` as Key) }), () => app.setView(id as View));
+    // "Overview" alone says not of what: in the palette it is the overview of the learning plans.
+    for (const id of views) add(`go.${id}`, t('palette.go', { view: t(id === 'learn' ? 'nav.learn_long' : (`nav.${id}` as Key)) }), () => app.setView(id as View));
   }
   if (app.can('views')) {
     add('go.views', t('palette.go', { view: t('nav.views') }), () => app.setView('views'));

@@ -51,6 +51,7 @@ test('the tab Learning plans: after View, the learning paths with the dot of the
   await expect(menu.getByRole('group', { name: 'Paths' })).toBeVisible();
   // In the order of the concept: what is next, the paths, the progress, the knowledge; only what the engine serves.
   await expect(menu.getByRole('menuitemradio')).toHaveText([
+    'Overview',
     'Next learning step',
     'Learning paths',
     'Competence map',
@@ -74,7 +75,7 @@ test('the tab Learning plans: after View, the learning paths with the dot of the
   await page.keyboard.press('ArrowRight');
   await expect(page.getByRole('menuitem', { name: 'Learning plans, current: Learning paths' })).toBeFocused();
   await page.keyboard.press('ArrowDown');
-  await expect(menu.getByRole('menuitemradio', { name: 'Next learning step' })).toBeFocused();
+  await expect(menu.getByRole('menuitemradio', { name: 'Overview' })).toBeFocused();
   await expect(menu.getByRole('menuitemradio', { name: 'Learning paths' })).toHaveAttribute('aria-checked', 'true');
   await expectAccessible(page, 'the tab with the view shown');
   await page.keyboard.press('Escape');
@@ -90,11 +91,11 @@ test('the tab Learning plans: after View, the learning paths with the dot of the
   expect(await violations(page)).toEqual([]);
 });
 
-test('a link to a view of the tab not built yet shows the learning paths and says so; the palette goes there', async ({ page }) => {
-  const problems = await pair(page, '/#view=learn');
-  await expect(page.getByText('The learning view “learn” is not in this version yet; showing Learning paths.')).toBeVisible();
-  await expect(page.getByRole('menuitem', { name: 'Learning plans, current: Learning paths' })).toBeVisible();
-  await expect(page).toHaveURL(/#view=paths/);
+test('a link to a view of the tab not built yet shows the overview and says so; the palette goes there', async ({ page }) => {
+  const problems = await pair(page, '/#view=learnstats');
+  await expect(page.getByText('The learning view “learnstats” is not in this version yet; showing Overview.')).toBeVisible();
+  await expect(page.getByRole('menuitem', { name: 'Learning plans, current: Overview' })).toBeVisible();
+  await expect(page).toHaveURL(/#view=learn$/);
 
   // The palette: "Go to Learning paths" from another view.
   await bar(page).getByRole('menuitem', { name: 'View', exact: true }).click();
@@ -112,8 +113,8 @@ test('a link to a view of the tab not built yet shows the learning paths and say
   await page.evaluate(() => {
     location.hash = '#view=learnstats';
   });
-  await expect(page.getByText('The learning view “learnstats” is not in this version yet; showing Learning paths.')).toBeVisible();
-  await expect(page.getByRole('menuitem', { name: 'Learning plans, current: Learning paths' })).toBeVisible();
+  await expect(page.getByText('The learning view “learnstats” is not in this version yet; showing Overview.')).toBeVisible();
+  await expect(page.getByRole('menuitem', { name: 'Learning plans, current: Overview' })).toBeVisible();
 
   expect(problems).toEqual([]);
   expect(await violations(page)).toEqual([]);

@@ -213,7 +213,7 @@ const NOTE_MAX = 1000;
 
 export type Phase = 'starting' | 'needs_pairing' | 'offline' | 'unavailable' | 'ready';
 export type Connection = 'live' | 'reconnecting' | 'offline';
-export type View = 'today' | 'list' | 'board' | 'plan' | 'inbox' | 'abnahme' | 'cross' | 'calendar' | 'timeline' | 'reminders' | 'stats' | 'done' | 'views' | 'repos' | 'repostatus' | 'paths' | 'pathmap' | 'competences' | 'badges' | 'rewards' | 'evidence' | 'learnnext' | 'learntime' | 'learnnotes';
+export type View = 'today' | 'list' | 'board' | 'plan' | 'inbox' | 'abnahme' | 'cross' | 'calendar' | 'timeline' | 'reminders' | 'stats' | 'done' | 'views' | 'repos' | 'repostatus' | 'paths' | 'pathmap' | 'competences' | 'badges' | 'rewards' | 'evidence' | 'learn' | 'learnnext' | 'learntime' | 'learnnotes';
 export type Theme = 'auto' | 'light' | 'dark';
 /** The blocks of the Today view that a person may hide. */
 export { ORDERED_TILES, TILES, type OrderedTile, type Tile } from './tiles-list';
@@ -2808,6 +2808,15 @@ export class App {
   /** Whether the view that is shown draws tasks an export can take (the list, the board, the plan, an open saved view). */
   get exportable(): boolean {
     return this.view === 'list' || this.view === 'board' || this.view === 'plan' || (this.view === 'views' && this.viewsState.open !== null);
+  }
+
+  /** A choice of a view kept in this browser (`tasks-desktop.view.<name>`): the periods of the learning views. */
+  viewPref(name: string): string | null {
+    return safe(() => this.env.prefs.getItem(`tasks-desktop.view.${name}`));
+  }
+
+  setViewPref(name: string, value: string): void {
+    safe(() => this.env.prefs.setItem(`tasks-desktop.view.${name}`, value));
   }
 
   /**

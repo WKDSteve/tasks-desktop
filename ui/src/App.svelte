@@ -1011,6 +1011,8 @@
           <Lazy {app} load={() => import('./views/RewardsView.svelte')} />
         {:else if app.view === 'evidence'}
           <Lazy {app} load={() => import('./views/EvidenceView.svelte')} />
+        {:else if app.view === 'learn'}
+          <Lazy {app} load={() => import('./views/LearnView.svelte')} />
         {:else if app.view === 'learnnext'}
           <Lazy {app} load={() => import('./views/LearnNextView.svelte')} />
         {:else if app.view === 'learntime'}

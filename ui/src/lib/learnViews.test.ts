@@ -19,8 +19,12 @@ describe('learnViews', () => {
     ]);
   });
 
-  it('offers only the views the page has, today the learning paths and the competence map', () => {
-    expect(learnMenu({ can: caps('paths', 'path'), gamification: true })).toEqual([{ section: 'paths', views: ['paths', 'pathmap'] }]);
+  it('offers only the views the page has: with the learning paths alone the overview, the paths and the competence map', () => {
+    expect(learnMenu({ can: caps('paths', 'path'), gamification: true })).toEqual([
+      { section: 'overview', views: ['learn'] },
+      { section: 'paths', views: ['paths', 'pathmap'] },
+    ]);
+    expect(learnMenu({ can: caps('paths', 'path'), gamification: true, built: ['paths'] })).toEqual([{ section: 'paths', views: ['paths'] }]);
   });
 
   it('has no tab without the learning paths of the engine', () => {
@@ -57,7 +61,8 @@ describe('learnViews', () => {
     expect(isLearnView('list')).toBe(false);
     expect(missingLearnView('#view=learnstats')).toBe('learnstats');
     expect(missingLearnView('#view=learnnotes')).toBeNull();
-    expect(missingLearnView('#open=a%2Fb&view=learn')).toBe('learn');
+    expect(missingLearnView('#open=a%2Fb&view=learnstats')).toBe('learnstats');
+    expect(missingLearnView('#view=learn')).toBeNull();
     expect(missingLearnView('#view=paths')).toBeNull();
     expect(missingLearnView('#view=list')).toBeNull();
     expect(missingLearnView('#view=nothing')).toBeNull();
@@ -65,38 +70,38 @@ describe('learnViews', () => {
     expect(missingLearnView('#view=learn', { built: ['learn'] })).toBeNull();
   });
 
-  it('lands on the learning paths until the overview is built, then on the overview', () => {
-    expect(learnFallback()).toBe('paths');
-    expect(learnFallback({ built: ['paths', 'learn'] })).toBe('learn');
+  it('lands on the overview, and on the learning paths where the page has no overview', () => {
+    expect(learnFallback()).toBe('learn');
+    expect(learnFallback({ built: ['paths'] })).toBe('paths');
   });
 });
 
 describe('App, a link to a view of the tab that is not built yet', () => {
-  it('shows the learning paths and says so once the list is there', async () => {
+  it('shows the overview and says so once the list is there', async () => {
     const { app, hub } = make({ token: 't' });
     hub.capabilities = ['paths', 'path'];
     app.openMissingLearnView('learnnotes');
-    expect(app.view).toBe('paths');
+    expect(app.view).toBe('learn');
     expect(app.toast).toBeNull();
     await app.start(null);
-    expect(app.view).toBe('paths');
+    expect(app.view).toBe('learn');
     expect(app.toast).toMatchObject({
       kind: 'ok',
-      text: translate('de', 'learn.missing', { view: 'learnnotes', target: translate('de', 'nav.paths') }),
+      text: translate('de', 'learn.missing', { view: 'learnnotes', target: translate('de', 'nav.learn') }),
     });
     app.stop();
   });
 
-  it('in a page that is already shown: the learning paths and the words at once', async () => {
+  it('in a page that is already shown: the overview and the words at once', async () => {
     const { app, hub } = make({ token: 't' });
     hub.capabilities = ['paths', 'path'];
     await app.start(null);
     app.setView('list');
     app.openMissingLearnView('learnstats');
-    expect(app.view).toBe('paths');
+    expect(app.view).toBe('learn');
     expect(app.toast).toMatchObject({
       kind: 'ok',
-      text: translate('de', 'learn.missing', { view: 'learnstats', target: translate('de', 'nav.paths') }),
+      text: translate('de', 'learn.missing', { view: 'learnstats', target: translate('de', 'nav.learn') }),
     });
     app.stop();
   });
@@ -112,5 +117,14 @@ describe('the palette, the views of the tab', () => {
     expect(app.view).toBe('paths');
     app.capabilities = ['reorder'];
     expect(paletteActions(app).some((a) => a.key === 'go.paths')).toBe(false);
+  });
+
+  it('names the overview as the overview of the learning plans', () => {
+    const { app } = make();
+    app.capabilities = ['paths', 'path'];
+    const go = paletteActions(app).find((a) => a.key === 'go.learn')!;
+    expect(go.label).toBe('Gehe zu Übersicht der Lernpläne');
+    go.run();
+    expect(app.view).toBe('learn');
   });
 });

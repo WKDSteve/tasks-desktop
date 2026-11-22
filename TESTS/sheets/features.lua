@@ -29,6 +29,11 @@ return {
     docs = "README.md",
   },
   {
+    id = "tasks.learn-figures",
+    title = "The figures of the tab Lernpläne: the overview with its period (today to year) against the period before, in words and a mark, and its bars as a table",
+    docs = "README.md",
+  },
+  {
     id = "tasks.pathmap",
     title = "The competence map of the learning paths: boxes by stage, frames of projects, the arrows of requires, a circle and a ghost; finished ones hidden, the list, a box opens its path",
     docs = "README.md",
