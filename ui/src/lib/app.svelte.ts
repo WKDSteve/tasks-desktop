@@ -2126,6 +2126,8 @@ export class App {
       onAnswer?: (result: Result) => boolean;
       /** The words of a success that fit better than `write.saved` (the way back stays on the toast). */
       saidAs?: (result: Result) => Key | undefined;
+      /** The values `saidAs` words need (`{title}` and the like). */
+      saidWith?: Record<string, string | number>;
     } = {},
   ): Promise<Result | null> {
     // Every way to change a task ends here (keys, palette, menus, drops): refused with the reason, nothing is sent.
@@ -2171,7 +2173,10 @@ export class App {
           const params = { id: first.id, due: first.due, n: started.length };
           this.say('ok', started.length > 1 ? 'routine.started_many' : 'routine.started', params, undo);
         } else if (files > 1) this.say('ok', 'write.saved_many', { n: files }, undo);
-        else this.say('ok', opts.saidAs?.(result) ?? 'write.saved', {}, undo);
+        else {
+          const said = opts.saidAs?.(result);
+          this.say('ok', said ?? 'write.saved', said ? (opts.saidWith ?? {}) : {}, undo);
+        }
       }
       await this.readAfter(ops);
       return result;
@@ -3335,7 +3340,7 @@ export class App {
   }
 
   /** Send a move of a card, or say why it cannot be made (the order has no meaning across a priority border). */
-  async moveCard(move: Move): Promise<void> {
+  async moveCard(move: Move, said?: { key: Key; params: Record<string, string | number> }): Promise<void> {
     if (move.kind === 'prio') {
       if (this.phase === 'ready' && !this.saving) {
         this.repriority = { id: move.id, from: move.from, prio: move.prio, ops: move.ops };
@@ -3347,7 +3352,7 @@ export class App {
       else if (move.reason === 'edge') this.say('error', 'board.refused_edge');
       return;
     }
-    await this.write([move.op]);
+    await this.write([move.op], said ? { saidAs: () => said.key, saidWith: said.params } : {});
   }
 
   cancelRepriority(): void {
@@ -3556,7 +3561,11 @@ export class App {
   /** `id` dropped on `target`: before or after it. */
   async dropNear(id: string, target: { id: string; place: 'before' | 'after' }): Promise<void> {
     if (this.refusedWhileSaving()) return;
-    await this.moveCard(placeNear(this.tasks, id, target, this.can('eff_prio')));
+    const title = this.tasks.find((t) => t.id === id)?.title ?? id;
+    await this.moveCard(placeNear(this.tasks, id, target, this.can('eff_prio')), {
+      key: 'board.moved',
+      params: { title },
+    });
   }
 
   /** `id` one place up or down inside its group (`K` and `J`). */
@@ -3565,7 +3574,10 @@ export class App {
     // A card the filter hides is not moved behind the person's back.
     if (!task || !isColumn(task.status) || !this.shown.some((t) => t.id === id)) return;
     if (this.refusedWhileSaving()) return;
-    await this.moveCard(stepInGroup(this.board[task.status], id, dir));
+    await this.moveCard(stepInGroup(this.board[task.status], id, dir), {
+      key: dir === 1 ? 'board.moved_down' : 'board.moved_up',
+      params: { title: task.title },
+    });
   }
 
   /** `id` into the column of `status` (a drop on a column, `H` and `L`). */
@@ -3578,7 +3590,14 @@ export class App {
       if (this.phase === 'ready' && !this.saving) this.blocking = { id };
       return;
     }
-    await this.setField(id, 'status', status);
+    // The words say where the card went (a status message, WCAG 4.1.3): the way back stays on the toast.
+    await this.write(
+      [{ op: 'set', id, patch: { status }, ...(task.etag ? { if_match: task.etag } : {}) }],
+      {
+        saidAs: () => 'board.moved_column',
+        saidWith: { title: task.title, column: labelOf(this.lang, 'status', status) },
+      },
+    );
   }
 
   cancelBlock(): void {
