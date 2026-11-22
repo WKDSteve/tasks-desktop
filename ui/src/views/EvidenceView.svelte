@@ -66,10 +66,13 @@
   const grouping = $derived<EvidenceGrouping>(chosenGrouping ?? (withFields ? 'competence' : 'path'));
   const items = $derived(doc?.items ?? []);
   const fieldTitle = (id: string): string => markHidden(fields?.items.find((f) => f.id === id)?.title ?? id);
+  /** Groups by name, the fields without one last (as the catalogue orders them). */
+  const byGroup = (a: string | undefined, b: string | undefined): number =>
+    a === b ? 0 : a === undefined ? 1 : b === undefined ? -1 : a.localeCompare(b);
   // The fields in the order of the catalogue: by group, then by title.
   const fieldOrder = $derived(
     (fields?.items ?? [])
-      .toSorted((a, b) => (a.group ?? '￿').localeCompare(b.group ?? '￿') || a.title.localeCompare(b.title))
+      .toSorted((a, b) => byGroup(a.group, b.group) || a.title.localeCompare(b.title))
       .map((f) => f.id),
   );
   const groups = $derived(evidenceGroups(items, { filter, competence, grouping }, fieldOrder));
