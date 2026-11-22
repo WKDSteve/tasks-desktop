@@ -9,7 +9,7 @@
 
 import { LuaFactory } from 'wasmoon';
 import { WebEngine, type EngineBundle } from './engine.ts';
-import { safeName, VaultMount, type VaultChanges } from './vault-files.ts';
+import { filesRecord, safeName, VaultMount, type VaultChanges } from './vault-files.ts';
 
 export const WASM_URL = 'embedded:glue.wasm';
 
@@ -119,12 +119,13 @@ export function startWorker(scope: Scope, options: WorkerOptions = {}): void {
         } else if (msg.type === 'pending') {
           if (!vault) throw new Error('no vault is mounted');
           const changes = vault.changes();
-          const files: Record<string, Uint8Array> = {};
+          const read: Array<[string, Uint8Array]> = [];
           for (const rel of [...changes.added, ...changes.modified]) {
             const bytes = vault.read(rel);
             if (!bytes) throw new Error(`a changed file is gone from the VM: ${JSON.stringify(rel)}`);
-            files[rel] = bytes;
+            read.push([rel, bytes]);
           }
+          const files = filesRecord(read);
           post({ type: 'pending', id: msg.id, changes, files });
         } else {
           if (!vault) throw new Error('no vault is mounted');

@@ -6,7 +6,7 @@
 
 import type { CallResult, EngineBundle } from './engine.ts';
 import { createWebHub, type DataClass, type HubDeps, type WebHub } from './hub.ts';
-import type { VaultChanges } from './vault-files.ts';
+import { filesRecord, type VaultChanges } from './vault-files.ts';
 import type { WorkerReply, WorkerRequest } from './worker.ts';
 
 /** What the client needs of a `Worker`; a test passes a pair of plain objects. */
@@ -91,7 +91,7 @@ export class WorkerClient {
 
   /** Put a vault into the VM at `root`, replacing what was there. Resolves with the number of files. */
   async mount(root: string, files: Map<string, Uint8Array> | Record<string, Uint8Array>): Promise<number> {
-    const record = files instanceof Map ? Object.fromEntries(files) : files;
+    const record = files instanceof Map ? filesRecord(files) : files;
     const reply = await this.ask((id) => ({ type: 'mount', id, root, files: record }));
     return reply.type === 'mounted' ? reply.files : 0;
   }
