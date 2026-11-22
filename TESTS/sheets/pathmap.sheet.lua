@@ -1,7 +1,8 @@
 -- The competence map of the learning paths in the page against a hub with a vault and the real engine (the app
 -- `pathmap-hub` of .testing.lua: a copy of the fixture vault in a folder of the run with the paths of
 -- tools/sheet-pathmap-vault.mjs: a finished root, a chain through two projects where one needs the other (hard), a
--- soft requirement not met, a circle and a requirement that names nothing), step by step:
+-- soft requirement not met, a circle, a requirement that names nothing, an id of another vault and a broken entry), step
+-- by step:
 --   testing sheets step pathmap --headed
 -- The steps go by data attributes, not by words: the page speaks the language of the browser. The browser test
 -- ui/e2e/pathmap.spec.ts checks the same against the test hub of the e2e run, with axe in both themes; what only eyes
@@ -61,6 +62,14 @@ return {
     {
       expect = stage("map-sheet-nothing", "ghost"),
       note = "the requirement that names nothing: a ghost",
+    },
+    {
+      expect = "document.querySelector('[data-box=\"work:lib.nvim/map-sheet-far\"]')?.dataset.stage === 'ghost'",
+      note = "an id of another vault (kind foreign): a ghost",
+    },
+    {
+      expect = "document.querySelector('[data-box=\"kein id\"]')?.dataset.stage === 'ghost'",
+      note = "a broken entry (kind bad): a ghost",
     },
     { shot = "map", note = "the map" },
 

@@ -37,6 +37,8 @@ export const FILES = {
   [`${AREA}/ROADMAP/paths/map-sheet-x.md`]: head(['title: Map sheet x', 'status: planning', `requires: [${id('map-sheet-y')}]`]) + tree('x', false),
   [`${AREA}/ROADMAP/paths/map-sheet-y.md`]: head(['title: Map sheet y', 'status: planning', `requires: [${id('map-sheet-x')}]`]) + tree('y', false),
   [`${AREA}/ROADMAP/paths/map-sheet-ghost.md`]: head(['title: Map sheet ghost', 'status: planning', `requires: [${id('map-sheet-nothing')}]`]) + tree('ghost', false),
+  // an id of another vault and a broken entry: the engine lists them as `foreign` and `bad` (a ghost each)
+  [`${AREA}/ROADMAP/paths/map-sheet-odd.md`]: head(['title: Map sheet odd', 'status: planning', 'requires: ["work:lib.nvim/map-sheet-far", kein id]']) + tree('odd', false),
 };
 
 /** Write the vault below `run` (the folder of the run); returns its path. */
