@@ -222,6 +222,8 @@
     gap: 0.5rem;
     margin: 0;
     padding: 0.35rem 0.6rem;
+    box-sizing: border-box;
+    min-height: var(--head-h);
     position: sticky;
     top: 0;
     z-index: 1;
@@ -238,6 +240,9 @@
     overflow: auto;
     flex: 1;
     min-height: 0;
+    /* The height of the sticky area head (.area): Tab to a row below it stops under it, not behind it (WCAG 2.4.11). */
+    --head-h: 1.9rem;
+    scroll-padding-top: var(--head-h);
   }
   @media (max-width: 52rem) {
     .rows {

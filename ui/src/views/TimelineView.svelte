@@ -505,7 +505,7 @@
     <p class="none">{t('timeline.none')}</p>
   {:else}
     <!-- svelte-ignore a11y_no_static_element_interactions -->
-    <div class="scroll" bind:this={scroller} onkeydown={onKey} onkeyup={onKeyUp} onfocusout={onFocusOut}>
+    <div class="scroll" style:scroll-padding-top="{HEAD}px" style:scroll-padding-left="{labelWidth}px" bind:this={scroller} onkeydown={onKey} onkeyup={onKeyUp} onfocusout={onFocusOut}>
       <div class="canvas" style:width="{labelWidth + width}px">
         <div class="row top" style:height="{HEAD}px">
           <div class="label" style:width="{labelWidth}px">{t('timeline.col.task')}</div>

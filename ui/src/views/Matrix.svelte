@@ -138,6 +138,9 @@
     font-size: 0.85rem;
   }
   .scroll {
+    /* The height of the sticky header row: Tab to a cell below it scrolls it to just under the header, not behind it (WCAG 2.4.11). */
+    --head-h: 2rem;
+    scroll-padding-top: var(--head-h);
     max-height: 50vh;
     overflow: auto;
     border: 1px solid var(--border);
@@ -157,6 +160,8 @@
   thead th {
     position: sticky;
     top: 0;
+    box-sizing: border-box;
+    height: var(--head-h);
     background: var(--surface-2);
     font-size: 0.8rem;
   }
