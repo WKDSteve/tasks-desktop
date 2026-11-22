@@ -162,7 +162,10 @@ pub(super) fn learn_notes_request(query: Option<&str>) -> Result<serde_json::Val
             if decoded.chars().any(char::is_control) {
                 return Err("q holds a control character");
             }
-            let decoded = decoded.trim();
+            // Trimmed as JavaScript's `String.prototype.trim` does, so that the web variant (ui/src/web/learnQuery.ts)
+            // asks the engine the same: Rust's `trim` keeps U+FEFF, JavaScript's removes it (U+0085, which only
+            // Rust's removes, is a control character and refused above).
+            let decoded = decoded.trim_matches(|c: char| c.is_whitespace() || c == '\u{feff}');
             if !decoded.is_empty() {
                 request.insert("query".to_owned(), json!(decoded));
             }
@@ -407,6 +410,12 @@ mod tests {
         );
         // Only blanks: no search, every note.
         assert_eq!(learn_notes_request(Some("q=%20%20")), Ok(json!({})));
+        // U+FEFF counts as a blank, as in the web variant: no search, and trimmed off a search text.
+        assert_eq!(learn_notes_request(Some("q=%EF%BB%BF%20")), Ok(json!({})));
+        assert_eq!(
+            learn_notes_request(Some("q=%EF%BB%BF%20Shell%20%EF%BB%BF")),
+            Ok(json!({ "query": "Shell" }))
+        );
         assert_eq!(
             learn_notes_request(Some("q=a&q=b")),
             Err("q is given twice")

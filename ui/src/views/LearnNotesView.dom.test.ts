@@ -260,4 +260,33 @@ describe('LearnNotesView', () => {
     const { page } = await show(doc as LearnNotes);
     expect(page.textContent).toContain('Showing 3 of 345: narrow the search to see the rest.');
   });
+  it('keeps the filter lists of the newer read when an older answer comes late', async () => {
+    const { m, page } = await show();
+    const paths = (id: string, title: string) => ({ kind: 'tasks.paths', rev: 'p2', digest: 'd', items: [ENTRY(id, title, ['ALL/os'])], incomplete: [] });
+    const competences = (title: string) => ({ kind: 'tasks.competences', items: [{ id: 'ALL/os', title }] });
+    const optionTexts = (label: string) => [...select(page, label).querySelectorAll('option')].map((o) => o.textContent);
+    // The lists are read again after a write; the answers to that read are held while a second write reads them anew.
+    const held: (() => void)[] = [];
+    m.hub.pathsGates.push(new Promise<void>((resolve) => held.push(resolve)));
+    // the gates of the tab's reads go in the order asked: the notes first, then the competences
+    m.hub.learnGates.push(new Promise<void>((resolve) => held.push(resolve)), new Promise<void>((resolve) => held.push(resolve)));
+    m.hub.pathsDoc = paths('old/one', 'Old path');
+    m.hub.learnDocs.competences = competences('Old competence');
+    m.app.writes += 1;
+    await settle();
+    m.hub.pathsDoc = paths('new/one', 'New path');
+    m.hub.learnDocs.competences = competences('New competence');
+    m.app.writes += 1;
+    await settle();
+    await vi.waitFor(() => expect(optionTexts('Path')).toContain('New path'));
+    expect(optionTexts('Competence')).toContain('New competence');
+    // The answers to the first read come last: dropped, not drawn over the newer lists.
+    for (const open of held) open();
+    await settle();
+    await settle();
+    expect(optionTexts('Path')).toContain('New path');
+    expect(optionTexts('Path')).not.toContain('Old path');
+    expect(optionTexts('Competence')).toContain('New competence');
+    expect(optionTexts('Competence')).not.toContain('Old competence');
+  });
 });

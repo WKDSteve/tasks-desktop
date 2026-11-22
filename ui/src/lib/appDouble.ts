@@ -430,11 +430,19 @@ export class FakeHub {
   pathsDoc: unknown = { kind: 'tasks.paths', rev: 'p1', digest: 'd', items: [], incomplete: [] };
   pathDocs = new Map<string, unknown>();
   pathCalls: string[] = [];
-  /** Each answer of `path` waits for the next of these gates first (none: it answers at once). */
+  /**
+   * Each answer of `path` waits for the next of these gates first (none: it answers at once). The answer is the
+   * document as it was when asked, as a hub answers: a gate held open lets a later question overtake an earlier one.
+   */
   pathGates: Promise<void>[] = [];
+  /** Each answer of `paths` waits for the next of these gates first, with the document as it was when asked. */
+  pathsGates: Promise<void>[] = [];
   async paths(_signal?: AbortSignal, includeDone = false) {
     this.pathCalls.push(includeDone ? 'paths include_done' : 'paths');
-    return this.pathsDoc as never;
+    const doc = this.pathsDoc;
+    const gate = this.pathsGates.shift();
+    if (gate) await gate;
+    return doc as never;
   }
   /** `paths` with `levels: true` (capability `paths_levels`): `pathsLevelsDoc`, else `pathsDoc`. */
   pathsLevelsDoc: unknown = null;
@@ -448,13 +456,16 @@ export class FakeHub {
    */
   learnDocs: Partial<Record<LearnReadName, unknown>> = {};
   learnQueries: [LearnReadName, unknown][] = [];
-  /** Each answer of a read of the tab waits for the next of these gates first (none: it answers at once). */
+  /**
+   * Each answer of a read of the tab waits for the next of these gates first (none: it answers at once), with the
+   * document as it was when asked.
+   */
   learnGates: Promise<void>[] = [];
   private async learnRead(name: LearnReadName, query: unknown) {
     this.learnQueries.push([name, query]);
+    const doc = this.learnDocs[name];
     const gate = this.learnGates.shift();
     if (gate) await gate;
-    const doc = this.learnDocs[name];
     if (doc === undefined) throw new ApiError(400, 'not_supported', `${name} is not faked here`);
     return (typeof doc === 'function' ? (doc as (q: unknown) => unknown)(query) : doc) as never;
   }
@@ -475,9 +486,9 @@ export class FakeHub {
   }
   async path(id: string) {
     this.pathCalls.push(`path ${id}`);
+    const doc = this.pathDocs.get(id);
     const gate = this.pathGates.shift();
     if (gate) await gate;
-    const doc = this.pathDocs.get(id);
     if (doc === undefined) throw new ApiError(404, 'not_found', `no path ${id}`);
     return doc as never;
   }

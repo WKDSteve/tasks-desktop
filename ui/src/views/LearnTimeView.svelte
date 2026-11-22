@@ -68,7 +68,11 @@
   type Sessions = { state: 'reading' } | { state: 'failed' } | { state: 'ready'; list: NonNullable<PathDocument['schedule']> };
   let unfolded = $state<ReadonlySet<string>>(new Set());
   let sessions = $state<ReadonlyMap<string, Sessions>>(new Map());
+  // The question per path: an answer to an older question (a read of the list asks again) is dropped.
+  const sessionsAsked = new Map<string, number>();
   async function readSessions(id: string): Promise<void> {
+    const mine = (sessionsAsked.get(id) ?? 0) + 1;
+    sessionsAsked.set(id, mine);
     sessions = new Map(sessions).set(id, { state: 'reading' });
     let next: Sessions;
     try {
@@ -77,6 +81,7 @@
     } catch {
       next = { state: 'failed' };
     }
+    if (sessionsAsked.get(id) !== mine) return;
     if (unfolded.has(id)) sessions = new Map(sessions).set(id, next);
   }
   function toggle(id: string): void {

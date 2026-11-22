@@ -127,6 +127,28 @@ describe('LearnTimeView', () => {
     expect(page.querySelector('table.sessions')).toBeNull();
   });
 
+  it('keeps the sessions of the newer read when an older answer comes late', async () => {
+    const { m, page } = await show();
+    const sessions = (label: string) => ({ kind: 'tasks.path', path: LUA, nodes: [], schedule: [{ index: 1, label, state: 'open', closed: 0, total: 1, ...hours(1, 1, 0) }] });
+    // The first read of the sessions is held; the list is read again meanwhile and asks the sessions anew.
+    let release!: () => void;
+    m.hub.pathGates.push(new Promise<void>((resolve) => (release = resolve)));
+    m.hub.pathDocs.set('lib/lua', sessions('Old'));
+    row(page, 'lib/lua').querySelector<HTMLButtonElement>('button.fold')!.click();
+    await settle();
+    m.hub.pathDocs.set('lib/lua', sessions('New'));
+    m.hub.doc = snapshot([], 'rev:2');
+    await m.app.refresh();
+    await settle();
+    await vi.waitFor(() => expect(page.querySelector('table.sessions tbody th')?.textContent).toBe('New'));
+    expect(m.hub.pathCalls.filter((c) => c === 'path lib/lua')).toHaveLength(2);
+    // The answer to the first question comes last: it is dropped, not drawn over the newer one.
+    release();
+    await settle();
+    await settle();
+    expect(page.querySelector('table.sessions tbody th')?.textContent).toBe('New');
+  });
+
   it('opens a path by its title', async () => {
     const { m, page } = await show();
     row(page, 'lib/lua').querySelector<HTMLButtonElement>('button.link')!.click();

@@ -147,6 +147,9 @@ test('the reads of the tab Lernpläne pass their question to the engine of the s
   // the search text is escaped as encodeURIComponent writes it, then trimmed; only blanks is no search
   await h.get('learn_notes?q=%20Shell%20%C3%BCben%20&kind=link&include_done=1&limit=50');
   await h.get('learn_notes?q=%20%20');
+  // U+FEFF is a blank as in the Rust hub (learn.rs): no search, and trimmed off a search text
+  await h.get('learn_notes?q=%EF%BB%BF%20');
+  await h.get('learn_notes?q=%EF%BB%BF%20Shell%20%EF%BB%BF');
   await h.get('learn_evidence?competence=ALL/os&include_done=1');
   await h.get('learn_history?since=2026-11-01&until=2026-11-22&step=week&area=lib.nvim');
   await h.get('competences?area=ALL');
@@ -154,6 +157,8 @@ test('the reads of the tab Lernpläne pass their question to the engine of the s
     ['learn_next', { params: { area: 'lib.nvim', paths: ['lib.nvim/lua'], machine: 'wsl', n: 5 } }],
     ['learn_notes', { params: { query: 'Shell üben', kind: 'link', include_done: true, limit: 50 } }],
     ['learn_notes', { params: {} }],
+    ['learn_notes', { params: {} }],
+    ['learn_notes', { params: { query: 'Shell' } }],
     ['learn_evidence', { params: { competence: 'ALL/os', include_done: true } }],
     ['learn_history', { params: { since: '2026-11-01', until: '2026-11-22', step: 'week', area: 'lib.nvim' } }],
     ['competences', { params: { area: 'ALL' } }],

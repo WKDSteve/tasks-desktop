@@ -85,19 +85,25 @@
     if (!usable) return;
     untrack(() => void read());
   });
-  // The lists of the filters: read with the view, again after a write.
+  // The lists of the filters: read with the view, again after a write; an answer to an older read is dropped.
+  let listsAsked = 0;
   $effect(() => {
     void app.writes;
     if (!usable) return;
     untrack(() => {
+      const mine = ++listsAsked;
       void app
         .paths()
-        .then((d) => (paths = d.items))
+        .then((d) => {
+          if (mine === listsAsked) paths = d.items;
+        })
         .catch(() => undefined);
       if (app.can('competences'))
         void app
           .competences()
-          .then((d) => (competences = d))
+          .then((d) => {
+            if (mine === listsAsked) competences = d;
+          })
           .catch(() => undefined);
     });
   });
