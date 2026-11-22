@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // The vault of the test sheet TESTS/sheets/path-levels.sheet.lua (`prepare` of the app `levels-hub` in .testing.lua):
 // a copy of the synthetic fixture vault (e2e/fixture/vault) in the folder of the run, plus a learning path with a
-// badge below its assets/badges/, one point already learned (60 XP) and one point promoted to a task with `xp: 10`.
+// badge below its assets/badges/, one point already learned (60 XP) and one point promoted to a task with `xp: 10`;
+// and the plain path of TESTS/sheets/learning-paths.sheet.lua (five open leaves).
 // Nothing of a real vault is read or written.
 //
 //   node tools/sheet-levels-vault.mjs <folder of the run>
@@ -15,6 +16,7 @@ const repo = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 export const AREA = 'lib.nvim';
 export const PATH_SLUG = 'levels-sheet';
 export const TASK_SLUG = 'levels-sheet-task';
+export const POINTS_SLUG = 'points-sheet';
 
 /** Write the vault below `run` (the folder of the run); returns its path. */
 export function prepare(run) {
@@ -42,6 +44,28 @@ export function prepare(run) {
       '- [ ] Levels sheet {#root}',
       '  - [x] First point {xp=60} {#first}',
       `  - [ ] Task point → ${AREA}/${TASK_SLUG} {#t}`,
+      '',
+    ].join('\n'),
+  );
+  // The path of TESTS/sheets/learning-paths.sheet.lua: one leaf for each thing that sheet does to a point.
+  writeFileSync(
+    join(roadmap, 'paths', `${POINTS_SLUG}.md`),
+    [
+      '---',
+      'title: Points sheet',
+      'status: doing',
+      '---',
+      '',
+      'A path of the test sheet learning-paths.',
+      '',
+      '## Lernpunkte',
+      '',
+      '- [ ] Points sheet {#root}',
+      '  - [ ] Tick point {#tick}',
+      '  - [ ] Drop point {#drop}',
+      '  - [ ] Block point {#block}',
+      '  - [ ] Outside point {#outside}',
+      '  - [ ] Promote point {#promo}',
       '',
     ].join('\n'),
   );

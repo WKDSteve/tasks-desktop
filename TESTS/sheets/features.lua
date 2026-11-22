@@ -13,4 +13,9 @@ return {
     title = "The levels of a learning path set in a form: written to ## Level with a badge and rewards, refused by the engine, the XP of a promoted task",
     docs = "README.md",
   },
+  {
+    id = "tasks.learning-paths",
+    title = "A learning path ticked and undone, a point set not applicable or blocked with its reason, a change of the file by another program kept, a point promoted to a task finished as seen",
+    docs = "README.md",
+  },
 }
