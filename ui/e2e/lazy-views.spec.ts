@@ -3,9 +3,9 @@ import type { Page } from '@playwright/test';
 import { expect, isMachineFault, test } from './fixtures';
 import { STATE } from './global';
 
-// The board and the saved views are loaded on demand (`ViewsView`, `BoardView`: the start has a budget,
-// tools/check-bundle-size.py). They must not flicker for it: their chunk comes while the page is idle after its start,
-// and a view opened again is drawn in the frame of its heading (`ui/src/views/loader.ts`).
+// The board, the saved views and the inbox are loaded on demand (`ViewsView`, `BoardView`, `InboxView`: the start has a
+// budget, tools/check-bundle-size.py). They must not flicker for it: their chunk comes while the page is idle after its
+// start, and a view opened again is drawn in the frame of its heading (`ui/src/views/loader.ts`).
 
 test.use({ locale: 'en-US' });
 
@@ -39,7 +39,7 @@ const fetched = (page: Page): Promise<string[]> =>
  */
 async function sampleFrames(page: Page): Promise<void> {
   await page.evaluate(() => {
-    const w = window as unknown as { frames_: { heading: string; board: boolean; views: boolean }[]; sampling: boolean };
+    const w = window as unknown as { frames_: { heading: string; board: boolean; views: boolean; inbox: boolean }[]; sampling: boolean };
     w.frames_ = [];
     w.sampling = true;
     const sample = () => {
@@ -48,6 +48,7 @@ async function sampleFrames(page: Page): Promise<void> {
         heading: document.querySelector('main h1')?.textContent?.trim() ?? '',
         board: document.querySelector('main [role="group"][aria-label="Board"]') !== null,
         views: document.querySelector('main [role="group"][aria-label="Saved views"]') !== null,
+        inbox: document.querySelector('main section.inbox') !== null,
       });
       requestAnimationFrame(sample);
     };
@@ -57,13 +58,16 @@ async function sampleFrames(page: Page): Promise<void> {
 
 async function emptyFrames(page: Page): Promise<string[]> {
   const frames = await page.evaluate(() => {
-    const w = window as unknown as { frames_: { heading: string; board: boolean; views: boolean }[]; sampling: boolean };
+    const w = window as unknown as { frames_: { heading: string; board: boolean; views: boolean; inbox: boolean }[]; sampling: boolean };
     w.sampling = false;
     return w.frames_;
   });
   expect(frames.length).toBeGreaterThan(0);
   return frames
-    .filter((f) => (f.heading === 'Board' && !(f.board && f.views)) || (f.heading === 'Views' && !f.views))
+    .filter(
+      (f) =>
+        (f.heading === 'Board' && !(f.board && f.views)) || (f.heading === 'Views' && !f.views) || (f.heading === 'Inbox' && !f.inbox),
+    )
     .map((f) => JSON.stringify(f));
 }
 
@@ -72,18 +76,26 @@ async function chord(page: Page, key: string): Promise<void> {
   await page.keyboard.press(key);
 }
 
-test('the board and the views come without flicker: fetched while idle after the start, drawn with their heading', async ({ page }) => {
+test('the board, the views and the inbox come without flicker: fetched while idle after the start, drawn with their heading', async ({ page }) => {
   const problems = await pair(page, '/#view=list');
   await expect(page.locator('main h1')).toHaveText('List');
   // Not opened, yet fetched: the page did it on its own once it was ready.
   await expect.poll(() => fetched(page), { message: 'the chunk of the views is fetched while the page is idle' }).toContain('ViewsView');
   expect(await fetched(page)).toContain('BoardView');
+  expect(await fetched(page)).toContain('InboxView');
   // Wait until the module has been evaluated, not only fetched: importing the same address resolves after it.
   await page.evaluate(async () => {
     const url = performance
       .getEntriesByType('resource')
       .map((entry) => entry.name)
       .find((name) => /\/assets\/ViewsView-[^/]+\.js$/.test(name));
+    if (url) await import(url);
+  });
+  await page.evaluate(async () => {
+    const url = performance
+      .getEntriesByType('resource')
+      .map((entry) => entry.name)
+      .find((name) => /\/assets\/InboxView-[^/]+\.js$/.test(name));
     if (url) await import(url);
   });
   await page.locator('main').click({ position: { x: 5, y: 5 } });
@@ -99,6 +111,8 @@ test('the board and the views come without flicker: fetched while idle after the
   await chord(page, 'v');
   await expect(page.locator('main h1')).toHaveText('Views');
   await expect(page.getByRole('group', { name: 'Saved views' })).toBeVisible();
+  await chord(page, 'i');
+  await expect(page.locator('main h1')).toHaveText('Inbox');
   expect(await emptyFrames(page), 'frames with the heading of a view but without the view').toEqual([]);
   expect(problems).toEqual([]);
 });

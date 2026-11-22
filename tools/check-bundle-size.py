@@ -61,8 +61,11 @@ drawn in the frame of its heading) and the page fetches them when it is idle aft
 at once too (`ui/e2e/lazy-views.spec.ts`). Lowered after it to 945 kB (decision of 2026-11-21,
 `tasks-desktop/start-budget-nach-dem-nachladen-von-board-und-ansichten`): about 14 kB of room as before, so growth shows
 early; the next candidates to load on demand are named above.
+On 2026-11-22 the four learning views (badges, rewards, competence catalogue, evidence; each a chunk of its own) took
+the start to 947 kB with what stays in it of them (the list of their chunks, their names in the menu, the branches of
+`App`). `InboxView` loads on demand since, fetched when idle like the board: the start is 941 kB (main 529).
 The candidates left in `App.svelte`: `Detail`, `ListView`, `Today`, `Capture` (all drawn at the start or from every
-view) and `InboxView` (10 kB source).
+view).
 
 usage: check-bundle-size.py [--dist ui/dist] [--budget-kb 945]
 """

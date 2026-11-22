@@ -8,7 +8,6 @@
   import { ago, hasKey, translate, type Key } from './lib/i18n';
   import Today from './views/Today.svelte';
   import ListView from './views/ListView.svelte';
-  import InboxView from './views/InboxView.svelte';
   import TaskDialog from './views/TaskDialog.svelte';
   import { floating } from './lib/floating';
   import ConflictsButton from './views/ConflictsButton.svelte';
@@ -62,15 +61,16 @@
     href: routeHref(location, { view }),
     ...(app.canDetach ? { onopennew: () => app.openViewApart(view) } : {}),
   });
-  // The board and the views: opened often, but rarely at the start (Today and List are). Their chunk comes when the
-  // page is idle after its start, so that the first open draws them in the frame of their heading (`loader`).
+  // The board, the views and the inbox: opened often, but rarely at the start (Today and List are). Their chunk comes
+  // when the page is idle after its start, so that the first open draws them in the frame of their heading (`loader`).
   const loadViews = loader(() => import('./views/ViewsView.svelte'));
   const loadBoard = loader(() => import('./views/BoardView.svelte'));
+  const loadInbox = loader(() => import('./views/InboxView.svelte'));
   let preloaded = false;
   $effect(() => {
     if (app.phase !== 'ready' || preloaded) return;
     preloaded = true;
-    preload([loadViews, loadBoard]);
+    preload([loadViews, loadBoard, loadInbox]);
   });
   let chordTimer: ReturnType<typeof setTimeout> | undefined;
   let searchBox = $state<HTMLInputElement | null>(null);
@@ -980,7 +980,7 @@
           <!-- The board is the built-in view of the views; an engine that keeps no views shows it alone. -->
           {#if app.can('views')}<Lazy {app} load={loadViews} extra={{ board: true }} />{:else}<Lazy {app} load={loadBoard} />{/if}
         {:else if app.view === 'inbox'}
-          <InboxView {app} />
+          <Lazy {app} load={loadInbox} />
         {:else if app.view === 'abnahme'}
           <Lazy {app} load={() => import('./views/AbnahmeView.svelte')} />
         {:else if app.view === 'cross'}
