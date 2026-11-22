@@ -4696,7 +4696,8 @@ test('the board: a held key writes once, a card the filter hides is not moved, a
   await selectCard(page, first);
   await page.keyboard.down('Shift');
   await page.keyboard.down('J');
-  await expect(page.getByRole('status').getByText(/^Moved ".*" down\.$/)).toBeVisible();
+  // Where the card went; a reorder that renumbered its neighbours says that after it.
+  await expect(page.getByRole('status').getByText(/^Moved ".*" down\./)).toBeVisible();
   await expect(column('open').locator('.card').first()).toHaveAttribute('draggable', 'true');
   await page.keyboard.down('J');
   await page.keyboard.down('J');
@@ -11513,7 +11514,9 @@ test('the board without dragging: the move bar moves the selected card by click 
   await expect(column('open').locator('.card')).toHaveCount(2);
   const first = await titles('open');
 
-  // Nothing selected: the bar says how to select. The grip is clicked (a click, no drag): it selects and opens nothing.
+  // Nothing selected (the capture selected the task it made; Escape lets go of it): the bar says how to select. The grip
+  // is clicked (a click, no drag): it selects and opens nothing.
+  await page.keyboard.press('Escape');
   await expect(bar.getByRole('button')).toHaveCount(0);
   await column('open').locator('.card').first().locator('.grip').click();
   await expect(taskFloat(page)).toHaveCount(0);

@@ -415,9 +415,17 @@
     min-width: 0;
     overflow-wrap: anywhere;
   }
+  /* The look of the other small buttons of the page: without it the browser's own button colour shows, which in the
+     dark theme gives its text too little contrast (axe color-contrast, 4.34:1). */
   .movebar button {
     min-height: 1.5rem;
     min-width: 1.5rem;
+    background: var(--surface-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 0.15rem 0.5rem;
+    cursor: pointer;
   }
   .layout {
     display: grid;

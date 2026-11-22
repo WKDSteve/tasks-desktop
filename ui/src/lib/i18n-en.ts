@@ -1904,6 +1904,7 @@ const en = {
   'board.group': 'Priority {p}',
   'board.stage': 'Stage {n}',
   'write.saved_many': 'Saved ({n} files written, the order is renumbered there).',
+  'write.renumbered': '{n} files written, the order is renumbered there.',
   'write.busy': 'Still saving - try again in a moment.',
   'plan.new.unknown': 'The engine did not answer; the name is not known yet.',
   'plan.new.areas_hint': 'None chosen means every area.',

@@ -25,6 +25,8 @@ const card = (id: string, status: string, group: string, etag: string) =>
   task(id, { etag, status, group, title: `Card ${id}` } as Partial<TaskEntry>);
 
 async function board(tasks: TaskEntry[]) {
+  // jsdom has no layout: the selected card is "scrolled into view" by a stand-in (the board keeps it in view).
+  Element.prototype.scrollIntoView = () => undefined;
   made = make({ token: 't' });
   made.hub.doc = snapshot(tasks);
   await made.app.start(null);
@@ -67,5 +69,21 @@ describe('the move bar of the board', () => {
     await vi.waitFor(() => expect(m.app.toast).not.toBeNull());
     expect(m.hub.sent[0]?.ops[0]).toMatchObject({ op: 'reorder', id: 'pub/a', after: 'pub/b' });
     expect(m.app.toast?.text).toBe(translate(m.app.lang, 'board.moved_down', { title: 'Card pub/a' }));
+  });
+
+  it('says where the card went also when the reorder renumbered its neighbours, and how many files', async () => {
+    const { m, button } = await board([
+      card('pub/a', 'doing', 'doing|1', 'e1'),
+      card('pub/b', 'doing', 'doing|1', 'e2'),
+    ]);
+    m.app.select('pub/a');
+    flushSync();
+    // The engine numbered the cards around the spot: three files written by one reorder.
+    m.hub.next_ops = { client_op_id: 'x', results: [{ ok: true, id: 'pub/a', writes: 3 }] } as unknown as typeof m.hub.next_ops;
+    button('down')!.click();
+    await vi.waitFor(() => expect(m.app.toast).not.toBeNull());
+    expect(m.app.toast?.text).toBe(
+      `${translate(m.app.lang, 'board.moved_down', { title: 'Card pub/a' })} ${translate(m.app.lang, 'write.renumbered', { n: 3 })}`,
+    );
   });
 });

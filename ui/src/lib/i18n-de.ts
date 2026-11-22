@@ -1908,6 +1908,7 @@ const de: Record<PageKey, string> = {
   'board.group': 'Priorität {p}',
   'board.stage': 'Stufe {n}',
   'write.saved_many': 'Gespeichert ({n} Dateien geschrieben, die Reihenfolge ist dort neu nummeriert).',
+  'write.renumbered': '{n} Dateien geschrieben, die Reihenfolge ist dort neu nummeriert.',
   'write.busy': 'Speichert noch - gleich noch einmal versuchen.',
   'plan.new.unknown': 'Die Engine hat nicht geantwortet; der Name steht noch nicht fest.',
   'plan.new.areas_hint': 'Keiner gewählt heißt: alle Bereiche.',

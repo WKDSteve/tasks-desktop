@@ -2226,10 +2226,16 @@ export class App {
         if (first) {
           const params = { id: first.id, due: first.due, n: started.length };
           this.say('ok', started.length > 1 ? 'routine.started_many' : 'routine.started', params, undo);
-        } else if (files > 1) this.say('ok', 'write.saved_many', { n: files }, undo);
-        else {
+        } else {
           const said = opts.saidAs?.(result);
-          this.say('ok', said ?? 'write.saved', said ? (opts.saidWith ?? {}) : {}, undo);
+          if (said) {
+            // Where the card went comes first (a status message, WCAG 4.1.3); a reorder that renumbered its neighbours
+            // says that too, after it.
+            const where = translate(this.lang, said, opts.saidWith ?? {});
+            const text = files > 1 ? `${where} ${translate(this.lang, 'write.renumbered', { n: files })}` : where;
+            this.toast = { kind: 'ok', text, ...(undo ? { undo } : {}) };
+          } else if (files > 1) this.say('ok', 'write.saved_many', { n: files }, undo);
+          else this.say('ok', 'write.saved', {}, undo);
         }
       }
       await this.readAfter(ops);
