@@ -1,5 +1,5 @@
-import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { expect, test, type CDPSession, type Page } from '@playwright/test';
 import { STATE } from '../e2e/global';
 import { origin, pairingLink, port } from '../e2e/hub';
@@ -214,6 +214,39 @@ test('a shared link fills the form and creates nothing', async () => {
   await expect(page.getByLabel('Title')).toHaveValue('Device share d003');
   await expect(page.getByLabel(/context/i)).toHaveValue(/https:\/\/example\.org\/d003/);
   expect(existsSync(taskFile('device-share-d003'))).toBe(false);
+});
+
+test('the page Lernen: the next step of a path is ticked learned on the way, the file of the PC shows it', async () => {
+  const file = join(state().vault, 'lib.nvim', 'ROADMAP', 'paths', 'device-learn-d001.md');
+  mkdirSync(dirname(file), { recursive: true });
+  writeFileSync(
+    file,
+    [
+      '---',
+      'title: Device learn d001',
+      'status: doing',
+      'created: 2026-11-20',
+      'updated: 2026-11-20',
+      '---',
+      '',
+      '## Lernpunkte',
+      '',
+      '- [ ] Stage {#s}',
+      '  - [x] First d001 {#first}',
+      '  - [ ] Second d001 {#second}',
+      '',
+    ].join('\n'),
+  );
+  try {
+    await page.getByRole('button', { name: 'Learn', exact: true }).click();
+    await expect(page.getByRole('region', { name: 'My learning' }).getByRole('group', { name: 'Period' })).toBeVisible();
+    const step = page.locator('li[data-step="lib.nvim/device-learn-d001"]');
+    await expect(step).toContainText('Second d001');
+    await step.getByRole('button', { name: 'Learned: Second d001' }).click();
+    await expect.poll(() => readFileSync(file, 'utf8')).toMatch(/- \[x\] Second d001/);
+  } finally {
+    rmSync(file, { force: true });
+  }
 });
 
 test('offline, a new task waits and is sent when the PC is back', async () => {

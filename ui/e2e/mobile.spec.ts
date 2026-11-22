@@ -218,6 +218,12 @@ test('the phone page shows a learning path cut by the hub and ticks a point thro
     await page.goto(pairingLink(config).replace('/#pair=', '/m/#pair='));
     await expect(page.getByTestId('connection')).toHaveAttribute('data-state', 'live');
     await page.getByRole('button', { name: 'Learn', exact: true }).click();
+    // The page Lernen: the tile from the series and the next step of the path, both read through the routes a phone
+    // has (asked of the engine for the released areas, cut by the hub).
+    await expect(page.getByRole('region', { name: 'My learning' }).getByRole('group', { name: 'Period' })).toBeVisible();
+    await expect(page.locator('li[data-step="lib.nvim/lua-lernen"]')).toBeVisible();
+    await expect(page.getByText('Only a newer hub shows the next steps.')).toHaveCount(0);
+    await page.getByTestId('learn-all-paths').click();
     const list = page.getByTestId('paths');
     await expect(list.getByRole('button', { name: /Lua lernen/ })).toBeVisible();
     await list.getByRole('button', { name: /Lua lernen/ }).click();
