@@ -3862,7 +3862,7 @@ test('the board: cards move by key and by drag, the engine keeps the order, a pr
   await slow(page, '/api/tasks/ops', SLOW_WRITE, 1);
   await write(page, () => page.keyboard.press('Shift+J'));
   // (a reorder may renumber the neighbours: "Saved (n files written ...)"; the "Saved." of the last create is gone)
-  await expect(page.getByRole('status').getByText(/^Saved/)).toBeVisible();
+  await expect(page.getByRole('status').getByText(/^(Saved|Moved ".*" down\.)/)).toBeVisible();
   const moved = [first[1], first[0], first[2]];
   await expect.poll(() => titles('open')).toEqual(moved);
   await page.reload();
@@ -4696,7 +4696,7 @@ test('the board: a held key writes once, a card the filter hides is not moved, a
   await selectCard(page, first);
   await page.keyboard.down('Shift');
   await page.keyboard.down('J');
-  await expect(page.getByRole('status').getByText('Saved.')).toBeVisible();
+  await expect(page.getByRole('status').getByText(/^Moved ".*" down\.$/)).toBeVisible();
   await expect(column('open').locator('.card').first()).toHaveAttribute('draggable', 'true');
   await page.keyboard.down('J');
   await page.keyboard.down('J');
@@ -11492,4 +11492,47 @@ test('the whiteboard of a meeting: drawn with a pen, a finger ignored, saved as 
     rmSync(file, { force: true });
     for (const f of readdirSync(meetings)) if (!before.has(f)) rmSync(join(meetings, f), { recursive: true, force: true });
   }
+});
+
+test('the board without dragging: the move bar moves the selected card by click and by key, and the status message says where it went (WCAG 2.5.7, 4.1.3)', async ({
+  page,
+}) => {
+  test.slow();
+  await watchViolations(page);
+  await pair(page);
+  await showList(page);
+  const prefix = `Board move e2e r${String(test.info().repeatEachIndex).padStart(3, '0')}`;
+  for (const n of [1, 2]) await capture(page, `${prefix} ${n}`);
+  await page.getByRole('searchbox', { name: /search/i }).first().fill(prefix);
+  await expect(page.locator('.rows .line')).toHaveCount(2);
+  await chooseView(page, 'View', 'Board');
+
+  const column = (name: string) => page.getByRole('region', { name, exact: true });
+  const titles = (name: string) => column(name).locator('.card .title').allInnerTexts();
+  const bar = page.getByRole('group', { name: 'Move the selected card without dragging' });
+  await expect(column('open').locator('.card')).toHaveCount(2);
+  const first = await titles('open');
+
+  // Nothing selected: the bar says how to select. The grip is clicked (a click, no drag): it selects and opens nothing.
+  await expect(bar.getByRole('button')).toHaveCount(0);
+  await column('open').locator('.card').first().locator('.grip').click();
+  await expect(taskFloat(page)).toHaveCount(0);
+  await expect(bar.getByText(/^Selected:/)).toBeVisible();
+
+  // One place down, by a click on a button: the engine's order changes and the status message says so.
+  await write(page, () => bar.getByRole('button', { name: /Down/ }).click());
+  await expect(page.getByRole('status').getByText(/^(Moved ".*" down\.|Saved)/)).toBeVisible();
+  await expect.poll(() => titles('open')).toEqual([first[1], first[0]]);
+
+  // One column to the right (parked is the neighbour of open), by a click.
+  await write(page, () => bar.getByRole('button', { name: /parked/ }).click());
+  await expect(page.getByRole('status').getByText(/^Moved ".*" to the parked column\./)).toBeVisible();
+  await expect(column('parked').locator('.card', { hasText: first[0] as string })).toHaveCount(1);
+
+  // The same by keys only: the focus is on the page, Shift+H moves the selected card back to the column before.
+  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+  await write(page, () => page.keyboard.press('Shift+H'));
+  await expect(page.getByRole('status').getByText(/^Moved ".*" to the open column\./)).toBeVisible();
+  await expect(column('open').locator('.card', { hasText: first[0] as string })).toHaveCount(1);
+  expect(await violations(page)).toEqual([]);
 });

@@ -7,7 +7,7 @@
   // another column: the status; among the cards of its group: the order) or with the keys of the page. The page
   // never sorts: the order is the engine's, and a move asks the engine for the new one.
   import type { App } from '../lib/app.svelte';
-  import { COLUMNS, COLUMN_FIRST, groupLabel, placeOf, runKey, stageOf, type Column } from '../lib/board';
+  import { COLUMNS, COLUMN_FIRST, groupLabel, isColumn, neighbourColumn, placeOf, runKey, stageOf, type Column } from '../lib/board';
   import { boardTargetAt, createGrip, farEnough, type BoardTarget, type PointerDragEvent } from '../lib/pointerDrag';
   import { isLearning } from '../lib/learning';
   import { hintOf, labelOf, translate, type Key } from '../lib/i18n';
@@ -27,6 +27,10 @@
     translate(app.lang, key, params);
 
   const board = $derived(app.board);
+
+  // The way to move a card without dragging, with a click (WCAG 2.5.7): the selected card, one column or one place.
+  const picked = $derived(app.tasks.find((x) => x.id === app.selectedId && isColumn(x.status) && app.shown.some((y) => y.id === x.id)));
+  const columnName = (column: Column) => labelOf(app.lang, 'status', column);
 
   const allFold = $derived(allButtonFold(app.folds.board, [...COLUMNS]));
   // A narrow column takes only the width of its head; the others share the rest as before.
@@ -210,6 +214,25 @@
     <Info hint={t('hint.board')} label={t('hint.about', { what: t('nav.board') })} />
     <Info hint={marksLegend(app.lang)} label={t('hint.about', { what: t('mark.legend.what') })} />
   </p>
+  <div class="movebar" role="group" aria-label={t('board.move.label')} data-move-bar>
+    {#if picked}
+      {@const left = neighbourColumn(picked.status, -1)}
+      {@const right = neighbourColumn(picked.status, 1)}
+      <span class="who">{t('board.move.selected', { title: markHidden(picked.title) })}</span>
+      {#if left !== null}
+        <button type="button" data-move="left" onclick={() => void app.shiftColumn(picked.id, -1)}>
+          <span aria-hidden="true">←</span> {t('board.move.left', { column: columnName(left) })}
+        </button>
+      {/if}
+      <button type="button" data-move="right" onclick={() => void app.shiftColumn(picked.id, 1)}>
+        {right === null ? t('board.move.finish') : t('board.move.right', { column: columnName(right) })} <span aria-hidden="true">→</span>
+      </button>
+      <button type="button" data-move="up" onclick={() => void app.stepCard(picked.id, -1)}><span aria-hidden="true">↑</span> {t('board.move.up')}</button>
+      <button type="button" data-move="down" onclick={() => void app.stepCard(picked.id, 1)}><span aria-hidden="true">↓</span> {t('board.move.down')}</button>
+    {:else}
+      <span class="who">{t('board.move.none')}</span>
+    {/if}
+  </div>
   <div class="layout">
     <div class="main" ondragleave={onBoardLeave} role="presentation">
       <div
@@ -377,6 +400,24 @@
     display: flex;
     justify-content: space-between;
     gap: 1rem;
+  }
+  .movebar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.4rem;
+    margin: 0 0 0.5rem;
+    font-size: 0.8rem;
+  }
+  .movebar .who {
+    color: var(--muted);
+    margin-right: 0.4rem;
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  .movebar button {
+    min-height: 1.5rem;
+    min-width: 1.5rem;
   }
   .layout {
     display: grid;
