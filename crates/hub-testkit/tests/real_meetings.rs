@@ -717,7 +717,14 @@ async fn a_paired_phone_puts_a_photo_and_a_voice_note_into_a_meeting_but_nothing
     ];
     for (id, kinds) in refused {
         for kind in kinds {
-            let (status, doc) = upload(id.clone(), kind, "note.m4a").await;
+            // A file of the kind's own type: the type check of the hub (415, before the engine is asked) lets it by, so
+            // the answer is the rule for devices.
+            let name = match *kind {
+                "video" => "clip.mp4",
+                "screenshot" | "image" => "shot.png",
+                _ => "note.m4a",
+            };
+            let (status, doc) = upload(id.clone(), kind, name).await;
             assert_eq!(
                 (status, doc["error"]["code"].clone()),
                 (403, json!("not_for_devices")),

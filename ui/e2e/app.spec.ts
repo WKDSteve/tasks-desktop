@@ -10496,8 +10496,10 @@ for (const scheme of ['light', 'dark'] as const) {
     await page.keyboard.press('j');
     await expect(firstFold).toHaveAttribute('aria-expanded', 'true');
     await expect(rows.locator('button.row[aria-current="true"] .id')).toHaveText(order[0] ?? '');
-    // A row the keys scroll to stops below the head that stays at the top, not under it.
-    expect(await rows.locator('button.row').first().evaluate((el) => parseFloat(getComputedStyle(el).scrollMarginTop))).toBeGreaterThan(20);
+    // A row the keys scroll to stops below the head that stays at the top, not under it: the list keeps the room of the
+    // head as its scroll padding (d42594b; the rows' own scroll-margin-top is gone).
+    await expect(rows).toHaveAttribute('data-areas', 'groups');
+    expect(await rows.evaluate((el) => parseFloat(getComputedStyle(el).scrollPaddingTop))).toBeGreaterThan(20);
     // "Mark all shown" takes the rows as they stand: the first area whole before any row of the next.
     await page.getByRole('button', { name: 'Mark all shown' }).click();
     const groupSize = await firstGroup.locator('button.row').count();
