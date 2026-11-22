@@ -1069,21 +1069,25 @@
     cursor: pointer;
     text-align: start;
   }
+  /* As specific as the colour rules above (two classes) and after them, so the contrast mode wins. */
   @media (forced-colors: active) {
-    .edge,
-    .tip {
+    .pathmap .edge,
+    .pathmap .tip {
       stroke: CanvasText;
     }
-    .head {
+    .pathmap .head {
       fill: CanvasText;
     }
-    .box,
-    .frame,
-    .cycle {
+    .pathmap .box {
+      --stage: CanvasText;
       border-color: CanvasText;
     }
-    .bar-fill,
-    .hint {
+    .pathmap .frame,
+    .pathmap .cycle {
+      border-color: CanvasText;
+    }
+    .pathmap .box .bar-fill,
+    .pathmap .hint {
       background: CanvasText;
       color: Canvas;
     }

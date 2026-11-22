@@ -84,6 +84,30 @@ test('the competence map: stages, frames, a chain, a circle and a ghost from the
     await expectAccessible(page, 'the competence map, dark');
     await page.emulateMedia({ colorScheme: 'light' });
 
+    // the contrast mode of the system (forced-colors): arrows, heads and box borders take the system's text colour,
+    // and hard and soft stay apart by the line (dashes) and the head (filled or open), not by colour
+    await page.emulateMedia({ forcedColors: 'active' });
+    const look = (selector: string) =>
+      page.locator(selector).evaluate((el) => {
+        const s = getComputedStyle(el);
+        return { stroke: s.stroke, dash: s.strokeDasharray, fill: s.fill };
+      });
+    const text = await page.locator('body').evaluate((el) => getComputedStyle(el).color);
+    const hard = await look(`[data-edge="j:${id('pm-e2e-base')}>j:${id('pm-e2e-top')}"]`);
+    const soft = await look(`[data-edge="p:${id('pm-e2e-root')}>p:${id('pm-e2e-a')}"]`);
+    expect(hard.stroke).toBe(text);
+    expect(soft.stroke).toBe(text);
+    expect(hard.dash).toBe('none');
+    expect(soft.dash).not.toBe('none');
+    expect((await look('marker[id="pathmap-hard-warn"] path')).fill).toBe(text);
+    expect((await look('marker[id="pathmap-soft-muted"] path')).fill).toBe('none');
+    await expect(box(page, 'pm-e2e-b')).toHaveCSS('border-top-color', text);
+    // the learned part of the bar stays visible (not the forced background of the track)
+    await expect(box(page, 'pm-e2e-a').locator('.bar-fill')).toHaveCSS('background-color', text);
+    await expect(box(page, 'pm-e2e-soft').locator('.bar-fill')).toHaveCSS('background-color', text);
+    await expectAccessible(page, 'the competence map, forced colours');
+    await page.emulateMedia({ forcedColors: 'none' });
+
     // the keys: from the root along the chain, Space holds it
     await box(page, 'pm-e2e-root').focus();
     await page.keyboard.press('ArrowRight');
