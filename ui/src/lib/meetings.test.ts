@@ -14,6 +14,7 @@ import {
   toReview,
   wallTime,
   whenText,
+  withComments,
   withDocument,
 } from './meetings';
 
@@ -92,9 +93,17 @@ describe('the sections of a body', () => {
     expect(sectionText(body, 'Ergebnis')).toBe('```\n## no heading\n```\nFertig.');
     expect(sectionText(body, 'Nope')).toBe('');
   });
-  it('adds a document as one line', () => {
-    expect(withDocument(body, 'Unterlagen', 'https://example.org/x')).toBe('- https://example.org/x');
+  it('adds a document as one line, and keeps the comments of the section it writes back whole', () => {
+    expect(withDocument(body, 'Unterlagen', 'https://example.org/x')).toBe('<!-- Links -->\n- https://example.org/x');
     expect(withDocument('## Unterlagen\n\n- a\n', 'Unterlagen', 'b\nc')).toBe('- a\n- b c');
+    const marked = '## Unterlagen\n\n<!-- GENERATED:docs begin -->\n- a\n<!-- GENERATED:docs end -->\n';
+    expect(withDocument(marked, 'Unterlagen', 'b')).toBe('<!-- GENERATED:docs begin -->\n<!-- GENERATED:docs end -->\n- a\n- b');
+  });
+  it('puts the comments of a section before the text written over what it shows', () => {
+    expect(withComments(body, 'Ergebnis', 'Neu.')).toBe('Neu.');
+    expect(withComments('## Ergebnis\n\n<!-- mine -->\nAlt.\n', 'Ergebnis', 'Neu.')).toBe('<!-- mine -->\nNeu.');
+    expect(withComments('## Ergebnis\n\n<!-- mine -->\n', 'Ergebnis', '')).toBe('<!-- mine -->');
+    expect(withComments(body, 'Nope', 'x')).toBe('x');
   });
 });
 

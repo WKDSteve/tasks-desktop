@@ -2,7 +2,7 @@
 // is read here into entries (a shortcut names the kind), and what the engine wrote into `## Protokoll` is read back into
 // lines with their time and kind. The page only shows; the engine writes the file (WEB-13).
 import type { Op } from './api';
-import { sectionText } from './meetings';
+import { sectionText, withComments } from './meetings';
 
 /** The kinds the engine takes (`meeting_capture`). */
 export type CaptureKind = 'text' | 'task' | 'decision' | 'question' | 'board' | 'photo' | 'audio';
@@ -198,7 +198,7 @@ export function convertOps(
   }
   if (!removed) return null;
   return [
-    { op: 'set_section', id, heading: `## ${heading}`, text: kept.join('\n'), ...(ifMatch ? { if_match: ifMatch } : {}) },
+    { op: 'set_section', id, heading: `## ${heading}`, text: withComments(body, heading, kept.join('\n')), ...(ifMatch ? { if_match: ifMatch } : {}) },
     captureOp(id, { kind: to, text: line.text }, line.at),
   ];
 }

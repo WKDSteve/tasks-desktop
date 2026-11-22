@@ -141,6 +141,13 @@ describe('convertOps', () => {
     ]);
   });
 
+  it('keeps the comments of the minutes, which the page does not show, when it writes them back', () => {
+    const body = '## Protokoll\n\n<!-- a note of mine -->\n- 09:40 Folie fehlt\n- 09:41 Weiter\n';
+    const line = minutesOf(body).find((l) => l.text === 'Folie fehlt')!;
+    const ops = convertOps('pub/m', body, line, 'task', undefined);
+    expect(ops?.[0]).toMatchObject({ op: 'set_section', text: '<!-- a note of mine -->\n- 09:41 Weiter' });
+  });
+
   it('turns only a plain line, and nothing when the line is no longer there as read', () => {
     const lines = minutesOf(BODY);
     expect(convertOps('pub/m', BODY, lines.find((l) => l.kind === 'task')!, 'decision', undefined)).toBeNull();

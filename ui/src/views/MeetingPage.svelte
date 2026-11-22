@@ -28,6 +28,7 @@
     sectionText,
     startTab,
     whenText,
+    withComments,
     withDocument,
     type MeetingTab,
   } from '../lib/meetings';
@@ -213,7 +214,7 @@
   async function saveResult(event: SubmitEvent): Promise<void> {
     event.preventDefault();
     if (!id || !doc || doc.body_truncated) return;
-    const result = await send({ op: 'set_section', id, heading: `## ${resultHeading}`, text: resultText.trim(), ...guard() });
+    const result = await send({ op: 'set_section', id, heading: `## ${resultHeading}`, text: withComments(doc.body, resultHeading, resultText.trim()), ...guard() });
     if (result?.results.every((r) => r.ok)) resultDirty = false;
   }
 

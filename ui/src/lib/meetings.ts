@@ -185,8 +185,8 @@ export function documentsHeading(body: string): string {
   return /^## Documents\s*$/m.test(body) && !/^## Unterlagen\s*$/m.test(body) ? 'Documents' : 'Unterlagen';
 }
 
-/** The text of a section `## <heading>` of `body` (without the heading), or '' when there is none. */
-export function sectionText(body: string, heading: string): string {
+/** The lines of a section `## <heading>` of `body` as written (without the heading), or '' when there is none. */
+function sectionRaw(body: string, heading: string): string {
   const lines = body.split(/\r?\n/);
   const at = lines.findIndex((l) => l.trim() === `## ${heading}`);
   if (at < 0) return '';
@@ -197,18 +197,32 @@ export function sectionText(body: string, heading: string): string {
     if (!fence && /^## /.test(line)) break;
     out.push(line);
   }
-  // the placeholders of the template are HTML comments: no text of the person
-  return out
-    .join('\n')
-    .replace(/<!--[\s\S]*?-->/g, '')
-    .trim();
+  return out.join('\n');
+}
+
+const COMMENT = /<!--[\s\S]*?-->/g;
+
+/** The text of a section `## <heading>` of `body` (without the heading), or '' when there is none. */
+export function sectionText(body: string, heading: string): string {
+  // HTML comments are not shown (a placeholder of a hand-made template, a block a tool keeps there), as the engine reads it
+  return sectionRaw(body, heading).replace(COMMENT, '').trim();
+}
+
+/**
+ * The text a write of section `heading` sends when the page changed what it shows (`sectionText`): the HTML comments
+ * of the section as they were, then `text`. `set_section` replaces the whole section, and the engine's template has no
+ * comments, so every comment there is the person's or a tool's: the page does not show it and must not drop it.
+ */
+export function withComments(body: string, heading: string, text: string): string {
+  const comments = sectionRaw(body, heading).match(COMMENT) ?? [];
+  return [...comments, text].filter((part) => part !== '').join('\n');
 }
 
 /** The documents section with one line more: a web address or a path, as `- <text>`. */
 export function withDocument(body: string, heading: string, entry: string): string {
   const line = entry.replace(/[\r\n]+/g, ' ').trim();
   const before = sectionText(body, heading);
-  return before === '' ? `- ${line}` : `${before}\n- ${line}`;
+  return withComments(body, heading, before === '' ? `- ${line}` : `${before}\n- ${line}`);
 }
 
 /** `YYYY-MM-DDTHH:MM` in minutes since the epoch (no zone: wall time), or NaN. A day alone is its midnight. */
