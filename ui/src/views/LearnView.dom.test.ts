@@ -271,7 +271,7 @@ describe('LearnView, the other tiles', () => {
     // the series is asked for the area, so that its streak and first day are those of ops
     expect(m.hub.learnQueries.filter(([name]) => name === 'learn_history').at(-1)).toEqual(['learn_history', { since: '2026-11-09', until: '2026-11-18', step: 'day', area: 'ops' }]);
     // the week of ops alone: the 17th, one point seen with 5 XP; the week before had nothing of ops
-    expect(text(fig(page, 'xp'))).toBe('XP 5 ▲ +5 vs last week');
+    expect(text(fig(page, 'xp'))).toBe('XP 5 ▲ +5 vs last week to Wednesday');
     expect(text(page.querySelector('[aria-labelledby="learn-next"]'))).not.toContain('Metatables');
     expect(text(page.querySelector('[aria-labelledby="learn-next"]'))).toContain('Pipes');
     m.app.filter = { ...m.app.filter, areas: ['elsewhere'] };
@@ -280,6 +280,6 @@ describe('LearnView, the other tiles', () => {
     page.querySelector<HTMLButtonElement>('.scope-note button')!.click();
     await settle();
     expect(m.app.filter.areas).toEqual([]);
-    expect(text(fig(page, 'xp'))).toBe('XP 35 ▲ +15 vs last week');
+    expect(text(fig(page, 'xp'))).toBe('XP 35 ▲ +15 vs last week to Wednesday');
   });
 });
