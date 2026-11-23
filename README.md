@@ -1122,7 +1122,7 @@ characters for a name or a title, 256 KiB.
 
 ### Open in DocMap (docmap-desktop)
 
-A task that names a place in code gets the button *Open in DocMap* in its detail (*Work*: no menu, no palette entry).
+A task that names a place in code gets the button *Open in DocMap* in its detail (no menu or palette entry).
 A task names a place in one of two ways: a fenced block of the language `code-ref` in its text (the schema `code-ref/1`
 of appkit: `repo`, `file`, `lines`; `tasks.nvim` writes it from a marked piece of code), or, older, a ref
 `<file>:<first>[-<last>]` of its `refs`. A click starts docmap-desktop at the function that holds the line

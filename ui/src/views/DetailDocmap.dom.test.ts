@@ -3,7 +3,7 @@
 // (a `code-ref` block or a ref `<file>:<lines>` of the task), one button per place, and a click names the task and the
 // number of the place, never a path.
 import { flushSync, mount, tick, unmount } from 'svelte';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { make, snapshot } from '../lib/appDouble';
 import { task } from '../lib/fixtures';
 import Detail from './Detail.svelte';
@@ -35,6 +35,10 @@ async function show(opts: { body?: string; refs?: string[]; docmap?: Made['hub']
   document.body.append(root);
   mounted = mount(Detail, { target: root, props: { app: m.app } });
   await settle();
+  // The buttons live in a chunk that is loaded on demand: wait for it (a task without a place never loads it).
+  const mayShow = (opts.body ?? '').includes('code-ref') || (opts.refs ?? []).some((r) => r.includes(':'));
+  if (mayShow && !opts.web) await vi.waitFor(() => expect(m.hub.docmapAsked).toBeGreaterThan(0));
+  await settle();
   return { m, buttons: () => [...root.querySelectorAll<HTMLButtonElement>('[data-testid="open-docmap"]')] };
 }
 
@@ -53,7 +57,7 @@ describe('the button "Open in DocMap" of the detail', () => {
       docmap: { found: true, places: [{ label: 'a.lua:1-2', repo: 'x', ok: true }] },
     });
     expect(buttons().map((b) => b.textContent?.trim())).toEqual(['In DocMap öffnen']);
-    buttons()[0].click();
+    buttons()[0]?.click();
     await settle();
     expect(m.hub.docmapOpened).toEqual(['pub/a 0']);
   });
@@ -71,7 +75,7 @@ describe('the button "Open in DocMap" of the detail', () => {
     });
     // Only the second place can be opened: its button stands alone, and a click names number 1 (not 0).
     expect(buttons().map((b) => b.textContent?.trim())).toEqual(['In DocMap öffnen']);
-    buttons()[0].click();
+    buttons()[0]?.click();
     await settle();
     expect(m.hub.docmapOpened).toEqual(['pub/a 1']);
   });

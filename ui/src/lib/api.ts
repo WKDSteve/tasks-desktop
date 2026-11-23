@@ -722,21 +722,12 @@ export class Hub extends HubClient<Snapshot> {
     return this.vaultPost('/api/tasks/open', { id, kind });
   }
 
-  /**
-   * The places in code a task names and whether docmap-desktop is found; null where nobody can say (a hub that is gone,
-   * a hub without the route).
-   */
-  async docmapPlaces(id: string): Promise<DocmapPlaces | null> {
-    try {
-      const doc = await this.json<Partial<DocmapPlaces>>(`/api/tasks/docmap?id=${encodeURIComponent(id).replace(/%2F/gi, '/')}`);
-      const places = Array.isArray(doc.places) ? doc.places.filter((p) => typeof p?.label === 'string') : [];
-      return { found: doc.found === true, places };
-    } catch {
-      return null;
-    }
+  /** The places in code a task names and whether docmap-desktop is found (`GET /api/tasks/docmap`); throws without a hub. */
+  docmapPlaces(id: string): Promise<DocmapPlaces> {
+    return this.json<DocmapPlaces>(`/api/tasks/docmap?id=${id}`);
   }
 
-  /** Open docmap-desktop at the `index`-th place of a task (the hub starts it; the page names the task and the number). */
+  /** Open docmap-desktop at the `index`-th place of a task (the page names the task and the number, never a path). */
   openInDocmap(id: string, index: number): Promise<void> {
     return this.vaultPost('/api/tasks/docmap_open', { id, index });
   }

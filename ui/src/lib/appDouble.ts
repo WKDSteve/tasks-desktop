@@ -668,7 +668,10 @@ export class FakeHub {
   /** What the hub says of the places of a task (none: it cannot say), and the places that were opened (`<id> <index>`). */
   docmapDoc: DocmapPlaces | null = null;
   docmapOpened: string[] = [];
-  async docmapPlaces(): Promise<DocmapPlaces | null> {
+  docmapAsked = 0;
+  async docmapPlaces(): Promise<DocmapPlaces> {
+    this.docmapAsked += 1;
+    if (!this.docmapDoc) throw new Error('no hub');
     return this.docmapDoc;
   }
   async openInDocmap(id: string, index: number): Promise<void> {

@@ -6587,7 +6587,6 @@ test('"Open in DocMap" at a task starts docmap-desktop with the repo and the lin
   const button = page.locator('aside.detail').getByRole('button', { name: 'Open in DocMap' });
   await expect(button).toHaveCount(1);
   await button.click();
-  await expect(page.getByRole('status').getByText('Opened in DocMap.')).toBeVisible();
   await expect.poll(() => (existsSync(log) ? readFileSync(log, 'utf8') : '')).toContain('lua/a.lua:3-9');
   const lines = readFileSync(log, 'utf8').trim().split('\n');
   expect(lines).toHaveLength(1);

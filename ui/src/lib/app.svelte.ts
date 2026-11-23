@@ -28,7 +28,7 @@ import {
 import { addOps, type AddTarget } from './picker';
 import { connectOp, edgeOp, parseGraphOrder, phaseOp, type DepEdge, type EdgeAction, type EdgeKind, type GraphOrder } from './depGraph';
 import { COLUMNS, columnsOf, isColumn, neighbourColumn, placeNear, stepInGroup, type Column, type Move } from './board';
-import { ApiError, type AgentKind, type AgentTab, type AiDesktop, type BoardRequest, type BoardSaved, type CheckAll, type DocmapPlaces, type SheetRunState, type Hub, type HubArea, type HubAreas, type SearchResult, type VaultList } from './api';
+import { ApiError, type AgentKind, type AgentTab, type AiDesktop, type BoardRequest, type BoardSaved, type CheckAll, type SheetRunState, type Hub, type HubArea, type HubAreas, type SearchResult, type VaultList } from './api';
 import { cacheableClass, cacheableList, type CachedList, type ListStore } from './cache';
 import type {
   DonePreview,
@@ -936,7 +936,7 @@ export class App {
   private loop: Promise<void> | null = null;
   private dirty = false;
 
-  constructor(private readonly env: Env) {
+  constructor(readonly env: Env) {
     this.mode = env.mode ?? null;
     this.readOnly = env.readOnly === true;
     // The day of the page's own clock (`env.now`), not of the machine: a page started on a set day (the tests, a
@@ -1473,7 +1473,7 @@ export class App {
     return `ui-${this.env.now().toString(36)}-${this.opCount}`;
   }
 
-  private say(kind: Toast['kind'], key: string, params: Record<string, string | number> = {}, undo?: Op[]): void {
+  say(kind: Toast['kind'], key: string, params: Record<string, string | number> = {}, undo?: Op[]): void {
     const text = translate(this.lang, key as Key, params);
     this.toast = { kind, text, ...(undo ? { undo } : {}) };
   }
@@ -4037,23 +4037,6 @@ export class App {
     } catch (error) {
       const message = error instanceof ApiError ? error.message : '';
       this.say('error', 'editor.failed', { message });
-    }
-  }
-
-  /** The places in code a task names, as the hub reads them; none where there is no hub to ask. */
-  async docmapPlaces(id: string): Promise<DocmapPlaces | null> {
-    if (!this.machineActions) return null;
-    return this.env.hub.docmapPlaces(id);
-  }
-
-  /** Open docmap-desktop at the `index`-th place of a task. The hub starts it; the answer says when it could not. */
-  async openInDocmap(id: string, index: number): Promise<void> {
-    try {
-      await this.env.hub.openInDocmap(id, index);
-      this.say('ok', 'docmap.opened');
-    } catch (error) {
-      const message = error instanceof ApiError ? error.message : '';
-      this.say('error', 'docmap.failed', { message });
     }
   }
 
