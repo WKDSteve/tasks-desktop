@@ -409,7 +409,7 @@ async function waitUntilReady(config: string, timeout: number): Promise<void> {
     }
     await new Promise((r) => setTimeout(r, 200));
   }
-  // The port answers before `hub.json` is written, and `tasks-hub open` (the
+  // The port answers before `hub.json` is written, and `tasks-desktop link` (the
   // pairing of the tests) needs that file.
   while (!existsSync(join(config, 'hub.json'))) {
     if (Date.now() > deadline) throw new Error('the hub answers but wrote no hub.json');
@@ -439,9 +439,9 @@ export function devicesCommand(config: string, ...args: string[]): string {
   return execFileSync(exe, ['devices', ...args], { env: env(config), encoding: 'utf8' });
 }
 
-/** A pairing link, as `tasks-hub open` prints it. */
+/** A pairing link, as `tasks-desktop link` prints it. */
 export function pairingLink(config: string): string {
-  const out = execFileSync(exe, ['open'], { env: env(config), encoding: 'utf8' });
+  const out = execFileSync(exe, ['link'], { env: env(config), encoding: 'utf8' });
   const link = out.trim().split(/\r?\n/)[0] ?? '';
   if (!link.startsWith(`${origin()}/#pair=`)) throw new Error(`unexpected link: ${link}`);
   return link;

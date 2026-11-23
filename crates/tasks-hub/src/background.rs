@@ -18,7 +18,7 @@ use crate::config::Env;
 const EXTRA_FILES: [&str; 3] = ["setup.json", "areas.json", "areas.proposed.json"];
 
 /// What the background commands know about this app.
-pub(crate) const APP: Background<'static> = Background {
+pub const APP: Background<'static> = Background {
     login: crate::LOGIN,
     extra_files: &EXTRA_FILES,
     uninstall_script: "scripts/uninstall",

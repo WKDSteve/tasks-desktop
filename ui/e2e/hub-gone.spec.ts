@@ -46,9 +46,9 @@ async function endOwn(hub: OwnHub): Promise<void> {
   clearTimeout(giveUp);
 }
 
-/** The link `tasks-hub open` prints for the hub of `config` on `port`. */
+/** The link `tasks-desktop link` prints for the hub of `config` on `port`. */
 function linkOf(config: string, port: number): string {
-  const out = execFileSync(exe, ['open'], { env: { ...env(config), TASKS_DESKTOP_PORT: String(port) }, encoding: 'utf8' });
+  const out = execFileSync(exe, ['link'], { env: { ...env(config), TASKS_DESKTOP_PORT: String(port) }, encoding: 'utf8' });
   const link = out.trim().split(/\r?\n/)[0] ?? '';
   if (!link.startsWith(`http://127.0.0.1:${port}/#pair=`)) throw new Error(`unexpected link: ${link}`);
   return link;
@@ -76,7 +76,7 @@ test('a page whose hub ends says so and keeps what was typed; a new hub takes th
     // The hub ends (as one in the background does ten minutes after its last page).
     await endOwn(hub);
     await expect(notice).toContainText('The hub is not running any more', { timeout: 30_000 });
-    await expect(notice).toContainText('tasks-hub start --open');
+    await expect(notice).toContainText('tasks-desktop start --open');
     await expect(notice).toHaveAttribute('role', 'status');
     // No toast in a loop, the page is not emptied, and what was typed stands.
     await expect(page.getByRole('alert').filter({ hasText: /\S/ })).toHaveCount(0);
@@ -86,7 +86,7 @@ test('a page whose hub ends says so and keeps what was typed; a new hub takes th
     // A new hub is started on the same port: another instance, it does not know the session of this tab.
     hub = await startOwn(config, port);
     await expect(notice).toContainText('The hub was started anew', { timeout: 30_000 });
-    await expect(notice).toContainText('tasks-hub open');
+    await expect(notice).toContainText('tasks-desktop link');
     await expect(page.getByRole('menubar')).toBeVisible();
     await expect(capture.getByLabel('Title')).toHaveValue('Typed before the hub ended');
     await expectAccessible(page, 'the page that waits for the link of a new hub');

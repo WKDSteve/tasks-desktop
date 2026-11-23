@@ -40,6 +40,28 @@ own: the app is the hub program and your browser. The newest green `main` is the
 
 ## Use
 
+`install` (every way: the install line, `scripts\build-install.ps1`, a double click that installs) makes the program a
+command named after the app, `tasks-desktop`, in every new terminal (PowerShell, cmd, Git Bash): a starter in
+`%LOCALAPPDATA%\appkit-family\bin`, which goes on the PATH of your user once; `uninstall` takes it away. It is the same
+program as `tasks-hub` below, so every command works under both names.
+
+```
+tasks-desktop                 start the hub when it does not run, and open the page
+tasks-desktop open            the same: open the page, starting the hub first when needed
+tasks-desktop start [--open]  run the hub in the background
+tasks-desktop stop | quit     end it
+tasks-desktop restart         stop, then start
+tasks-desktop status [--json] does it run (process, port, version)? exit code 0 yes, 1 no
+tasks-desktop link            print a one-time pairing link (for a phone, a tunnel or a script)
+tasks-desktop logs [-f]       the end of the log of the hub in the background
+tasks-desktop paths           where the program, the settings and the log are
+tasks-desktop help [<cmd>]    all commands, or one
+```
+
+These are the commands of every hub app of the family (`hub-desktop`, `rules-desktop`, `testing-desktop`). Exit codes:
+0 done, 1 failed, 2 wrong arguments. `open` printed the pairing link in earlier versions; that is `link` now, and
+`open --launch` still works and does what `open` does. The commands of tasks-desktop itself:
+
 ```
 tasks-hub serve [--port 1024-65535]   run the hub until Ctrl-C
 tasks-hub start [--open]               run the hub in the background (no window; log: hub.log
@@ -66,9 +88,7 @@ tasks-hub uninstall [--purge-settings] stop the hub, take away the login entry a
                                       vault); the program file is left for scripts/uninstall.*
                                       (it acts on the installation of this user, whichever copy
                                       of the program you run it from: a build in target/ included)
-tasks-hub open [--launch]             print a one-time pairing link for the running hub
-                                      (--launch also opens it in the default browser)
-tasks-hub open --phone [--no-window]  the same for a phone through Tailscale Serve, as a QR code
+tasks-hub open --phone [--no-window]  a pairing link for a phone through Tailscale Serve, as a QR code
 tasks-hub usage [--days=14]           on how many of the last days the interface was opened
 ```
 
@@ -197,7 +217,7 @@ The hub tries port 17615 first (the port is part of the origin, so it is
 fixed). If it is taken the hub starts on a free port and says so; the page
 then has another origin.
 
-`tasks-hub open` prints `http://127.0.0.1:PORT/#pair=<code>`. The code is
+`tasks-hub link` prints `http://127.0.0.1:PORT/#pair=<code>`. The code is
 good once and for 60 seconds.
 
 ```
@@ -226,7 +246,7 @@ The hub binds loopback only and takes no other `Host`, so nothing about it opens
 device, tunnel to it with the **same port on both ends**: the `Host` and the `Origin` have to name that port.
 
 ```
-ssh user@machine tasks-hub open
+ssh user@machine tasks-hub link
 ssh -N -L PORT:127.0.0.1:PORT user@machine
 ```
 
@@ -302,7 +322,7 @@ hub (which still listens on loopback only). Tell the hub that name before it sta
 forwards another HTTPS port than 443 to this hub, `tailscale serve --bg --https=8443 17615` and
 `<pc>.<tailnet>.ts.net:8443`, so that a second hub of the PC keeps 443; another value
 stops the start). The hub then also answers that host, but there only to paired phones: pairing a phone with a key
-works there, a plain pairing code does not, and neither does anything of the PC. `tasks-hub open` (with the same
+works there, a plain pairing code does not, and neither does anything of the PC. `tasks-hub link` (with the same
 variable set) prints the link for the phone too: `https://<pc>.<tailnet>.ts.net/m/#pair=<code>`.
 `tasks-hub open --phone` shows that link as a QR code for the phone's camera: in the terminal, black on white
 whatever the theme, and in a terminal also as a picture in a window (the one to scan when the terminal's font leaves
@@ -662,7 +682,7 @@ saved. When a hub answers again:
 - the same one (it was only out of reach): the page reads again and goes on by itself;
 - a new one (started anew, so it knows nothing of the old session): the page says that it needs the new link and
   keeps everything on the screen meanwhile. Come back to the old tab once the start has opened its own page: the old
-  tab takes that session over when it gets the focus. Or paste the link of `tasks-hub open` into the address bar of
+  tab takes that session over when it gets the focus. Or paste the link of `tasks-hub link` into the address bar of
   the old tab. Either way the page goes on where it stood, with what you typed.
 
 A session that the hub of the page itself refuses (it was ended there) still empties the page and asks to pair.

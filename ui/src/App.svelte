@@ -910,13 +910,13 @@
             <p role="alert">{t('state.needs_pairing.refused')}</p>
           {/if}
           <p>{t('state.needs_pairing.body')}</p>
-          <pre><code>tasks-hub open</code></pre>
+          <pre><code>tasks-desktop open</code></pre>
         </section>
       {:else if app.phase === 'offline'}
         <section class="card centered">
           <h1>{t('state.offline.title')}</h1>
           <p>{t('state.offline.body')}</p>
-          <pre><code>tasks-hub serve</code></pre>
+          <pre><code>tasks-desktop serve</code></pre>
         </section>
       {:else if app.phase === 'unavailable'}
         <section class="card centered">

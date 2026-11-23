@@ -109,7 +109,7 @@ async fn serve_open_and_pair() {
     }
 
     // `open` prints a link with the pairing code in the fragment.
-    let out = command(&config).arg("open").output().unwrap();
+    let out = command(&config).arg("link").output().unwrap();
     assert!(out.status.success(), "{out:?}");
     let url = String::from_utf8(out.stdout).unwrap();
     let url = url.trim();
@@ -236,7 +236,7 @@ async fn a_second_hub_does_not_start_and_a_stale_record_is_replaced() {
     hub.child.kill().unwrap();
     hub.child.wait().unwrap();
     assert!(config.join("hub.json").exists());
-    let stale_open = command(&config).arg("open").output().unwrap();
+    let stale_open = command(&config).arg("link").output().unwrap();
     assert!(!stale_open.status.success(), "open talked to a dead hub");
 
     // A new hub starts over the stale record.
@@ -279,13 +279,47 @@ fn bad_arguments_are_told() {
         vec!["serve", "--bind", "0.0.0.0"],
         vec!["open", "extra"],
         vec!["frobnicate"],
+        vec!["close"],
+        vec!["logs", "-n", "0"],
+        vec!["usage", "--days=0"],
+        vec!["install", "--bogus"],
+        vec!["help", "frobnicate"],
     ] {
         let out = command(&config).args(&args).output().unwrap();
-        assert!(!out.status.success(), "{args:?} was accepted");
+        assert_eq!(out.status.code(), Some(2), "{args:?}: {out:?}");
         assert!(!out.stderr.is_empty(), "{args:?} said nothing");
     }
     let out = command(&config).arg("--version").output().unwrap();
     assert!(out.status.success());
+}
+
+/// `help <command>` and `<command> --help`, for a common command, an own one and `open`, which is both.
+#[test]
+fn help_of_one_command_is_its_own_text() {
+    let config = temp_dir("help-one");
+    let text = |args: &[&str]| {
+        let out = command(&config).args(args).output().unwrap();
+        assert!(out.status.success(), "{args:?}: {out:?}");
+        String::from_utf8_lossy(&out.stdout).into_owned()
+    };
+    assert!(text(&["help", "status"]).starts_with("tasks-desktop status [--json]"));
+    assert!(text(&["link", "--help"]).starts_with("tasks-desktop link"));
+    assert!(text(&["help", "devices"]).contains("tasks-desktop devices revoke <id>"));
+    assert!(text(&["help", "areas"]).contains("tasks-desktop areas check"));
+    let open = text(&["help", "open"]);
+    assert!(
+        open.starts_with("tasks-desktop open") && open.contains("open --phone"),
+        "{open}"
+    );
+    let all = text(&["--help"]);
+    for word in [
+        "tasks-desktop restart",
+        "tasks-desktop setup",
+        "tasks-desktop testing unlink",
+        "Exit codes",
+    ] {
+        assert!(all.contains(word), "{word}: {all}");
+    }
 }
 
 #[test]
@@ -636,7 +670,7 @@ fn the_program_is_installed_under_one_name_whatever_the_download_was_called() {
 #[test]
 fn open_without_a_hub_says_so() {
     let config = temp_dir("nohub");
-    let out = command(&config).arg("open").output().unwrap();
+    let out = command(&config).arg("link").output().unwrap();
     assert!(!out.status.success());
     assert!(String::from_utf8_lossy(&out.stderr).contains("no hub"));
 }
@@ -837,8 +871,49 @@ fn start_runs_the_hub_in_the_background_and_stop_ends_it() {
         String::from_utf8_lossy(&again.stdout)
     );
 
-    // The log of the hub is in the config folder.
+    // The log of the hub is in the config folder, and `logs` shows its end.
     assert!(config.join("hub.log").is_file());
+    let logs = command(&config).args(["logs", "-n", "5"]).output().unwrap();
+    assert!(logs.status.success(), "{logs:?}");
+
+    // `status` names the hub that runs: exit code 0, its port, in text and in JSON.
+    let status = command(&config).arg("status").output().unwrap();
+    assert_eq!(status.status.code(), Some(0), "{status:?}");
+    let said = String::from_utf8_lossy(&status.stdout).into_owned();
+    assert!(
+        said.starts_with("tasks-desktop: running (process ")
+            && said.contains(&format!("port {port},")),
+        "{said}"
+    );
+    let json = command(&config)
+        .args(["status", "--json"])
+        .output()
+        .unwrap();
+    let doc: Value = serde_json::from_slice(&json.stdout).unwrap();
+    assert_eq!(doc["running"], true);
+    assert_eq!(doc["port"], port);
+
+    // `restart` ends the hub and starts another one.
+    let before = doc["pid"].clone();
+    let restarted = command(&config)
+        .env("TASKS_DESKTOP_PORT", port.to_string())
+        .arg("restart")
+        .output()
+        .unwrap();
+    assert!(restarted.status.success(), "{restarted:?}");
+    let after: Value = serde_json::from_slice(
+        &command(&config)
+            .args(["status", "--json"])
+            .output()
+            .unwrap()
+            .stdout,
+    )
+    .unwrap();
+    assert_eq!(after["running"], true, "{restarted:?}");
+    assert_ne!(
+        after["pid"], before,
+        "the hub after restart is a new process"
+    );
 
     let stopped = command(&config).arg("stop").output().unwrap();
     assert!(
@@ -847,8 +922,13 @@ fn start_runs_the_hub_in_the_background_and_stop_ends_it() {
         String::from_utf8_lossy(&stopped.stderr)
     );
     assert!(String::from_utf8_lossy(&stopped.stdout).contains("is stopped"));
-    let none = command(&config).arg("stop").output().unwrap();
+    // `quit` is `stop`; with nothing running it says so and succeeds, and `status` ends with 1.
+    let none = command(&config).arg("quit").output().unwrap();
+    assert!(none.status.success(), "{none:?}");
     assert!(String::from_utf8_lossy(&none.stdout).contains("no hub is running"));
+    let off = command(&config).arg("status").output().unwrap();
+    assert_eq!(off.status.code(), Some(1), "{off:?}");
+    assert!(String::from_utf8_lossy(&off.stdout).starts_with("tasks-desktop: not running\n"));
 }
 
 /// `start` with a short time alone (`TASKS_DESKTOP_ALONE_SECS`), on a port of its own.
@@ -923,7 +1003,7 @@ async fn a_hub_in_the_background_stays_while_a_page_is_connected_and_ends_after_
     start_in_background(&config, port, alone);
 
     // The page: a pairing link, its session, and a connection that stays open (as the event stream does).
-    let out = command(&config).arg("open").output().unwrap();
+    let out = command(&config).arg("link").output().unwrap();
     assert!(out.status.success(), "{out:?}");
     let url = String::from_utf8(out.stdout).unwrap();
     let code = url

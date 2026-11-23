@@ -57,7 +57,7 @@ answer for an unknown, a spent and an expired code is the same.
 
 ### How a browser gets a session
 
-1. `tasks-hub open` reads `hub.json` and `control.secret` from the config
+1. `tasks-hub link` (and `open`, which opens that link) reads `hub.json` and `control.secret` from the config
    folder, checks that the program on the port is this hub (same instance
    id) before it sends the secret anywhere, and asks for a pairing code.
 2. It prints `http://127.0.0.1:PORT/#pair=<code>`. The code is in the URL
@@ -996,14 +996,14 @@ To answer whether the interface is used, the hub keeps `usage.json` next to
 stream was open (a tab that stays open counts again each time its window
 gets the focus back after a pause of ten minutes). No task, area, title,
 token or time of day is in it, and it is never sent anywhere; `tasks-hub usage` prints it and deleting the file
-resets it. `tasks-hub open --launch` passes the browser only the hub's own
+resets it. `tasks-hub open` passes the browser only the hub's own
 link (`http://127.0.0.1:<port>/#pair=<hex>`, checked) and nothing else.
 
 ## What this does not protect against
 
 * **Another process of the same user.** It can read `control.secret`, or
   bind the port while the hub is not running (rule T2). The server cannot
-  tell that process from `tasks-hub open`. Mitigations that exist: the
+  tell that process from `tasks-hub link`. Mitigations that exist: the
   secret is only sent to a process that reports the instance id of
   `hub.json`, tokens are per run, and the port is fixed so the origin is
   stable.
@@ -1013,7 +1013,7 @@ link (`http://127.0.0.1:<port>/#pair=<hex>`, checked) and nothing else.
   pairing. It gains no access by that.
 * **An administrator**, who can take ownership of the file.
 * **The terminal and the browser history.** The pairing link lives in the
-  URL fragment; it ends up in the terminal that ran `tasks-hub open` and in
+  URL fragment; it ends up in the terminal that ran `tasks-hub link` and in
   the browser's history. That is why the code is single use and lives 60 s.
 * **A page script in the app's own origin.** A script in the page would own
   the session (the token is in `sessionStorage`). The policy above and the

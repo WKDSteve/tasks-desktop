@@ -117,7 +117,7 @@ void loadLang(state.lang)
     followTaskRoute(state, window);
   });
 
-// A link from `tasks-hub open` pasted into a tab that is already open changes only the fragment: no reload.
+// A link from `tasks-desktop link` pasted into a tab that is already open changes only the fragment: no reload.
 window.addEventListener('hashchange', () => {
   // A place typed into the address is not the pairing's: it stays (the history goes to it).
   const later = takePairingCode(window.location, window.history, undefined, { keepRoute: true });

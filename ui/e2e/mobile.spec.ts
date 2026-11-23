@@ -36,7 +36,7 @@ function watchConsole(page: import('@playwright/test').Page): string[] {
 test('the phone page pairs, shows only the classified areas and creates a task through the engine', async ({ page }) => {
   const problems = watchConsole(page);
   const { vault, config } = state();
-  // `tasks-hub open` prints the link of the desktop page; the phone opens the same code under /m/.
+  // `tasks-desktop link` prints the link of the desktop page; the phone opens the same code under /m/.
   const response = await page.goto(pairingLink(config).replace('/#pair=', '/m/#pair='));
   const csp = response?.headers()['content-security-policy'] ?? '';
   expect(csp).toContain("worker-src 'self'");

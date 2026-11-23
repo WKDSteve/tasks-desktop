@@ -128,7 +128,7 @@ try {
     Write-Host "Running in the background. Stop it with: & '$exe' stop"
   }
   else {
-    Write-Host 'Running until Ctrl-C; the pairing link is printed below (or: tasks-hub open in a second terminal).'
+    Write-Host 'Running until Ctrl-C; the pairing link is printed below (or: tasks-hub link in a second terminal).'
     & $exe serve
   }
 }

@@ -19,7 +19,7 @@ return {
     },
     {
       ask = "tasks-hub autostart on, signed out and in again: no console window at the login, and the hub runs"
-        .. " (tasks-hub open finds it)?",
+        .. " (tasks-hub status says it runs)?",
     },
     {
       ask = "tasks-hub stop ends the hub: afterwards no tasks-hub.exe and no nvim.exe of the hub is left in the Task"

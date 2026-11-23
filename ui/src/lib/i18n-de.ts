@@ -1433,7 +1433,7 @@ const de: Record<PageKey, string> = {
   'hub.gone.then': 'Diese Seite verbindet sich von selbst wieder, sobald der Hub antwortet.',
   'hub.replaced':
     'Der Hub wurde neu gestartet, und diese Seite ist noch mit dem alten gekoppelt. Komm in diesen Tab zurück, sobald der Start seine Seite geöffnet hat (dieser Tab übernimmt dann die Sitzung), oder füge den Link, den das hier ausgibt, in die Adresszeile dieses Tabs ein:',
-  'hub.replaced.refused': 'Der neue Hub hat diese Seite nicht angenommen. Hol dir einen frischen Link (tasks-hub open) und versuch es erneut.',
+  'hub.replaced.refused': 'Der neue Hub hat diese Seite nicht angenommen. Hol dir einen frischen Link (tasks-desktop link) und versuch es erneut.',
   'hub.unsaved': 'Was du getippt hast, steht noch da, ist aber noch nicht gespeichert.',
   'today.next': 'Nächster Task',
   'today.why.freed': 'Frei geworden: worauf er wartete, ist erledigt',

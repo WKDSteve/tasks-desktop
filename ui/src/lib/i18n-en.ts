@@ -1429,7 +1429,7 @@ const en = {
   'hub.gone.then': 'This page connects again by itself as soon as the hub answers.',
   'hub.replaced':
     'The hub was started anew, and this page is still paired with the one before. Come back to this tab once the start has opened its page (this tab then takes the session over), or paste the link this prints into the address bar of this tab:',
-  'hub.replaced.refused': 'The new hub did not take this page. Get a fresh link (tasks-hub open) and try again.',
+  'hub.replaced.refused': 'The new hub did not take this page. Get a fresh link (tasks-desktop link) and try again.',
   'hub.unsaved': 'What you typed is still here, but it is not saved yet.',
   'today.next': 'Next task',
   'today.why.freed': 'Freed: what it waited for is done',

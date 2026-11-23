@@ -77,7 +77,7 @@ describe('a page whose hub is gone', () => {
     await settle();
     expect(m.app.hubState).toBe('gone');
     expect(region().textContent).toContain(t(m, 'hub.gone'));
-    expect(region().querySelector('code')?.textContent).toBe('tasks-hub start --open');
+    expect(region().querySelector('code')?.textContent).toBe('tasks-desktop start --open');
     expect(region().textContent).toContain(t(m, 'hub.gone.then'));
     // What was typed stands, and is named as not saved.
     expect(m.app.drafts).toEqual({ 'pub/a': { prio: 1 } });
@@ -117,7 +117,7 @@ describe('a page whose hub is gone', () => {
     await vi.waitFor(() => expect(m.app.hubState).toBe('replaced'));
     await settle();
     expect(region().textContent).toContain(t(m, 'hub.replaced'));
-    expect(region().querySelector('code')?.textContent).toBe('tasks-hub open');
+    expect(region().querySelector('code')?.textContent).toBe('tasks-desktop link');
     expect(region().textContent).toContain(t(m, 'hub.unsaved'));
     expect(m.app.tasks.map((x) => x.id)).toEqual(['pub/a']);
     expect(m.app.drafts).toEqual({ 'pub/a': { prio: 1 } });
