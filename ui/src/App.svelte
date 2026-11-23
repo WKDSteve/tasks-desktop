@@ -76,9 +76,12 @@
   });
   let chordTimer: ReturnType<typeof setTimeout> | undefined;
   let searchBox = $state<HTMLInputElement | null>(null);
+  // The hints of the submenus of View come from a part loaded after the start (menuGroupHints.ts).
+  let groupHint = $state<(lang: string, group: string) => string>(() => '');
 
   onMount(() => {
     void app.start(code);
+    void import('./lib/menuGroupHints').then((m) => (groupHint = m.groupHint));
     const onFocus = () => void app.focused();
     window.addEventListener('focus', onFocus);
     // A middle click or Ctrl+click on a task opens it in a new tab, as a link does.
@@ -332,14 +335,14 @@
     return {
       kind: 'submenu',
       label: t('menu.sub.export'),
-      hint: t('hint.item.menu.sub.export'),
+      hint: groupHint(app.lang, 'export'),
       items: [
         { kind: 'info', label: t('menu.export_of', { view: hasKey(app.lang, `nav.${app.view}`) ? t(`nav.${app.view}` as Key) : app.view }) },
-        { kind: 'section', label: t('menu.sec.export_save') },
+        { kind: 'section', label: groupHint(app.lang, 'save') },
         ...all.slice(0, 3),
-        { kind: 'section', label: t('menu.sec.export_copy') },
+        { kind: 'section', label: groupHint(app.lang, 'copy') },
         ...all.slice(3, 6),
-        { kind: 'section', label: t('menu.sec.export_print') },
+        { kind: 'section', label: groupHint(app.lang, 'print') },
         ...all.slice(6),
       ],
     };
@@ -484,6 +487,7 @@
             return {
               kind: 'submenu',
               label: t(`menu.sub.${entry.group}` as Key),
+              hint: groupHint(app.lang, entry.group),
               items: entry.views.map((v) => viewItem(v.id, v.disabled)),
             };
           }),
