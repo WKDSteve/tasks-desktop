@@ -22,6 +22,8 @@
   import { shownIcon } from '../lib/icons';
   import { markHidden } from '../lib/text';
   import { pathSafetyText, type PathSafetyKey } from '../lib/pathSafetyTexts';
+  import { hasBlock, needsResult, withResult, type ExerciseAction } from '../lib/exercise';
+  import { exerciseWord, type ExerciseWord } from './pathExerciseWords';
   import {
     clickedState,
     cleanNote,
@@ -55,6 +57,8 @@
   const t = (key: Key, params: Record<string, string | number> = {}) => translate(app.lang, key, params);
   // The words of the safety question come with the chunk of the view (lib/pathSafetyTexts.ts).
   const ts = (key: PathSafetyKey, params: Record<string, string | number> = {}) => pathSafetyText(app.lang, key, params);
+  // The words of the task float come with its chunk (views/pathExerciseWords.ts).
+  const tx = (key: ExerciseWord, params: Record<string, string | number> = {}) => exerciseWord(app.lang, key, params);
 
   const MARKS: Record<PathNode['derived'], string> = { open: ' ', learned: '✓', seen: '~', dropped: '–', blocked: '!', partial: '◐' };
 
@@ -73,6 +77,8 @@
   // The point whose reason or note is being written (by its name, so that a read after a change elsewhere keeps the
   // field and what is typed), with what is typed.
   let editing = $state<{ id: string; kind: EditKind; state?: PointState; missing: boolean } | null>(null);
+  // The point whose task float is open (by its name, so that a read after a change keeps it).
+  let exercising = $state<string | null>(null);
   // The form of the levels of the open path (loaded when first opened; PathLevels.svelte).
   let editingLevels = $state(false);
   // What is typed into the open field (apart from `editing`, so that closing the field never leaves a binding on nothing).
@@ -92,6 +98,7 @@
   // next tick would be refused as a conflict, or set a state the point already has).
   const busy = $derived(app.saving || reading);
   const idOf = (node: PathNode): string => ids.get(node.index) ?? `#${node.index}`;
+  const exerciseNode = $derived(exercising === null ? undefined : doc?.nodes.find((n) => idOf(n) === exercising));
   const editingOf = (node: PathNode, kind: EditKind): boolean => editing?.kind === kind && editing.id === idOf(node);
   /** A leaf whose XP are its own to set here (a point whose task carries `xp:` takes the task's). */
   const ownsXp = (node: PathNode): boolean => node.children === 0 && node.xp_from !== 'task';
@@ -312,7 +319,82 @@
   function clickMark(node: PathNode): void {
     // The mark is never `disabled` (a disabled button drops the focus to the page): a click while busy is refused here.
     if (!node.state || refused()) return;
-    setState(node, clickedState(node.state));
+    const next = clickedState(node.state);
+    // A point whose proof is not written yet is not learned with a tick: the engine would refuse it, the float asks.
+    if (next === 'learned' && needsResult(node.note)) {
+      openExercise(node);
+      return;
+    }
+    setState(node, next);
+  }
+  // What had the focus when the float opened (the title, the mark or the menu of the point): it gets it back.
+  let exerciseOpener: HTMLElement | null = null;
+  function openExercise(node: PathNode): void {
+    const had = document.activeElement;
+    exerciseOpener = had instanceof HTMLElement && had !== document.body ? had : null;
+    exercising = idOf(node);
+  }
+  /** The float closes: the focus goes back to what opened it, else to the point's menu or mark, never to the page. */
+  async function closeExercise(): Promise<void> {
+    const node = exerciseNode;
+    const opener = exerciseOpener;
+    exercising = null;
+    exerciseOpener = null;
+    await tick();
+    if (opener?.isConnected) opener.focus();
+    else if (node) await focusPoint(node);
+  }
+  /**
+   * Writes what the float asked for: the result (the `**Ergebnis:**` line of the note) and then the state. The engine
+   * will take both in one `node_set` (`result` with `state`) once its contract has the field; until then it is two
+   * writes, the second on the version the first one wrote. Returns the reason in words when something was refused.
+   */
+  async function writeResult(node: PathNode, action: ExerciseAction): Promise<string | null> {
+    if (!doc) return t('paths.conflict');
+    if (refused()) return t(app.saving ? 'write.busy' : 'paths.busy_reading');
+    let reason: string | null = null;
+    const run = (op: Parameters<App['write']>[0][number]) => {
+      conflict = false;
+      return app.write([op], {
+        onAnswer: (answer) => {
+          const failed = answer.results.find((r) => !r.ok);
+          if (!failed) return false;
+          if (failed.error?.code === 'conflict') {
+            conflict = true;
+            reason = t('paths.conflict');
+            return true;
+          }
+          if (failed.error?.code === 'invalid_argument') {
+            const message = failed.error.message ?? '';
+            reason = /needs a result/.test(message) ? tx('ex.needs_result') : tx('ex.refused', { message });
+            return true;
+          }
+          return false;
+        },
+      });
+    };
+    let etag = doc.path.etag;
+    if (action.result !== undefined) {
+      const note = withResult(node.note ?? '', action.result);
+      if (note === null) return tx('ex.refused', { message: tx('ex.read_only') });
+      if (note !== (node.note ?? '')) {
+        const written = await run(noteOp(doc.path.id, etag, node, note));
+        if (!written || written.results.some((r) => !r.ok)) return reason ?? t('write.failed', { code: 'failed' });
+        etag = written.results[0]?.etag_after ?? etag;
+      }
+    }
+    if (action.state === undefined) return null;
+    if (closesSafety(node, action.state)) {
+      // The question of the safety point is asked in the list, as for a tick there; the float closes.
+      confirming = { id: idOf(node), state: action.state };
+      exercising = null;
+      exerciseOpener = null;
+      void focusField(`safety-no-${node.index}`);
+      return null;
+    }
+    const done = await run(stateOp(doc.path.id, etag, node, action.state));
+    if (!done || done.results.some((r) => !r.ok)) return reason ?? t('write.failed', { code: 'failed' });
+    return null;
   }
   function pick(node: PathNode, state: PointState): void {
     if (!needsReason(state)) {
@@ -465,6 +547,8 @@
         out.push({ id: state, label: t(`paths.menu.${state}` as Key), onselect: () => pick(node, state) });
       }
     }
+    // A point with a link has no title to click (the link opens): its task opens from the menu.
+    if (node.children === 0 && openableLink(node.link)) out.push({ id: 'exercise', label: tx('ex.open', { label: shownLabel(node) }), onselect: () => openExercise(node) });
     if (node.promoted === undefined) {
       const reason = writesNotes ? undefined : t('paths.note.read_only');
       out.push({
@@ -648,6 +732,26 @@
             {#if busy}<span class="busy" role="status">{app.saving ? t('paths.saving') : t('paths.reading')}</span>{/if}
           </div>
 
+          {#if exerciseNode}
+            {@const node = exerciseNode}
+            <Lazy
+              {app}
+              load={() => import('./PathExercise.svelte')}
+              extra={{
+                label: shownLabel(node),
+                note: node.note,
+                pointState: node.state,
+                stateWord: stateWord(node.derived),
+                marking: isMarkable(node) && node.state !== undefined,
+                writable: writesNotes,
+                busy,
+                act: (action: ExerciseAction) => writeResult(node, action),
+                onclose: () => void closeExercise(),
+              }}
+              onfailed={() => (exercising = null)}
+            />
+          {/if}
+
           <ul class="tree" aria-label={t('paths.tree', { title })}>
             {#each shown as node (node.index)}
               {@const label = shownLabel(node)}
@@ -698,6 +802,8 @@
                     {#if link}
                       <a href={link} target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer" aria-label={t('paths.link_of', { label })}>{label}</a
                       >{#if host}<span class="host">{` (${markHidden(host)})`}</span>{/if}
+                    {:else if !parent}
+                      <button type="button" class="link title-open" aria-haspopup="dialog" onclick={() => openExercise(node)}>{label}</button>
                     {:else}
                       {label}
                     {/if}
@@ -747,7 +853,7 @@
                 {#if node.reason}
                   <p class="reason">{t(node.state === 'blocked' ? 'paths.key' : 'paths.reason', { reason: markHidden(node.reason) })}</p>
                 {/if}
-                {#if node.note && !editingOf(node, 'note')}
+                {#if node.note && !editingOf(node, 'note') && !hasBlock(node.note)}
                   <p class="note" aria-label={t('paths.note_of', { label })}>{markHidden(node.note)}</p>
                 {/if}
 
@@ -1155,6 +1261,17 @@
   }
   .point[data-state='dropped'] .label {
     text-decoration: line-through;
+  }
+  .title-open {
+    font: inherit;
+    text-align: start;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: inherit;
+    cursor: pointer;
+    text-decoration: underline dotted;
+    text-underline-offset: 0.2em;
   }
   .label a {
     color: var(--accent);
