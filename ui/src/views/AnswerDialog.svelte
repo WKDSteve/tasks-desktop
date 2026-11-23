@@ -12,6 +12,9 @@
   let { app }: { app: App } = $props();
   const t = (key: Key, params: Record<string, string | number> = {}) => translate(app.lang, key, params);
 
+  // The words of the hand-over's title stand here, not in the language files: the start of the page does not carry them.
+  const handoffTitle = $derived(app.lang === 'de' ? 'Zusammenfassung der Übergabe' : 'Summary of the hand-over');
+
   let dialog: HTMLDialogElement | undefined = $state();
   const view = $derived(app.answer);
   const text = $derived(
@@ -34,7 +37,7 @@
   onclose={() => app.closeAnswer()}
 >
   {#if view}
-    <h2 id="answer-title">{t(view.kind === 'review-done' ? 'answer.title.review' : view.kind === 'handoff' ? 'answer.title.handoff' : 'answer.title.decision')}</h2>
+    <h2 id="answer-title">{view.kind === 'handoff' ? handoffTitle : t(view.kind === 'review-done' ? 'answer.title.review' : 'answer.title.decision')}</h2>
     <p class="what">{markHidden(view.title)} <code>{view.id}</code></p>
     {#if view.phase === 'waiting'}
       <p class="status" role="status">

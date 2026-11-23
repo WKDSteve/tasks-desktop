@@ -1864,7 +1864,6 @@ const en = {
   'hint.ui.detail.decision': 'An agent of ai-desktop prepares this decision: options with their consequences, a recommendation and open questions. It only reads; its proposal comes back here, nothing is written until you adopt it, and you decide in the question view.',
   'answer.title.review': 'Review against the acceptance',
   'answer.title.decision': 'Prepared decision',
-  'answer.title.handoff': 'Summary of the hand-over',
   'answer.sending': 'Sending it to ai-desktop ...',
   'answer.waiting': 'The agent is working on it (job {job}); this can take a few minutes. You may close this window: the job stays in ai-desktop.',
   'answer.confirm': 'This area is private or not classified, and the model of ai-desktop does not run on this machine. Send the task there anyway?',
