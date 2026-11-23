@@ -184,6 +184,20 @@ export function noteOp(id: string, etag: string | undefined, node: Pick<PathNode
   return { op: 'node_set', id, point: pointRef(node), note, ...match(etag) };
 }
 
+/**
+ * The operation that writes the result (the `**Ergebnis:**` line of the exercise block) of point `node` and, when given,
+ * its state in the same call (capability `node_result`): the engine writes the proof first, so one call closes the point.
+ */
+export function resultOp(
+  id: string,
+  etag: string | undefined,
+  node: Pick<PathNode, 'key' | 'index'>,
+  result: string,
+  state?: PointState,
+): Op {
+  return { op: 'node_set', id, point: pointRef(node), ...(state !== undefined ? { state } : {}), result, ...match(etag) };
+}
+
 /** The largest XP of one point the engine takes (`lernbaum.MAX_XP`). */
 export const XP_MAX = 100000;
 

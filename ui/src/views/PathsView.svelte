@@ -22,7 +22,7 @@
   import { shownIcon } from '../lib/icons';
   import { markHidden } from '../lib/text';
   import { pathSafetyText, type PathSafetyKey } from '../lib/pathSafetyTexts';
-  import { hasBlock, needsResult, withResult, type ExerciseAction } from '../lib/exercise';
+  import { hasBlock, needsResult, type ExerciseAction } from '../lib/exercise';
   import { exerciseWord, type ExerciseWord } from './pathExerciseWords';
   import {
     clickedState,
@@ -43,6 +43,7 @@
     progressParts,
     promoteOp,
     REASON_MAX,
+    resultOp,
     rewardOp,
     stateOp,
     taskXpOp,
@@ -345,17 +346,17 @@
     else if (node) await focusPoint(node);
   }
   /**
-   * Writes what the float asked for: the result (the `**Ergebnis:**` line of the note) and then the state. The engine
-   * will take both in one `node_set` (`result` with `state`) once its contract has the field; until then it is two
-   * writes, the second on the version the first one wrote. Returns the reason in words when something was refused.
+   * Writes what the float asked for: the result (the `**Ergebnis:**` line of the exercise block) and the state in ONE
+   * `node_set` (capability `node_result`): the engine writes the proof first, so a point is learned with it or not at all.
+   * Returns the reason in words when something was refused.
    */
   async function writeResult(node: PathNode, action: ExerciseAction): Promise<string | null> {
     if (!doc) return t('paths.conflict');
     if (refused()) return t(app.saving ? 'write.busy' : 'paths.busy_reading');
     let reason: string | null = null;
-    const run = (op: Parameters<App['write']>[0][number]) => {
+    const run = async (op: Parameters<App['write']>[0][number]): Promise<boolean> => {
       conflict = false;
-      return app.write([op], {
+      const written = await app.write([op], {
         onAnswer: (answer) => {
           const failed = answer.results.find((r) => !r.ok);
           if (!failed) return false;
@@ -372,28 +373,22 @@
           return false;
         },
       });
+      return written !== null && written.results.every((r) => r.ok);
     };
-    let etag = doc.path.etag;
-    if (action.result !== undefined) {
-      const note = withResult(node.note ?? '', action.result);
-      if (note === null) return tx('ex.refused', { message: tx('ex.read_only') });
-      if (note !== (node.note ?? '')) {
-        const written = await run(noteOp(doc.path.id, etag, node, note));
-        if (!written || written.results.some((r) => !r.ok)) return reason ?? t('write.failed', { code: 'failed' });
-        etag = written.results[0]?.etag_after ?? etag;
-      }
+    const { id, etag } = doc.path;
+    // A point under `{safety}` is closed only after the question in the list: the result is written now, the state then.
+    const asks = action.state !== undefined && closesSafety(node, action.state);
+    const state = asks ? undefined : action.state;
+    if (action.result !== undefined || state !== undefined) {
+      const op = action.result !== undefined ? resultOp(id, etag, node, action.result, state) : stateOp(id, etag, node, state!);
+      if (!(await run(op))) return reason ?? t('write.failed', { code: 'failed' });
     }
-    if (action.state === undefined) return null;
-    if (closesSafety(node, action.state)) {
-      // The question of the safety point is asked in the list, as for a tick there; the float closes.
+    if (asks && action.state !== undefined) {
       confirming = { id: idOf(node), state: action.state };
       exercising = null;
       exerciseOpener = null;
       void focusField(`safety-no-${node.index}`);
-      return null;
     }
-    const done = await run(stateOp(doc.path.id, etag, node, action.state));
-    if (!done || done.results.some((r) => !r.ok)) return reason ?? t('write.failed', { code: 'failed' });
     return null;
   }
   function pick(node: PathNode, state: PointState): void {

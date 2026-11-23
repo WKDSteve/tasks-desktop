@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { hasBlock, needsResult, parseExercise, withResult } from './exercise';
+import { hasBlock, needsResult, parseExercise } from './exercise';
 
 const BLOCK = [
   '**Aufgabe:** Lege in `~/cli-uebung` drei Dateien an',
@@ -38,24 +38,5 @@ describe('needsResult', () => {
   it('is false without a Nachweis line or without a block', () => {
     expect(needsResult('**Aufgabe:** a\n**Ergebnis:**')).toBe(false);
     expect(needsResult('plain')).toBe(false);
-  });
-});
-
-describe('withResult', () => {
-  it('fills an empty result line and keeps every other line', () => {
-    expect(withResult(BLOCK, '  total 12  ')).toBe(BLOCK.replace('**Ergebnis:**', '**Ergebnis:** total 12'));
-  });
-  it('replaces a result with its continuation lines, several lines allowed', () => {
-    const had = `${BLOCK} alt\nzweite Zeile`;
-    expect(withResult(had, 'neu\nmehr')).toBe(`${BLOCK} neu\nmehr`);
-  });
-  it('adds the line when the block has none, and clears it with an empty text', () => {
-    const without = BLOCK.replace('\n**Ergebnis:**', '');
-    expect(withResult(without, 'x')).toBe(`${without}\n**Ergebnis:** x`);
-    expect(withResult(`${BLOCK} alt`, '')).toBe(BLOCK);
-  });
-  it('refuses a note without a block and a text with a control character', () => {
-    expect(withResult('plain', 'x')).toBeNull();
-    expect(withResult(BLOCK, 'a\u0007b')).toBeNull();
   });
 });

@@ -116,24 +116,27 @@ describe('task float of a learning point', () => {
     expect(sentOps(m)).toEqual([]);
   });
 
-  it('writes the result into the note, then the state on the version the first write answered', async () => {
+  it('writes the result and the state in one node_set on the version read', async () => {
     const { m, page } = await show();
-    m.hub.ops_queue.push(answer([{ n: 1, op: 'node_set', id: 'all/cli', ok: true, outcome: 'changed', changed_ids: [], etag_after: 'e2' }]));
     const float = await openFloat(page, 'ls');
     type(float, 'total 12');
     button(float, 'data-exercise-learned').click();
-    await vi.waitFor(() => expect(sentOps(m)).toHaveLength(2));
-    const note = BLOCK.replace('**Ergebnis:**', '**Ergebnis:** total 12');
-    expect(sentOps(m)).toEqual([
-      { op: 'node_set', id: 'all/cli', point: 'ls', note, if_match: 'e1' },
-      { op: 'node_set', id: 'all/cli', point: 'ls', state: 'learned', if_match: 'e2' },
-    ]);
+    await vi.waitFor(() => expect(sentOps(m)).toHaveLength(1));
+    expect(sentOps(m)).toEqual([{ op: 'node_set', id: 'all/cli', point: 'ls', state: 'learned', result: 'total 12', if_match: 'e1' }]);
+  });
+
+  it('Save result writes the result alone, and leaves the float open', async () => {
+    const { m, page } = await show();
+    const float = await openFloat(page, 'ls');
+    type(float, 'halb fertig');
+    float.querySelector<HTMLButtonElement>('.actions button:not(.primary)')!.click();
+    await vi.waitFor(() => expect(sentOps(m)).toEqual([{ op: 'node_set', id: 'all/cli', point: 'ls', result: 'halb fertig', if_match: 'e1' }]));
+    expect((float as HTMLDialogElement).open).toBe(true);
   });
 
   it('says the refusal of the engine in words and stays open', async () => {
     const { m, page } = await show();
     m.hub.ops_queue.push(
-      answer([{ n: 1, op: 'node_set', ok: true, outcome: 'changed', changed_ids: [], etag_after: 'e2' }]),
       answer(
         [{ n: 1, op: 'node_set', ok: false, error: { code: 'invalid_argument', message: 'learned needs a result: write the **Ergebnis:** line under the point (LP-04)' } }],
         false,

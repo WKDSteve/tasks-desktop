@@ -116,7 +116,8 @@ export type Op =
   | { op: 'plan_close' | 'project_close'; id: string }
   /**
    * One learning point of a path (`point`: its key or `#<index>`): its state with the reason, or its note (capability
-   * `node_note`), on the version read. The engine judges both.
+   * `node_note`), or the `Ergebnis` of its exercise block (`result`, capability `node_result`; with `state` in one call,
+   * not together with `note`), on the version read. The engine judges all of it.
    */
   | {
       op: 'node_set';
@@ -125,6 +126,7 @@ export type Op =
       state?: 'open' | 'learned' | 'seen' | 'dropped' | 'blocked';
       reason?: string;
       note?: string;
+      result?: string;
       /** The point's own XP `{xp=N}` (capability `xp`); `xp_clear` removes them. */
       xp?: number;
       xp_clear?: true;

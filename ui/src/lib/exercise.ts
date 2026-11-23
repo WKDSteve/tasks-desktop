@@ -58,31 +58,3 @@ export function needsResult(note: string | undefined): boolean {
   const parts = parseExercise(note);
   return !!parts.nachweis && !parts.ergebnis;
 }
-
-const CONTROL = /[\u0000-\u0008\u000b-\u001f\u007f]/;
-
-/**
- * The note with its `**Ergebnis:**` part set to `text`: the part is replaced where it stands (its continuation lines
- * with it), or added after the last line. Every other line stays. `null` for a note without a block or a text with a
- * control character (the engine refuses both as well).
- */
-export function withResult(note: string, text: string): string | null {
-  if (!hasBlock(note)) return null;
-  const result = text.replace(/\r\n?/g, '\n').trim();
-  if (CONTROL.test(result)) return null;
-  const lines = note.replace(/\r\n?/g, '\n').split('\n');
-  while (lines.length > 0 && lines[lines.length - 1]!.trim() === '') lines.pop();
-  let first = -1;
-  let last = -1;
-  for (let i = 0; i < lines.length; i++) {
-    const label = LABEL_LINE.exec(lines[i]!)?.[1]?.trim().toLowerCase();
-    if (label === 'ergebnis' && first < 0) first = last = i;
-    else if (first >= 0 && i === last + 1 && label === undefined) last = i;
-    else if (first >= 0 && label !== undefined) break;
-  }
-  const written = result.split('\n');
-  written[0] = `**${LABELS.ergebnis}:**${written[0] !== '' ? ` ${written[0]}` : ''}`;
-  if (first >= 0) lines.splice(first, last - first + 1, ...written);
-  else lines.push(...written);
-  return lines.join('\n');
-}
