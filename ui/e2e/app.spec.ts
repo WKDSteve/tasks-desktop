@@ -201,6 +201,19 @@ async function selectCard(page: Page, card: Locator): Promise<void> {
 }
 
 /** Close the float of a task when one is open: the list behind it is not reached while it is. */
+/**
+ * Close the message of the last write (its × button) before a drag in the bottom left of the page: the message stands
+ * there and would take the drop. In the month grid that is the day of the last row's Monday (2026-11-23 was today and
+ * in that cell: the calendar tests ran red on that day only).
+ */
+async function closeToast(page: Page): Promise<void> {
+  const toast = page.locator('.toast');
+  await expect(async () => {
+    if ((await toast.count()) > 0) await toast.getByRole('button', { name: 'Close' }).click({ timeout: 1000 });
+    await expect(toast).toHaveCount(0, { timeout: 1000 });
+  }).toPass({ timeout: 10_000 });
+}
+
 async function closeFloat(page: Page): Promise<void> {
   const float = taskFloat(page);
   if ((await float.count()) === 0) return;
@@ -5550,6 +5563,10 @@ body
 });
 
 test('the calendar shows a task on its due day; dragging sets the date, dragging to the list takes it away', async ({ page }) => {
+  // The month and the list of the tasks without a date whole in the window: a drag that has to scroll between the
+  // chip (low in a long list) and today (in the last row) moves the page under the pressed mouse, and another chip
+  // is dragged (red on 2026-11-23, the Monday of the last row).
+  await page.setViewportSize({ width: 1280, height: 1600 });
   await watchViolations(page);
   await pair(page);
   const title = `Calendar drag ${Date.now()}`;
@@ -5575,6 +5592,7 @@ test('the calendar shows a task on its due day; dragging sets the date, dragging
   const loose = page.locator('aside.loose');
   const chip = loose.locator('.chip', { hasText: title });
   await expect(chip).toBeVisible();
+  await closeToast(page);
   await answered(page, () => chip.dragTo(today));
   expect(fileOf(), 'the task file').toBeDefined();
   await expect.poll(() => readFileSync(join(dir, fileOf()!), 'utf8')).toContain(`due: ${day}`);
@@ -5591,6 +5609,7 @@ test('the calendar shows a task on its due day; dragging sets the date, dragging
   await page.locator('label.mode select').first().selectOption('month');
 
   // Dragged back to the list the date is gone.
+  await closeToast(page);
   await answered(page, () => page.locator('td.today .chip.due', { hasText: title }).dragTo(loose));
   await expect.poll(() => readFileSync(join(dir, fileOf()!), 'utf8')).not.toContain('due:');
   await expect(loose.locator('.chip', { hasText: title })).toBeVisible();
@@ -7767,6 +7786,7 @@ test.describe('a finger', () => {
     expect(readFileSync(file, 'utf8')).not.toContain('due:');
 
     // Down on the grip, a little aside, then over today and up: the due date is written.
+    await closeToast(page);
     const again = await centre(row.locator('.grip'));
     await touch('touchStart', again);
     await touch('touchMove', { x: again.x + 8, y: again.y + 8 });
@@ -7778,6 +7798,7 @@ test.describe('a finger', () => {
     await expect(placed.locator('.grip')).toBeVisible({ timeout: WRITE_BUDGET });
 
     // And back onto the list of the tasks without a date: the date is gone.
+    await closeToast(page);
     const back = await centre(placed.locator('.grip'));
     await touch('touchStart', back);
     await touch('touchMove', { x: back.x + 8, y: back.y + 8 });
