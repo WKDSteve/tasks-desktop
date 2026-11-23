@@ -29,6 +29,14 @@
   const board = $derived(app.board);
 
   // The way to move a card without dragging, with a click (WCAG 2.5.7): the selected card, one column or one place.
+  /** Whether the keyboard (not a click) moved the focus to `el`; where the browser cannot say, it counts as the keyboard. */
+  function keyboardFocus(el: Element): boolean {
+    try {
+      return el.matches(':focus-visible');
+    } catch {
+      return true;
+    }
+  }
   const picked = $derived(app.tasks.find((x) => x.id === app.selectedId && isColumn(x.status) && app.shown.some((y) => y.id === x.id)));
   const columnName = (column: Column) => labelOf(app.lang, 'status', column);
 
@@ -303,10 +311,11 @@
                 class:before={over?.id === card.id && over.place === 'before'}
                 class:after={over?.id === card.id && over.place === 'after'}
                 aria-current={card.id === app.selectedId ? 'true' : undefined}
-                onfocus={() => {
-                  // Focus is selection: Tab to a card selects it, so the keys (Shift+J/K/H/L) and the move bar act on the
-                  // card the person is on (a screen reader says the focused card).
-                  if (app.selectedId !== card.id) app.select(card.id);
+                onfocus={(e) => {
+                  // Focus is selection when the keyboard moves it: Tab to a card selects it, so the keys (Shift+J/K/H/L) and
+                  // the move bar act on the card the person is on (a screen reader says the focused card). A click focuses a
+                  // card too, but that is a mark (Shift), a new tab (Ctrl) or the context menu, and keeps the selection.
+                  if (app.selectedId !== card.id && keyboardFocus(e.currentTarget)) app.select(card.id);
                 }}
                 draggable={!app.locked}
                 ondragstart={(e) => onDragStart(e, card.id)}

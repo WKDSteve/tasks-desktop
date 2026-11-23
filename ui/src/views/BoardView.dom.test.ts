@@ -98,13 +98,27 @@ describe('the move bar of the board', () => {
   });
 });
 
-describe('focus is selection on the board', () => {
-  it('selects the card the focus moves to, so the keys and the move bar act on it', async () => {
-    const { m, target } = await board([
-      card('pub/a', 'doing', 'doing|1', 'e1'),
-      card('pub/b', 'doing', 'doing|1', 'e2'),
-    ]);
-    const cardEl = (id: string) => target.querySelector<HTMLButtonElement>(`[data-card="${id}"]`)!;
+describe('focus is selection on the board, when the keyboard moves it', () => {
+  // jsdom has no focus modality: `:focus-visible` is what the stand-in says (the keyboard moved the focus, or a click did).
+  const realMatches = Element.prototype.matches;
+  let byKeyboard = true;
+  const stub = function (this: Element, selector: string): boolean {
+    return selector === ':focus-visible' ? byKeyboard : realMatches.call(this, selector);
+  };
+  afterEach(() => {
+    Element.prototype.matches = realMatches;
+    byKeyboard = true;
+  });
+
+  async function twoCards() {
+    Element.prototype.matches = stub as typeof Element.prototype.matches;
+    const made = await board([card('pub/a', 'doing', 'doing|1', 'e1'), card('pub/b', 'doing', 'doing|1', 'e2')]);
+    const cardEl = (id: string) => made.target.querySelector<HTMLButtonElement>(`[data-card="${id}"]`)!;
+    return { ...made, cardEl };
+  }
+
+  it('selects the card the keyboard moves the focus to, so the keys and the move bar act on it', async () => {
+    const { m, cardEl } = await twoCards();
     expect(m.app.selectedId).toBeNull();
     cardEl('pub/a').focus();
     flushSync();
@@ -115,5 +129,14 @@ describe('focus is selection on the board', () => {
     expect(m.app.selectedId).toBe('pub/b');
     expect(cardEl('pub/a').getAttribute('aria-current')).toBeNull();
     expect(cardEl('pub/b').getAttribute('aria-current')).toBe('true');
+  });
+
+  it('does not select a card a click focuses (a mark with Shift, a new tab with Ctrl, the context menu)', async () => {
+    const { m, cardEl } = await twoCards();
+    byKeyboard = false;
+    cardEl('pub/a').focus();
+    flushSync();
+    expect(m.app.selectedId).toBeNull();
+    expect(cardEl('pub/a').getAttribute('aria-current')).toBeNull();
   });
 });
