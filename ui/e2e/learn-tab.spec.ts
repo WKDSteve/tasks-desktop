@@ -30,13 +30,13 @@ const bar = (page: Page) => page.getByRole('menubar');
 test('the tab Learning plans: after View, the learning paths with the dot of the view shown, by keys, axe', async ({ page }) => {
   const problems = await pair(page, '/#view=list');
   const triggers = bar(page).locator('button.mb-trigger');
-  await expect(triggers).toHaveText(['Work', 'Project', 'View', 'Learning plans', 'Options', 'Help']);
+  await expect(triggers).toHaveText(['Work', 'Project', /^\W*View$/, 'Learning plans', 'Options', 'Help']);
   const tab = bar(page).getByRole('menuitem', { name: 'Learning plans', exact: true });
   // The list is shown: no dot on the tab.
   await expect(tab.locator('.mb-current')).toHaveCount(0);
 
   // View has no learning paths any more.
-  await bar(page).getByRole('menuitem', { name: 'View', exact: true }).click();
+  await bar(page).getByRole('menuitem', { name: /^View(,|$)/ }).click();
   await expect(page.getByRole('menu', { name: 'View' })).toBeVisible();
   await expect(page.getByRole('menuitemradio', { name: 'Learning paths' })).toHaveCount(0);
   await expect(page.getByRole('menuitemradio', { name: 'Competence map' })).toHaveCount(0);
@@ -72,7 +72,7 @@ test('the tab Learning plans: after View, the learning paths with the dot of the
   await expect(page).toHaveURL(/#view=paths/);
 
   // By keys: from View, Right goes to the tab; Down opens it on its first item; the view shown is checked.
-  await bar(page).getByRole('menuitem', { name: 'View', exact: true }).focus();
+  await bar(page).getByRole('menuitem', { name: /^View(,|$)/ }).focus();
   await page.keyboard.press('ArrowRight');
   await expect(page.getByRole('menuitem', { name: 'Learning plans, current: Learning paths' })).toBeFocused();
   await page.keyboard.press('ArrowDown');
@@ -83,7 +83,7 @@ test('the tab Learning plans: after View, the learning paths with the dot of the
   await expect(menu).toBeHidden();
 
   // Back to the list: the dot goes.
-  await bar(page).getByRole('menuitem', { name: 'View', exact: true }).click();
+  await bar(page).getByRole('menuitem', { name: /^View(,|$)/ }).click();
   await page.getByRole('menuitemradio', { name: 'List' }).click();
   await expect(tab).toBeVisible();
   await expect(tab.locator('.mb-current')).toHaveCount(0);
@@ -99,7 +99,7 @@ test('a link to a view of the tab opens it, also pasted into the open page; the 
   await expect(page.getByRole('menuitem', { name: 'Learning plans, current: Learning statistics' })).toBeVisible();
 
   // The palette: "Go to Overview of the learning plans" from another view.
-  await bar(page).getByRole('menuitem', { name: 'View', exact: true }).click();
+  await bar(page).getByRole('menuitem', { name: /^View(,|$)/ }).click();
   await page.getByRole('menuitemradio', { name: 'List' }).click();
   await page.keyboard.press('Control+k');
   const palette = page.getByRole('dialog');

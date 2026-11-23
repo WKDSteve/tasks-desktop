@@ -88,7 +88,7 @@ test('the search finds a word only the text holds, and the page names the web mo
   await page.getByRole('button', { name: /Choose folder|Ordner wählen/ }).click();
   await expect(page.getByText('Eta tests').first()).toBeVisible({ timeout: 30_000 });
 
-  await page.getByRole('menuitem', { name: /^(View|Ansicht)$/ }).click();
+  await page.getByRole('menuitem', { name: /^(View|Ansicht)(,|$)/ }).click();
   await page.getByRole('menuitemradio', { name: /^(List|Liste)$/ }).click();
   await page.getByRole('searchbox').first().fill('QuokkaBody');
   const hit = page.locator('button.hit', { hasText: 'cascade.nvim/web-search-e2e' });

@@ -27,7 +27,7 @@ const classes = (areas: Record<string, string>, extra: Record<string, unknown> =
   JSON.stringify({ schema: 1, areas: Object.fromEntries(Object.entries(areas).map(([name, cls]) => [name, { class: cls }])), ...extra });
 
 async function showList(page: Page): Promise<void> {
-  await page.getByRole('menuitem', { name: /^(View|Ansicht)$/ }).click();
+  await page.getByRole('menuitem', { name: /^(View|Ansicht)(,|$)/ }).click();
   await page.getByRole('menuitemradio', { name: /^(List|Liste)$/ }).click();
   await expect(page.locator('button.row').first()).toBeVisible();
 }

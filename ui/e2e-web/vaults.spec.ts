@@ -4,6 +4,7 @@
 
 import { expect, test, type Page } from '@playwright/test';
 import { askedFor, closeFloat, dropAccess, fakeFolders, pageUrl, pickNext, vaultFiles, violations, watchPage } from './page';
+import { chooseFromMenu } from '../e2e/menu';
 
 test.use({ locale: 'en-US' });
 
@@ -26,8 +27,7 @@ async function projectMenu(page: Page): Promise<void> {
 
 async function chooseView(page: Page, item: string): Promise<void> {
   await closeFloat(page);
-  await page.getByRole('menuitem', { name: 'View', exact: true }).click();
-  await page.getByRole('menuitemradio', { name: item, exact: true }).click();
+  await chooseFromMenu(page, 'View', item);
 }
 
 /** Read `name` through the menu: the page loads again and shows the vault. */

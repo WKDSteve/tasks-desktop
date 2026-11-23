@@ -9,6 +9,7 @@ import { expect, test, type Locator, type Page } from '@playwright/test';
 import { expectAccessible } from '../e2e/a11y';
 import { HOSTILE } from '../e2e/hub';
 import { closeFloat, editOnDisk, openVault, vaultFiles, violations, watchPage, type Watch } from './page';
+import { chooseFromMenu } from '../e2e/menu';
 
 test.use({ locale: 'en-US' });
 
@@ -55,8 +56,7 @@ async function reopen(page: Page): Promise<void> {
 
 async function chooseView(page: Page, menu: string, item: string): Promise<void> {
   await closeFloat(page);
-  await page.getByRole('menuitem', { name: menu, exact: true }).click();
-  await page.getByRole('menuitemradio', { name: item, exact: true }).click();
+  await chooseFromMenu(page, menu, item);
 }
 
 async function showList(page: Page): Promise<void> {
@@ -456,8 +456,8 @@ test('the German page has no violations either, and the name of the app stays', 
   // The icons are in the file: the bar and the tab name a data: URL, and the policy lets it through.
   await expect.poll(() => page.locator('.kit-brand img').evaluate((i: HTMLImageElement) => i.naturalWidth)).toBeGreaterThan(0);
   await expect(page.locator('head link[rel="icon"]')).toHaveAttribute('href', /^data:image\/svg\+xml/);
-  await expect(page.getByRole('menubar').getByRole('menuitem')).toHaveText(['Arbeit', 'Projekt', 'Ansicht', 'Lernpläne', 'Optionen', 'Hilfe']);
-  await page.getByRole('menuitem', { name: 'Ansicht', exact: true }).click();
+  await expect(page.getByRole('menubar').getByRole('menuitem')).toHaveText(['Arbeit', 'Projekt', /^\W*Ansicht$/, 'Lernpläne', 'Optionen', 'Hilfe']);
+  await page.getByRole('menuitem', { name: /^Ansicht(,|$)/ }).click();
   await page.getByRole('menuitemradio', { name: 'Liste', exact: true }).click();
   await expect(page.locator('button.row').first()).toBeVisible();
   await expectAccessible(page, 'the German list');

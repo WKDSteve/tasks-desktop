@@ -15,7 +15,7 @@ async function openVault(page: Page, files: Record<string, string> = vaultFiles(
 async function showList(page: Page): Promise<void> {
   // The task just made opens in its float over the list: it is closed first.
   await closeFloat(page);
-  await page.getByRole('menuitem', { name: /^(View|Ansicht)$/ }).click();
+  await page.getByRole('menuitem', { name: /^(View|Ansicht)(,|$)/ }).click();
   await page.getByRole('menuitemradio', { name: /^(List|Liste)$/ }).click();
   await expect(page.locator('button.row').first()).toBeVisible();
 }

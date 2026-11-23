@@ -10,6 +10,7 @@ import { expect, isMachineFault, test } from './fixtures';
 import { expectAccessible, violations, watchViolations } from './a11y';
 import { STATE } from './global';
 import { ABNAHME_SLUG, HAND_KEYS_SLUG, HAND_SLUG, MIXED_SLUG, origin, pairingLink, pickedFolder, removeFile } from './hub';
+import { chooseFromMenu, openExportMenu } from './menu';
 
 test.use({ locale: 'en-US' });
 
@@ -50,8 +51,7 @@ async function prepare(page: Page): Promise<void> {
 /** Choose a view in the menu bar (the labels are the page's own language); a float of a task is closed first. */
 async function chooseView(page: Page, menu: string, item: string): Promise<void> {
   await closeFloat(page);
-  await page.getByRole('menuitem', { name: menu, exact: true }).click();
-  await page.getByRole('menuitemradio', { name: item, exact: true }).click();
+  await chooseFromMenu(page, menu, item);
 }
 
 async function showList(page: Page): Promise<void> {
@@ -728,7 +728,7 @@ test('the board is the built-in view of the views: g b shows it in their bar, it
   await choice.selectOption('@board');
   await expect(page.getByRole('group', { name: 'Board' })).toBeVisible();
   await expect(page.getByRole('menuitemradio', { name: 'Board', exact: true })).toHaveCount(0);
-  await page.getByRole('menuitem', { name: 'View', exact: true }).click();
+  await page.getByRole('menuitem', { name: /^View(,|$)/ }).click();
   await expect(page.getByRole('menuitemradio', { name: 'Board', exact: true })).toHaveAttribute('aria-checked', 'true');
   await page.keyboard.press('Escape');
 
@@ -1155,7 +1155,7 @@ test('the export: the button of a view, the View menu and the palette take what 
     // the overview's list of doing tasks is dragged in by another test, and a row coming and going there moves it.)
     await chooseView(page, 'View', 'Board');
     await expect(page.locator('.foldall details.export summary')).toBeVisible();
-    await page.getByRole('menuitem', { name: 'View', exact: true }).click();
+    await openExportMenu(page);
     const [csv] = await Promise.all([
       page.waitForEvent('download'),
       page.getByRole('menuitem', { name: 'Save tasks as CSV file ...', exact: true }).click(),
@@ -2212,25 +2212,25 @@ test('the page loads only the language it shows, and the other one when the pers
   });
   await pair(page);
   const bar = page.getByRole('menubar').getByRole('menuitem');
-  await expect(bar).toHaveText(['Work', 'Project', 'View', 'Learning plans', 'Options', 'Help']);
+  await expect(bar).toHaveText(['Work', 'Project', /^\W*View$/, 'Learning plans', 'Options', 'Help']);
   expect(words).toEqual(['i18n-en']);
   await page.getByRole('menuitem', { name: 'Options' }).click();
   await page.getByRole('menuitemradio', { name: 'Deutsch' }).click();
   await expect.poll(() => words).toEqual(['i18n-en', 'i18n-de']);
   // While German loads, the page stays English: never a key in place of a word.
-  await expect(bar).toHaveText(['Work', 'Project', 'View', 'Learning plans', 'Options', 'Help']);
+  await expect(bar).toHaveText(['Work', 'Project', /^\W*View$/, 'Learning plans', 'Options', 'Help']);
   release();
-  await expect(bar).toHaveText(['Arbeit', 'Projekt', 'Ansicht', 'Lernpläne', 'Optionen', 'Hilfe']);
+  await expect(bar).toHaveText(['Arbeit', 'Projekt', /^\W*Ansicht$/, 'Lernpläne', 'Optionen', 'Hilfe']);
   // A reload starts in German, with the German words alone.
   await page.unroute(/\/assets\/i18n-de-[^/]+\.js$/);
   words.length = 0;
   await page.reload();
-  await expect(bar).toHaveText(['Arbeit', 'Projekt', 'Ansicht', 'Lernpläne', 'Optionen', 'Hilfe']);
+  await expect(bar).toHaveText(['Arbeit', 'Projekt', /^\W*Ansicht$/, 'Lernpläne', 'Optionen', 'Hilfe']);
   expect(words).toEqual(['i18n-de']);
   // Back to English for the tests after this one in the same profile.
   await page.getByRole('menuitem', { name: 'Optionen' }).click();
   await page.getByRole('menuitemradio', { name: 'English' }).click();
-  await expect(bar).toHaveText(['Work', 'Project', 'View', 'Learning plans', 'Options', 'Help']);
+  await expect(bar).toHaveText(['Work', 'Project', /^\W*View$/, 'Learning plans', 'Options', 'Help']);
 });
 
 test('the German page has no violations either', async ({ page }) => {
@@ -2247,7 +2247,7 @@ test('the German page has no violations either', async ({ page }) => {
   // Its icon is really drawn: the policy of the page lets it through.
   await expect.poll(() => page.locator('.kit-brand img').evaluate((i: HTMLImageElement) => i.naturalWidth)).toBeGreaterThan(0);
   const bar = page.getByRole('menubar').getByRole('menuitem');
-  await expect(bar).toHaveText(['Arbeit', 'Projekt', 'Ansicht', 'Lernpläne', 'Optionen', 'Hilfe']);
+  await expect(bar).toHaveText(['Arbeit', 'Projekt', /^\W*Ansicht$/, 'Lernpläne', 'Optionen', 'Hilfe']);
   await showListDe(page);
   const result = await new AxeBuilder({ page }).analyze();
   expect(result.violations, JSON.stringify(result.violations, null, 1)).toEqual([]);
@@ -2361,10 +2361,10 @@ test('the tiles of the overview can be put in another order with the keys, the o
   await expect.poll(order).toEqual(before);
   await page.locator(`section[data-tile="${before[0]}"] button[data-nudge="down"]`).click();
   await expect.poll(order).toEqual(after);
-  await page.getByRole('menuitem', { name: 'View' }).click();
+  await page.getByRole('menuitem', { name: 'Options' }).click();
   await page.getByRole('menuitem', { name: 'Reset the order of the tiles' }).click();
   await expect.poll(order).toEqual(before);
-  await page.getByRole('menuitem', { name: 'View' }).click();
+  await page.getByRole('menuitem', { name: 'Options' }).click();
   await expect(page.getByRole('menuitem', { name: 'Reset the order of the tiles' })).toBeDisabled();
 });
 
@@ -2454,7 +2454,7 @@ test('the start page has a small summary of today: tasks finished, made and chan
   await expect(dialog).toHaveCount(0);
   // Making a task shows it in the list, in its float: back to the start page.
   await closeFloat(page);
-  await page.getByRole('menuitem', { name: 'View', exact: true }).click();
+  await page.getByRole('menuitem', { name: /^View(,|$)/ }).click();
   await page.getByRole('menuitemradio', { name: 'Today', exact: true }).click();
   await expect.poll(() => figure('created')).toBe(before.created + 1);
 
@@ -2465,7 +2465,7 @@ test('the start page has a small summary of today: tasks finished, made and chan
   const done = page.getByRole('dialog', { name: 'Finish this task?' });
   await done.getByRole('button', { name: 'Finish', exact: true }).click();
   await expect(done).toHaveCount(0);
-  await page.getByRole('menuitem', { name: 'View', exact: true }).click();
+  await page.getByRole('menuitem', { name: /^View(,|$)/ }).click();
   await page.getByRole('menuitemradio', { name: 'Today', exact: true }).click();
   await expect.poll(() => figure('finished')).toBe(before.finished + 1);
 
@@ -3051,9 +3051,9 @@ test('every entry of the header explains itself on hover: the six menus and the 
   const entries = [
     [page.getByRole('menuitem', { name: 'Work', exact: true }), /Create, find and edit tasks/],
     [page.getByRole('menuitem', { name: 'Project', exact: true }), /vault, the plan and the export/],
-    [page.getByRole('menuitem', { name: 'View', exact: true }), /Switch the view/],
+    [page.getByRole('menuitem', { name: /^View(,|$)/ }), /Switch the view/],
     [page.getByRole('menuitem', { name: 'Learning plans', exact: true }), /views of the learning plans/],
-    [page.getByRole('menuitem', { name: 'Options', exact: true }), /language and how the page behaves/],
+    [page.getByRole('menuitem', { name: 'Options', exact: true }), /the look and how the page behaves/],
     [page.getByRole('menuitem', { name: 'Help', exact: true }), /About this app/],
     [page.locator('header .conn'), /gets every change of the vault at once/],
   ] as const;
@@ -3100,7 +3100,7 @@ test('the menus are Tasks, Project, View, Options and Help, with sections and th
   await pair(page);
   await showList(page);
   const bar = page.getByRole('menubar').getByRole('menuitem');
-  await expect(bar).toHaveText(['Work', 'Project', 'View', 'Learning plans', 'Options', 'Help']);
+  await expect(bar).toHaveText(['Work', 'Project', /^\W*View$/, 'Learning plans', 'Options', 'Help']);
   // The name of the app is no name of a menu too: one word must not stand twice in the bar.
   const brandName = (await page.locator('.kit-brand').getAttribute('aria-label')) ?? '';
   expect(await bar.allTextContents()).not.toContain(brandName);
@@ -3136,13 +3136,13 @@ test('the menus are Tasks, Project, View, Options and Help, with sections and th
   await expect(project.getByRole('menuitem', { name: 'Read the vault again' })).toBeVisible();
   await page.keyboard.press('Escape');
 
-  // View holds the theme, Options the language.
-  await page.getByRole('menuitem', { name: 'View', exact: true }).click();
-  await expect(page.getByRole('menuitemradio', { name: 'Dark' })).toBeVisible();
+  // Options holds the theme and the language; View holds none of them.
+  await page.getByRole('menuitem', { name: /^View(,|$)/ }).click();
+  await expect(page.getByRole('menuitemradio', { name: 'Dark' })).toHaveCount(0);
   await page.keyboard.press('Escape');
   await page.getByRole('menuitem', { name: 'Options', exact: true }).click();
   await expect(page.getByRole('menuitemradio', { name: 'Deutsch' })).toBeVisible();
-  await expect(page.getByRole('menuitemradio', { name: 'Dark' })).toHaveCount(0);
+  await expect(page.getByRole('menuitemradio', { name: 'Dark' })).toBeVisible();
 });
 
 test('the menu bar opens with the keyboard, switches views, language and theme', async ({ page }) => {
@@ -3181,7 +3181,7 @@ test('the menu bar opens with the keyboard, switches views, language and theme',
   await expect(page.getByRole('menuitem', { name: 'Help' })).toBeFocused();
 
   expect(await violations(page)).toEqual([]);
-  await page.getByRole('menuitem', { name: 'View', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Options', exact: true }).click();
   await page.getByRole('menuitemradio', { name: 'Dark' }).click();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
 
@@ -6931,7 +6931,7 @@ test('the name at the left of the bar leads back to today and says so on hover',
   await brand.hover();
   await expect(page.locator('#hint-tip')).toHaveText(/Back to today/);
   await brand.click();
-  await page.getByRole('menuitem', { name: 'View', exact: true }).click();
+  await page.getByRole('menuitem', { name: /^View(,|$)/ }).click();
   await expect(page.getByRole('menuitemradio', { name: 'Today', exact: true })).toBeChecked();
 });
 
@@ -8383,7 +8383,7 @@ test('with the option to save with a button, the fields of a task are held until
   await expect(draftMark).toContainText('✎ 2');
   // And its card on the board; back in the list the draft is still there.
   await closeFloat(page);
-  await page.getByRole('menuitem', { name: 'View', exact: true }).click();
+  await page.getByRole('menuitem', { name: /^View(,|$)/ }).click();
   await page.getByRole('menuitemradio', { name: 'Board', exact: true }).click();
   await expect(page.locator(`[data-card="${id}"] .tag.draft`)).toContainText('✎ 2');
   await showList(page);
@@ -8619,21 +8619,21 @@ test('no view makes the window itself scroll: a hidden label of a row stays insi
 test('a middle click on a view of the menu opens it in a new tab, paired; this tab keeps its view', async ({ page, context }) => {
   await pair(page);
   await showList(page);
-  await page.getByRole('menuitem', { name: 'View', exact: true }).click();
+  await page.getByRole('menuitem', { name: /^View(,|$)/ }).click();
   const [tab] = await Promise.all([
     context.waitForEvent('page'),
     page.getByRole('menuitemradio', { name: 'Plan', exact: true }).click({ button: 'middle' }),
   ]);
   // The new tab has the session of this one (a copy of its session storage) and opens on the plan.
   await expect(tab.locator('.stage-list').first()).toBeVisible();
-  await expect(tab.getByRole('menuitem', { name: 'View', exact: true })).toBeVisible();
+  await expect(tab.getByRole('menuitem', { name: /^View(,|$)/ })).toBeVisible();
   // Its address names its place, so that a reload of it stays there.
   expect(new URL(tab.url()).hash).toBe('#view=plan');
   await tab.close();
   await expect(page.locator('button.row').first()).toBeVisible();
   expect(await page.evaluate(() => localStorage.getItem('tasks-desktop.view'))).toBe('list');
   // Ctrl+Enter does the same from the keyboard.
-  await page.getByRole('menuitem', { name: 'View', exact: true }).click();
+  await page.getByRole('menuitem', { name: /^View(,|$)/ }).click();
   await page.getByRole('menuitemradio', { name: 'Inbox', exact: true }).focus();
   const [next] = await Promise.all([context.waitForEvent('page'), page.keyboard.press('Control+Enter')]);
   await expect(next.getByRole('region', { name: 'Inbox' })).toBeVisible();
@@ -8725,7 +8725,7 @@ test('Defaults: start view, order and filter are set in a dialog, hold after a r
   await page.keyboard.press('Escape');
   await page.goto('/');
   await expect(page.getByRole('menubar')).toBeVisible();
-  await page.getByRole('menuitem', { name: 'View', exact: true }).click();
+  await page.getByRole('menuitem', { name: /^View(,|$)/ }).click();
   await expect(page.getByRole('menuitemradio', { name: 'Plan', exact: true })).toHaveAttribute('aria-checked', 'true');
   await page.keyboard.press('Escape');
   expect((await prefsOf()).filter ?? '').not.toContain('"open"');

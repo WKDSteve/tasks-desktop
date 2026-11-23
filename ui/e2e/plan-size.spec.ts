@@ -48,10 +48,10 @@ async function bigSnapshot(page: Page, n: number, planned = 0): Promise<void> {
 
 /** Open the plan view from the list. */
 async function openPlan(page: Page): Promise<void> {
-  await page.getByRole('menuitem', { name: 'View', exact: true }).click();
+  await page.getByRole('menuitem', { name: /^View(,|$)/ }).click();
   await page.getByRole('menuitemradio', { name: 'List', exact: true }).click();
   await expect(page.locator('button.row').first()).toBeVisible();
-  await page.getByRole('menuitem', { name: 'View', exact: true }).click();
+  await page.getByRole('menuitem', { name: /^View(,|$)/ }).click();
   await expect(page.getByRole('menuitemradio', { name: 'Plan', exact: true })).toBeVisible();
 }
 

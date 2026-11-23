@@ -4,6 +4,7 @@
 import { expect, test } from '@playwright/test';
 import { expectAccessible } from '../e2e/a11y';
 import { openVault, pageUrl, vaultFiles, watchPage } from './page';
+import { menuTab, submenu } from '../e2e/menu';
 
 test('the defaults dialog of the web variant: a start view that holds when the page is opened again', async ({ page }) => {
   const seen = await watchPage(page);
@@ -28,7 +29,8 @@ test('the defaults dialog of the web variant: a start view that holds when the p
   await page.goto(pageUrl());
   await page.getByRole('button', { name: /Choose folder|Ordner wählen/ }).click();
   await expect(page.getByRole('menubar')).toBeVisible({ timeout: 30_000 });
-  await page.getByRole('menuitem', { name: 'View', exact: true }).click();
+  await menuTab(page, 'View').click();
+  await submenu(page, 'Review').click();
   await expect(page.getByRole('menuitemradio', { name: 'Statistics', exact: true })).toHaveAttribute('aria-checked', 'true');
   await page.keyboard.press('Escape');
   expect(seen.errors).toEqual([]);
@@ -41,7 +43,7 @@ test('the icons of the categories in the web variant: chosen in the defaults, ke
   files['lib.nvim/ROADMAP/tasks/webicons-e2e-c01.md'] =
     '---\ntitle: Webicons e2e c01\nstatus: open\nprio: 1\ncategory: [bug]\ncreated: 2026-11-21\nupdated: 2026-11-21\n---\n\nA task with the icon of its category.\n';
   await openVault(page, files, 'Webicons e2e c01');
-  await page.getByRole('menuitem', { name: 'View', exact: true }).click();
+  await page.getByRole('menuitem', { name: /^View(,|$)/ }).click();
   await page.getByRole('menuitemradio', { name: 'List', exact: true }).click();
   const icon = page.locator('button.row', { hasText: 'Webicons e2e c01' }).locator('[data-icon="category"]');
   await expect(icon).toHaveText('🐞');

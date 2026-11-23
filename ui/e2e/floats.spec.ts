@@ -9,6 +9,7 @@ import { expect, isMachineFault, test } from './fixtures';
 import { expectAccessible, violations, watchViolations } from './a11y';
 import { STATE } from './global';
 import { removeFile } from './hub';
+import { chooseFromMenu } from './menu';
 
 test.use({ locale: 'en-US' });
 
@@ -31,7 +32,7 @@ async function pair(page: Page, path = '/'): Promise<string[]> {
 }
 
 async function showList(page: Page): Promise<void> {
-  await page.getByRole('menuitem', { name: 'View', exact: true }).click();
+  await page.getByRole('menuitem', { name: /^View(,|$)/ }).click();
   await page.getByRole('menuitemradio', { name: 'List', exact: true }).click();
   await expect(page.locator('button.row').first()).toBeVisible();
 }
@@ -158,7 +159,7 @@ test('a task is detached from its float into a window of its own, which shows th
   await expect(win.locator('main aside.detail .id')).toHaveText('lib.nvim/beta');
   await expectAccessible(win, 'the window of one task');
   // A view chosen in that window makes it a page of views again.
-  await win.getByRole('menuitem', { name: 'View', exact: true }).click();
+  await win.getByRole('menuitem', { name: /^View(,|$)/ }).click();
   await win.getByRole('menuitemradio', { name: 'List', exact: true }).click();
   await expect(win.locator('section.list')).toBeVisible();
   await expect(win.locator('aside.detail')).toHaveCount(0);
@@ -217,7 +218,7 @@ test('a view of the menu is a link: a new tab at its address takes the session o
   const problems = await pair(page);
   await showList(page);
   await expect.poll(() => page.evaluate(() => location.hash)).toBe('#view=list');
-  await page.getByRole('menuitem', { name: 'View', exact: true }).click();
+  await page.getByRole('menuitem', { name: /^View(,|$)/ }).click();
   const inbox = page.getByRole('menuitemradio', { name: 'Inbox', exact: true });
   expect(await inbox.evaluate((e) => e.tagName)).toBe('A');
   const href = await inbox.getAttribute('href');
@@ -247,8 +248,7 @@ test('the filter belongs to its place: typing writes no entry, Back and Forward 
   await showList(page);
   const search = page.getByRole('searchbox', { name: /search/i }).first();
   const goTo = async (name: string) => {
-    await page.getByRole('menuitem', { name: 'View', exact: true }).click();
-    await page.getByRole('menuitemradio', { name, exact: true }).click();
+    await chooseFromMenu(page, 'View', name);
   };
   const entries = () => page.evaluate(() => history.length);
   const filterInAddress = () =>
@@ -289,8 +289,7 @@ test('the filter belongs to its place: typing writes no entry, Back and Forward 
 test('the plan, the order of the list and the field of the statistics belong to their place: no entry of their own, Back and Forward set them, a link carries plan and order', async ({ page, context }) => {
   const problems = await pair(page);
   const goTo = async (name: string) => {
-    await page.getByRole('menuitem', { name: 'View', exact: true }).click();
-    await page.getByRole('menuitemradio', { name, exact: true }).click();
+    await chooseFromMenu(page, 'View', name);
   };
   const entries = () => page.evaluate(() => history.length);
   const inAddress = (key: string) =>
@@ -448,7 +447,7 @@ test('the handle of a dialog comes first in the order of the focus without takin
 
     // A dialog without a field of its own to focus: the browser's first control would be the handle; the focus goes on
     // to the control after it.
-    await page.getByRole('menuitem', { name: 'View', exact: true }).click();
+    await page.getByRole('menuitem', { name: /^View(,|$)/ }).click();
     await page.getByRole('menuitemradio', { name: 'Today', exact: true }).click();
     await page.locator('button.tile[data-count="doing"]').click();
     // The actions of a row are drawn in the row under the pointer (or with the focus).
@@ -584,7 +583,7 @@ test('the float is moved and sized by the keyboard on its handle, and Home puts 
 test('board and views open a task in the float, the inbox keeps its panel for its keys', async ({ page }) => {
   await pair(page);
   await showList(page);
-  await page.getByRole('menuitem', { name: 'View', exact: true }).click();
+  await page.getByRole('menuitem', { name: /^View(,|$)/ }).click();
   await page.getByRole('menuitemradio', { name: 'Board', exact: true }).click();
   await expect(page.locator('.board')).toBeVisible();
   await expect(page.locator('main aside.detail')).toHaveCount(0);
@@ -602,7 +601,7 @@ test('board and views open a task in the float, the inbox keeps its panel for it
   await page.keyboard.press('Escape');
   await expect(float(page)).toHaveCount(0);
 
-  await page.getByRole('menuitem', { name: 'View', exact: true }).click();
+  await page.getByRole('menuitem', { name: /^View(,|$)/ }).click();
   await page.getByRole('menuitemradio', { name: 'Inbox', exact: true }).click();
   await expect(page.locator('main aside.detail')).toHaveCount(1);
 });
@@ -670,7 +669,7 @@ test('the other floats move too, each keeps its own place, and they have no viol
 test('the float speaks German too, and has no violation there', async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('tasks-desktop.lang', 'de'));
   await pair(page);
-  await page.getByRole('menuitem', { name: 'Ansicht', exact: true }).click();
+  await page.getByRole('menuitem', { name: /^Ansicht(,|$)/ }).click();
   await page.getByRole('menuitemradio', { name: 'Liste', exact: true }).click();
   await page.locator('button.row', { hasText: 'lib.nvim/alpha' }).first().click();
   const f = page.getByRole('dialog', { name: 'Task' });

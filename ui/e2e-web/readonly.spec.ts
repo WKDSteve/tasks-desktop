@@ -31,7 +31,7 @@ test('without the picker the vault is read through the input, shown read only, a
 
   // The controls that change a task are locked, and what cannot be locked says why at once.
   await closeFloat(page);
-  await page.getByRole('menuitem', { name: /^(View|Ansicht)$/ }).click();
+  await page.getByRole('menuitem', { name: /^(View|Ansicht)(,|$)/ }).click();
   await page.getByRole('menuitemradio', { name: /^(List|Liste)$/ }).click();
   await page.locator('button.row', { hasText: 'Eta tests' }).first().click();
   const detail = page.locator('aside.detail');

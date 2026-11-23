@@ -4,6 +4,7 @@ import type { Page } from '@playwright/test';
 import { expect, isMachineFault, test } from './fixtures';
 import { expectAccessible, watchViolations } from './a11y';
 import { STATE } from './global';
+import { openExportMenu } from './menu';
 
 // The figures of the tab Lernpläne against the real hub and the real engine (capability learn_history): the overview
 // with its period (kept on the device), the figures of a period against the one before in words and a mark, the bars
@@ -157,7 +158,7 @@ test('the statistics: one path over days of its own, the charts as tables, the e
     await expect(page.getByRole('region', { name: 'Hours per week, stacked by path' })).toBeVisible();
 
     // the menu View saves the tables of the view, and says tables, not tasks
-    await page.getByRole('menubar').getByRole('menuitem', { name: 'View', exact: true }).click();
+    await openExportMenu(page);
     await expect(page.getByRole('menuitem', { name: 'Save tasks as CSV file ...' })).toHaveCount(0);
     const download = page.waitForEvent('download');
     await page.getByRole('menuitem', { name: 'Save tables as CSV file ...' }).click();

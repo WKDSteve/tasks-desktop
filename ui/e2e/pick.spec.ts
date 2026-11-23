@@ -4,6 +4,7 @@ import type { Locator, Page } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { violations, watchViolations } from './a11y';
 import { STATE } from './global';
+import { chooseFromMenu } from './menu';
 
 // The searchable choices (`PickList`): the plan of a task chosen from the engine's plans, a new plan made from that
 // choice and given to the task; tasks put into a phase of a plan from the plan view, and a new task made in the plan.
@@ -41,8 +42,7 @@ async function closeFloat(page: Page): Promise<void> {
 
 async function chooseView(page: Page, menu: string, item: string): Promise<void> {
   await closeFloat(page);
-  await page.getByRole('menuitem', { name: menu, exact: true }).click();
-  await page.getByRole('menuitemradio', { name: item, exact: true }).click();
+  await chooseFromMenu(page, menu, item);
 }
 
 /** Make a task in lib.nvim through the capture dialog; its float stays open when `keep` asks for it. */

@@ -36,6 +36,7 @@
   import { createContextRegistry, taskTarget, viewTarget } from './lib/context';
   import { vaultMenuItems, vaultMenuOpened } from './lib/vaultMenu';
   import { isLearnView, learnMenu } from './lib/learnViews';
+  import { isMenuView, viewMenu } from './lib/viewTabMenu';
   import SetupCard from './views/SetupCard.svelte';
   import HubNotice from './views/HubNotice.svelte';
   import Toast from './views/Toast.svelte';
@@ -313,6 +314,37 @@
       .concat({ kind: 'action' as const, label: tl('menu.print_view'), hint: tl('hint.item.menu.print_view'), disabled: !ready || !app.exportable, onselect: () => void app.printView() })
       .concat(app.canPng ? [{ kind: 'action' as const, label: tl('export.png'), hint: tl('hint.item.menu.png'), disabled: !ready || !app.exportable, onselect: () => void app.pngView() }] : []);
 
+  /** The name of a view in the menu: the saved views are named so there, as "Views" would stand twice beside the tab. */
+  const viewLabel = (id: string): string => (id === 'views' ? t('menu.saved_views') : t(`nav.${id}` as Key));
+  /** A view of the tab View: a radio that goes there (as a link, with the new tab where the page can open one). */
+  const viewItem = (id: string, disabled: boolean): MenuItem => ({
+    kind: 'radio',
+    label: viewLabel(id),
+    hint: t(`hint.item.nav.${id}` as Key),
+    ...(disabled ? { disabled } : {}),
+    checked: app.view === id,
+    onselect: () => app.setView(id as View),
+    ...apart(id as View),
+  });
+  /** The submenu Export of the tab View: what the view shown draws, to a file, the clipboard or the printer. */
+  const exportSubmenu = (ready: boolean): MenuItem => {
+    const all = exportItems(ready);
+    return {
+      kind: 'submenu',
+      label: t('menu.sub.export'),
+      hint: t('hint.item.menu.sub.export'),
+      items: [
+        { kind: 'info', label: t('menu.export_of', { view: hasKey(app.lang, `nav.${app.view}`) ? t(`nav.${app.view}` as Key) : app.view }) },
+        { kind: 'section', label: t('menu.sec.export_save') },
+        ...all.slice(0, 3),
+        { kind: 'section', label: t('menu.sec.export_copy') },
+        ...all.slice(3, 6),
+        { kind: 'section', label: t('menu.sec.export_print') },
+        ...all.slice(6),
+      ],
+    };
+  };
+
   /** The task the engine names as the next one to take: the one the tile of that name shows. */
   const nextTaskId = $derived(app.next?.task?.id ?? null);
 
@@ -443,169 +475,21 @@
         id: 'view',
         label: t('menu.view'),
         hint: t('hint.ui.menu.view'),
+        // Like the learning plans: the name of the view shown, where it is one of this tab.
+        current: isMenuView(app.view) ? viewLabel(app.view) : null,
         items: [
-          { kind: 'section', label: t('menu.sec.views') },
-          {
-            kind: 'radio',
-            label: t('nav.today'),
-            hint: t('hint.item.nav.today'),
-            checked: app.view === 'today',
-            onselect: () => app.setView('today'),
-            ...apart('today'),
-          },
-          {
-            kind: 'radio',
-            label: t('nav.list'),
-            hint: t('hint.item.nav.list'),
-            checked: app.view === 'list',
-            onselect: () => app.setView('list'),
-            ...apart('list'),
-          },
-          {
-            kind: 'radio',
-            label: t('nav.board'),
-            hint: t('hint.item.nav.board'),
-            disabled: !app.can('reorder'),
-            checked: app.view === 'board',
-            onselect: () => app.setView('board'),
-            ...apart('board'),
-          },
-          {
-            kind: 'radio',
-            label: t('nav.plan'),
-            hint: t('hint.item.nav.plan'),
-            checked: app.view === 'plan',
-            onselect: () => app.setView('plan'),
-            ...apart('plan'),
-          },
-          {
-            kind: 'radio',
-            label: t('nav.inbox'),
-            hint: t('hint.item.nav.inbox'),
-            checked: app.view === 'inbox',
-            onselect: () => app.setView('inbox'),
-            ...apart('inbox'),
-          },
-          {
-            kind: 'radio',
-            label: t('nav.abnahme'),
-            hint: t('hint.item.nav.abnahme'),
-            checked: app.view === 'abnahme',
-            onselect: () => app.setView('abnahme'),
-            ...apart('abnahme'),
-          },
-          {
-            kind: 'radio',
-            label: t('nav.cross'),
-            hint: t('hint.item.nav.cross'),
-            checked: app.view === 'cross',
-            onselect: () => app.setView('cross'),
-            ...apart('cross'),
-          },
-          {
-            kind: 'radio',
-            label: t('nav.calendar'),
-            hint: t('hint.item.nav.calendar'),
-            checked: app.view === 'calendar',
-            onselect: () => app.setView('calendar'),
-            ...apart('calendar'),
-          },
-          {
-            kind: 'radio',
-            label: t('nav.timeline'),
-            hint: t('hint.item.nav.timeline'),
-            checked: app.view === 'timeline',
-            onselect: () => app.setView('timeline'),
-            ...apart('timeline'),
-          },
-          {
-            kind: 'radio',
-            label: t('nav.reminders'),
-            hint: t('hint.item.nav.reminders'),
-            checked: app.view === 'reminders',
-            onselect: () => app.setView('reminders'),
-            ...apart('reminders'),
-          },
-          {
-            kind: 'radio',
-            label: t('nav.stats'),
-            hint: t('hint.item.nav.stats'),
-            checked: app.view === 'stats',
-            onselect: () => app.setView('stats'),
-            ...apart('stats'),
-          },
-          ...(app.can('finished')
-            ? [
-                {
-                  kind: 'radio' as const,
-                  label: t('nav.done'),
-                  hint: t('hint.item.nav.done'),
-                  checked: app.view === 'done',
-                  onselect: () => app.setView('done'),
-                  ...apart('done'),
-                },
-              ]
-            : []),
-          ...(app.can('views')
-            ? [
-                {
-                  kind: 'radio' as const,
-                  label: t('nav.views'),
-                  hint: t('hint.item.nav.views'),
-                  checked: app.view === 'views',
-                  onselect: () => app.setView('views'),
-                  ...apart('views'),
-                },
-              ]
-            : []),
-          {
-            kind: 'radio' as const,
-            label: t('nav.repos'),
-            hint: t('hint.item.nav.repos'),
-            checked: app.view === 'repos',
-            onselect: () => app.setView('repos'),
-            ...apart('repos'),
-          },
-          // The state of those repos is asked by the hub (git, gh): the web variant has none and does not offer it.
-          ...(app.machineActions
-            ? [
-                {
-                  kind: 'radio' as const,
-                  label: t('nav.repostatus'),
-                  hint: t('hint.item.nav.repostatus'),
-                  checked: app.view === 'repostatus',
-                  onselect: () => app.setView('repostatus'),
-                  ...apart('repostatus'),
-                },
-              ]
-            : []),
+          ...viewMenu({ can: (c) => app.can(c), machine: app.machineActions }).map((entry): MenuItem => {
+            if (entry.kind === 'section') return { kind: 'section', label: t(`menu.sec.view_${entry.group}` as Key) };
+            if (entry.kind === 'view') return viewItem(entry.id, entry.disabled);
+            return {
+              kind: 'submenu',
+              label: t(`menu.sub.${entry.group}` as Key),
+              items: entry.views.map((v) => viewItem(v.id, v.disabled)),
+            };
+          }),
           // The learning paths and the other views of the learning plans are in a tab of their own (learnViews.ts).
           // The export belongs to the view that is shown: it takes what that view draws.
-          { kind: 'section', label: t('menu.sec.export') },
-          ...exportItems(ready),
-          { kind: 'section', label: t('menu.sec.tiles') },
-          {
-            kind: 'action',
-            label: t('menu.show_tiles', { n: app.hiddenTiles.length }),
-            hint: t('hint.item.menu.show_tiles'),
-            disabled: app.hiddenTiles.length === 0,
-            onselect: () => app.showTiles(),
-          },
-          {
-            kind: 'action',
-            label: t('menu.reset_order'),
-            hint: t('hint.item.menu.reset_order'),
-            disabled: !app.tileOrderChanged,
-            onselect: () => app.resetTileOrder(),
-          },
-          { kind: 'section', label: t('theme.label') },
-          ...(['auto', 'light', 'dark'] as const).map((value) => ({
-            kind: 'radio' as const,
-            label: t(`theme.${value}` as Key),
-            hint: t(`hint.item.theme.${value}` as Key),
-            checked: app.theme === value,
-            onselect: () => app.setTheme(value),
-          })),
+          exportSubmenu(ready),
         ],
       },
       // The tab of the learning plans, after View: only with the learning paths of the engine, and only the views the
@@ -651,20 +535,15 @@
             checked: app.lang === 'en',
             onselect: () => void app.setLang('en'),
           },
-          { kind: 'section', label: t('menu.sec.behaviour') },
-          {
-            kind: 'action',
-            label: t('menu.defaults'),
-            hint: t('hint.item.menu.defaults'),
-            onselect: () => (defaultsOpen = true),
-          },
-          {
-            kind: 'check',
-            label: t('shortcuts.label'),
-            hint: t('hint.item.shortcuts.label'),
-            checked: app.shortcuts,
-            onselect: () => app.setShortcuts(!app.shortcuts),
-          },
+          // How the page looks: the colours and the switches that only change what is drawn (not what happens).
+          { kind: 'section', label: t('theme.label') },
+          ...(['auto', 'light', 'dark'] as const).map((value) => ({
+            kind: 'radio' as const,
+            label: t(`theme.${value}` as Key),
+            hint: t(`hint.item.theme.${value}` as Key),
+            checked: app.theme === value,
+            onselect: () => app.setTheme(value),
+          })),
           {
             kind: 'check',
             label: t('menu.short_areas'),
@@ -699,6 +578,40 @@
             hint: t('hint.item.menu.bar_areas'),
             checked: app.barAreas,
             onselect: () => app.setBarAreas(!app.barAreas),
+          },
+          // The tiles of the overview Today: only where it is shown (they act on nothing else).
+          ...(app.view === 'today'
+            ? [
+                { kind: 'section' as const, label: t('menu.sec.tiles') },
+                {
+                  kind: 'action' as const,
+                  label: t('menu.show_tiles', { n: app.hiddenTiles.length }),
+                  hint: t('hint.item.menu.show_tiles'),
+                  disabled: app.hiddenTiles.length === 0,
+                  onselect: () => app.showTiles(),
+                },
+                {
+                  kind: 'action' as const,
+                  label: t('menu.reset_order'),
+                  hint: t('hint.item.menu.reset_order'),
+                  disabled: !app.tileOrderChanged,
+                  onselect: () => app.resetTileOrder(),
+                },
+              ]
+            : []),
+          { kind: 'section', label: t('menu.sec.behaviour') },
+          {
+            kind: 'action',
+            label: t('menu.defaults'),
+            hint: t('hint.item.menu.defaults'),
+            onselect: () => (defaultsOpen = true),
+          },
+          {
+            kind: 'check',
+            label: t('shortcuts.label'),
+            hint: t('hint.item.shortcuts.label'),
+            checked: app.shortcuts,
+            onselect: () => app.setShortcuts(!app.shortcuts),
           },
           {
             kind: 'check',

@@ -3,6 +3,7 @@ import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { expectAccessible, violations, watchViolations } from './a11y';
 import { STATE } from './global';
+import { chooseFromMenu } from './menu';
 
 // The findings of the walk through the page (2026-10-17): layout, keyboard and wording, each with the test that was
 // red before its fix. The page is the one of `app.spec.ts`, paired the same way; every test runs axe on the state
@@ -35,7 +36,7 @@ async function closeFloat(page: Page): Promise<void> {
 
 async function showList(page: Page): Promise<void> {
   await closeFloat(page);
-  await page.getByRole('menuitem', { name: 'View', exact: true }).click();
+  await page.getByRole('menuitem', { name: /^View(,|$)/ }).click();
   await page.getByRole('menuitemradio', { name: 'List', exact: true }).click();
   await expect(page.locator('button.row').first()).toBeVisible();
 }
@@ -165,7 +166,8 @@ test('a hint that lies on the next control lets the pointer through, so the firs
   await page.keyboard.press('Escape');
   const tip = page.locator('#hint-tip');
   let cover: { left: number; right: number; top: number; bottom: number } | null = null;
-  for (const width of [448, 430, 470, 410, 490, 400, 520]) {
+  // The dot of the tab View (the view shown) makes the bar wider: the widths go on beyond the first ones.
+  for (const width of [448, 430, 470, 410, 490, 400, 520, 540, 560, 580, 600, 620, 640]) {
     await page.setViewportSize({ width, height: 800 });
     await page.mouse.move(0, 700);
     await expect(tip).toBeHidden();
@@ -209,7 +211,7 @@ test('a hint that lies on the next control lets the pointer through, so the firs
 test('an explanation stays open when it is pressed in (its text can be copied) until a press outside', async ({ page }) => {
   await pair(page);
   await closeFloat(page);
-  await page.getByRole('menuitem', { name: 'View', exact: true }).click();
+  await page.getByRole('menuitem', { name: /^View(,|$)/ }).click();
   await page.getByRole('menuitemradio', { name: 'Plan', exact: true }).click();
   await page.keyboard.press('Escape');
   const tip = page.locator('#hint-tip');
@@ -244,7 +246,7 @@ test('in a menu the explanation of an entry goes at once when the pointer is on 
   await pair(page);
   await showList(page);
   await page.keyboard.press('Escape');
-  await page.getByRole('menuitem', { name: 'View', exact: true }).click();
+  await page.getByRole('menuitem', { name: /^View(,|$)/ }).click();
   const items = page.getByRole('menu').getByRole('menuitemradio');
   const first = items.nth(0);
   const second = items.nth(1);
@@ -387,8 +389,7 @@ test('the finished view dims the old figures and says "Loading" until the answer
     if (held) await gate;
     await route.continue();
   });
-  await page.getByRole('menuitem', { name: 'View', exact: true }).click();
-  await page.getByRole('menuitemradio', { name: 'Finished', exact: true }).click();
+  await chooseFromMenu(page, 'View', 'Finished');
   const view = page.locator('.done');
   await expect(view).toHaveAttribute('aria-busy', 'false');
   held = true;
@@ -445,8 +446,7 @@ test('"Show more" in the finished view loads the next page and adds it below the
     const body = { ...doc, total: 120, limit: 100, items, ...(offset === 0 ? { next_offset: 100 } : { next_offset: undefined }) };
     await route.fulfill({ response, json: body });
   });
-  await page.getByRole('menuitem', { name: 'View', exact: true }).click();
-  await page.getByRole('menuitemradio', { name: 'Finished', exact: true }).click();
+  await chooseFromMenu(page, 'View', 'Finished');
   const list = page.getByRole('region', { name: 'Finished tasks, newest first' });
   await expect(list.getByText('Paged finished task 99')).toBeVisible();
   await expect(list.getByText('Paged finished task 100')).toHaveCount(0);
@@ -475,10 +475,10 @@ test('the marks of rows, cards and stage lines are explained with one tab stop e
   await showList(page);
   await check('p.count');
   await expectAccessible(page, 'the list with its legend');
-  await page.getByRole('menuitem', { name: 'View', exact: true }).click();
+  await page.getByRole('menuitem', { name: /^View(,|$)/ }).click();
   await page.getByRole('menuitemradio', { name: 'Board', exact: true }).click();
   await check('.wrap > p.count');
-  await page.getByRole('menuitem', { name: 'View', exact: true }).click();
+  await page.getByRole('menuitem', { name: /^View(,|$)/ }).click();
   await page.getByRole('menuitemradio', { name: 'Plan', exact: true }).click();
   // The plan explains its stages first, and says so in the name of the button.
   await check('section.stages', 'the stages and the marks of a task');
@@ -510,24 +510,51 @@ for (const lang of ['en', 'de'] as const) {
         await expectAccessible(page, `${lang} ${theme} ${name}`);
       };
       // The memory was read: the menu has the words of the language, the page has the colours of the theme.
-      await expect(page.getByRole('menuitem', { name: lang === 'de' ? 'Ansicht' : 'View', exact: true })).toBeVisible();
+      await expect(page.getByRole('menuitem', { name: lang === 'de' ? /^Ansicht(,|$)/ : /^View(,|$)/ })).toBeVisible();
       const bg = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
       const lum = bg.match(/\d+/g)!.slice(0, 3).map(Number).reduce((x, y) => x + y, 0) / 3;
       expect(theme === 'dark' ? lum < 100 : lum > 150, `${theme} background ${bg}`).toBe(true);
       const viewMenu = page.getByRole('menubar').getByRole('menuitem').nth(2);
+      // The tab names the view shown once the page has drawn it (a click before that finds the tab drawn again).
+      await expect(viewMenu).toHaveAccessibleName(/current: |aktuell: /);
       await viewMenu.click();
-      // The views come first, the three themes after them.
-      const count = (await page.getByRole('menuitemradio').count()) - 3;
+      // The views of the tab: the plain entries, then the views of each submenu (they are in the page while it is open).
+      const plain = await (async () => {
+        // The first click right after the start may find the bar drawn again: click until the menu is open.
+        await expect(async () => {
+          if ((await page.getByRole('menuitemradio').count()) === 0) await viewMenu.click();
+          await expect(page.getByRole('menuitemradio').first()).toBeVisible({ timeout: 1000 });
+        }).toPass({ timeout: 10000 });
+        const n = await page.getByRole('menuitemradio').count();
+        await page.keyboard.press('Escape');
+        return n;
+      })();
+      await viewMenu.click();
+      const parents = await page.locator('button.mb-parent:not([disabled])').count();
       await page.keyboard.press('Escape');
-      expect(count).toBeGreaterThan(4);
-      for (let i = 0; i < count; i++) {
+      const sizes: number[] = [];
+      for (let j = 0; j < parents; j++) {
         await viewMenu.click();
-        const radio = page.getByRole('menuitemradio').nth(i);
+        await page.locator('button.mb-parent:not([disabled])').nth(j).click();
+        sizes.push(await page.locator('.mb-subpopup').getByRole('menuitemradio').count());
+        // The first Escape closes the submenu, the second the menu.
+        await page.keyboard.press('Escape');
+        await page.keyboard.press('Escape');
+      }
+      expect(plain).toBeGreaterThan(4);
+      // The export submenu has no view in it, the others have two or three.
+      expect(sizes.filter((n) => n > 0).length).toBeGreaterThanOrEqual(3);
+      const visit = async (sub: number | null, i: number): Promise<void> => {
+        await viewMenu.click();
+        if (sub !== null) await page.locator('button.mb-parent:not([disabled])').nth(sub).click();
+        const radio = (sub === null ? page.getByRole('menuitemradio') : page.locator('.mb-subpopup').getByRole('menuitemradio')).nth(i);
         const name = (await radio.textContent())?.trim() ?? String(i);
         await radio.click();
         await page.waitForTimeout(400);
         await readsWell(name);
-      }
+      };
+      for (let i = 0; i < plain; i++) await visit(null, i);
+      for (let j = 0; j < sizes.length; j++) for (let i = 0; i < sizes[j]!; i++) await visit(j, i);
 
       // The views beyond their tab: the context menu of a row, open, and a matrix (a view to try) with an open cell.
       await viewMenu.click();
@@ -571,7 +598,7 @@ test('Back and Forward of the browser walk through the views and the open task',
 
 test('Back closes the popup of a task and Forward opens it again; closing it by hand leaves the place', async ({ page }) => {
   await pair(page);
-  await page.getByRole('menuitem', { name: 'View', exact: true }).click();
+  await page.getByRole('menuitem', { name: /^View(,|$)/ }).click();
   await page.getByRole('menuitemradio', { name: 'Plan', exact: true }).click();
   const first = page.getByRole('region', { name: 'Stages' }).locator('.stage li').getByRole('button').first();
   const title = (await first.innerText()).trim();

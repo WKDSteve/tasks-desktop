@@ -9,7 +9,7 @@ import { disk, fakePicker, openVault, pageUrl, vaultFiles, violations, watchPage
 test.use({ locale: 'en-US' });
 
 async function showList(page: Page): Promise<void> {
-  await page.getByRole('menuitem', { name: 'View', exact: true }).click();
+  await page.getByRole('menuitem', { name: /^View(,|$)/ }).click();
   await page.getByRole('menuitemradio', { name: 'List', exact: true }).click();
   await expect(page.locator('button.row').first()).toBeVisible();
 }
@@ -158,7 +158,7 @@ test('Enter in the summary writes it and keeps the focus there; keys that fall o
 test('Enter in the summary of the inbox keeps the focus there: the next letter is typed, not a key of the inbox', async ({ page }) => {
   const seen = await watchPage(page);
   await openVault(page, vaultFiles(), 'Next task');
-  await page.getByRole('menuitem', { name: 'View', exact: true }).click();
+  await page.getByRole('menuitem', { name: /^View(,|$)/ }).click();
   await page.getByRole('menuitemradio', { name: 'Inbox', exact: true }).click();
   const detail = page.locator('main aside.detail');
   await expect(detail.locator('.id')).not.toHaveText('');
@@ -230,7 +230,7 @@ test('a middle click on a view of the menu opens the same file in a new window a
   const seen = await watchPage(page);
   await openVault(page, vaultFiles(), 'Next task');
   await showList(page);
-  await page.getByRole('menuitem', { name: 'View', exact: true }).click();
+  await page.getByRole('menuitem', { name: /^View(,|$)/ }).click();
   const [win] = await Promise.all([
     context.waitForEvent('page'),
     page.getByRole('menuitemradio', { name: 'Plan', exact: true }).click({ button: 'middle' }),
@@ -253,7 +253,7 @@ test('the file opened at a view shows that view once the folder is open, and the
   expect(page.url()).toBe(`${pageUrl()}#view=plan`);
   await page.getByRole('button', { name: /Choose folder/ }).click();
   await expect(page.locator('.stage-list').first()).toBeVisible({ timeout: 30_000 });
-  await expect(page.getByRole('menuitem', { name: 'View', exact: true })).toBeVisible();
+  await expect(page.getByRole('menuitem', { name: /^View(,|$)/ })).toBeVisible();
   // Not kept as the view of the page: the other windows open on theirs.
   expect(await page.evaluate(() => localStorage.getItem('tasks-desktop.view'))).not.toBe('plan');
   expect(seen.requests).toEqual([]);

@@ -11,7 +11,7 @@ const classes = JSON.stringify({ schema: 1, areas: { 'lib.nvim': { class: 'inter
 test('the view is saved as a PNG without the private areas, and the rules of the page hold', async ({ page }) => {
   const seen = await watchPage(page);
   await openVault(page, { ...vaultFiles(), 'areas.json': classes });
-  await page.getByRole('menuitem', { name: 'View', exact: true }).click();
+  await page.getByRole('menuitem', { name: /^View(,|$)/ }).click();
   await page.getByRole('menuitemradio', { name: 'List', exact: true }).click();
   const rows = page.locator('button.row');
   await expect(rows.first()).toBeVisible();
