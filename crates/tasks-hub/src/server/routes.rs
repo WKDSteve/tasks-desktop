@@ -1553,6 +1553,147 @@ pub(super) async fn ai_desktop_get(State(st): State<Arc<Shared>>) -> Response {
     axum::Json(presence).into_response()
 }
 
+/// The places in code the task `id` names, each with where it is on this machine. The engine hands over the body and the
+/// refs of the task; nothing is read from the vault by the hub itself.
+// The error is the answer to send, as for the routes: a response is large, and rare.
+#[allow(clippy::result_large_err)]
+async fn docmap_places(
+    st: &Arc<Shared>,
+    id: &str,
+) -> Result<Vec<(crate::docmap::CodeRef, crate::docmap::Resolved)>, Response> {
+    let reply = ask(st, Calls::Task, Some(&json!({ "id": id }))).await?;
+    let doc: serde_json::Value = serde_json::from_str(&reply.text).unwrap_or_default();
+    let body = doc["body"].as_str().unwrap_or_default();
+    let refs: Vec<String> = doc["task"]["refs"]
+        .as_array()
+        .map(Vec::as_slice)
+        .unwrap_or_default()
+        .iter()
+        .filter_map(|r| r.as_str().map(str::to_owned))
+        .collect();
+    let places = crate::docmap::collect(body, &refs);
+    let folders = st
+        .rt()
+        .repos
+        .as_ref()
+        .map(|store| store.folders())
+        .unwrap_or_default();
+    Ok(places
+        .into_iter()
+        .map(|place| {
+            let found = crate::docmap::resolve(&place, &folders);
+            (place, found)
+        })
+        .collect())
+}
+
+/// `GET /api/tasks/docmap?id=`: the places in code the task names and whether DocMap can be opened at each
+/// (`{ "found", "places": [{ "label", "repo", "ok", "why"? }] }`). The label is `<file>:<lines>` relative to the repo,
+/// `repo` the name of the folder: no path of this machine leaves the hub. A hub without the discovery of the family says
+/// DocMap is not found, and a web variant has no such route (its page offers no button).
+pub(super) async fn docmap_get(
+    State(st): State<Arc<Shared>>,
+    RawQuery(query): RawQuery,
+) -> Response {
+    let params = match parse_query(query.as_deref(), &["id"]) {
+        Ok(p) => p,
+        Err(why) => return error_body(StatusCode::BAD_REQUEST, "bad_query", why),
+    };
+    let Some(id) = params.get("id").filter(|id| valid_task_id(id)) else {
+        return error_body(
+            StatusCode::BAD_REQUEST,
+            "bad_id",
+            "id must be <area>/<slug>",
+        );
+    };
+    let family = st.rt().family.clone();
+    let found = match family {
+        Some(family) => tokio::task::spawn_blocking(move || family.docmap_desktop().installed)
+            .await
+            .unwrap_or(false),
+        None => false,
+    };
+    let places = match docmap_places(&st, id).await {
+        Ok(p) => p,
+        Err(response) => return response,
+    };
+    let places: Vec<serde_json::Value> = places
+        .iter()
+        .map(|(place, found_at)| match found_at {
+            crate::docmap::Resolved::Found { repo, .. } => {
+                json!({ "label": place.at(), "repo": repo, "ok": true })
+            }
+            crate::docmap::Resolved::Refused(why) => {
+                json!({ "label": place.at(), "repo": place.repo, "ok": false, "why": why })
+            }
+        })
+        .collect();
+    axum::Json(json!({ "found": found, "places": places })).into_response()
+}
+
+/// `POST /api/tasks/docmap_open` `{ "id", "index" }`: open docmap-desktop at the `index`-th place of the task (the order
+/// of `docmap`). The page names the task and the number, never a path: the hub reads the place again, checks it (a path
+/// inside a repo of the tiles) and starts the program with the folder and `<file>:<lines>` as arguments of their own.
+pub(super) async fn docmap_open(State(st): State<Arc<Shared>>, body: Bytes) -> Response {
+    let Some(family) = st.rt().family.clone() else {
+        return error_body(
+            StatusCode::NOT_FOUND,
+            "docmap_unavailable",
+            "this hub cannot open DocMap",
+        );
+    };
+    let map = match vault_request(&body, &["id", "index"]) {
+        Ok(m) => m,
+        Err(r) => return r,
+    };
+    let id = match vault_text(&map, "id", 200) {
+        Ok(id) if valid_task_id(&id) => id,
+        Ok(_) => {
+            return error_body(
+                StatusCode::BAD_REQUEST,
+                "bad_id",
+                "id must be <area>/<slug>",
+            )
+        }
+        Err(r) => return r,
+    };
+    let Some(index) = map
+        .get("index")
+        .and_then(serde_json::Value::as_u64)
+        .and_then(|n| usize::try_from(n).ok())
+    else {
+        return error_body(StatusCode::BAD_REQUEST, "bad_index", "index is a number");
+    };
+    let places = match docmap_places(&st, &id).await {
+        Ok(p) => p,
+        Err(response) => return response,
+    };
+    let Some((place, found)) = places.into_iter().nth(index) else {
+        return error_body(
+            StatusCode::NOT_FOUND,
+            "not_found",
+            "the task names no such place",
+        );
+    };
+    let crate::docmap::Resolved::Found { folder, .. } = found else {
+        let crate::docmap::Resolved::Refused(why) = found else {
+            unreachable!("a place is found or refused");
+        };
+        return error_body(StatusCode::BAD_REQUEST, "docmap_refused", why);
+    };
+    let at = place.at();
+    let opened = tokio::task::spawn_blocking(move || family.open_docmap(&folder, &at)).await;
+    match opened {
+        Ok(Ok(())) => axum::Json(json!({ "ok": true })).into_response(),
+        Ok(Err(why)) => error_body(StatusCode::BAD_GATEWAY, "docmap_failed", &why),
+        Err(_) => error_body(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "docmap_failed",
+            "the start stopped unexpectedly",
+        ),
+    }
+}
+
 /// `POST /api/tasks/agent` `{ "id", "mode", "kind" }`: hand a task to an agent of ai-desktop (`crate::agent`). The page
 /// names the task and what it asks for; the engine names the file, the hub checks that it lies in the vault, reads it
 /// and sends it with the secret of ai-desktop, which the page never sees. A private or unclassified area goes with

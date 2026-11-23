@@ -28,7 +28,7 @@ import {
 import { addOps, type AddTarget } from './picker';
 import { connectOp, edgeOp, parseGraphOrder, phaseOp, type DepEdge, type EdgeAction, type EdgeKind, type GraphOrder } from './depGraph';
 import { COLUMNS, columnsOf, isColumn, neighbourColumn, placeNear, stepInGroup, type Column, type Move } from './board';
-import { ApiError, type AgentKind, type AgentTab, type AiDesktop, type BoardRequest, type BoardSaved, type CheckAll, type SheetRunState, type Hub, type HubArea, type HubAreas, type SearchResult, type VaultList } from './api';
+import { ApiError, type AgentKind, type AgentTab, type AiDesktop, type BoardRequest, type BoardSaved, type CheckAll, type DocmapPlaces, type SheetRunState, type Hub, type HubArea, type HubAreas, type SearchResult, type VaultList } from './api';
 import { cacheableClass, cacheableList, type CachedList, type ListStore } from './cache';
 import type {
   DonePreview,
@@ -4037,6 +4037,23 @@ export class App {
     } catch (error) {
       const message = error instanceof ApiError ? error.message : '';
       this.say('error', 'editor.failed', { message });
+    }
+  }
+
+  /** The places in code a task names, as the hub reads them; none where there is no hub to ask. */
+  async docmapPlaces(id: string): Promise<DocmapPlaces | null> {
+    if (!this.machineActions) return null;
+    return this.env.hub.docmapPlaces(id);
+  }
+
+  /** Open docmap-desktop at the `index`-th place of a task. The hub starts it; the answer says when it could not. */
+  async openInDocmap(id: string, index: number): Promise<void> {
+    try {
+      await this.env.hub.openInDocmap(id, index);
+      this.say('ok', 'docmap.opened');
+    } catch (error) {
+      const message = error instanceof ApiError ? error.message : '';
+      this.say('error', 'docmap.failed', { message });
     }
   }
 

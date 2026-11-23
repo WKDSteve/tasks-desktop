@@ -6,6 +6,7 @@
   import { ownTags } from '../lib/tagging';
   import { tick, untrack } from 'svelte';
   import type { App } from '../lib/app.svelte';
+  import type { DocmapPlaces } from '../lib/api';
   import { formatNumber, hintOf, labelOf, translate, type Key } from '../lib/i18n';
   import { areaLabel } from '../lib/filter';
   import { parseMarkdown } from 'appkit-ui/markdown';
@@ -57,6 +58,34 @@
   const task = $derived(app.selected);
   const detail = $derived(app.detail);
   const body = $derived(detail.state === 'ok' ? detail.doc.body : '');
+  // The places in code the task names (a `code-ref` block, or a ref `<file>:<lines>`): the hub reads them, finds the repo
+  // among the tiles and says whether docmap-desktop is there. The page asks only when the task may name one, and shows a
+  // button only for a place the hub can open: nothing dead (a web page, a repo that is no tile, no docmap-desktop).
+  let docmap = $state<DocmapPlaces | null>(null);
+  const mayNamePlaces = $derived(
+    app.machineActions && (/```+\s*code-ref/.test(body) || (task?.refs ?? []).some((r) => /:\d+(-\d+)?$/.test(r))),
+  );
+  $effect(() => {
+    const id = task?.id;
+    const text = body;
+    const refs = task?.refs;
+    if (!mayNamePlaces || id === undefined) {
+      docmap = null;
+      return;
+    }
+    void text;
+    void refs;
+    let current = true;
+    void app.docmapPlaces(id).then((found) => {
+      if (current) docmap = found;
+    });
+    return () => {
+      current = false;
+    };
+  });
+  const docmapOpenable = $derived(
+    docmap?.found ? docmap.places.map((place, index) => ({ place, index })).filter((entry) => entry.place.ok) : [],
+  );
   let raw = $state(false);
   // The images below `assets/` of a task in its folder form: one store per task, given back when another is shown.
   const assetOwner = $derived(task?.folder ? task.id : null);
@@ -1322,6 +1351,16 @@
           >{t('editor.button')}</button
         >
       {/if}
+      {#each docmapOpenable as entry (entry.index)}
+        <button
+          type="button"
+          class="open-editor"
+          data-testid="open-docmap"
+          data-hint={t('hint.ui.detail.docmap')}
+          onclick={() => void app.openInDocmap(task.id, entry.index)}
+          >{docmapOpenable.length === 1 ? t('docmap.button') : t('docmap.button_at', { place: entry.place.label })}</button
+        >
+      {/each}
       {#if app.can('plan_for')}
         <button type="button" class="open-editor" data-hint={t('hint.ui.detail.graph')} onclick={() => app.openGraph(task.id)}>{t('graph.button')}</button>
       {/if}

@@ -291,6 +291,15 @@ export function prepareVault(): { root: string; vault: string; config: string } 
   writeFileSync(join(snaps, 'float.80x24.snap'), ['ABNAHME-ROW-ONE', '+------+', '| ok   |', '+------+', ''].join('\n'));
   const config = join(root, 'config');
   mkdirSync(config);
+  // A repo of this device that holds `lua/a.lua`, a tile of the repos page, for the tasks that name code in it ("Open in
+  // DocMap", where docmap-desktop is stood in for by `TASKS_DESKTOP_DOCMAP_LOG` of `env`).
+  const docmapRepo = join(root, 'repos', 'docmap-e2e');
+  mkdirSync(join(docmapRepo, 'lua'), { recursive: true });
+  writeFileSync(join(docmapRepo, 'lua', 'a.lua'), 'return 1\n');
+  writeFileSync(
+    join(config, 'repos.json'),
+    JSON.stringify({ schema: 1, repos: { docmape2: { path: docmapRepo, name: 'docmap-e2e' } }, groups: [] }),
+  );
   writeFileSync(
     join(config, 'config.json'),
     JSON.stringify({
@@ -326,6 +335,8 @@ export function env(config: string): NodeJS.ProcessEnv {
     TASKS_DESKTOP_CONFIG_DIR: config,
     // The editor is not started in a test: the file it would open is written here.
     TASKS_DESKTOP_EDITOR_LOG: join(config, '..', 'editor.log'),
+    // docmap-desktop is not started in a test: the arguments it would get are written here (and it counts as found).
+    TASKS_DESKTOP_DOCMAP_LOG: join(config, '..', 'docmap.log'),
     // The folder dialog is not shown in a test: the folder it "returns" is this one (see `pickedFolder`).
     TASKS_DESKTOP_PICK_RESULT: pickedFolder(config),
     TASKS_DESKTOP_PORT: String(port()),

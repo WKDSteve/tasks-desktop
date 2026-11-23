@@ -16,6 +16,17 @@ const AI_DESKTOP: Member<'static> = Member {
     env_prefix: "AI_DESKTOP",
 };
 
+/// docmap-desktop: the program an "Open in DocMap" starts, found by its manifest (`DOCMAP_DESKTOP_CONFIG_DIR` moves its
+/// config folder, and with it `hub.json`).
+const DOCMAP_DESKTOP: Member<'static> = Member {
+    app: "docmap-desktop",
+    env_prefix: "DOCMAP_DESKTOP",
+};
+
+/// A file the tests give the hub (`TASKS_DESKTOP_DOCMAP_LOG`): the hub then writes the arguments it would start
+/// docmap-desktop with, one line each, instead of starting anything.
+pub const DOCMAP_LOG_VAR: &str = "TASKS_DESKTOP_DOCMAP_LOG";
+
 /// Whether an app of the family is on this machine, and whether its hub is running now.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize)]
 pub struct Presence {
@@ -32,6 +43,22 @@ pub struct Presence {
 pub trait FamilyApps: Send + Sync {
     /// ai-desktop on this machine: read anew on each call (the page asks when its window gets the focus).
     fn ai_desktop(&self) -> Presence;
+
+    /// docmap-desktop on this machine (`installed`: its program is there and can be started).
+    fn docmap_desktop(&self) -> Presence {
+        Presence::default()
+    }
+
+    /// Start docmap-desktop at a place: `docmap-desktop --open-at <folder> <at>`, the folder of a repo the person
+    /// added as a tile and `at` as [`crate::docmap::CodeRef::at`] spells it. Each is one argument; nothing goes
+    /// through a shell.
+    ///
+    /// # Errors
+    ///
+    /// A short reason, no path.
+    fn open_docmap(&self, _folder: &std::path::Path, _at: &str) -> Result<(), String> {
+        Err("docmap-desktop is not found".to_owned())
+    }
 }
 
 /// The apps of the family as the discovery of appkit finds them in the environment `env` (a few file reads per call).
@@ -56,6 +83,50 @@ impl FamilyApps for Discovered {
             running: app.running,
             port: app.running.then_some(app.port).flatten(),
         }
+    }
+
+    fn docmap_desktop(&self) -> Presence {
+        let app = self.docmap_app();
+        Presence {
+            // A hub of the tests that logs its starts counts as having a program.
+            installed: app.program.is_some() || self.env.path(DOCMAP_LOG_VAR).is_some(),
+            running: app.running,
+            port: None,
+        }
+    }
+
+    fn open_docmap(&self, folder: &std::path::Path, at: &str) -> Result<(), String> {
+        if let Some(log) = self.env.path(DOCMAP_LOG_VAR) {
+            use std::io::Write as _;
+            let mut file = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(log)
+                .map_err(|e| e.to_string())?;
+            return writeln!(file, "--open-at\t{}\t{at}", folder.display())
+                .map_err(|e| e.to_string());
+        }
+        let program = self
+            .docmap_app()
+            .program
+            .ok_or_else(|| "docmap-desktop is not installed".to_owned())?;
+        let folder_text = folder.to_string_lossy();
+        appkit_core::launch::spawn(
+            &program,
+            &["--open-at", &folder_text, at],
+            &appkit_core::launch::LaunchOpts {
+                cwd: folder,
+                window: appkit_core::launch::Window::Default,
+            },
+        )
+        .map(|_| ())
+    }
+}
+
+impl Discovered {
+    fn docmap_app(&self) -> family::FamilyApp {
+        let vars = |name: &str| self.env.path(name);
+        family::family_app(&vars, DOCMAP_DESKTOP)
     }
 }
 

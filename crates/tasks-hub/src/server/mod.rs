@@ -443,6 +443,11 @@ fn app_routes(core: &Arc<Shared>) -> Router<Arc<Shared>> {
                 .layer(DefaultBodyLimit::max(small)),
         )
         .route(&r("ai_desktop"), get(ai_desktop_get))
+        .route(&r("docmap"), get(docmap_get))
+        .route(
+            &r("docmap_open"),
+            post(docmap_open).layer(DefaultBodyLimit::max(small)),
+        )
         .route(
             &r("agent"),
             post(agent_send).layer(DefaultBodyLimit::max(small)),

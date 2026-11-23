@@ -190,6 +190,23 @@ export interface AiDesktop {
   port?: number | null;
 }
 
+/** One place in code a task names, as the hub reads it (`GET /api/tasks/docmap`): never a path of the machine. */
+export interface DocmapPlace {
+  /** `<file>:<lines>`, relative to the repo. */
+  label: string;
+  /** The folder name of the repo among the tiles of this device. */
+  repo: string | null;
+  /** The hub can open it: the repo is a tile and holds the file. */
+  ok: boolean;
+  why?: string;
+}
+
+/** The places of a task and whether docmap-desktop is on this machine. */
+export interface DocmapPlaces {
+  found: boolean;
+  places: DocmapPlace[];
+}
+
 /** A task handed to an agent: the job ai-desktop made of it (`POST /api/tasks/agent`). */
 export interface AgentJob {
   job_id: string;
@@ -703,6 +720,25 @@ export class Hub extends HubClient<Snapshot> {
    */
   openInEditor(id: string, kind?: 'competence'): Promise<void> {
     return this.vaultPost('/api/tasks/open', { id, kind });
+  }
+
+  /**
+   * The places in code a task names and whether docmap-desktop is found; null where nobody can say (a hub that is gone,
+   * a hub without the route).
+   */
+  async docmapPlaces(id: string): Promise<DocmapPlaces | null> {
+    try {
+      const doc = await this.json<Partial<DocmapPlaces>>(`/api/tasks/docmap?id=${encodeURIComponent(id).replace(/%2F/gi, '/')}`);
+      const places = Array.isArray(doc.places) ? doc.places.filter((p) => typeof p?.label === 'string') : [];
+      return { found: doc.found === true, places };
+    } catch {
+      return null;
+    }
+  }
+
+  /** Open docmap-desktop at the `index`-th place of a task (the hub starts it; the page names the task and the number). */
+  openInDocmap(id: string, index: number): Promise<void> {
+    return this.vaultPost('/api/tasks/docmap_open', { id, index });
   }
 
   /** Read another vault; the hub swaps what it holds and the page reads everything again. */

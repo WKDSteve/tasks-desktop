@@ -6545,6 +6545,61 @@ test('a task is opened in Neovim by the hub: the page names the task, the hub th
   expect(consoleProblems.get(page)).toEqual([]);
 });
 
+test('"Open in DocMap" at a task starts docmap-desktop with the repo and the lines, and the page sees no path', async ({ page }) => {
+  await watchViolations(page);
+  const id = 'lib.nvim/docmap-place-e2e';
+  writeFileSync(
+    join(state().vault, 'lib.nvim', 'ROADMAP', 'tasks', 'docmap-place-e2e.md'),
+    [
+      '---',
+      'title: A place in code',
+      'status: open',
+      'kind: task',
+      'created: 2026-01-01',
+      'updated: 2026-01-01',
+      '---',
+      '',
+      '## Kontext',
+      '',
+      '```code-ref',
+      '{ "schema": "code-ref/1", "repo": "docmap-e2e", "file": "lua/a.lua", "lines": [3, 9] }',
+      '```',
+      '',
+      'A block of a repo that is not a tile of this device, and one that leaves its repo:',
+      '',
+      '```code-ref',
+      '{ "schema": "code-ref/1", "repo": "unknown-repo", "file": "lua/a.lua", "lines": [1, 1] }',
+      '```',
+      '',
+      '```code-ref',
+      '{ "schema": "code-ref/1", "repo": "docmap-e2e", "file": "../x.lua", "lines": [1, 1] }',
+      '```',
+      '',
+    ].join('\n'),
+  );
+  await pair(page);
+  await showList(page);
+  await open(page, id);
+  const log = join(state().config, '..', 'docmap.log');
+  removeFile(log);
+
+  // One button: the unknown repo and the path that leaves the repo are no places the hub can open.
+  const button = page.locator('aside.detail').getByRole('button', { name: 'Open in DocMap' });
+  await expect(button).toHaveCount(1);
+  await button.click();
+  await expect(page.getByRole('status').getByText('Opened in DocMap.')).toBeVisible();
+  await expect.poll(() => (existsSync(log) ? readFileSync(log, 'utf8') : '')).toContain('lua/a.lua:3-9');
+  const lines = readFileSync(log, 'utf8').trim().split('\n');
+  expect(lines).toHaveLength(1);
+  const [flag, folder, at] = (lines[0] ?? '').split('\t');
+  expect([flag, at]).toEqual(['--open-at', 'lua/a.lua:3-9']);
+  expect((folder ?? '').replaceAll('\\', '/')).toMatch(/\/repos\/docmap-e2e$/);
+  // The page never saw the folder of the repo.
+  expect(await page.locator('body').innerText()).not.toContain('repos/docmap-e2e');
+  expect(await violations(page)).toEqual([]);
+  expect(consoleProblems.get(page)).toEqual([]);
+});
+
 test('a note that is being typed survives a change of the vault that arrives meanwhile', async ({ page }) => {
   await pair(page);
   await showList(page);

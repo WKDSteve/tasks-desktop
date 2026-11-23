@@ -1120,6 +1120,30 @@ through the tab *Repos*); a file that cannot be used does not stop the hub: the 
 first change keeps the old file as `repos.json.invalid` beside the new one. At most 200 repos, 50 groups, 80
 characters for a name or a title, 256 KiB.
 
+### Open in DocMap (docmap-desktop)
+
+A task that names a place in code gets the button *Open in DocMap* in its detail (*Work*: no menu, no palette entry).
+A task names a place in one of two ways: a fenced block of the language `code-ref` in its text (the schema `code-ref/1`
+of appkit: `repo`, `file`, `lines`; `tasks.nvim` writes it from a marked piece of code), or, older, a ref
+`<file>:<first>[-<last>]` of its `refs`. A click starts docmap-desktop at the function that holds the line
+(`docmap-desktop --open-at <repo folder> <file>:<lines>`; its `docs/USAGE.md`, "Opening the map at a file and line").
+
+What the hub checks, so that the page sees no path of this computer and nothing from outside is trusted: the page
+sends only the task and the number of the place; the hub reads the place again from the text the engine hands over
+(a block that fails the rules of the schema is not a place: a path that is not repository-relative in the one
+spelling, `..`, a drive, `~`, `$`, `%`, a backslash or a colon in it; more than 64 KiB; an unknown `schema`), finds the
+repo among the **repo tiles** of this device by the name of its folder (two folders of one name: refused; a ref without
+a repo needs exactly one tile that holds the file), checks that the file is a plain file inside that folder (a link
+that leaves it is refused), and starts the program with the folder and `<file>:<lines>` as two arguments of their own
+(no shell). docmap-desktop is found as the family finds ai-desktop (the manifest of its installer; the hub does not
+start it from its checkout). The button is there only for a place the hub can open: no docmap-desktop, a repo that is
+no tile, or a file the repo does not hold: no button. At most 8 places are read; with several, each button names its
+place.
+
+The web variant has no hub: it offers no button. There is no way yet to open the generated page of a repo
+(`docs/map/index.html`) without docmap-desktop: the hub opens only loopback pages in the browser (task
+`tasks-desktop/docmap-seite-des-repos-ohne-docmap-desktop-oeffnen`).
+
 ### AI functions (ai-desktop)
 
 AI does not push itself forward. The page offers its AI functions (handing a task to an agent of ai-desktop) only

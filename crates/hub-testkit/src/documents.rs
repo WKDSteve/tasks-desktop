@@ -15,6 +15,7 @@
 //! * `.fake-bodies-page`: how many bodies one page holds;
 //! * `.fake-snapshot-ms`: a `snapshot` takes that long (an engine started slowly on a busy machine);
 //! * `.fake-task-ms`, `.fake-task-calls`: a `task` read takes that long, and every one is counted;
+//! * `.fake-task-body`, `.fake-task-refs`: the body every task has and its refs (one per line);
 //! * `.fake-task-file`: the file every task is in; `.fake-task-done-file`: the file a finished one (`task` with
 //!   `finished`) is in, which then says `status: done` and `finished: true` (without it: `not_found`);
 //! * `agent_answer`: one section `## Prüfung` whose text is the `output` it was given, and a follow-up when the output
@@ -383,7 +384,13 @@ fn tasks_fill(call: &Call<'_>, doc: &mut Value) {
                 if let Ok(file) = std::fs::read_to_string(vault.join(".fake-task-file")) {
                     doc["task"]["file"] = json!(file.trim());
                 }
-                doc["body"] = json!("");
+                // The text the vault gives every task (`.fake-task-body`) and its refs (`.fake-task-refs`, one per line).
+                doc["body"] = json!(
+                    std::fs::read_to_string(vault.join(".fake-task-body")).unwrap_or_default()
+                );
+                if let Ok(refs) = std::fs::read_to_string(vault.join(".fake-task-refs")) {
+                    doc["task"]["refs"] = json!(refs.lines().collect::<Vec<_>>());
+                }
                 // The state the task was read in follows the snapshot, in another form than the
                 // snapshot's, as the engine's is.
                 if let Some(n) = state(vault) {

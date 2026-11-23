@@ -2,7 +2,7 @@
 // that are maps, a clock that stands still. `make` builds an `App` on them; the tests of the state (app.test.ts) and
 // the tests that mount a component in a DOM (`*.dom.test.ts`) share it, so both test the app as it is, not a copy.
 import type { IntentAnswer } from './intent';
-import { ApiError, type AssetAnswer, type BoardRequest, type BoardSaved, type FinishedQuery, type Hub, type HubArea, type OpsRequest, type SetupInfo, type SetupStep, type VaultList } from './api';
+import { ApiError, type AssetAnswer, type BoardRequest, type BoardSaved, type DocmapPlaces, type FinishedQuery, type Hub, type HubArea, type OpsRequest, type SetupInfo, type SetupStep, type VaultList } from './api';
 import { App, type Env } from './app.svelte';
 import type { CachedList, ListStore } from './cache';
 import type { DonePreview, Groupings, MeetingDocument, MeetingEntry, MeetingParse, Meetings, Next, Result, Snapshot, TaskDocument, TaskEntry, View, Views } from './contract';
@@ -663,6 +663,16 @@ export class FakeHub {
   }
   async openInEditor(id: string, kind?: 'competence'): Promise<void> {
     this.vaultCalls.push(kind ? `open ${kind} ${id}` : `open ${id}`);
+    if (this.vaultError) throw this.vaultError;
+  }
+  /** What the hub says of the places of a task (none: it cannot say), and the places that were opened (`<id> <index>`). */
+  docmapDoc: DocmapPlaces | null = null;
+  docmapOpened: string[] = [];
+  async docmapPlaces(): Promise<DocmapPlaces | null> {
+    return this.docmapDoc;
+  }
+  async openInDocmap(id: string, index: number): Promise<void> {
+    this.docmapOpened.push(`${id} ${index}`);
     if (this.vaultError) throw this.vaultError;
   }
   async selectVault(name: string): Promise<void> {

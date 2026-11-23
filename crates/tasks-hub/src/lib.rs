@@ -15,6 +15,7 @@ pub mod bundle;
 pub mod classes;
 pub mod config;
 pub mod discovery;
+pub mod docmap;
 pub mod editor;
 pub mod engine;
 pub mod family;
