@@ -13,6 +13,14 @@
   }: { app: App; files?: File[]; screenshot?: boolean } = $props();
 
   const t = (key: Key, params: Record<string, string | number> = {}) => translate(app.lang, key, params);
+  // The words of this part stand here, not in the language files: the start of the page does not carry them.
+  const de = $derived(app.lang === 'de');
+  const words = $derived({
+    pending: de ? 'Nach dem Anlegen anhängen' : 'Attach once it is made',
+    files: de ? 'Dateien von diesem Rechner' : 'Files from this computer',
+    list: de ? 'Anzuhängende Dateien' : 'Files to attach',
+  });
+  const removeLabel = (name: string) => (de ? `${name} nicht anhängen` : `Do not attach ${name}`);
 
   function picked(input: HTMLInputElement): void {
     const chosen = [...(input.files ?? [])];
@@ -25,19 +33,19 @@
 
 {#if app.canAttach}
   <fieldset class="pending">
-    <legend>{t('attach.pending')}</legend>
+    <legend>{words.pending}</legend>
     <label class="file" data-hint={t('hint.form.task.files')}>
-      <span>{t('attach.pending_files')}</span>
+      <span>{words.files}</span>
       <input type="file" multiple onchange={(e) => picked(e.currentTarget)} />
     </label>
     {#if files.length > 0}
-      <ul aria-label={t('attach.pending_list')}>
+      <ul aria-label={words.list}>
         {#each files as file, i (`${file.name}-${file.size}-${i}`)}
           <li>
             <span class="name">{file.name}</span>
             <button
               type="button"
-              aria-label={t('attach.pending_remove', { name: file.name })}
+              aria-label={removeLabel(file.name)}
               onclick={() => (files = files.filter((_, j) => j !== i))}>×</button
             >
           </li>
