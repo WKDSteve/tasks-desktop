@@ -4459,10 +4459,24 @@ export class App {
    * page (`handoffSummary.ts`, loaded when the first one starts): a reload forgets it, the job stays in ai-desktop.
    */
   async watchHandoff(id: string, job: string): Promise<void> {
+    // eslint-disable-next-line @typescript-eslint/no-this-alias
+    const self = this;
     try {
       const lazy = await import('./handoffSummary');
       this.#handoffStop = lazy.stopHandoffs;
-      await lazy.watchHandoffRun(this, id, job);
+      await lazy.watchHandoffRun(
+        {
+          env: this.env,
+          get answer() {
+            return self.answer;
+          },
+          tasks: this.tasks,
+          say: (kind, key, params) => this.say(kind, key, params),
+          showAnswer: (view) => this.showAnswer(view),
+        },
+        id,
+        job,
+      );
     } catch {
       // The hub or ai-desktop is gone: the job stays in ai-desktop, the page has nothing to show.
     }
