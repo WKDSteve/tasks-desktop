@@ -1,8 +1,10 @@
 <script lang="ts">
   // "Open in DocMap" at a task: loaded only for a task that may name a place in code (`Detail.svelte`), so the start of
   // the page does not carry it. The hub reads the places (a `code-ref` block, or a ref `<file>:<lines>`), finds the repo
-  // among the tiles and says whether docmap-desktop is there; a button shows only for a place the hub can open, so
-  // nothing is dead (a web page, a repo that is no tile, no docmap-desktop). A click names the task and the number.
+  // among the tiles and says per place whether it opens, and the way (`app`: docmap-desktop, `page`: the generated page
+  // of the repo in the browser, where docmap-desktop is not); a button shows only for a place the hub can open, so
+  // nothing is dead (a web page, a repo that is no tile, neither docmap-desktop nor a page). A click names the task and
+  // the number.
   import type { App } from '../lib/app.svelte';
   import type { DocmapPlaces } from '../lib/api';
   import { ApiError } from '../lib/api';
@@ -42,7 +44,7 @@
     }
   }
   const openable = $derived(
-    found?.found ? found.places.map((place, index) => ({ place, index })).filter((entry) => entry.place.ok) : [],
+    found ? found.places.map((place, index) => ({ place, index })).filter((entry) => entry.place.ok) : [],
   );
 </script>
 
@@ -51,6 +53,7 @@
     type="button"
     class="open-editor"
     data-testid="open-docmap"
+    data-way={entry.place.way}
     onclick={() => void go(entry.index)}>{openable.length === 1 ? label : `${label}: ${entry.place.label}`}</button
   >
 {/each}

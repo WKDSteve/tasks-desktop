@@ -1587,8 +1587,39 @@ async fn docmap_places(
         .collect())
 }
 
+/// How an "Open in DocMap" opens a repo.
+enum DocmapWay {
+    /// docmap-desktop, started at the place.
+    App,
+    /// The generated page of the repo (`<out_dir>/index.html`, this path), in the browser.
+    Page(String),
+}
+
+impl DocmapWay {
+    fn name(&self) -> &'static str {
+        match self {
+            Self::App => "app",
+            Self::Page(_) => "page",
+        }
+    }
+}
+
+/// The way for the repo in `folder`: docmap-desktop when it is on this machine (`app`), else the generated page of the
+/// repo when it is there and this machine opens it, else none (the button is not shown). Reads files.
+fn docmap_way(
+    family: Option<&dyn crate::family::FamilyApps>,
+    app: bool,
+    folder: &std::path::Path,
+) -> Option<DocmapWay> {
+    if app {
+        return Some(DocmapWay::App);
+    }
+    family?.docmap_page(folder).map(DocmapWay::Page)
+}
+
 /// `GET /api/tasks/docmap?id=`: the places in code the task names and whether DocMap can be opened at each
-/// (`{ "found", "places": [{ "label", "repo", "ok", "why"? }] }`). The label is `<file>:<lines>` relative to the repo,
+/// (`{ "found", "places": [{ "label", "repo", "ok", "way"?, "why"? }] }`; `way` is `app` for docmap-desktop, `page` for the
+/// generated page of the repo, which opens when docmap-desktop is not there; `found` says docmap-desktop is). The label is `<file>:<lines>` relative to the repo,
 /// `repo` the name of the folder: no path of this machine leaves the hub. A hub without the discovery of the family says
 /// DocMap is not found, and a web variant has no such route (its page offers no button).
 pub(super) async fn docmap_get(
@@ -1607,31 +1638,46 @@ pub(super) async fn docmap_get(
         );
     };
     let family = st.rt().family.clone();
-    let found = match family {
-        Some(family) => tokio::task::spawn_blocking(move || family.docmap_desktop().installed)
-            .await
-            .unwrap_or(false),
-        None => false,
-    };
     let places = match docmap_places(&st, id).await {
         Ok(p) => p,
         Err(response) => return response,
     };
-    let places: Vec<serde_json::Value> = places
-        .iter()
-        .map(|(place, found_at)| match found_at {
-            crate::docmap::Resolved::Found { repo, .. } => {
-                json!({ "label": place.at(), "repo": repo, "ok": true })
-            }
-            crate::docmap::Resolved::Refused(why) => {
-                json!({ "label": place.at(), "repo": place.repo, "ok": false, "why": why })
-            }
-        })
-        .collect();
+    // File reads (the page, `.docmap.json`) and the discovery of the app: off the executor.
+    let listed = tokio::task::spawn_blocking(move || {
+        let app = family.as_ref().is_some_and(|f| f.docmap_desktop().installed);
+        let list: Vec<serde_json::Value> = places
+            .iter()
+            .map(|(place, found_at)| match found_at {
+                crate::docmap::Resolved::Found { repo, folder } => {
+                    match docmap_way(family.as_deref(), app, folder) {
+                        Some(way) => {
+                            json!({ "label": place.at(), "repo": repo, "ok": true, "way": way.name() })
+                        }
+                        None => json!({
+                            "label": place.at(), "repo": repo, "ok": false,
+                            "why": "neither docmap-desktop nor a generated page of the repo is here",
+                        }),
+                    }
+                }
+                crate::docmap::Resolved::Refused(why) => {
+                    json!({ "label": place.at(), "repo": place.repo, "ok": false, "why": why })
+                }
+            })
+            .collect();
+        (app, list)
+    })
+    .await;
+    let Ok((found, places)) = listed else {
+        return error_body(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "docmap_failed",
+            "the check stopped unexpectedly",
+        );
+    };
     axum::Json(json!({ "found": found, "places": places })).into_response()
 }
 
-/// `POST /api/tasks/docmap_open` `{ "id", "index" }`: open docmap-desktop at the `index`-th place of the task (the order
+/// `POST /api/tasks/docmap_open` `{ "id", "index" }`: open docmap-desktop (or, without it, the generated page of the repo) at the `index`-th place of the task (the order
 /// of `docmap`). The page names the task and the number, never a path: the hub reads the place again, checks it (a path
 /// inside a repo of the tiles) and starts the program with the folder and `<file>:<lines>` as arguments of their own.
 pub(super) async fn docmap_open(State(st): State<Arc<Shared>>, body: Bytes) -> Response {
@@ -1682,7 +1728,18 @@ pub(super) async fn docmap_open(State(st): State<Arc<Shared>>, body: Bytes) -> R
         return error_body(StatusCode::BAD_REQUEST, "docmap_refused", why);
     };
     let at = place.at();
-    let opened = tokio::task::spawn_blocking(move || family.open_docmap(&folder, &at)).await;
+    let node = place.node.clone();
+    let opened = tokio::task::spawn_blocking(move || {
+        let app = family.docmap_desktop().installed;
+        match docmap_way(Some(&*family), app, &folder) {
+            Some(DocmapWay::App) => family.open_docmap(&folder, &at),
+            Some(DocmapWay::Page(page)) => family.open_docmap_page(&folder, &page, node.as_deref()),
+            None => {
+                Err("neither docmap-desktop nor a generated page of the repo is here".to_owned())
+            }
+        }
+    })
+    .await;
     match opened {
         Ok(Ok(())) => axum::Json(json!({ "ok": true })).into_response(),
         Ok(Err(why)) => error_body(StatusCode::BAD_GATEWAY, "docmap_failed", &why),

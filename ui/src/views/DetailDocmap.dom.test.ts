@@ -62,6 +62,17 @@ describe('the button "Open in DocMap" of the detail', () => {
     expect(m.hub.docmapOpened).toEqual(['pub/a 0']);
   });
 
+  it('shows without docmap-desktop for a place whose repo has its page, and says the way', async () => {
+    const { m, buttons } = await show({
+      body: BLOCK,
+      docmap: { found: false, places: [{ label: 'a.lua:1-2', repo: 'x', ok: true, way: 'page' }] },
+    });
+    expect(buttons().map((b) => [b.textContent?.trim(), b.dataset.way])).toEqual([['In DocMap öffnen', 'page']]);
+    buttons()[0]?.click();
+    await settle();
+    expect(m.hub.docmapOpened).toEqual(['pub/a 0']);
+  });
+
   it('shows for a ref <file>:<lines> without a block, one button per place the hub can open, with its place', async () => {
     const { m, buttons } = await show({
       refs: ['a.lua:3-4', 'b.lua:9'],
@@ -100,7 +111,7 @@ describe('the button "Open in DocMap" of the detail', () => {
   it('is not there without docmap-desktop, without a place, for a place the hub refuses, or in the web variant', async () => {
     const ok = [{ label: 'a.lua:1-2', repo: 'x', ok: true }];
     for (const opts of [
-      { body: BLOCK, docmap: { found: false, places: ok } },
+      { body: BLOCK, docmap: { found: false, places: [{ label: 'a.lua:1-2', repo: 'x', ok: false }] } },
       { body: 'no place here', refs: ['a task/slug'], docmap: { found: true, places: ok } },
       { body: BLOCK, docmap: { found: true, places: [{ label: 'a.lua:1-2', repo: 'x', ok: false }] } },
       { body: BLOCK, docmap: null },

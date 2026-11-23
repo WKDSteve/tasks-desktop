@@ -27,6 +27,13 @@ const DOCMAP_DESKTOP: Member<'static> = Member {
 /// docmap-desktop with, one line each, instead of starting anything.
 pub const DOCMAP_LOG_VAR: &str = "TASKS_DESKTOP_DOCMAP_LOG";
 
+/// A file the tests give the hub (`TASKS_DESKTOP_DOCMAP_PAGE_LOG`): the hub then writes `<folder>, <page>, <node>`, tab separated, of the
+/// page it would open in the browser, instead of opening it. The page must still be there: only the start is replaced.
+pub const DOCMAP_PAGE_LOG_VAR: &str = "TASKS_DESKTOP_DOCMAP_PAGE_LOG";
+
+/// The machine role that never opens the generated page of a repo (`MASCHINE-04`; the kit checks it as well).
+const WORKSTATION: &str = "workstation";
+
 /// Whether an app of the family is on this machine, and whether its hub is running now.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize)]
 pub struct Presence {
@@ -58,6 +65,29 @@ pub trait FamilyApps: Send + Sync {
     /// A short reason, no path.
     fn open_docmap(&self, _folder: &std::path::Path, _at: &str) -> Result<(), String> {
         Err("docmap-desktop is not found".to_owned())
+    }
+
+    /// The generated DocMap page of the repo in `folder` (a tile), relative to it (`<out_dir>/index.html`), when it is
+    /// there and this machine opens it; none otherwise (no page, the workstation, a hub without discovery). The way an
+    /// "Open in DocMap" takes when docmap-desktop is not on this machine.
+    fn docmap_page(&self, _folder: &std::path::Path) -> Option<String> {
+        None
+    }
+
+    /// Open the page `relative` (as [`FamilyApps::docmap_page`] gave it) of the repo in `folder` in the browser, at the
+    /// DocMap node `node` if there is one. The link is built by `appkit_hub::browser::open_index_html` from the checked
+    /// file; nothing of the page reaches it.
+    ///
+    /// # Errors
+    ///
+    /// A short reason, no path.
+    fn open_docmap_page(
+        &self,
+        _folder: &std::path::Path,
+        _relative: &str,
+        _node: Option<&str>,
+    ) -> Result<(), String> {
+        Err("the page of the repo is not opened here".to_owned())
     }
 }
 
@@ -121,9 +151,55 @@ impl FamilyApps for Discovered {
         )
         .map(|_| ())
     }
+
+    fn docmap_page(&self, folder: &std::path::Path) -> Option<String> {
+        if self.on_workstation() {
+            return None;
+        }
+        let relative = crate::docmap::page_relative(folder)?;
+        appkit_hub::browser::index_html_available(folder, &relative).then_some(relative)
+    }
+
+    fn open_docmap_page(
+        &self,
+        folder: &std::path::Path,
+        relative: &str,
+        node: Option<&str>,
+    ) -> Result<(), String> {
+        if self.on_workstation() {
+            return Err("the page of a repo is not opened on this machine".to_owned());
+        }
+        if let Some(log) = self.env.path(DOCMAP_PAGE_LOG_VAR) {
+            if !appkit_hub::browser::index_html_available(folder, relative) {
+                return Err("there is no such page".to_owned());
+            }
+            use std::io::Write as _;
+            let mut file = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(log)
+                .map_err(|e| e.to_string())?;
+            return writeln!(
+                file,
+                "{}\t{relative}\t{}",
+                folder.display(),
+                node.unwrap_or("")
+            )
+            .map_err(|e| e.to_string());
+        }
+        appkit_hub::browser::open_index_html(folder, relative, node)
+    }
 }
 
 impl Discovered {
+    fn on_workstation(&self) -> bool {
+        self.env.get("NVIM_MACHINE_ROLE").is_some_and(|role| {
+            role.to_string_lossy()
+                .trim()
+                .eq_ignore_ascii_case(WORKSTATION)
+        })
+    }
+
     fn docmap_app(&self) -> family::FamilyApp {
         let vars = |name: &str| self.env.path(name);
         family::family_app(&vars, DOCMAP_DESKTOP)

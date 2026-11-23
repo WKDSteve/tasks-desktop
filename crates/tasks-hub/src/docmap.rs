@@ -17,6 +17,14 @@ const MAX_BLOCK_BYTES: usize = 64 * 1024;
 pub const MAX_REFS: usize = 8;
 /// The longest path of a place.
 const MAX_FILE: usize = 300;
+/// The longest node name the page of a repo is opened at (the limit of `appkit_hub::browser::open_index_html`; a longer
+/// name opens the page without a fragment).
+const MAX_NODE: usize = 128;
+/// The file that tells DocMap where its page is written, and the folder when it says nothing.
+const DOCMAP_CONFIG: &str = ".docmap.json";
+const DEFAULT_OUT_DIR: &str = "docs/map";
+/// The largest `.docmap.json` that is read.
+const MAX_CONFIG_BYTES: u64 = 256 * 1024;
 /// The largest line number of the schema.
 const MAX_LINE: u64 = 10_000_000;
 
@@ -29,6 +37,8 @@ pub struct CodeRef {
     pub file: String,
     pub first: u32,
     pub last: u32,
+    /// The DocMap node the block names (`docmap.node`), if it is one the page can be opened at; never from a ref.
+    pub node: Option<String>,
 }
 
 impl CodeRef {
@@ -148,11 +158,18 @@ pub fn from_block(text: &str) -> Result<CodeRef, String> {
         Some(Value::String(sha)) if hex_sha(sha) => {}
         Some(_) => return Err("sha is not a commit".to_owned()),
     }
+    let node = map
+        .get("docmap")
+        .and_then(|d| d.get("node"))
+        .and_then(Value::as_str)
+        .filter(|n| !n.is_empty() && n.len() <= MAX_NODE)
+        .map(str::to_owned);
     Ok(CodeRef {
         repo: Some(repo.to_owned()),
         file: file.to_owned(),
         first,
         last,
+        node,
     })
 }
 
@@ -180,6 +197,7 @@ pub fn from_ref(text: &str) -> Option<CodeRef> {
         file: file.to_owned(),
         first,
         last,
+        node: None,
     })
 }
 
@@ -250,6 +268,32 @@ pub fn collect(body: &str, refs: &[String]) -> Vec<CodeRef> {
     }
     found.truncate(MAX_REFS);
     found
+}
+
+/// The path of the generated page of the repo in `folder`, relative to it: `<out_dir>/index.html`, where `out_dir` is the
+/// one of the `.docmap.json` of the repo (default `docs/map`, as docmap-desktop reads it). The file is read as untrusted
+/// input: a missing, too large or unreadable file or an `out_dir` that is no plain relative path gives the default or
+/// nothing, never a path outside the repo (the opener checks the path once more).
+#[must_use]
+pub fn page_relative(folder: &Path) -> Option<String> {
+    let out_dir = match std::fs::symlink_metadata(folder.join(DOCMAP_CONFIG)) {
+        Ok(meta) if meta.is_file() && meta.len() <= MAX_CONFIG_BYTES => {
+            let text = std::fs::read_to_string(folder.join(DOCMAP_CONFIG)).ok()?;
+            let doc: Value = serde_json::from_str(&text).ok()?;
+            match doc.get("out_dir") {
+                None | Some(Value::Null) => DEFAULT_OUT_DIR.to_owned(),
+                Some(Value::String(dir)) => dir.trim_end_matches('/').to_owned(),
+                Some(_) => return None,
+            }
+        }
+        Ok(_) => return None,
+        Err(_) => DEFAULT_OUT_DIR.to_owned(),
+    };
+    let out_dir = out_dir.strip_prefix("./").unwrap_or(&out_dir);
+    if out_dir.is_empty() || path_error(out_dir).is_some() {
+        return None;
+    }
+    Some(format!("{out_dir}/index.html"))
 }
 
 /// Where a place is on this machine, or why it cannot be opened.
@@ -334,6 +378,56 @@ mod tests {
     }
 
     #[test]
+    fn a_block_may_name_the_docmap_node_a_ref_never() {
+        let with = GOOD.replace(r#""lines""#, r#""docmap": { "node": "a.b" }, "lines""#);
+        assert_eq!(from_block(&with).unwrap().node.as_deref(), Some("a.b"));
+        assert_eq!(from_block(GOOD).unwrap().node, None);
+        // A node the kit would refuse (too long) opens the page without a fragment.
+        let long = GOOD.replace(
+            r#""lines""#,
+            &format!(r#""docmap": {{ "node": "{}" }}, "lines""#, "n".repeat(129)),
+        );
+        assert_eq!(from_block(&long).unwrap().node, None);
+        assert_eq!(from_ref("lua/a.lua:3").unwrap().node, None);
+    }
+
+    #[test]
+    fn the_page_is_where_the_docmap_json_says() {
+        let root = Scratch::new("docmap-page-relative");
+        let repo = |name: &str, config: Option<&str>| {
+            let dir = root.join(name);
+            std::fs::create_dir_all(&dir).unwrap();
+            if let Some(text) = config {
+                std::fs::write(dir.join(".docmap.json"), text).unwrap();
+            }
+            dir
+        };
+        assert_eq!(
+            page_relative(&repo("none", None)).as_deref(),
+            Some("docs/map/index.html")
+        );
+        assert_eq!(
+            page_relative(&repo("empty", Some("{}"))).as_deref(),
+            Some("docs/map/index.html")
+        );
+        assert_eq!(
+            page_relative(&repo("own", Some(r#"{ "out_dir": "./site/map/" }"#))).as_deref(),
+            Some("site/map/index.html")
+        );
+        for bad in [
+            r#"{ "out_dir": "../x" }"#,
+            r#"{ "out_dir": "/abs" }"#,
+            r#"{ "out_dir": "C:/x" }"#,
+            r#"{ "out_dir": "" }"#,
+            r#"{ "out_dir": 3 }"#,
+            "not json",
+        ] {
+            let dir = repo(&format!("bad{}", bad.len()), Some(bad));
+            assert_eq!(page_relative(&dir), None, "{bad}");
+        }
+    }
+
+    #[test]
     fn only_fenced_blocks_of_the_language_are_read() {
         let body = format!(
             "## Kontext\n\n```code-ref\n{GOOD}\n```\n\n```json\n{GOOD}\n```\n\n````md\n```code-ref\n{GOOD}\n```\n````\n\n```code-ref\n{GOOD}\n"
@@ -396,6 +490,7 @@ mod tests {
             file: file.to_owned(),
             first: 1,
             last: 1,
+            node: None,
         };
         assert_eq!(
             resolve(&place(Some("one"), "lua/a.lua"), &folders),

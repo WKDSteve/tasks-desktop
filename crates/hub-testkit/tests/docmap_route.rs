@@ -25,6 +25,8 @@ struct Rig {
     server: RunningServer,
     vault: PathBuf,
     log: PathBuf,
+    /// The folder of the repos of this device (`alpha`, `beta`).
+    repos: PathBuf,
     token: String,
     _base: Scratch,
 }
@@ -40,7 +42,29 @@ const BLOCK: &str = r#"## Kontext
 ```
 "#;
 
+/// What the hub knows of the family.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Family {
+    /// No discovery at all.
+    None,
+    /// docmap-desktop is there (its start is logged).
+    App,
+    /// docmap-desktop is not there; the page of a repo is opened in the browser (its opening is logged); the machine
+    /// is the one named.
+    Page(Option<&'static str>),
+}
+
 async fn rig(name: &str, body: &str, refs: &str, discovery: bool) -> Rig {
+    rig_with(
+        name,
+        body,
+        refs,
+        if discovery { Family::App } else { Family::None },
+    )
+    .await
+}
+
+async fn rig_with(name: &str, body: &str, refs: &str, kind: Family) -> Rig {
     let base = Scratch::new(&format!("docmap-{name}"));
     let vault = base.join("vault");
     let tasks = vault.join("alpha.nvim").join("ROADMAP").join("tasks");
@@ -85,12 +109,23 @@ async fn rig(name: &str, body: &str, refs: &str, discovery: bool) -> Rig {
     )
     .unwrap();
     let log = base.join("docmap.log");
-    let family: Option<Arc<dyn FamilyApps>> = discovery.then(|| {
-        Arc::new(Discovered::new(Env::from_pairs([(
+    let family: Option<Arc<dyn FamilyApps>> = match kind {
+        Family::None => None,
+        Family::App => Some(Arc::new(Discovered::new(Env::from_pairs([(
             "TASKS_DESKTOP_DOCMAP_LOG",
             log.to_string_lossy().into_owned(),
-        )]))) as Arc<dyn FamilyApps>
-    });
+        )])))),
+        Family::Page(machine) => {
+            let mut pairs = vec![(
+                "TASKS_DESKTOP_DOCMAP_PAGE_LOG".to_owned(),
+                log.to_string_lossy().into_owned(),
+            )];
+            if let Some(role) = machine {
+                pairs.push(("NVIM_MACHINE_ROLE".to_owned(), role.to_owned()));
+            }
+            Some(Arc::new(Discovered::new(Env::from_pairs(pairs))))
+        }
+    };
     let engine: Arc<dyn Engine> = Arc::new(CliEngine::new(CliEngineConfig {
         dialect: tasks_hub::engine::DIALECT,
         nvim: PathBuf::from(env!("CARGO_BIN_EXE_fake-nvim")),
@@ -176,6 +211,7 @@ async fn rig(name: &str, body: &str, refs: &str, discovery: bool) -> Rig {
         .unwrap()
         .to_owned();
     Rig {
+        repos: base.join("repos"),
         server,
         vault,
         log,
@@ -313,4 +349,135 @@ async fn a_task_without_places_lists_none_and_a_hub_without_discovery_finds_no_d
         (404, Some("docmap_unavailable")),
         "{doc}"
     );
+}
+
+/// The generated page of `repo` (a tile of the rig) in `out_dir`, and its `.docmap.json` if there is one.
+fn write_page(r: &Rig, repo: &str, config: Option<&str>, out_dir: &str) {
+    let folder = r.repos.join(repo);
+    std::fs::create_dir_all(folder.join(out_dir)).unwrap();
+    std::fs::write(folder.join(out_dir).join("index.html"), "<html></html>").unwrap();
+    if let Some(config) = config {
+        std::fs::write(folder.join(".docmap.json"), config).unwrap();
+    }
+}
+
+const NODE_BLOCK: &str = r#"```code-ref
+{ "schema": "code-ref/1", "repo": "alpha", "file": "lua/a.lua", "lines": [22, 41], "docmap": { "node": "alpha.core x" } }
+```
+
+```code-ref
+{ "schema": "code-ref/1", "repo": "beta", "file": "lua/b.lua", "lines": [1, 2] }
+```
+"#;
+
+#[tokio::test]
+async fn without_docmap_desktop_the_page_of_the_repo_is_the_way_when_it_is_there() {
+    let r = rig_with("page", NODE_BLOCK, "", Family::Page(None)).await;
+    // alpha has its page in the default folder, beta has none: only the first is a button, and the answer names the way.
+    write_page(&r, "alpha", None, "docs/map");
+    let (status, doc) = call(&r, "GET", "/api/tasks/docmap?id=alpha.nvim/t1", "").await;
+    assert_eq!(status, 200, "{doc}");
+    assert_eq!(doc["found"], false, "docmap-desktop is not there: {doc}");
+    let places = doc["places"].as_array().unwrap();
+    assert_eq!(places[0]["ok"], true, "{doc}");
+    assert_eq!(places[0]["way"], "page", "{doc}");
+    assert_eq!(places[1]["ok"], false, "{doc}");
+    assert!(places[1].get("way").is_none(), "{doc}");
+    // The page sees no path of this machine and no name of the file of the page.
+    assert!(!doc.to_string().contains("repos"), "{doc}");
+    assert!(!doc.to_string().contains("index.html"), "{doc}");
+
+    // Opening the one with a page: the page of alpha, at the node, nothing else.
+    let (status, doc) = call(
+        &r,
+        "POST",
+        "/api/tasks/docmap_open",
+        r#"{"id":"alpha.nvim/t1","index":0}"#,
+    )
+    .await;
+    assert_eq!(status, 200, "{doc}");
+    let seen = started(&r);
+    assert_eq!(seen.len(), 1, "{seen:?}");
+    let parts: Vec<_> = seen[0].split('\t').collect();
+    assert!(parts[0].ends_with("alpha"), "{seen:?}");
+    assert_eq!(
+        parts[1..],
+        ["docs/map/index.html", "alpha.core x"],
+        "{seen:?}"
+    );
+    // The place without a page is refused, and nothing more is opened.
+    let (status, doc) = call(
+        &r,
+        "POST",
+        "/api/tasks/docmap_open",
+        r#"{"id":"alpha.nvim/t1","index":1}"#,
+    )
+    .await;
+    assert_eq!(
+        (status, doc["error"]["code"].as_str()),
+        (502, Some("docmap_failed")),
+        "{doc}"
+    );
+    assert_eq!(started(&r).len(), 1);
+}
+
+#[tokio::test]
+async fn the_page_is_where_the_docmap_json_of_the_repo_puts_it_and_nowhere_else() {
+    let r = rig_with("outdir", NODE_BLOCK, "", Family::Page(None)).await;
+    write_page(
+        &r,
+        "alpha",
+        Some(r#"{ "out_dir": "build/site/" }"#),
+        "build/site",
+    );
+    // beta: a page in the default folder, but its config sends the page out of the repo.
+    write_page(
+        &r,
+        "beta",
+        Some(r#"{ "out_dir": "../elsewhere" }"#),
+        "docs/map",
+    );
+    let (_, doc) = call(&r, "GET", "/api/tasks/docmap?id=alpha.nvim/t1", "").await;
+    let ways: Vec<_> = doc["places"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|p| p["way"].as_str().unwrap_or("-").to_owned())
+        .collect();
+    assert_eq!(ways, ["page", "-"], "{doc}");
+    call(
+        &r,
+        "POST",
+        "/api/tasks/docmap_open",
+        r#"{"id":"alpha.nvim/t1","index":0}"#,
+    )
+    .await;
+    assert!(
+        started(&r)[0].contains("build/site/index.html"),
+        "{:?}",
+        started(&r)
+    );
+}
+
+#[tokio::test]
+async fn docmap_desktop_wins_over_the_page_and_the_workstation_shows_no_button() {
+    // With the app: the way is the app, even where a page exists.
+    let r = rig_with("app", NODE_BLOCK, "", Family::App).await;
+    write_page(&r, "alpha", None, "docs/map");
+    let (_, doc) = call(&r, "GET", "/api/tasks/docmap?id=alpha.nvim/t1", "").await;
+    assert_eq!(doc["places"][0]["way"], "app", "{doc}");
+    // On the workstation (MASCHINE-04): no page way, no button, and an open is refused.
+    let r = rig_with("ws", NODE_BLOCK, "", Family::Page(Some("Workstation"))).await;
+    write_page(&r, "alpha", None, "docs/map");
+    let (_, doc) = call(&r, "GET", "/api/tasks/docmap?id=alpha.nvim/t1", "").await;
+    assert_eq!(doc["places"][0]["ok"], false, "{doc}");
+    let (status, _) = call(
+        &r,
+        "POST",
+        "/api/tasks/docmap_open",
+        r#"{"id":"alpha.nvim/t1","index":0}"#,
+    )
+    .await;
+    assert_eq!(status, 502);
+    assert!(started(&r).is_empty());
 }

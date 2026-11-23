@@ -196,12 +196,15 @@ export interface DocmapPlace {
   label: string;
   /** The folder name of the repo among the tiles of this device. */
   repo: string | null;
-  /** The hub can open it: the repo is a tile and holds the file. */
+  /** The hub can open it: the repo is a tile and holds the file, and docmap-desktop or the page of the repo is there. */
   ok: boolean;
+  /** How it opens: `app` starts docmap-desktop at the place, `page` opens the generated page of the repo in the browser
+   *  (without docmap-desktop). Set when `ok`. */
+  way?: 'app' | 'page';
   why?: string;
 }
 
-/** The places of a task and whether docmap-desktop is on this machine. */
+/** The places of a task and whether docmap-desktop is on this machine (a place may open without it, see `way`). */
 export interface DocmapPlaces {
   found: boolean;
   places: DocmapPlace[];

@@ -28,6 +28,7 @@ The ways:
 | `tasks-hub install --open` | **Install** in the page of a first start | until it has copied the program, restarted the hub and opened its page | launch |
 | `<installed tasks-hub> start` | `tasks-hub install` brings the hub back from the installed program | the call; the hub it puts in the background stays | child (`background::start_from`, `Leftovers::Keep`) |
 | the default browser | `start --open`, `open`, the link | yours | system (`appkit_hub::browser::open`) |
+| the default browser, at the generated DocMap page of a repo | **Open in DocMap** where docmap-desktop is not installed | yours | system (`appkit_hub::browser::open_index_html`: one file `index.html` below a repo tile, checked; not on the work machine) |
 | the folder or program dialog | choosing the vault or Neovim in the page | until you choose | Windows: in the hub's own process (`IFileOpenDialog`), no program; macOS `osascript`, Linux `zenity`/`kdialog`: child, closed after 30 minutes |
 | `conhost.exe` | Windows gives every console program (`nvim`, `git`) a console host, also without a window | as long as its console program | comes with each child; no window |
 

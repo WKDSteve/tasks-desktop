@@ -1136,13 +1136,22 @@ repo among the **repo tiles** of this device by the name of its folder (two fold
 a repo needs exactly one tile that holds the file), checks that the file is a plain file inside that folder (a link
 that leaves it is refused), and starts the program with the folder and `<file>:<lines>` as two arguments of their own
 (no shell). docmap-desktop is found as the family finds ai-desktop (the manifest of its installer; the hub does not
-start it from its checkout). The button is there only for a place the hub can open: no docmap-desktop, a repo that is
-no tile, or a file the repo does not hold: no button. At most 8 places are read; with several, each button names its
-place.
+start it from its checkout). The button is there only for a place the hub can open: neither docmap-desktop nor a
+generated page (below), a repo that is no tile, or a file the repo does not hold: no button. At most 8 places are read;
+with several, each button names its place.
 
-The web variant has no hub: it offers no button. There is no way yet to open the generated page of a repo
-(`docs/map/index.html`) without docmap-desktop: the hub opens only loopback pages in the browser (task
-`tasks-desktop/docmap-seite-des-repos-ohne-docmap-desktop-oeffnen`).
+**Without docmap-desktop** the button opens the page docmap.nvim generated in the repo, in the default browser:
+`<repo>/<out_dir>/index.html`, where `out_dir` is the one of the `.docmap.json` of the repo (default `docs/map`, as
+docmap-desktop reads it; an `out_dir` that is not a plain relative path means no page). `GET /api/tasks/docmap` names
+the way of each place that opens (`way`: `app` for docmap-desktop, which wins where it is, or `page`), and a repo
+without a generated page gets no button, so none is dead. A `code-ref` block that names `docmap.node` opens the page at
+that node (`#tab=tree&id=<node>`; a node longer than 128 bytes, and any ref of the form `<file>:<lines>`, open the page
+without a fragment: only docmap-desktop resolves a file and a line to a node). The hub hands the repo folder and the
+fixed relative path to `appkit_hub::browser::open_index_html`, which opens that one file name below the folder
+(a plain path, no link out of the folder) and builds the `file:` link itself; the page of the hub never gets a path or
+a link. The work machine (`NVIM_MACHINE_ROLE=workstation`) shows no such button.
+
+The web variant has no hub: it offers no button.
 
 ### AI functions (ai-desktop)
 
