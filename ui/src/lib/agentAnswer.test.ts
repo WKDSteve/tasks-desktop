@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { adoptOps, followUpOp, runAnswer, summaryOutcome, watchAnswer, type AnswerHub, type AnswerState } from './agentAnswer';
+import { adoptOps, followUpOp, runAnswer, watchAnswer, type AnswerHub, type AnswerState } from './agentAnswer';
+import { summaryOutcome } from './handoffSummary';
 
 /** ai-desktop through the hub as a double: the job it gives, the states `agent_result` answers one by one. */
 function hub(job: { job_id: string; status: string; note?: string }, states: (AnswerState | Error)[]) {
@@ -160,7 +161,7 @@ describe('the summary of a hand-over', () => {
         return states.length > 1 ? states.shift()! : states[0]!;
       },
     };
-    const out = await watchAnswer(hub, 'pub/a', 'handoff', 'j1', { sleep: async () => {} });
+    const out = await watchAnswer(hub, 'pub/a', 'handoff', 'j1', { sleep: async () => {}, finish: summaryOutcome });
     expect(asked).toEqual(['j1 pub/a handoff', 'j1 pub/a handoff']);
     expect(out).toMatchObject({ kind: 'answer' });
     // A failed run has no summary: its own reason, nothing to adopt.

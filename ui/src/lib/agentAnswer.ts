@@ -99,7 +99,10 @@ export async function watchAnswer(
   id: string,
   kind: AnswerKind,
   jobId: string,
-  options: Omit<AnswerOptions, 'confirm' | 'started'>,
+  options: Omit<AnswerOptions, 'confirm' | 'started'> & {
+    /** Takes the finished job's state apart itself (the summary of a hand-over, `handoffSummary.ts`). */
+    finish?(job: string, state: AnswerState): AnswerOutcome;
+  },
 ): Promise<AnswerOutcome> {
   const sleep = options.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
   const now = options.now ?? Date.now;
@@ -110,7 +113,7 @@ export async function watchAnswer(
     if (!wanted()) return { kind: 'declined' };
     const state = await hub.agentResult(job.job_id, id, kind);
     if (state.status === 'done') {
-      if (kind === 'handoff') return summaryOutcome(job.job_id, state);
+      if (options.finish) return options.finish(job.job_id, state);
       const sections = Array.isArray(state.sections) ? state.sections.filter(isSection) : [];
       if (sections.length === 0) return { kind: 'failed', why: 'the answer holds nothing to adopt', job: job.job_id };
       return {
@@ -131,36 +134,6 @@ export async function watchAnswer(
     }
     await sleep(options.interval ?? 2000);
   }
-}
-
-/** The most a summary weighs once it is written into the task (UTF-8 bytes; the limit of ai-desktop and the hub). */
-export const SUMMARY_MAX_BYTES = 4096;
-
-/**
- * The summary of a hand-over as the section to adopt, or why there is none. The text comes out of an agent's run: the
- * hub and ai-desktop checked it, and it is checked here once more before it can be written (the job, the date, the
- * size). It is shown as text (Markdown blocks, never HTML). The engine takes no `## ` heading inside a section, so the
- * four headings of the summary go one level down; the section's own heading names the job and the date.
- */
-export function summaryOutcome(jobId: string, state: AnswerState): AnswerOutcome {
-  const summary = state.summary;
-  if (!summary) return { kind: 'failed', why: state.summary_error ?? 'the run left no summary', job: jobId, noSummary: true };
-  const { job_id: from, date, markdown } = summary;
-  if (from !== jobId || typeof date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(date) || typeof markdown !== 'string') {
-    return { kind: 'failed', why: 'the summary does not belong to this job', job: jobId, noSummary: true };
-  }
-  if (new TextEncoder().encode(markdown).length > SUMMARY_MAX_BYTES) {
-    return { kind: 'failed', why: 'the summary is longer than 4 KiB', job: jobId, noSummary: true };
-  }
-  // eslint-disable-next-line no-control-regex
-  if (/[\u0000-\u0008\u000b-\u001f\u007f]/.test(markdown)) {
-    return { kind: 'failed', why: 'the summary holds a control character', job: jobId, noSummary: true };
-  }
-  const text = markdown.replace(/^## /gm, '### ').trim();
-  return {
-    kind: 'answer',
-    answer: { job: jobId, sections: [{ heading: `## Agent-Verlauf (Job ${jobId}, ${date})`, text }] },
-  };
 }
 
 /** The operations that write the answer into the task `id`: one `set_section` per section, in order. */

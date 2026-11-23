@@ -60,7 +60,7 @@ import type {
 } from './contract';
 import { expandAreas, isAreaGroup, NO_AREA, type AreaGroupInfo } from './areaGroups';
 import type { AssetAnswer, AssetOwner, FinishedQuery, LearnEvidenceQuery, LearnHistoryQuery, LearnNextQuery, LearnNotesQuery, Op } from './api';
-import { adoptOps, followUpOp, runAnswer, watchAnswer, type Answer, type AnswerKind } from './agentAnswer';
+import { adoptOps, followUpOp, runAnswer, type Answer, type AnswerKind } from './agentAnswer';
 
 /** The note an inverse of `node_set` carries (capability `node_note`), as a part of the operation; none: `{}`. */
 function noteOf(inv: object): { note?: string } {
@@ -4459,28 +4459,25 @@ export class App {
     this.#handoffWatch.add(job);
     const wanted = () => this.#handoffWatch.has(job);
     try {
-      const outcome = await watchAnswer(this.env.hub, id, 'handoff', job, {
-        wanted,
-        sleep: (ms) => this.env.sleep(ms),
-        now: () => this.env.now(),
-        interval: 3000,
-        maxMs: 6 * 60 * 60 * 1000,
-      });
-      if (outcome.kind === 'failed') {
-        // `failed`/`cancelled` runs carry their own reason and no summary; only a finished run is worth a word.
-        if (outcome.noSummary) {
-          this.say('error', 'handoff.summary_missing', { why: outcome.why, job });
-        }
-        return;
-      }
-      if (outcome.kind !== 'answer') return;
-      // Another answer is open: this one waits its turn, the person is not interrupted.
-      while (wanted() && this.answer !== null) await this.env.sleep(1000);
-      if (!wanted()) return;
-      const title = this.tasks.find((t) => t.id === id)?.title ?? id;
-      this.#answerRun += 1;
-      this.answer = { id, area: id.split('/')[0] ?? '', title, kind: 'handoff', phase: 'shown', job, answer: outcome.answer };
-      this.say('ok', 'handoff.summary_ready', { job });
+      const { watchHandoffRun } = await import('./handoffSummary');
+      await watchHandoffRun(
+        {
+          hub: this.env.hub,
+          sleep: (ms) => this.env.sleep(ms),
+          now: () => this.env.now(),
+          wanted,
+          busy: () => this.answer !== null,
+          say: (key, params) => this.say('error', key, params),
+          show: (view) => {
+            this.#answerRun += 1;
+            this.answer = view;
+            this.say('ok', 'handoff.summary_ready', { job });
+          },
+          title: this.tasks.find((t) => t.id === id)?.title ?? id,
+        },
+        id,
+        job,
+      );
     } catch {
       // The hub or ai-desktop is gone: the job stays in ai-desktop, the page has nothing to show.
     } finally {
