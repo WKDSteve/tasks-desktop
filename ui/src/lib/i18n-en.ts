@@ -1865,8 +1865,6 @@ const en = {
   'answer.title.review': 'Review against the acceptance',
   'answer.title.decision': 'Prepared decision',
   'answer.title.handoff': 'Summary of the hand-over',
-  'handoff.summary_ready': 'Job {job} finished: its summary is ready.',
-  'handoff.summary_missing': 'Job {job}: no usable summary: {why}',
   'answer.sending': 'Sending it to ai-desktop ...',
   'answer.waiting': 'The agent is working on it (job {job}); this can take a few minutes. You may close this window: the job stays in ai-desktop.',
   'answer.confirm': 'This area is private or not classified, and the model of ai-desktop does not run on this machine. Send the task there anyway?',

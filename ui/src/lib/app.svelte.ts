@@ -4444,44 +4444,27 @@ export class App {
     if (made && this.answer?.id === view.id) this.answer = { ...this.answer, followUpMade: made };
   }
 
-  /** Hand-over jobs watched for their summary, by job id; `stop()` and a new page end them. */
-  #handoffWatch = new Set<string>();
+  /** Ends the watches of hand-overs (`handoffSummary.ts`); `stop()` calls it. */
+  #handoffStop: (() => void) | null = null;
+
+  /** Opens the dialog "Answer of the agent" on `view` (a hand-over's summary, from `handoffSummary.ts`). */
+  showAnswer(view: AnswerView): void {
+    this.#answerRun += 1;
+    this.answer = view;
+  }
 
   /**
    * Watch a hand-over (`handoff`, run at once) of the task `id` until it ends: its summary then opens in the dialog
-   * "Answer of the agent" as a proposal, and nothing is written until the person adopts it (the section carries the job
-   * id and the date). A run that failed or was cancelled has no summary and says nothing here (ai-desktop shows it); a
-   * run that ended without a usable one says why. The watch lives with this page: a reload forgets it, the job stays in
-   * ai-desktop.
+   * "Answer of the agent" as a proposal, nothing is written until the person adopts it. The watch lives with this
+   * page (`handoffSummary.ts`, loaded when the first one starts): a reload forgets it, the job stays in ai-desktop.
    */
   async watchHandoff(id: string, job: string): Promise<void> {
-    if (this.#handoffWatch.has(job)) return;
-    this.#handoffWatch.add(job);
-    const wanted = () => this.#handoffWatch.has(job);
     try {
-      const { watchHandoffRun } = await import('./handoffSummary');
-      await watchHandoffRun(
-        {
-          hub: this.env.hub,
-          sleep: (ms) => this.env.sleep(ms),
-          now: () => this.env.now(),
-          wanted,
-          busy: () => this.answer !== null,
-          say: (key, params) => this.say('error', key, params),
-          show: (view) => {
-            this.#answerRun += 1;
-            this.answer = view;
-            this.say('ok', 'handoff.summary_ready', { job });
-          },
-          title: this.tasks.find((t) => t.id === id)?.title ?? id,
-        },
-        id,
-        job,
-      );
+      const lazy = await import('./handoffSummary');
+      this.#handoffStop = lazy.stopHandoffs;
+      await lazy.watchHandoffRun(this, id, job);
     } catch {
       // The hub or ai-desktop is gone: the job stays in ai-desktop, the page has nothing to show.
-    } finally {
-      this.#handoffWatch.delete(job);
     }
   }
 
@@ -4518,8 +4501,7 @@ export class App {
           tab.close();
         }
       }
-      // A job of ai-desktop has 16 hex digits (the hub refuses any other id): nothing else is watched.
-      if (kind === 'handoff' && mode === 'run' && /^[0-9a-f]{16}$/.test(job.job_id) && (job.status === 'running' || job.status === 'needs_confirmation')) {
+            if (kind === 'handoff' && mode === 'run' && job.status !== 'prefilled') {
         void this.watchHandoff(id, job.job_id);
       }
       const key = job.status === 'needs_confirmation' ? 'agent.sent_confirm' : mode === 'run' && job.status === 'running' ? 'agent.sent_run' : 'agent.sent';
@@ -5425,7 +5407,7 @@ export class App {
   }
 
   stop(): void {
-    this.#handoffWatch.clear();
+    this.#handoffStop?.();
     this.stream.stop();
     this.checkState.invalidate();
     this.matrixState.invalidate();

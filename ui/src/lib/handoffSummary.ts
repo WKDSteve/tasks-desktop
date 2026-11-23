@@ -32,42 +32,60 @@ export function summaryOutcome(jobId: string, state: AnswerState): AnswerOutcome
   };
 }
 
-/** What the watch needs of the page. */
-export interface HandoffWatchDeps {
-  hub: Pick<AnswerHub, 'agentResult'>;
-  sleep(ms: number): Promise<void>;
-  now(): number;
-  /** False once the page ended the watch. */
-  wanted(): boolean;
-  /** Another answer is open in the dialog. */
-  busy(): boolean;
-  /** Tells the person (an error message by its key). */
-  say(key: 'handoff.summary_missing', params: Record<string, string>): void;
-  /** Opens the dialog on the summary as a proposal. */
-  show(view: { id: string; area: string; title: string; kind: 'handoff'; phase: 'shown'; job: string; answer: Answer }): void;
-  title: string;
+/** What the watch needs of the page (`App`). */
+export interface HandoffHost {
+  env: { hub: Pick<AnswerHub, 'agentResult'>; sleep(ms: number): Promise<void>; now(): number };
+  answer: unknown;
+  tasks: readonly { id: string; title: string }[];
+  say(kind: 'error', key: 'answer.failed', params: Record<string, string>): void;
+  showAnswer(view: {
+    id: string;
+    area: string;
+    title: string;
+    kind: 'handoff';
+    phase: 'shown';
+    job: string;
+    answer: Answer;
+  }): void;
+}
+
+/** The jobs watched now, by id. */
+const watched = new Set<string>();
+
+/** Ends every watch (the page stopped). */
+export function stopHandoffs(): void {
+  watched.clear();
 }
 
 /**
  * Watches the hand-over `job` of the task `id` until it ends. A run that failed or was cancelled has no summary and
  * says nothing (ai-desktop shows it); one that ended without a usable summary says why; otherwise the summary opens as
- * a proposal, after another open answer is closed. Nothing is written.
+ * a proposal, after another open answer is closed. A job of ai-desktop has 16 hex digits (the hub refuses any other
+ * id): nothing else is watched. Nothing is written.
  */
-export async function watchHandoffRun(deps: HandoffWatchDeps, id: string, job: string): Promise<void> {
-  const outcome = await watchAnswer(deps.hub, id, 'handoff', job, {
-    finish: summaryOutcome,
-    wanted: deps.wanted,
-    sleep: deps.sleep,
-    now: deps.now,
-    interval: 3000,
-    maxMs: 6 * 60 * 60 * 1000,
-  });
-  if (outcome.kind === 'failed') {
-    if (outcome.noSummary) deps.say('handoff.summary_missing', { why: outcome.why, job });
-    return;
+export async function watchHandoffRun(app: HandoffHost, id: string, job: string): Promise<void> {
+  if (watched.has(job) || !/^[0-9a-f]{16}$/.test(job)) return;
+  watched.add(job);
+  const wanted = () => watched.has(job);
+  try {
+    const outcome = await watchAnswer(app.env.hub, id, 'handoff', job, {
+      finish: summaryOutcome,
+      wanted,
+      sleep: (ms) => app.env.sleep(ms),
+      now: () => app.env.now(),
+      interval: 3000,
+      maxMs: 6 * 60 * 60 * 1000,
+    });
+    if (outcome.kind === 'failed') {
+      if (outcome.noSummary) app.say('error', 'answer.failed', { why: outcome.why });
+      return;
+    }
+    if (outcome.kind !== 'answer') return;
+    while (wanted() && app.answer !== null) await app.env.sleep(1000);
+    if (!wanted()) return;
+    const title = app.tasks.find((t) => t.id === id)?.title ?? id;
+    app.showAnswer({ id, area: id.split('/')[0] ?? '', title, kind: 'handoff', phase: 'shown', job, answer: outcome.answer });
+  } finally {
+    watched.delete(job);
   }
-  if (outcome.kind !== 'answer') return;
-  while (deps.wanted() && deps.busy()) await deps.sleep(1000);
-  if (!deps.wanted()) return;
-  deps.show({ id, area: id.split('/')[0] ?? '', title: deps.title, kind: 'handoff', phase: 'shown', job, answer: outcome.answer });
 }

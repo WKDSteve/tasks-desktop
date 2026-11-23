@@ -1869,8 +1869,6 @@ const de: Record<PageKey, string> = {
   'answer.title.review': 'Prüfung gegen die Akzeptanz',
   'answer.title.decision': 'Vorbereitete Entscheidung',
   'answer.title.handoff': 'Zusammenfassung der Übergabe',
-  'handoff.summary_ready': 'Auftrag {job} fertig: Zusammenfassung bereit.',
-  'handoff.summary_missing': 'Auftrag {job}: keine brauchbare Zusammenfassung: {why}',
   'answer.sending': 'Wird an ai-desktop geschickt ...',
   'answer.waiting': 'Der Agent arbeitet daran (Auftrag {job}); das kann ein paar Minuten dauern. Du kannst dieses Fenster schließen: der Auftrag bleibt in ai-desktop.',
   'answer.confirm': 'Dieser Bereich ist privat oder nicht eingestuft, und das Modell von ai-desktop läuft nicht auf diesem Rechner. Die Task trotzdem dorthin schicken?',
