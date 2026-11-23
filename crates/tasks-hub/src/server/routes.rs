@@ -1700,7 +1700,73 @@ pub(super) async fn agent_send(State(st): State<Arc<Shared>>, body: Bytes) -> Re
 }
 
 /// The kinds whose answer comes back to the page as sections to adopt (`agent_result`).
-const ANSWER_KINDS: [&str; 2] = ["review-done", "prepare-decision"];
+const ANSWER_KINDS: [&str; 3] = ["review-done", "prepare-decision", "handoff"];
+
+/// The headings of the summary of a hand-over, in the order ai-desktop checks them (`docs/JOBS.md` of ai-desktop).
+const SUMMARY_HEADINGS: [&str; 4] = ["## Getan", "## Commits", "## Prüfungen", "## Offen"];
+/// The most the summary of a hand-over weighs, in bytes (the limit of ai-desktop; checked here again: the text comes
+/// out of an agent's run).
+const SUMMARY_MAX: usize = 4096;
+
+/// The summary of a hand-over (`summary` of the job `job`) as the page may show it: `{ job_id, date, markdown }`, or the
+/// reason it is none. ai-desktop cleans and checks the text; the hub does not rely on that, since the text is an
+/// agent's: the schema, the job it belongs to, the date, the size, no control character but the line break and the
+/// tab, and the four headings, each alone on its line and in order.
+fn handoff_summary(doc: &serde_json::Value, job: &str) -> Result<serde_json::Value, String> {
+    let Some(summary) = doc.get("summary").filter(|v| v.is_object()) else {
+        let why = doc["summary_error"]
+            .as_str()
+            .map(|e| {
+                e.chars()
+                    .filter(|c| !c.is_control())
+                    .take(200)
+                    .collect::<String>()
+            })
+            .filter(|e| !e.is_empty())
+            .unwrap_or_else(|| "the run left no summary".to_owned());
+        return Err(why);
+    };
+    if summary["schema"].as_str() != Some("handoff-summary/1") {
+        return Err("the summary is not of the schema handoff-summary/1".to_owned());
+    }
+    if summary["job_id"].as_str() != Some(job) {
+        return Err("the summary belongs to another job".to_owned());
+    }
+    let date = summary["date"].as_str().unwrap_or_default();
+    let b = date.as_bytes();
+    let date_ok = b.len() == 10
+        && b.iter().enumerate().all(|(i, c)| {
+            if i == 4 || i == 7 {
+                *c == b'-'
+            } else {
+                c.is_ascii_digit()
+            }
+        });
+    if !date_ok {
+        return Err("the date of the summary is not YYYY-MM-DD".to_owned());
+    }
+    let markdown = summary["markdown"].as_str().unwrap_or_default();
+    if markdown.len() > SUMMARY_MAX {
+        return Err("the summary is longer than 4 KiB".to_owned());
+    }
+    if markdown
+        .chars()
+        .any(|c| c.is_control() && c != '\n' && c != '\t')
+    {
+        return Err("the summary holds a control character".to_owned());
+    }
+    let mut want = SUMMARY_HEADINGS.iter();
+    let mut next = want.next();
+    for line in markdown.lines() {
+        if next == Some(&line.trim_end()) {
+            next = want.next();
+        }
+    }
+    if next.is_some() {
+        return Err("the summary lacks one of its four headings".to_owned());
+    }
+    Ok(json!({ "job_id": job, "date": date, "markdown": markdown }))
+}
 /// The most of a job's answer the engine is given: its end, where the block stands. The block itself is at most 32 KiB;
 /// the engine takes a request of 256 KiB, and escaped for it (line breaks, quotes, `\uXXXX` for what is not ASCII) a
 /// text can grow threefold, so 64 KiB stay below that.
@@ -1750,7 +1816,7 @@ pub(super) async fn agent_result(State(st): State<Arc<Shared>>, body: Bytes) -> 
             return error_body(
                 StatusCode::BAD_REQUEST,
                 "bad_kind",
-                "kind is review-done or prepare-decision",
+                "kind is review-done, prepare-decision or handoff",
             )
         }
         Err(r) => return r,
@@ -1773,6 +1839,15 @@ pub(super) async fn agent_result(State(st): State<Arc<Shared>>, body: Bytes) -> 
                 out.insert(key.to_owned(), v.clone());
             }
         }
+        return axum::Json(serde_json::Value::Object(out)).into_response();
+    }
+    if kind == "handoff" {
+        // No engine: the summary is the job's own, checked here; only it (never `output`) reaches the page.
+        out.insert("status".to_owned(), json!("done"));
+        match handoff_summary(&doc, &job) {
+            Ok(summary) => out.insert("summary".to_owned(), summary),
+            Err(why) => out.insert("summary_error".to_owned(), json!(why)),
+        };
         return axum::Json(serde_json::Value::Object(out)).into_response();
     }
     let output = tail_of(doc["output"].as_str().unwrap_or_default(), ANSWER_TAIL);
@@ -2758,5 +2833,77 @@ mod sort_words {
         assert!(draft_choices(&json!({}), &enums, &json!({})).is_err());
         assert!(draft_choices(&areas, &json!({}), &snapshot).is_err());
         assert!(draft_choices(&areas, &json!(null), &json!(null)).is_err());
+    }
+}
+
+#[cfg(test)]
+mod handoff_summary_rules {
+    use super::handoff_summary;
+    use serde_json::json;
+
+    const JOB: &str = "0123456789abcdef";
+    const GOOD: &str =
+        "## Getan\n- x\n\n## Commits\nrepo@abc1234\n\n## Prüfungen\nCLEAN\n\n## Offen\nnothing\n";
+
+    fn doc(markdown: &str) -> serde_json::Value {
+        json!({ "summary": {
+            "schema": "handoff-summary/1", "job_id": JOB, "date": "2026-11-23", "markdown": markdown
+        } })
+    }
+
+    #[test]
+    fn a_summary_that_keeps_the_rules_passes_as_it_is() {
+        let got = handoff_summary(&doc(GOOD), JOB).unwrap();
+        assert_eq!(got["markdown"], GOOD);
+        assert_eq!(
+            (got["job_id"].as_str(), got["date"].as_str()),
+            (Some(JOB), Some("2026-11-23"))
+        );
+    }
+
+    #[test]
+    fn a_summary_that_breaks_a_rule_is_refused_with_its_reason() {
+        let mut other_job = doc(GOOD);
+        other_job["summary"]["job_id"] = json!("ffffffffffffffff");
+        let mut schema = doc(GOOD);
+        schema["summary"]["schema"] = json!("handoff-summary/2");
+        let mut date = doc(GOOD);
+        date["summary"]["date"] = json!("23.11.2026");
+        for (name, d, part) in [
+            ("another job", other_job, "another job"),
+            ("schema", schema, "schema"),
+            ("date", date, "YYYY-MM-DD"),
+            (
+                "too long",
+                doc(&format!("{GOOD}{}", "x".repeat(4096))),
+                "4 KiB",
+            ),
+            (
+                "control",
+                doc(&GOOD.replace("nothing", "no\u{1b}[31mthing")),
+                "control",
+            ),
+            (
+                "heading",
+                doc(&GOOD.replace("## Offen", "Offen")),
+                "headings",
+            ),
+            (
+                "order",
+                doc("## Commits\n## Getan\n## Prüfungen\n## Offen\n"),
+                "headings",
+            ),
+            ("none", json!({ "summary_error": "no block" }), "no block"),
+            ("neither", json!({}), "no summary"),
+        ] {
+            let why = handoff_summary(&d, JOB).expect_err(name);
+            assert!(why.contains(part), "{name}: {why}");
+        }
+    }
+
+    #[test]
+    fn the_reason_an_agent_run_left_is_cleaned_of_control_characters() {
+        let why = handoff_summary(&json!({ "summary_error": "a\u{7}b\nc" }), JOB).unwrap_err();
+        assert_eq!(why, "abc");
     }
 }

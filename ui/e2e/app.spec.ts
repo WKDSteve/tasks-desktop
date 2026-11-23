@@ -9425,6 +9425,60 @@ test('"Split into tasks": the plan and its tasks go to ai-desktop, only the tick
   }
 });
 
+test('a hand-over ends with a summary: it comes back as a proposal and is written into the task only after Adopt', async ({ page }) => {
+  const file = join(state().vault, 'lib.nvim', 'ROADMAP', 'tasks', 'alpha.md');
+  const original = readFileSync(file, 'utf8');
+  const markdown = ['## Getan', '- the button is blue', '', '## Commits', 'lib.nvim@abc1234', '', '## Prüfungen', 'ci commit CLEAN', '', '## Offen', '- docs'].join('\n');
+  let asked = 0;
+  const ai = await aiDesktopDouble((_, path) => {
+    if (path === '/jobs') return { status: 201, body: { job_id: '0123456789abcdef', status: 'running', private: false } };
+    if (path === '/jobs/0123456789abcdef') {
+      asked += 1;
+      return {
+        status: 200,
+        body:
+          asked < 2
+            ? { id: '0123456789abcdef', status: 'running' }
+            : {
+                id: '0123456789abcdef',
+                status: 'done',
+                output: 'the whole run, never shown',
+                summary: { schema: 'handoff-summary/1', job_id: '0123456789abcdef', date: '2026-11-23', markdown },
+              },
+      };
+    }
+    return { status: 404, body: { error: { message: 'no such route' } } };
+  });
+  try {
+    await pair(page);
+    await showList(page);
+    await open(page, 'lib.nvim/alpha');
+    await page.locator('aside.detail').getByRole('button', { name: 'Hand to an agent ...' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Hand to an agent' });
+    await dialog.getByRole('radio', { name: 'Run at once' }).check();
+    await dialog.getByRole('button', { name: 'Hand over', exact: true }).click();
+    const answer = page.getByRole('dialog', { name: 'Summary of the hand-over' });
+    await expect(answer.getByTestId('answer-body')).toContainText('the button is blue', { timeout: 30_000 });
+    await expect(answer).toContainText('nothing is written until you adopt it');
+    await expect(answer).not.toContainText('never shown');
+    // Shown only: the task file is as it was.
+    expect(readFileSync(file, 'utf8')).toBe(original);
+
+    await answer.getByRole('button', { name: 'Adopt', exact: true }).click();
+    await expect(answer).toContainText('Adopted into the task');
+    const written = readFileSync(file, 'utf8');
+    expect(written).toContain('\n## Agent-Verlauf (Job 0123456789abcdef, 2026-11-23)\n');
+    expect(written).toContain('### Getan\n');
+    expect(written).toContain('- the button is blue');
+    expect(written).toContain('The body of alpha.');
+    await answer.getByRole('button', { name: 'Close', exact: true }).click();
+    await expect(answer).toBeHidden();
+  } finally {
+    await ai.close();
+    writeFileSync(file, original);
+  }
+});
+
 test('a finished task is checked against its acceptance: the review comes back as a proposal, adopt writes it into the Backlog file', async ({
   page,
 }) => {

@@ -1204,6 +1204,17 @@ task has no questions of its own (the dialog says so otherwise), through `set_se
 you decide in the questions of the task, as always; no button decides for you. The engine checks the answer the same
 way (a proposal first, then only questions that read as questions of the engine).
 
+**Summary of a hand-over.** A task handed over with *Run at once* (*Hand to an agent ...*, the kind `handoff`) is
+watched by the page while it is open. When the run ends well, ai-desktop gives a short summary (`docs/JOBS.md` of
+ai-desktop, "Summary of a hand-over": done, commits, checks with their verdict, what is open; at most 4 KiB, cleaned of
+paths and control characters), and the dialog *Summary of the hand-over* shows it as a proposal, as text, never as HTML.
+Nothing is written until *Adopt*, which writes it into the task as its own section `## Agent-Verlauf (Job <id>, <date>)`
+through `set_section` (its four headings one level down; a later job adds a section of its own), with an undo in the
+message. The full stream of the run never goes into the task. A run that failed or was stopped has no summary; one that
+ended without a usable summary says so in a message. The watch lives with the open page: after a reload the job stays
+in ai-desktop and the summary is not offered again. The hub checks the summary once more before the page sees it (job,
+date, size, control characters, the four headings in order); the engine is not asked, it takes the section as it is.
+
 <!-- connections:begin (written by the app-icons tool of the workshop; change integrations.json there, not this block) -->
 ## Connections
 

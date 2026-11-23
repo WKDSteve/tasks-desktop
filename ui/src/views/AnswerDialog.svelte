@@ -34,7 +34,7 @@
   onclose={() => app.closeAnswer()}
 >
   {#if view}
-    <h2 id="answer-title">{t(view.kind === 'review-done' ? 'answer.title.review' : 'answer.title.decision')}</h2>
+    <h2 id="answer-title">{t(view.kind === 'review-done' ? 'answer.title.review' : view.kind === 'handoff' ? 'answer.title.handoff' : 'answer.title.decision')}</h2>
     <p class="what">{markHidden(view.title)} <code>{view.id}</code></p>
     {#if view.phase === 'waiting'}
       <p class="status" role="status">

@@ -4,8 +4,8 @@
 // `followUpOp` makes the follow-up task a review proposes, each on its own click.
 import type { AgentJob, Op } from './api';
 
-/** The kinds whose answer comes back to the page. */
-export type AnswerKind = 'review-done' | 'prepare-decision';
+/** The kinds whose answer comes back to the page (`handoff`: the summary at the end of a hand-over). */
+export type AnswerKind = 'review-done' | 'prepare-decision' | 'handoff';
 
 /** One section to write: its heading (one line, `## ` and a word) and the text below it. */
 export interface AnswerSection {
@@ -19,6 +19,9 @@ export interface AnswerState {
   sections?: AnswerSection[];
   follow_up?: { title: string; summary?: string };
   questions_added?: boolean;
+  /** A finished hand-over: its summary (`handoff-summary/1`, checked by the hub) or why there is none. */
+  summary?: { job_id?: string; date?: string; markdown?: string };
+  summary_error?: string;
   error?: string;
   note?: string;
 }
@@ -42,7 +45,7 @@ export interface Answer {
 export type AnswerOutcome =
   | { kind: 'answer'; answer: Answer }
   | { kind: 'declined' }
-  | { kind: 'failed'; why: string; job?: string };
+  | { kind: 'failed'; why: string; job?: string; /** A run that ended well, but whose summary is no use. */ noSummary?: true };
 
 export interface AnswerOptions {
   /** Asked when the job waits for a yes (a private area on a model that is not local); false: nothing runs. */
@@ -74,9 +77,6 @@ function isSection(value: unknown): value is AnswerSection {
  * only after `confirm()`; the answer is the engine's (the hub asks it), nothing is written anywhere.
  */
 export async function runAnswer(hub: AnswerHub, id: string, kind: AnswerKind, options: AnswerOptions): Promise<AnswerOutcome> {
-  const sleep = options.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
-  const now = options.now ?? Date.now;
-  const wanted = options.wanted ?? (() => true);
   const job = await hub.handToAgent(id, 'run', kind);
   options.started?.(job.job_id);
   // Not started (two jobs of ai-desktop run already): it waits in the dashboard of ai-desktop, not here.
@@ -87,11 +87,30 @@ export async function runAnswer(hub: AnswerHub, id: string, kind: AnswerKind, op
     if (!(await options.confirm())) return { kind: 'declined' };
     await hub.confirmDraft(job.job_id);
   }
+  return watchAnswer(hub, id, kind, job.job_id, options);
+}
+
+/**
+ * Waits for the answer of the job `jobId` of the task `id` (a review, a prepared decision, or the summary of a
+ * hand-over that went out earlier) and gives it as the sections to adopt. Nothing is written anywhere.
+ */
+export async function watchAnswer(
+  hub: Pick<AnswerHub, 'agentResult'>,
+  id: string,
+  kind: AnswerKind,
+  jobId: string,
+  options: Omit<AnswerOptions, 'confirm' | 'started'>,
+): Promise<AnswerOutcome> {
+  const sleep = options.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
+  const now = options.now ?? Date.now;
+  const wanted = options.wanted ?? (() => true);
+  const job = { job_id: jobId };
   const deadline = now() + (options.maxMs ?? 60 * 60 * 1000);
   for (;;) {
     if (!wanted()) return { kind: 'declined' };
     const state = await hub.agentResult(job.job_id, id, kind);
     if (state.status === 'done') {
+      if (kind === 'handoff') return summaryOutcome(job.job_id, state);
       const sections = Array.isArray(state.sections) ? state.sections.filter(isSection) : [];
       if (sections.length === 0) return { kind: 'failed', why: 'the answer holds nothing to adopt', job: job.job_id };
       return {
@@ -112,6 +131,36 @@ export async function runAnswer(hub: AnswerHub, id: string, kind: AnswerKind, op
     }
     await sleep(options.interval ?? 2000);
   }
+}
+
+/** The most a summary weighs once it is written into the task (UTF-8 bytes; the limit of ai-desktop and the hub). */
+export const SUMMARY_MAX_BYTES = 4096;
+
+/**
+ * The summary of a hand-over as the section to adopt, or why there is none. The text comes out of an agent's run: the
+ * hub and ai-desktop checked it, and it is checked here once more before it can be written (the job, the date, the
+ * size). It is shown as text (Markdown blocks, never HTML). The engine takes no `## ` heading inside a section, so the
+ * four headings of the summary go one level down; the section's own heading names the job and the date.
+ */
+export function summaryOutcome(jobId: string, state: AnswerState): AnswerOutcome {
+  const summary = state.summary;
+  if (!summary) return { kind: 'failed', why: state.summary_error ?? 'the run left no summary', job: jobId, noSummary: true };
+  const { job_id: from, date, markdown } = summary;
+  if (from !== jobId || typeof date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(date) || typeof markdown !== 'string') {
+    return { kind: 'failed', why: 'the summary does not belong to this job', job: jobId, noSummary: true };
+  }
+  if (new TextEncoder().encode(markdown).length > SUMMARY_MAX_BYTES) {
+    return { kind: 'failed', why: 'the summary is longer than 4 KiB', job: jobId, noSummary: true };
+  }
+  // eslint-disable-next-line no-control-regex
+  if (/[\u0000-\u0008\u000b-\u001f\u007f]/.test(markdown)) {
+    return { kind: 'failed', why: 'the summary holds a control character', job: jobId, noSummary: true };
+  }
+  const text = markdown.replace(/^## /gm, '### ').trim();
+  return {
+    kind: 'answer',
+    answer: { job: jobId, sections: [{ heading: `## Agent-Verlauf (Job ${jobId}, ${date})`, text }] },
+  };
 }
 
 /** The operations that write the answer into the task `id`: one `set_section` per section, in order. */

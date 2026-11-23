@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { adoptOps, followUpOp, runAnswer, type AnswerHub, type AnswerState } from './agentAnswer';
+import { adoptOps, followUpOp, runAnswer, summaryOutcome, watchAnswer, type AnswerHub, type AnswerState } from './agentAnswer';
 
 /** ai-desktop through the hub as a double: the job it gives, the states `agent_result` answers one by one. */
 function hub(job: { job_id: string; status: string; note?: string }, states: (AnswerState | Error)[]) {
@@ -112,5 +112,59 @@ describe('the writes of an answer', () => {
       fields: { kind: 'task', summary: 'The README' },
     });
     expect(followUpOp('pub', { title: 'X', summary: '  ' })).toEqual({ op: 'new', area: 'pub', title: 'X', fields: { kind: 'task' } });
+  });
+});
+
+const MD = '## Getan\n- a\n\n## Commits\nrepo@abc1234\n\n## Prüfungen\nCLEAN\n\n## Offen\n-\n';
+const good = (over: Partial<NonNullable<AnswerState['summary']>> = {}): AnswerState => ({
+  status: 'done',
+  summary: { job_id: 'j1', date: '2026-11-23', markdown: MD, ...over },
+});
+
+describe('the summary of a hand-over', () => {
+  it('becomes one section named by the job and the date, its four headings one level down', () => {
+    const out = summaryOutcome('j1', good());
+    expect(out).toMatchObject({ kind: 'answer', answer: { job: 'j1' } });
+    if (out.kind !== 'answer') return;
+    expect(out.answer.sections).toHaveLength(1);
+    const [section] = out.answer.sections;
+    expect(section?.heading).toBe('## Agent-Verlauf (Job j1, 2026-11-23)');
+    // The engine takes no `## ` heading inside a section.
+    expect(section?.text).not.toMatch(/^## /m);
+    expect(section?.text).toContain('### Getan');
+    expect(section?.text).toContain('### Offen');
+  });
+
+  it('is not taken when it is of another job, too long, or holds a control character; the reason is the hub text', () => {
+    expect(summaryOutcome('j1', good({ job_id: 'j2' }))).toMatchObject({ kind: 'failed', noSummary: true });
+    expect(summaryOutcome('j1', good({ date: 'yesterday' }))).toMatchObject({ kind: 'failed', noSummary: true });
+    // 4097 bytes: a multi-byte letter counts by its bytes, not as one character.
+    expect(summaryOutcome('j1', good({ markdown: MD + 'ü'.repeat(2100) }))).toMatchObject({ why: expect.stringContaining('4 KiB') });
+    expect(summaryOutcome('j1', good({ markdown: MD.replace('CLEAN', 'a' + String.fromCharCode(27) + 'b') }))).toMatchObject({
+      why: expect.stringContaining('control'),
+    });
+    expect(summaryOutcome('j1', { status: 'done', summary_error: 'no summary block' })).toEqual({
+      kind: 'failed',
+      why: 'no summary block',
+      job: 'j1',
+      noSummary: true,
+    });
+  });
+
+  it('is watched without handing anything to the agent, and is a proposal only', async () => {
+    const asked: string[] = [];
+    const states: AnswerState[] = [{ status: 'running' }, good()];
+    const hub = {
+      agentResult: async (job: string, id: string, kind: string) => {
+        asked.push(`${job} ${id} ${kind}`);
+        return states.length > 1 ? states.shift()! : states[0]!;
+      },
+    };
+    const out = await watchAnswer(hub, 'pub/a', 'handoff', 'j1', { sleep: async () => {} });
+    expect(asked).toEqual(['j1 pub/a handoff', 'j1 pub/a handoff']);
+    expect(out).toMatchObject({ kind: 'answer' });
+    // A failed run has no summary: its own reason, nothing to adopt.
+    const failed = await watchAnswer({ agentResult: async () => ({ status: 'failed', error: 'boom' }) }, 'pub/a', 'handoff', 'j1', {});
+    expect(failed).toEqual({ kind: 'failed', why: 'boom', job: 'j1' });
   });
 });

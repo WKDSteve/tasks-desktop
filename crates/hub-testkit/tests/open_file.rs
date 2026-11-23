@@ -1316,12 +1316,102 @@ async fn the_answer_of_a_review_comes_back_taken_apart_by_the_engine_and_never_w
     assert_eq!(post(&r, route, body, false).await.0, 401);
     for bad in [
         r#"{"job":"../x","id":"alpha.nvim/t1","kind":"review-done"}"#,
-        r#"{"job":"0123456789abcdef","id":"alpha.nvim/t1","kind":"handoff"}"#,
+        r#"{"job":"0123456789abcdef","id":"alpha.nvim/t1","kind":"draft-task"}"#,
         r#"{"job":"0123456789abcdef","id":"../t1","kind":"review-done"}"#,
         r#"{"job":"0123456789abcdef","id":"alpha.nvim/t1"}"#,
     ] {
         assert_eq!(post(&r, route, bad, true).await.0, 400, "{bad}");
     }
+}
+
+#[tokio::test]
+async fn the_summary_of_a_hand_over_comes_back_checked_and_never_with_the_whole_output() {
+    let route = "/api/tasks/agent_result";
+    let fake = intake(Err(Refusal::NotRunning));
+    let r = rig_full(
+        "agent-summary",
+        false,
+        None,
+        None,
+        None,
+        None,
+        None,
+        Some(Arc::clone(&fake) as Arc<dyn JobIntake>),
+    )
+    .await;
+    let body = r#"{"job":"0123456789abcdef","id":"alpha.nvim/t1","kind":"handoff"}"#;
+    let markdown = "## Getan
+- x
+
+## Commits
+repo@abc1234
+
+## Prüfungen
+CLEAN
+
+## Offen
+-
+";
+
+    // While it runs: its status only.
+    *fake.doc.lock().unwrap() = serde_json::json!({
+        "id": "0123456789abcdef", "status": "running", "output": "half"
+    });
+    let (status, doc) = post(&r, route, body, true).await;
+    assert_eq!(
+        (status, doc["status"].as_str()),
+        (200, Some("running")),
+        "{doc}"
+    );
+    assert!(
+        doc.get("summary").is_none() && doc.get("output").is_none(),
+        "{doc}"
+    );
+
+    // Done with a summary: it passes, the output of the run does not.
+    *fake.doc.lock().unwrap() = serde_json::json!({
+        "id": "0123456789abcdef", "status": "done", "output": "the whole run",
+        "summary": { "schema": "handoff-summary/1", "job_id": "0123456789abcdef",
+                     "date": "2026-11-23", "markdown": markdown }
+    });
+    let (status, doc) = post(&r, route, body, true).await;
+    assert_eq!(status, 200, "{doc}");
+    assert_eq!(doc["summary"]["markdown"], markdown, "{doc}");
+    assert_eq!(doc["summary"]["date"], "2026-11-23", "{doc}");
+    assert!(
+        doc.get("output").is_none() && doc.get("summary_error").is_none(),
+        "{doc}"
+    );
+
+    // Done with a block ai-desktop refused: its reason, nothing to adopt.
+    *fake.doc.lock().unwrap() = serde_json::json!({
+        "id": "0123456789abcdef", "status": "done", "summary_error": "no summary block"
+    });
+    let (_, doc) = post(&r, route, body, true).await;
+    assert_eq!(doc["summary_error"], "no summary block", "{doc}");
+    assert!(doc.get("summary").is_none(), "{doc}");
+
+    // A summary of another job (or one that breaks a rule the hub checks again) is no summary.
+    *fake.doc.lock().unwrap() = serde_json::json!({
+        "id": "0123456789abcdef", "status": "done",
+        "summary": { "schema": "handoff-summary/1", "job_id": "ffffffffffffffff",
+                     "date": "2026-11-23", "markdown": markdown }
+    });
+    let (_, doc) = post(&r, route, body, true).await;
+    assert!(
+        doc.get("summary").is_none() && doc["summary_error"].is_string(),
+        "{doc}"
+    );
+
+    // A failed job: status and error, no summary.
+    *fake.doc.lock().unwrap() =
+        serde_json::json!({ "id": "0123456789abcdef", "status": "failed", "error": "boom" });
+    let (_, doc) = post(&r, route, body, true).await;
+    assert_eq!(
+        (doc["status"].as_str(), doc["error"].as_str()),
+        (Some("failed"), Some("boom")),
+        "{doc}"
+    );
 }
 
 #[tokio::test]

@@ -1017,6 +1017,45 @@ describe('App', () => {
     app.stop();
   });
 
+  it('shows the summary of a hand-over like a review answer and writes it only after Adopt', async () => {
+    const { app, hub } = make({ token: 't' });
+    hub.aiDesktopFound = { installed: true, running: true };
+    await app.start(null);
+    await app.loadEnums();
+    await vi.waitFor(() => expect(app.aiFeatures).toBe(true));
+    const md = '## Getan\n- a\n\n## Commits\nrepo@abc1234\n\n## Prüfungen\nCLEAN\n\n## Offen\n-\n';
+    hub.agentAnswer = { job_id: '0123456789abcdef', status: 'running', private: false, port: 47123 };
+    hub.resultQueue = [
+      { status: 'running' },
+      { status: 'done', summary: { job_id: '0123456789abcdef', date: '2026-11-23', markdown: md } },
+    ];
+    app.openAgent('pub/a');
+    await app.handToAgent('run', 'handoff');
+    await vi.waitFor(() => expect(app.answer).toMatchObject({ kind: 'handoff', phase: 'shown', id: 'pub/a' }));
+    expect(hub.resultCalls.at(-1)).toEqual({ job: '0123456789abcdef', id: 'pub/a', kind: 'handoff' });
+    // Shown, nothing written (PRIN-60).
+    expect(hub.sent).toEqual([]);
+    await app.adoptAnswer();
+    expect(hub.sent.at(-1)?.ops).toHaveLength(1);
+    expect(hub.sent.at(-1)?.ops[0]).toMatchObject({
+      op: 'set_section',
+      id: 'pub/a',
+      heading: '## Agent-Verlauf (Job 0123456789abcdef, 2026-11-23)',
+    });
+    expect(app.answer?.phase).toBe('adopted');
+    app.closeAnswer();
+
+    // A run that ended without a usable summary says so and opens nothing.
+    hub.agentAnswer = { job_id: 'fedcba9876543210', status: 'running', private: false, port: 47123 };
+    hub.resultQueue = [{ status: 'done', summary_error: 'no summary block' }];
+    app.openAgent('pub/a');
+    await app.handToAgent('run', 'handoff');
+    await vi.waitFor(() => expect(app.toast?.kind).toBe('error'));
+    expect(app.toast?.text).toContain('no summary block');
+    expect(app.answer).toBeNull();
+    app.stop();
+  });
+
   it('counts a running ai-desktop without an installer as found', async () => {
     const { app, hub } = make({ token: 't' });
     hub.aiDesktopFound = { installed: false, running: true };

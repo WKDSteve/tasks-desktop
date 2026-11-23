@@ -486,6 +486,19 @@ model's whole answer. A needed yes for a private area goes through `draft_confir
 routes: the page writes the sections with `ops` (`set_section`) only after the person's *Adopt*, and the follow-up task
 with `new` only after its own click. A paired phone does not reach the route.
 
+### The summary of a hand-over (`kind: handoff`)
+
+`agent_result` takes the kind `handoff` as well, for the job the page started with `POST /api/tasks/agent`. The engine
+is not asked: ai-desktop gives the finished job a `summary` (`handoff-summary/1`, `docs/JOBS.md` of ai-desktop) that it
+cleaned and checked itself. The hub does not rely on that, since the text came out of an agent's run: it passes the
+summary only when the schema, the job id (it must be the job asked for), the date (`YYYY-MM-DD`), the size (at most
+4096 bytes), the characters (no control character but the line break and the tab) and the four headings (`## Getan`,
+`## Commits`, `## Prüfungen`, `## Offen`, in order) are right; otherwise the page gets `summary_error` with the reason
+(cleaned of control characters, at most 200 characters). Only `status`, `summary` or `summary_error` pass, never the
+`output` of the run. The page checks the job, the date and the size once more, shows the text as Markdown blocks (never
+HTML) and writes it only after *Adopt*, as the section `## Agent-Verlauf (Job <id>, <date>)` with `set_section` (the
+`## ` headings inside become `### `, the engine takes none inside a section).
+
 ## An intent of another app (`POST /api/tasks/intent`)
 
 "Paste an intent" (menu *Work*, the palette) takes what another app hands over: a document `wkd-intent/1` (appkit
