@@ -22,7 +22,7 @@ for all surfaces:
 - [ ] The path appears in the list with the right title, icon and status.
 - [ ] Points, XP and the stage list match `tasks path <area>/<slug>`.
 - [ ] Badges show as images (not as broken links); a missing badge means a wrong path in `## Level`.
-- [ ] Open a **point with an exercise note**: the task text and "Fertig, wenn" are readable. An exercise point that shows only a title
+- [ ] Open a **point with an exercise note**: Aufgabe, Erwartet, Nachweis and Ergebnis are readable (format of `tasks-vault/ALL/Lernpunkt-Aufgabenblock-Format-2026-11-23.md`). An exercise point that shows only a title
   is the known gap `tasks.nvim/uebungspunkte-mit-ausformulierter-aufgabe` (click-through to the written-out task).
 - [ ] Optional groups (literature) do not count towards "path done".
 
