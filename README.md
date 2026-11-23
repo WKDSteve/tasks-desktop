@@ -56,7 +56,11 @@ tasks-desktop link            print a one-time pairing link (for a phone, a tunn
 tasks-desktop logs [-f]       the end of the log of the hub in the background
 tasks-desktop paths           where the program, the settings and the log are
 tasks-desktop help [<cmd>]    all commands, or one
+tasks-desktop completions <shell>  tab completion script for powershell or bash
 ```
+
+Tab completion: put `tasks-desktop completions powershell | Out-String | Invoke-Expression` in your PowerShell profile (`$PROFILE`),
+or `source <(tasks-desktop completions bash)` in `~/.bashrc`.
 
 These are the commands of every hub app of the family (`hub-desktop`, `rules-desktop`, `testing-desktop`). Exit codes:
 0 done, 1 failed, 2 wrong arguments. `open` printed the pairing link in earlier versions; that is `link` now, and

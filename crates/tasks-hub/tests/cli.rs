@@ -1361,3 +1361,28 @@ fn the_program_is_the_watcher_of_its_childrens_groups() {
     assert!(out.status.success(), "{out:?}");
     assert!(out.stdout.is_empty() && out.stderr.is_empty(), "{out:?}");
 }
+
+#[test]
+fn completions_print_a_script_for_each_shell_and_refuse_another() {
+    let config = temp_dir("completions");
+    for (shell, needle) in [
+        ("bash", "complete -F"),
+        ("powershell", "Register-ArgumentCompleter"),
+    ] {
+        let out = command(&config)
+            .args(["completions", shell])
+            .output()
+            .unwrap();
+        assert!(out.status.success(), "{shell}: {out:?}");
+        let script = String::from_utf8_lossy(&out.stdout).into_owned();
+        assert!(script.contains(needle), "{shell}: {script}");
+        for word in ["status", "stop", "serve", "install", "tasks-desktop"] {
+            assert!(script.contains(word), "{shell} lacks {word}: {script}");
+        }
+    }
+    let out = command(&config)
+        .args(["completions", "zsh"])
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(2), "{out:?}");
+}
