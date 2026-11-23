@@ -484,6 +484,7 @@
             return {
               kind: 'submenu',
               label: t(`menu.sub.${entry.group}` as Key),
+              hint: t(`hint.item.menu.sub.${entry.group}` as Key),
               items: entry.views.map((v) => viewItem(v.id, v.disabled)),
             };
           }),
