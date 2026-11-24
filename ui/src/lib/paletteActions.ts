@@ -50,6 +50,7 @@ export function paletteActions(app: App): PaletteAction[] {
   add('go.abnahme', t('palette.go', { view: t('nav.abnahme') }), () => app.setView('abnahme'));
   add('go.cross', t('palette.go', { view: t('nav.cross') }), () => app.setView('cross'));
   if (app.canMeetings) add('go.meetings', t('palette.go', { view: t('nav.meetings') }), () => app.setView('meetings'));
+  if (app.canContacts) add('go.contacts', t('palette.go', { view: t('nav.contacts') }), () => app.setView('contacts'));
   add('go.calendar', t('palette.go', { view: t('nav.calendar') }), () => app.setView('calendar'));
   add('go.timeline', t('palette.go', { view: t('nav.timeline') }), () => app.setView('timeline'));
   add('go.reminders', t('palette.go', { view: t('nav.reminders') }), () => app.setView('reminders'));

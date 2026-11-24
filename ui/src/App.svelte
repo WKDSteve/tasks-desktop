@@ -503,16 +503,31 @@
                   { kind: 'section', label: t(`menu.sec.office_${section}` as Key) },
                   ...views.map((id) => viewItem(id, false)),
                 ]),
-                ...(app.canMeetings
+                ...(app.canMeetings || app.canContacts
                   ? ([
                       { kind: 'section', label: t('menu.sec.office_create') },
-                      {
-                        kind: 'action',
-                        label: t('menu.meeting'),
-                        hint: t('hint.item.menu.meeting'),
-                        disabled: app.phase !== 'ready' || !app.canMakeMeetings,
-                        onselect: () => app.openMeetingForm(),
-                      },
+                      ...(app.canMeetings
+                        ? [
+                            {
+                              kind: 'action',
+                              label: t('menu.meeting'),
+                              hint: t('hint.item.menu.meeting'),
+                              disabled: app.phase !== 'ready' || !app.canMakeMeetings,
+                              onselect: () => app.openMeetingForm(),
+                            },
+                          ]
+                        : []),
+                      ...(app.canContacts
+                        ? [
+                            {
+                              kind: 'action',
+                              label: t('menu.contact'),
+                              hint: groupHint(app.lang, 'menu.contact'),
+                              disabled: app.phase !== 'ready' || !app.canMakeContacts,
+                              onselect: () => app.openContactForm(),
+                            },
+                          ]
+                        : []),
                     ] as MenuItem[])
                   : []),
               ],
@@ -893,6 +908,8 @@
                     ? t('nav.cross')
                   : app.view === 'meetings'
                     ? t('nav.meetings')
+                  : app.view === 'contacts'
+                    ? t('nav.contacts')
                   : app.view === 'calendar'
                     ? t('nav.calendar')
                   : app.view === 'timeline'
@@ -931,6 +948,8 @@
           <Lazy {app} load={() => import('./views/CrossView.svelte')} />
         {:else if app.view === 'meetings'}
           <Lazy {app} load={() => import('./views/MeetingsView.svelte')} />
+        {:else if app.view === 'contacts'}
+          <Lazy {app} load={() => import('./views/ContactsView.svelte')} />
         {:else if app.view === 'calendar'}
           <Lazy {app} load={() => import('./views/CalendarView.svelte')} />
         {:else if app.view === 'timeline'}
@@ -997,6 +1016,8 @@
     <Lazy {app} when={app.planning} load={() => import('./views/PlanWizard.svelte')} onfailed={() => app.closePlanWizard()} />
     <Lazy {app} when={app.meetingDraft !== null} load={() => import('./views/MeetingForm.svelte')} onfailed={() => app.closeMeetingForm()} />
     <Lazy {app} when={app.meetingOpen !== null} load={() => import('./views/MeetingPage.svelte')} onfailed={() => app.closeMeeting()} />
+    <Lazy {app} when={app.contactDraft !== null} load={() => import('./views/ContactForm.svelte')} onfailed={() => app.closeContactForm()} />
+    <Lazy {app} when={app.contactOpen !== null} load={() => import('./views/ContactPage.svelte')} onfailed={() => app.closeContact()} />
     <DoneDialog {app} />
     <PrioDialog {app} />
     <Lazy {app} when={app.matrix !== null} load={() => import('./views/Matrix.svelte')} onfailed={() => app.closeMatrix()} />

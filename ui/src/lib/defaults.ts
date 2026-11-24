@@ -19,6 +19,7 @@ export const START_VIEWS: readonly View[] = [
   'abnahme',
   'cross',
   'meetings',
+  'contacts',
   'calendar',
   'timeline',
   'reminders',

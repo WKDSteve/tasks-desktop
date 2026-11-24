@@ -8,7 +8,7 @@ import { editedTags, type TagEdit } from './bulk';
 import type { Result, TaskEntry } from './contract';
 
 /** The kinds of operation whose refusal is kept. */
-type Kept = Extract<Op, { op: 'set' | 'reorder' }>;
+type Kept = Extract<Op, { op: 'set' | 'reorder' | 'contact_set' }>;
 
 export interface Conflict {
   /** One entry for the same change of the same task: a newer refusal replaces the older one. */
@@ -26,12 +26,12 @@ export interface Conflict {
 }
 
 function keyOf(op: Kept): string {
-  const what = op.op === 'set' ? Object.keys(op.patch).sort().join(',') : 'order';
+  const what = op.op === 'set' || op.op === 'contact_set' ? Object.keys(op.patch).sort().join(',') : 'order';
   return `${op.op}:${op.id}:${what}`;
 }
 
 function kept(op: Op | undefined): op is Kept {
-  return op !== undefined && (op.op === 'set' || op.op === 'reorder');
+  return op !== undefined && (op.op === 'set' || op.op === 'reorder' || op.op === 'contact_set');
 }
 
 /** The refusals in the answer of a write, with the operation each one was. */

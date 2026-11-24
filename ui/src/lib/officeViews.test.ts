@@ -14,6 +14,18 @@ describe('officeViews', () => {
     ]);
   });
 
+  it('puts the contacts under People, after Remind, only when the engine reads them', () => {
+    expect(officeMenu(can(['meetings', 'meeting', 'contacts', 'contact'])).map((s) => [s.section, s.views])).toEqual([
+      ['dates', ['meetings', 'calendar', 'timeline']],
+      ['remind', ['reminders']],
+      ['people', ['contacts']],
+    ]);
+    // both documents are needed; one alone is no view
+    expect(officeMenu(can(['contacts'])).map((s) => s.section)).toEqual(['dates', 'remind']);
+    expect(isOfficeView('contacts')).toBe(true);
+    expect(isMenuView('contacts')).toBe(false);
+  });
+
   it('leaves the meetings out, not greyed, when the engine cannot read them', () => {
     expect(officeMenu(can([]))[0]).toEqual({ section: 'dates', views: ['calendar', 'timeline'] });
     expect(officeMenu(can(['meetings']))[0]?.views).not.toContain('meetings');

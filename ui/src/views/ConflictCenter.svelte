@@ -6,6 +6,7 @@
   import type { ConflictItem } from 'appkit-ui/conflicts';
   import type { App } from '../lib/app.svelte';
   import { alreadyDone, differences, retryOp } from '../lib/conflicts';
+  import { contactDifferences, contactDoneAlready, contactRetryOp } from '../lib/contactConflicts';
   import { labelOf, translate, type Key } from '../lib/i18n';
 
   let { app }: { app: App } = $props();
@@ -22,6 +23,7 @@
       tags: 'field.tags',
       remind: 'remind.field',
     };
+    // The keys of a contact that are not a task's (organisation, role, ...) are shown as they are.
     const hit = known[key];
     return hit ? t(hit) : key;
   }
@@ -32,6 +34,28 @@
 
   const items = $derived(
     app.conflicts.map((conflict): ConflictItem => {
+      // A refused change of a contact: shown next to the contact as it is now (read after the refusal).
+      if (conflict.op.op === 'contact_set') {
+        const contact = app.conflictContacts[conflict.id];
+        const same = contactDoneAlready(conflict, contact ?? undefined);
+        const notes: string[] = [];
+        if (contact === null) notes.push(t('conflicts.contact_gone'));
+        else if (same) notes.push(t('conflicts.contact_done'));
+        else if (conflict.code === 'locked' || conflict.code === 'lock_stuck') notes.push(t('conflicts.locked'));
+        return {
+          key: conflict.key,
+          title: contact?.name ?? conflict.id,
+          id: conflict.id,
+          notes,
+          rows: contact && !same ? contactDifferences(conflict, contact).map((d) => ({ key: d.key, label: keyLabel(d.key), wanted: d.wanted, now: d.now })) : [],
+          actions: [
+            ...(contactRetryOp(conflict, contact ?? undefined) !== null && !same
+              ? [{ name: 'retry', label: t('conflicts.retry'), primary: true, disabled: app.saving }]
+              : []),
+            { name: 'discard', label: t('conflicts.discard') },
+          ],
+        };
+      }
       const task = app.tasks.find((x) => x.id === conflict.id);
       const same = alreadyDone(conflict, task);
       const notes: string[] = [];

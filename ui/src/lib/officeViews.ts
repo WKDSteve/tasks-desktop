@@ -1,10 +1,10 @@
 // The tab "Office" of the menu bar: the views about appointments, in sections, as the concept orders them (tasks-vault,
 // ALL/Reiter-Buero-Termine-und-Kontakte-Konzept-2026-11-23.md, wave 1): Dates (meetings, calendar, timeline) and
-// Remind (reminders), and the action "New meeting" under Create (it is not a view; the page adds it when the engine
-// makes meetings). The sections are data, like `viewTabMenu.ts` and `learnViews.ts`. A view the engine cannot serve is
-// left out, not greyed; a section without a view is left out. The contacts come with wave 3 and are not here.
+// Remind (reminders), People (contacts, wave 3), and the actions "New meeting" and "New contact" under Create (they
+// are no views; the page adds them when the engine makes them). The sections are data, like `viewTabMenu.ts` and `learnViews.ts`. A view the engine cannot serve is
+// left out, not greyed; a section without a view is left out.
 
-export type OfficeSection = 'dates' | 'remind';
+export type OfficeSection = 'dates' | 'remind' | 'people';
 
 export interface OfficeView {
   /** The name of the view in `#view=<id>` and in `View`. */
@@ -24,6 +24,7 @@ export const OFFICE_SECTIONS: readonly { section: OfficeSection; views: readonly
     ],
   },
   { section: 'remind', views: [{ id: 'reminders', needs: [] }] },
+  { section: 'people', views: [{ id: 'contacts', needs: ['contacts', 'contact'] }] },
 ];
 
 const ALL: readonly OfficeView[] = OFFICE_SECTIONS.flatMap((s) => s.views);

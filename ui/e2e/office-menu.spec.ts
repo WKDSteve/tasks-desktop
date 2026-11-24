@@ -30,8 +30,8 @@ test('Office: sections, the views with their links, the dot, and nothing of it l
   const problems = await pair(page, '/#view=list');
   await menuTab(page, 'Office').click();
   const menu = page.getByRole('menu', { name: /^Office/ });
-  for (const group of ['Dates', 'Remind', 'Create']) await expect(menu.getByRole('group', { name: group })).toBeVisible();
-  await expect(menu.getByRole('menuitemradio')).toHaveText(['Meetings', 'Calendar', 'Timeline', 'Reminders']);
+  for (const group of ['Dates', 'Remind', 'People', 'Create']) await expect(menu.getByRole('group', { name: group })).toBeVisible();
+  await expect(menu.getByRole('menuitemradio')).toHaveText(['Meetings', 'Calendar', 'Timeline', 'Reminders', 'Contacts']);
   await expect(menu.getByRole('menuitemradio', { name: 'Timeline' })).toHaveAttribute('href', /#view=timeline/);
   await expect(menu.getByRole('menuitem', { name: 'New meeting ...' })).toBeVisible();
   await menu.getByRole('menuitemradio', { name: 'Calendar' }).click();

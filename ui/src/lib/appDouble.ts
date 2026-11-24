@@ -5,7 +5,10 @@ import type { IntentAnswer } from './intent';
 import { ApiError, type AssetAnswer, type BoardRequest, type BoardSaved, type DocmapPlaces, type FinishedQuery, type Hub, type HubArea, type OpsRequest, type SetupInfo, type SetupStep, type VaultList } from './api';
 import { App, type Env } from './app.svelte';
 import type { CachedList, ListStore } from './cache';
-import type { DonePreview, Groupings, MeetingDocument, MeetingEntry, MeetingParse, Meetings, Next, Result, Snapshot, TaskDocument, TaskEntry, View, Views } from './contract';
+import type {
+  ContactDocument,
+  ContactEntry,
+  Contacts, DonePreview, Groupings, MeetingDocument, MeetingEntry, MeetingParse, Meetings, Next, Result, Snapshot, TaskDocument, TaskEntry, View, Views } from './contract';
 import { task } from './fixtures';
 import type { PrintSheet } from './export';
 import type { RemindersMail } from './reminders';
@@ -612,6 +615,32 @@ export class FakeHub {
       ...this.parseAnswer,
     } as MeetingParse;
   }
+  /** The contacts the hub knows (`contacts`, `contact`), what was asked of them, and the pages they come in. */
+  contactItems: ContactEntry[] = [];
+  contactReads: string[] = [];
+  contactQueries: Record<string, unknown>[] = [];
+  contactsError: ApiError | null = null;
+  /** Holds the answer of `contacts` back until it is settled (a reading on its way). */
+  holdContacts: Promise<void> | null = null;
+  contactPageSize: number | null = null;
+  async contacts(query: { area?: string; limit?: number; offset?: number } = {}): Promise<Contacts> {
+    this.contactQueries.push({ ...query });
+    if (this.holdContacts) await this.holdContacts;
+    if (this.contactsError) throw this.contactsError;
+    const items = this.contactItems.filter((c) => query.area === undefined || c.area === query.area);
+    const size = this.contactPageSize ?? 100;
+    const offset = query.offset ?? 0;
+    const page = items.slice(offset, offset + size);
+    const next = offset + size < items.length ? offset + size : undefined;
+    return { kind: 'tasks.contacts', items: page, total: items.length, offset, limit: size, ...(next === undefined ? {} : { next_offset: next }), incomplete: [] } as unknown as Contacts;
+  }
+  async contact(id: string): Promise<ContactDocument> {
+    this.contactReads.push(id);
+    const contact = this.contactItems.find((c) => c.id === id);
+    if (!contact) throw new ApiError(404, 'not_found', 'no such contact');
+    return { kind: 'tasks.contact', contact, body: '', body_truncated: false, notes: '', ...this.contactBodies.get(id) } as unknown as ContactDocument;
+  }
+  contactBodies = new Map<string, Partial<ContactDocument>>();
   searches: string[] = [];
   searchStatus: 'ready' | 'building' = 'ready';
   async search(query: string) {
@@ -738,6 +767,8 @@ export class FakeHub {
         id:
           op.op === 'meeting_new'
             ? `${op.area}/made-meeting`
+            : op.op === 'contact_new'
+              ? (op.id ?? `${op.area}/made-contact`)
             : op.op === 'new'
             ? 'pub/created'
             : op.op === 'plan_new' || op.op === 'project_new'
@@ -749,16 +780,22 @@ export class FakeHub {
                   : undefined,
         ok: true,
         outcome:
-          op.op === 'new' || op.op === 'plan_new' || op.op === 'project_new' || op.op === 'meeting_new' || (op.op === 'view_save' && op.id === undefined)
+          op.op === 'new' || op.op === 'plan_new' || op.op === 'project_new' || op.op === 'meeting_new' || op.op === 'contact_new' || (op.op === 'view_save' && op.id === undefined)
             ? request.dry_run
               ? 'would_create'
               : 'created'
-            : op.op === 'view_delete'
+            : op.op === 'view_delete' || op.op === 'contact_delete'
               ? 'deleted'
               : 'changed',
         changed_ids: [],
         ...(op.op === 'set'
           ? { inverse: { op: 'set', id: op.id, patch: { status: 'open' }, if_match: 'e2' } }
+          : {}),
+        // A contact, as the engine answers: made is taken back by deleting it, changed by the old values, deleted by making it again.
+        ...(op.op === 'contact_new' ? { inverse: { op: 'contact_delete', id: op.id ?? `${op.area}/made-contact`, if_match: 'c-made' } } : {}),
+        ...(op.op === 'contact_set' ? { inverse: { op: 'contact_set', id: op.id, patch: { role: 'Before' }, if_match: 'c-after' } } : {}),
+        ...(op.op === 'contact_delete'
+          ? { inverse: { op: 'contact_new', id: op.id, name: 'Gone Person', fields: { emails: ['gone@example.org'] }, body: '\n## Notes\nkept\n' } }
           : {}),
         // A view made is taken back by deleting it; a view changed or deleted by saving the old one (as the engine does).
         ...(op.op === 'view_save' && op.id === undefined

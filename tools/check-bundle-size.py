@@ -72,14 +72,22 @@ of it: the call that starts the watch, its words in German, the dialog's title) 
 checks load on demand (`ui/src/lib/handoffSummary.ts`); the rest could not move out. Raised by 1 kB to 946, not more,
 so growth still shows early; the candidates to load on demand are those named above.
 
-usage: check-bundle-size.py [--dist ui/dist] [--budget-kb 946]
+On 2026-11-24 the contacts (Office concept, wave 3; tasks-desktop/kontakte-im-reiter-office-liste-seite-und-formular)
+took the start to 949.2 kB. The list, the page, the form, their words and their work (`contactsApp.ts`) and the refused
+changes of a contact (`contactConflicts.ts`) are chunks of their own; what stays in the start is what the menu bar and
+the state need: the entry and the action in the tab Office, the view in the list of routes and the palette, the state
+of the form and of the open page, the two reads of the hub, the way back of a contact write and five words in each
+language. Raised by 4 kB to 950 (the cheap trims were made: the work of the views out of `App`, one path builder for the
+reads of the hub, one branch for the three inverses).
+
+usage: check-bundle-size.py [--dist ui/dist] [--budget-kb 950]
 """
 import argparse
 import pathlib
 import re
 import sys
 
-BUDGET_KB = 946
+BUDGET_KB = 950
 
 # `from"./x.js"` and `import"./x.js"` of a built chunk: a static import. A dynamic `import("./x.js")` has a bracket.
 STATIC_IMPORT = re.compile(r'(?:from|import)\s*"\./([^"]+\.js)"')

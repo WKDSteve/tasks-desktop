@@ -16,6 +16,8 @@ import type {
   LearnNotes,
   LevelsSpec,
   Links,
+  ContactDocument,
+  Contacts,
   MeetingDocument,
   MeetingParse,
   Meetings,
@@ -160,7 +162,15 @@ export type Op =
       if_match?: string;
     }
   /** Tasks made of the follow-ups: line `n`, else every line that names no task yet; each id is written behind its line. */
-  | { op: 'meeting_followups'; id: string; n?: number; area?: string };
+  | { op: 'meeting_followups'; id: string; n?: number; area?: string }
+  /**
+   * A contact file `<area>/CONTACTS/<slug>.md` (capability `contacts`); `fields` are its frontmatter keys. The inverse of
+   * a `contact_delete` names it by `id` (area and slug in one word) and brings the fields and the text back.
+   */
+  | { op: 'contact_new'; area?: string; id?: string; name: string; fields?: Record<string, unknown>; body?: string; slug?: string; lang?: 'de' | 'en' }
+  /** The frontmatter of a contact (`null` removes a key, not `name`). */
+  | { op: 'contact_set'; id: string; patch: Record<string, unknown>; if_match?: string }
+  | { op: 'contact_delete'; id: string; if_match?: string };
 
 /** The vaults the hub can read, and the one it reads. A folder is shown by its last part only. */
 export interface VaultList {
@@ -748,15 +758,25 @@ export class Hub extends HubClient<Snapshot> {
     return this.json<SearchResult>(path, signal ? { signal } : undefined);
   }
 
+  /** The path of a read with a query: the values that are set, as `key=value` (a `/` stays one). */
+  private listPath(route: string, query: object): string {
+    const parts = Object.entries(query)
+      .filter(([, v]) => v !== undefined && v !== '')
+      .map(([k, v]) => `${k}=${encodeURIComponent(String(v)).replace(/%2F/gi, '/')}`);
+    return `/api/tasks/${route}${parts.length > 0 ? `?${parts.join('&')}` : ''}`;
+  }
+
   /** The meetings whose days touch a window, or the meetings of one task (`tasks.meetings`, one page). */
   meetings(
     query: { since?: string; until?: string; area?: string; task?: string; limit?: number; offset?: number },
     signal?: AbortSignal,
   ): Promise<Meetings> {
-    const parts = Object.entries(query)
-      .filter(([, v]) => v !== undefined && v !== '')
-      .map(([k, v]) => `${k}=${encodeURIComponent(String(v)).replace(/%2F/gi, '/')}`);
-    return this.json<Meetings>(`/api/tasks/meetings${parts.length > 0 ? `?${parts.join('&')}` : ''}`, signal ? { signal } : undefined);
+    return this.json<Meetings>(this.listPath('meetings', query), signal ? { signal } : undefined);
+  }
+
+  /** The contacts by name, one page (`tasks.contacts`); the tag and the organisation are filtered by the page. */
+  contacts(query: { area?: string; limit?: number; offset?: number } = {}, signal?: AbortSignal): Promise<Contacts> {
+    return this.json<Contacts>(this.listPath('contacts', query), signal ? { signal } : undefined);
   }
 
   /**
@@ -787,6 +807,12 @@ export class Hub extends HubClient<Snapshot> {
     } catch {
       return null;
     }
+  }
+
+  /** One contact with its text and its notes (`tasks.contact`). */
+  contact(id: string, signal?: AbortSignal): Promise<ContactDocument> {
+    const path = `/api/tasks/contact?id=${encodeURIComponent(id).replace(/%2F/gi, '/')}`;
+    return this.json<ContactDocument>(path, signal ? { signal } : undefined);
   }
 
   /** One meeting with its body and the sections the engine reads (`tasks.meeting`). */

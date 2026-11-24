@@ -79,3 +79,19 @@ it('greys the new meeting when the engine reads meetings but cannot make them', 
   const item = [...open('office').querySelectorAll<HTMLElement>('.mb-item')].find((el) => el.querySelector('.mb-text')?.textContent === 'Neues Meeting ...')!;
   expect(item.getAttribute('aria-disabled') === 'true' || item.hasAttribute('disabled')).toBe(true);
 });
+
+it('offers the contacts under People and "New contact ..." under Create when the engine reads contacts, and neither without', async () => {
+  await start(['meetings', 'meeting', 'meeting_ops', 'contacts', 'contact']);
+  const office = open('office');
+  expect(labels(office)).toEqual(['Meetings', 'Kalender', 'Zeitleiste', 'Erinnerungen', 'Kontakte', 'Neues Meeting ...', 'Neuer Kontakt ...']);
+  expect(office.textContent).toContain('Leute');
+  expect(office.querySelector<HTMLAnchorElement>('[href*="#view=contacts"]')).not.toBeNull();
+  for (const item of office.querySelectorAll('.mb-item')) expect((item.getAttribute('data-hint') ?? item.getAttribute('title') ?? '').length, item.textContent ?? '').toBeGreaterThan(10);
+});
+
+it('has no contacts without the capability', async () => {
+  await start(['meetings', 'meeting', 'meeting_ops']);
+  const office = open('office');
+  expect(labels(office)).not.toContain('Kontakte');
+  expect(labels(office)).not.toContain('Neuer Kontakt ...');
+});

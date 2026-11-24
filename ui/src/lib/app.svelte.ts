@@ -31,6 +31,8 @@ import { COLUMNS, columnsOf, isColumn, neighbourColumn, placeNear, stepInGroup, 
 import { ApiError, type AgentKind, type AgentTab, type AiDesktop, type BoardRequest, type BoardSaved, type CheckAll, type SheetRunState, type Hub, type HubArea, type HubAreas, type SearchResult, type VaultList } from './api';
 import { cacheableClass, cacheableList, type CachedList, type ListStore } from './cache';
 import type {
+  ContactDocument,
+  ContactEntry,
   DonePreview,
   Estimate,
   Finished,
@@ -159,6 +161,7 @@ import {
 } from './lists';
 import { LEARNING, learningIds, withoutLearning } from './learning';
 import { localToday } from './remind';
+import type { ContactForm } from './contacts';
 import {
   MEETINGS_EVER,
   MEETING_PAGES,
@@ -213,7 +216,7 @@ const NOTE_MAX = 1000;
 
 export type Phase = 'starting' | 'needs_pairing' | 'offline' | 'unavailable' | 'ready';
 export type Connection = 'live' | 'reconnecting' | 'offline';
-export type View = 'today' | 'list' | 'board' | 'plan' | 'inbox' | 'abnahme' | 'cross' | 'meetings' | 'calendar' | 'timeline' | 'reminders' | 'stats' | 'done' | 'views' | 'repos' | 'repostatus' | 'paths' | 'pathmap' | 'competences' | 'badges' | 'rewards' | 'evidence' | 'learn' | 'learnnext' | 'learnstats' | 'learntime' | 'learnnotes';
+export type View = 'today' | 'list' | 'board' | 'plan' | 'inbox' | 'abnahme' | 'cross' | 'meetings' | 'contacts' | 'calendar' | 'timeline' | 'reminders' | 'stats' | 'done' | 'views' | 'repos' | 'repostatus' | 'paths' | 'pathmap' | 'competences' | 'badges' | 'rewards' | 'evidence' | 'learn' | 'learnnext' | 'learnstats' | 'learntime' | 'learnnotes';
 export type Theme = 'auto' | 'light' | 'dark';
 /** The blocks of the Today view that a person may hide. */
 export { ORDERED_TILES, TILES, type OrderedTile, type Tile } from './tiles-list';
@@ -1468,7 +1471,8 @@ export class App {
 
   // ── writing ───────────────────────────────────────────────────────────
 
-  private opId(): string {
+  /** The id of a request of this page (a write, a dry run). */
+  opId(): string {
     this.opCount += 1;
     return `ui-${this.env.now().toString(36)}-${this.opCount}`;
   }
@@ -1665,7 +1669,10 @@ export class App {
     const conflict = this.conflictsState.find(key);
     // Not now (a write is under way, or the page is not connected): the entry stays, nothing is lost.
     if (!conflict || this.saving || this.phase !== 'ready') return;
-    const op = retryOp(conflict, this.tasks.find((t) => t.id === conflict.id));
+    const op =
+      conflict.op.op === 'contact_set'
+        ? (await import('./contactConflicts')).contactRetryOp(conflict, this.conflictContacts[conflict.id] ?? undefined)
+        : retryOp(conflict, this.tasks.find((t) => t.id === conflict.id));
     if (op === null) return;
     this.conflictsState.discard(key);
     await this.write([op]);
@@ -2044,6 +2051,63 @@ export class App {
     return this.env.hub.meeting(id, signal);
   }
 
+  // ── contacts (Office concept, wave 3) ─────────────────────────────────────────────────────────────────────────
+  // A contact is a person of a third party: a status message, a toast or a note of the page never holds an address or a
+  // number (the engine names none either); a write says "saved" and offers the way back, like any other.
+
+  /** The form of a contact while it is open (a new one has no `id`). */
+  contactDraft = $state<ContactForm | null>(null);
+  /** The contact whose page is open. */
+  contactOpen = $state<string | null>(null);
+
+  /** The engine reads contacts: the view, the page and the form are offered. */
+  get canContacts(): boolean {
+    return this.can('contacts') && this.can('contact');
+  }
+  get canMakeContacts(): boolean {
+    return this.canContacts && !this.readOnly;
+  }
+
+  /** Open the form of a new contact. */
+  openContactForm(opts: { area?: string } = {}): void {
+    if (this.phase !== 'ready' || !this.canMakeContacts) return;
+    this.contactDraft = { area: opts.area ?? this.meetingArea([]), name: '', org: '', role: '', emails: '', phones: '', tz: '', tags: '', notes: '' };
+  }
+
+  /** Open the form of an existing contact (the form the page made of it, `formOfContact`). */
+  openContactDraft(form: ContactForm): void {
+    if (this.phase !== 'ready' || !this.canMakeContacts) return;
+    this.contactDraft = form;
+  }
+
+  closeContactForm(): void {
+    this.contactDraft = null;
+  }
+
+  openContact(id: string): void {
+    if (!this.canContacts) return;
+    this.contactOpen = id;
+  }
+
+  closeContact(): void {
+    this.contactOpen = null;
+  }
+
+  /**
+   * The contacts a refused change is about, as they are now (read after the refusal, kept by id): the conflict center
+   * shows them next to what was wanted. A contact that cannot be read is `null` (gone).
+   */
+  conflictContacts = $state<Record<string, ContactEntry | null>>({});
+
+  private readContactsOf(refused: readonly Conflict[]): void {
+    if (refused.some((c) => c.op.op === 'contact_set')) void import('./contactConflicts').then((m) => m.readContactsOf(this, refused));
+  }
+
+  /** One contact with its text and its notes. */
+  readContact(id: string, signal?: AbortSignal): Promise<ContactDocument> {
+    return this.env.hub.contact(id, signal);
+  }
+
   /**
    * Ask the engine what the plan would be called (a dry run: nothing is written, nothing is scanned). The engine's
    * refusal is the answer when the form is not one, so the rules stay in one place.
@@ -2208,7 +2272,9 @@ export class App {
     try {
       const result = await this.env.hub.ops({ client_op_id: this.opId(), ops });
       this.answering = false;
-      this.conflictsState.add(conflictsOf(ops, result, Date.now(), opts.tags));
+      const refused = conflictsOf(ops, result, Date.now(), opts.tags);
+      this.conflictsState.add(refused);
+      this.readContactsOf(refused);
       const failed = result.results.find((r) => !r.ok);
       if (opts.onAnswer?.(result)) {
         // said already
@@ -2251,7 +2317,9 @@ export class App {
       if (error instanceof ApiError && error.code === 'outcome_unknown') {
         this.say('error', 'write.unknown');
       } else if (error instanceof ApiError && error.status === 409) {
-        this.conflictsState.add(conflictsOfRequest(ops, Date.now(), opts.tags));
+        const refused = conflictsOfRequest(ops, Date.now(), opts.tags);
+        this.conflictsState.add(refused);
+        this.readContactsOf(refused);
         this.say('error', 'write.conflict');
       } else if (error instanceof ApiError && error.code === 'read_only') {
         this.say('error', 'write.read_only');
@@ -2371,6 +2439,13 @@ export class App {
           present: inv.present === true,
           ...(inv.if_match ? { if_match: inv.if_match } : {}),
         });
+        continue;
+      }
+      // A contact: its old values back, a new one taken back by deleting it, a deleted one made again (the engine's).
+      if (inv.op === 'contact_set' || inv.op === 'contact_delete' || inv.op === 'contact_new') {
+        const { op, id, name, fields, body, patch, if_match: ifMatch } = inv;
+        if (op === 'contact_new' && typeof name !== 'string') return undefined;
+        inverses.push({ op, id, name, fields, body: body || undefined, patch, if_match: ifMatch } as Op);
         continue;
       }
       if (inv.op === 'tick_step') {

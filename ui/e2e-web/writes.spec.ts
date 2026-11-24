@@ -166,3 +166,36 @@ test('a task whose file was deleted meanwhile is not written back: nothing is cr
   expect(Object.keys(after).sort()).toEqual(Object.keys(before).filter((p) => p !== file).sort());
   await expect(page.locator('button.row', { hasText: 'lib.nvim/beta' })).toHaveCount(0, { timeout: 30_000 });
 });
+
+test('contacts: read in the list, made through the form into a file on the disk, and taken back with Undo', async ({ page }) => {
+  const seen = await watchPage(page);
+  const files = {
+    ...vaultFiles(),
+    'lib.nvim/CONTACTS/web-rick.md': '---\nname: "Web Rick"\norg: "Web GmbH"\nemails: [web.rick@example.org]\ntags: [web]\n---\n\nA person of the web test.\n',
+  };
+  await openVault(page, files);
+  await closeFloat(page);
+  await page.getByRole('menuitem', { name: /^Office(,|$)/ }).click();
+  await page.getByRole('menuitemradio', { name: 'Contacts' }).click();
+  const rick = page.locator('[data-contact="lib.nvim/web-rick"]');
+  await expect(rick).toBeVisible();
+  await expect(rick).toContainText('Web GmbH');
+
+  // made through the form: a file on the disk, the way back (Undo) removes it again
+  await page.getByRole('button', { name: 'New contact', exact: true }).click();
+  const form = page.getByRole('dialog', { name: 'New contact' });
+  await form.locator('[data-contact-area]').selectOption('lib.nvim');
+  await form.locator('[data-contact-name]').fill('Web Made');
+  await form.locator('[data-contact-emails]').fill('web.made@example.org');
+  await expect(form.getByRole('status')).toContainText('lib.nvim/web-made');
+  await form.locator('[data-contact-save]').click();
+  await expect(form).toBeHidden();
+  await expect.poll(async () => (await disk(page))['lib.nvim/CONTACTS/web-made.md'] ?? '').toContain('web.made@example.org');
+  await expect(page.locator('[data-contact="lib.nvim/web-made"]')).toBeVisible();
+  expect((await page.locator('[role="status"], [role="alert"]').allTextContents()).join(' | ')).not.toContain('example.org');
+  await page.getByRole('button', { name: 'Undo' }).click();
+  await expect.poll(async () => (await disk(page))['lib.nvim/CONTACTS/web-made.md']).toBeUndefined();
+  expect(await violations(page)).toEqual([]);
+  expect(seen.errors).toEqual([]);
+  expect(seen.requests).toEqual([]);
+});
