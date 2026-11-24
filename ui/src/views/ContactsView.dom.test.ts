@@ -166,6 +166,37 @@ describe('the page of a contact', () => {
     expect(phone.getAttribute('aria-label')).not.toContain('2345678');
   });
 
+  it('shows the meetings that name the person, the latest first, and opens one', async () => {
+    const m = await boot([RICK], ['contacts', 'contact', 'meetings', 'meeting']);
+    m.hub.contactBodies.set('pub/rick', {
+      history: [
+        { id: 'pub/sync', title: 'Sync', date: '2026-11-10', participant: 1, role: 'Lead', present: true },
+        { id: 'pub/old', title: 'Old', date: '2026-09-01', participant: 2, present: false },
+      ],
+    });
+    m.app.openContact('pub/rick');
+    const root = await show(ContactPage, m);
+    const rows = [...root.querySelectorAll('[data-contact-history] li')];
+    expect(rows.map((r) => r.querySelector('button')!.textContent)).toEqual(['Sync', 'Old']);
+    expect(rows[0]!.textContent).toContain('Lead');
+    expect(root.querySelector('[data-contact-history-none]')).toBeNull();
+    rows[0]!.querySelector('button')!.click();
+    expect(m.app.meetingOpen).toBe('pub/sync');
+    expect(m.app.contactOpen).toBeNull();
+  });
+
+  it('says so when no meeting names the person, and shows nothing for an engine that has no history', async () => {
+    const m = await boot([RICK, ANNA]);
+    m.hub.contactBodies.set('pub/rick', { history: [] });
+    m.app.openContact('pub/rick');
+    const root = await show(ContactPage, m);
+    expect(root.querySelector('[data-contact-history-none]')).not.toBeNull();
+    m.app.openContact('pub/anna');
+    await settle();
+    expect(root.querySelector('[data-contact-history]')).toBeNull();
+    expect(root.querySelector('[data-contact-history-none]')).toBeNull();
+  });
+
   it('asks before it deletes, then removes the file on the version shown and offers the way back', async () => {
     const m = await boot([RICK]);
     m.app.openContact('pub/rick');

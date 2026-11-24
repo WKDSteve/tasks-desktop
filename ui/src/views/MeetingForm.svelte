@@ -12,6 +12,8 @@
   import { floating } from '../lib/floating';
   import { translate, type Key } from '../lib/i18n';
   import { joinLink } from '../lib/meetingLink';
+  import type { ContactEntry } from '../lib/contract';
+  import { fillFromContact, nameOptions } from '../lib/participantContacts';
   import { MAX_NOTIFY, MAX_PARTICIPANTS, NOTIFY_PRESETS, type MeetingForm, type MeetingPreview } from '../lib/meetings';
   import { exceptDays, REPEATS, repeatLabel, seriesWord, type SeriesWord } from '../lib/series';
   import { markHidden } from '../lib/text';
@@ -33,6 +35,9 @@
   let ownNotify = $state('');
   // The service of the address, as the engine names it, with the address it was asked for.
   let service = $state<{ online: string; name: string | null } | null>(null);
+  // The contacts the participant field suggests (read when the form opens; a vault without them suggests nothing).
+  let contacts = $state<ContactEntry[]>([]);
+  const contactNames = $derived(nameOptions(contacts));
 
   const areas = $derived(
     [...app.allAreaNames]
@@ -80,6 +85,24 @@
       clearTimeout(timer);
       abort.abort();
     };
+  });
+
+  // The contacts, once per opening of the form: the chunk of the contacts comes only when the form is open.
+  $effect(() => {
+    if (app.meetingDraft === null || !app.can('contacts')) {
+      contacts = [];
+      return;
+    }
+    const abort = new AbortController();
+    void import('../lib/contactsApp')
+      .then((m) => m.contactsAll(app, abort.signal))
+      .then((all) => {
+        if (!abort.signal.aborted) contacts = all.items;
+      })
+      .catch(() => {
+        if (!abort.signal.aborted) contacts = [];
+      });
+    return () => abort.abort();
   });
 
   // The service of the address: the engine's word for it (the same table as on the meeting it makes).
@@ -300,7 +323,17 @@
               <div class="person" role="group" aria-label={t('meeting.participant.row', { n: i + 1 })}>
                 <label data-hint={t('hint.form.meeting.participant')}>
                   <span class="sr-only">{t('meeting.participant.name')}</span>
-                  <input type="text" bind:value={p.name} placeholder={t('meeting.participant.name')} maxlength="120" />
+                  <input
+                    type="text"
+                    bind:value={p.name}
+                    placeholder={t('meeting.participant.name')}
+                    maxlength="120"
+                    list="meeting-contact-names"
+                    data-participant-name
+                    onchange={() => {
+                      if (form) form.participants[i] = fillFromContact(form.participants[i]!, contacts);
+                    }}
+                  />
                 </label>
                 <label data-hint={t('hint.form.meeting.participant')}>
                   <span class="sr-only">{t('meeting.participant.email')}</span>
@@ -319,6 +352,9 @@
                 >
               </div>
             {/each}
+            <datalist id="meeting-contact-names">
+              {#each contactNames as option (option.value)}<option value={option.value}>{option.label}</option>{/each}
+            </datalist>
             <button type="button" onclick={addParticipant} disabled={form.participants.length >= MAX_PARTICIPANTS}>{t('meeting.participant.add')}</button>
           </fieldset>
 

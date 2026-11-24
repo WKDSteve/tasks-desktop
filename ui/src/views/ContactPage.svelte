@@ -149,6 +149,31 @@
     {/if}
     {#if canWrite}<p class="muted small">{t('contact.notes_file')}</p>{/if}
 
+    {#if doc.history !== undefined}
+      <h3>{t('contact.history')}</h3>
+      {#if doc.history.length === 0}
+        <p class="muted" data-contact-history-none>{t('contact.history_none')}</p>
+      {:else}
+        <ul class="history" data-contact-history>
+          {#each doc.history as h (h.id)}
+            <li>
+              <button
+                type="button"
+                class="link"
+                aria-label={t('contact.history_open', { title: h.title })}
+                onclick={() => {
+                  app.closeContact();
+                  app.openMeeting(h.id);
+                }}>{markHidden(h.title)}</button
+              >
+              <span class="muted">{[h.date, h.role ? markHidden(h.role) : ''].filter((x) => x).join(' · ')}</span>
+            </li>
+          {/each}
+        </ul>
+        {#if doc.history_truncated}<p class="muted small">{t('contact.history_cut')}</p>{/if}
+      {/if}
+    {/if}
+
     {#if asking}
       <div class="ask" role="alertdialog" aria-label={t('contact.delete')} data-contact-ask>
         <p>{t('contact.delete_ask', { name: c.name })}</p>
@@ -219,6 +244,25 @@
   }
   .muted {
     color: var(--muted);
+  }
+  .history {
+    list-style: none;
+    padding: 0;
+    margin: 0 0 0.5rem;
+  }
+  .history li {
+    display: flex;
+    gap: 0.5rem;
+    align-items: baseline;
+  }
+  .history .link {
+    background: none;
+    border: 0;
+    padding: 0.25rem 0;
+    color: var(--accent);
+    text-decoration: underline;
+    cursor: pointer;
+    text-align: left;
   }
   .small {
     font-size: 0.8rem;
