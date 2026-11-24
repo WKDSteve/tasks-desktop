@@ -3052,7 +3052,7 @@ test('every entry of the header explains itself on hover: the six menus and the 
     [page.getByRole('menuitem', { name: 'Work', exact: true }), /Create, find and edit tasks/],
     [page.getByRole('menuitem', { name: 'Project', exact: true }), /vault, the plan and the export/],
     [page.getByRole('menuitem', { name: /^View(,|$)/ }), /Switch the view/],
-    [page.getByRole('menuitem', { name: /^Office(,|$)/ }), /Appointments and reminders/],
+    [page.getByRole('menuitem', { name: /^Office(,|$)/ }), /Appointments, reminders and people/],
     [page.getByRole('menuitem', { name: 'Learning plans', exact: true }), /views of the learning plans/],
     [page.getByRole('menuitem', { name: 'Options', exact: true }), /the look and how the page behaves/],
     [page.getByRole('menuitem', { name: 'Help', exact: true }), /About this app/],
