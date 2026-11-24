@@ -2761,8 +2761,9 @@ pub(super) fn device_op_level(op: &str) -> Option<Level> {
     match op {
         "new" | "answer" | "contact_new" => Some(Level::Create),
         // A participant ticked present: only where the people of the meeting may reach the phone (`device_refusal`).
-        "set" | "done" | "node_set" | "meeting_capture" | "meeting_attend" | "contact_set"
-        | "contact_delete" => Some(Level::Change),
+        "set" | "done" | "node_set" | "meeting_capture" | "meeting_attend" | "contact_set" => {
+            Some(Level::Change)
+        }
         _ => None,
     }
 }
@@ -2787,7 +2788,6 @@ pub(super) fn device_op_fields(op: &str) -> &'static [&'static str] {
         // A contact written on the phone: only where the data of the contacts is released (`device_refusal`).
         "contact_new" => &["op", "area", "name", "fields", "body", "slug", "lang"],
         "contact_set" => &["op", "id", "patch", "if_match"],
-        "contact_delete" => &["op", "id", "if_match"],
         _ => &[],
     }
 }

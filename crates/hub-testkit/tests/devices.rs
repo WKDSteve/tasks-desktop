@@ -396,7 +396,8 @@ async fn ops_takes_from_a_phone_only_what_the_phone_page_sends_at_its_level() {
         json!({ "op": "contact_new", "area": "gamma.nvim", "name": "Rick", "fields": { "file": "x" } }),
         json!({ "op": "contact_set", "id": "gamma.nvim/rick", "patch": { "type": "x" } }),
         json!({ "op": "contact_set", "id": "gamma.nvim/rick", "patch": {} }),
-        json!({ "op": "contact_delete", "id": "gamma.nvim/rick", "by": "x" }),
+        // a phone does not delete a contact: it has no button for it
+        json!({ "op": "contact_delete", "id": "gamma.nvim/rick" }),
         json!({ "op": "promote", "container": "alpha.nvim/p1", "point": "a" }),
         json!({ "op": "unpromote", "container": "alpha.nvim/p1", "point": "a" }),
     ];
@@ -455,7 +456,7 @@ async fn ops_takes_from_a_phone_only_what_the_phone_page_sends_at_its_level() {
 
 /// The contacts reach a phone cut (MOB-02, decided 2026-11-24): those of released areas; the mail addresses, numbers and
 /// text only where the people are released (`public`, or `internal` with `meetings.internal_people`), never those of a
-/// private or unclassified area. A phone writes a contact only there, at `create` (new) or `change` (set, delete), and
+/// private or unclassified area. A phone writes a contact only there, at `create` (new) or `change` (set), never deletes one, and
 /// no field the form has no place for; no answer names an address or a number.
 #[tokio::test]
 async fn a_phone_reads_the_contacts_of_released_areas_and_writes_them_only_where_their_data_is_released(
@@ -537,21 +538,13 @@ async fn a_phone_reads_the_contacts_of_released_areas_and_writes_them_only_where
         );
     }
     // Writes: public yes, internal no (its data is not released), private and unclassified are not there.
-    for op in [
-        new("gamma.nvim"),
-        set("gamma.nvim/rick"),
-        delete("gamma.nvim/rick"),
-    ] {
+    for op in [new("gamma.nvim"), set("gamma.nvim/rick")] {
         let (status, doc) = r.op(&phone, &op).await;
         assert_eq!(status, 200, "{op}: {doc}");
         let text = doc.to_string();
         assert!(!text.contains('@') && !text.contains("1234567"), "{text}");
     }
-    for op in [
-        new("alpha.nvim"),
-        set("alpha.nvim/rick"),
-        delete("alpha.nvim/rick"),
-    ] {
+    for op in [new("alpha.nvim"), set("alpha.nvim/rick")] {
         let (status, doc) = r.op(&phone, &op).await;
         assert!(
             refused(status, &doc, "not_for_devices"),
@@ -561,17 +554,24 @@ async fn a_phone_reads_the_contacts_of_released_areas_and_writes_them_only_where
     for op in [
         new("secret-area"),
         set("secret-area/rick"),
-        delete("beta.nvim/rick"),
         new("beta.nvim"),
     ] {
         let (status, doc) = r.op(&phone, &op).await;
         assert_eq!(status, 404, "{op}: {doc}");
     }
-    // Levels: new creates, set and delete change, a read-only phone writes none.
+    // A phone does not delete a contact, in no area.
+    for area in ["gamma.nvim", "alpha.nvim", "secret-area"] {
+        let (status, doc) = r.op(&phone, &delete(&format!("{area}/rick"))).await;
+        assert!(
+            refused(status, &doc, "not_for_devices"),
+            "{area}: {status} {doc}"
+        );
+    }
+    // Levels: new creates, set changes, a read-only phone writes none.
     r.set_level(&device, "create").await;
     let (status, doc) = r.op(&phone, &new("gamma.nvim")).await;
     assert_eq!(status, 200, "{doc}");
-    for op in [set("gamma.nvim/rick"), delete("gamma.nvim/rick")] {
+    for op in [set("gamma.nvim/rick")] {
         let (status, doc) = r.op(&phone, &op).await;
         assert!(
             refused(status, &doc, "level_too_low"),
@@ -606,11 +606,7 @@ async fn a_phone_reads_the_contacts_of_released_areas_and_writes_them_only_where
         .await;
     assert_eq!(status, 200, "{doc}");
     assert!(doc["notes"].as_str().unwrap().contains("1234567"), "{doc}");
-    for op in [
-        new("alpha.nvim"),
-        set("alpha.nvim/rick"),
-        delete("alpha.nvim/rick"),
-    ] {
+    for op in [new("alpha.nvim"), set("alpha.nvim/rick")] {
         let (status, doc) = r.op(&phone, &op).await;
         assert_eq!(status, 200, "{op}: {doc}");
     }
