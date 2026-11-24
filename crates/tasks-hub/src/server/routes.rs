@@ -2786,7 +2786,7 @@ pub(super) fn device_op_fields(op: &str) -> &'static [&'static str] {
         // A participant ticked present or not, by number or by name.
         "meeting_attend" => &["op", "id", "n", "name", "present", "if_match"],
         // A contact written on the phone: only where the data of the contacts is released (`device_refusal`).
-        "contact_new" => &["op", "area", "name", "fields", "body", "slug", "lang"],
+        "contact_new" => &["op", "area", "name", "fields"],
         "contact_set" => &["op", "id", "patch", "if_match"],
         _ => &[],
     }

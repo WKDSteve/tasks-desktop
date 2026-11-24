@@ -394,6 +394,8 @@ async fn ops_takes_from_a_phone_only_what_the_phone_page_sends_at_its_level() {
         json!({ "op": "meeting_close", "id": "alpha.nvim/m1" }),
         // a contact with a field a phone has no form for, or one it may not send
         json!({ "op": "contact_new", "area": "gamma.nvim", "name": "Rick", "fields": { "file": "x" } }),
+        json!({ "op": "contact_new", "area": "gamma.nvim", "name": "Rick", "body": "text" }),
+        json!({ "op": "contact_new", "area": "gamma.nvim", "name": "Rick", "slug": "x" }),
         json!({ "op": "contact_set", "id": "gamma.nvim/rick", "patch": { "type": "x" } }),
         json!({ "op": "contact_set", "id": "gamma.nvim/rick", "patch": {} }),
         // a phone does not delete a contact: it has no button for it
