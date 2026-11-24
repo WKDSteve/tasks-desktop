@@ -799,6 +799,22 @@ with its password in the key store of the system, is a task of its own. Until th
 session, is not released for a paired phone (`MOB-02`, fail closed), and a refusal of the transport reaches the page as
 one line of at most 200 characters.
 
+## Contacts (`GET /api/tasks/contacts`, `contact`; the operations `contact_new`, `contact_set`)
+
+Two data routes behind a session (security matrix, `subjects/tasks.rs`). The PC gets the engine's documents as they
+are. A paired phone (decided 2026-11-24: read and write) gets them cut (`device_cut::contacts`, `device_cut::contact`,
+`MOB-02`, fail closed): only contacts of a `public` or `internal` area (`contact` of another area is `404` before the
+engine is asked); never the file (`file`), the faults (`problems`) or the assets. A contact's mail addresses, numbers,
+summary, text and notes (the *data*) reach a phone only for a `public` area, or for an `internal` one with the
+settings' `meetings.internal_people` (`device_cut::contact_data`, the same switch as the people of a meeting); without
+it the phone gets name, organisation, role, time zone and tags. The meetings of a contact (`history`) only of released
+areas. A phone does `contact_new` (level `create`) and `contact_set` (level `change`) only where the data is released
+(`403 not_for_devices` otherwise, `404` for an area it may not see), with the name and the fields of its form only
+(`org`, `role`, `emails`, `phones`, `tz`, `tags`; `device_op_shape`); `contact_delete` is not for devices. Why the data
+gate on writes: the engine's result and its inverse for Undo carry the old addresses and numbers. No message of the
+hub or the page names an address or a number (the engine's errors do not; the cut empties an error's message anyway).
+Tested in the guard matrix (`devices.rs`, `a_phone_reads_the_contacts_of_released_areas_and_writes_them_only_where_their_data_is_released`).
+
 ## Meetings (`GET /api/tasks/meetings`, `meeting`, `meeting/ics`, `meeting/thumb`)
 
 Four data routes, each behind a session (they are in the security matrix, `crates/hub-testkit/src/subjects/tasks.rs`).
