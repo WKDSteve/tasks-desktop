@@ -84,7 +84,8 @@
       </select>
     </label>
     <div class="actions">
-      <button type="button" onclick={() => app.cancelFinish()}>{t('dialog.cancel')}</button>
+      <!-- svelte-ignore a11y_autofocus -->
+      <button type="button" autofocus onclick={() => app.cancelFinish()}>{t('dialog.cancel')}</button>
       <button type="button" class="primary" disabled={busy} onclick={confirm}
         >{t('done.confirm')}</button
       >

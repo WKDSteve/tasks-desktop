@@ -29,7 +29,8 @@
     <p class="id" translate="no"><code translate="no">{asking.id}</code></p>
     <p>{t('board.prio.body', { from: asking.from, prio: asking.prio })}</p>
     <div class="actions">
-      <button type="button" onclick={() => app.cancelRepriority()}>{t('dialog.cancel')}</button>
+      <!-- svelte-ignore a11y_autofocus -->
+      <button type="button" autofocus onclick={() => app.cancelRepriority()}>{t('dialog.cancel')}</button>
       <button
         type="button"
         class="primary"
