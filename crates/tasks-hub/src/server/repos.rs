@@ -445,6 +445,8 @@ pub(super) async fn repo_open(State(st): State<Arc<Shared>>, body: Bytes) -> Res
 
 #[cfg(test)]
 mod tests {
+    // Only the Windows test below uses the items of the module: elsewhere the import would be unused.
+    #[cfg(windows)]
     use super::*;
 
     /// `REPOS_DIR` on a drive root: the folders Windows keeps there (hidden, system) are no suggestion; the plain ones
