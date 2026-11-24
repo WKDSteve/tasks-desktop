@@ -166,8 +166,8 @@ test('a hint that lies on the next control lets the pointer through, so the firs
   await page.keyboard.press('Escape');
   const tip = page.locator('#hint-tip');
   let cover: { left: number; right: number; top: number; bottom: number } | null = null;
-  // The dot of the tab View (the view shown) makes the bar wider: the widths go on beyond the first ones.
-  for (const width of [448, 430, 470, 410, 490, 400, 520, 540, 560, 580, 600, 620, 640]) {
+  // The dot of the tab View (the view shown) and the Sign out button make the bar wider: the widths go on beyond the first ones.
+  for (const width of [448, 430, 470, 410, 490, 400, 520, 540, 560, 580, 600, 620, 640, 660, 680, 700, 720, 740, 760, 780]) {
     await page.setViewportSize({ width, height: 800 });
     await page.mouse.move(0, 700);
     await expect(tip).toBeHidden();
