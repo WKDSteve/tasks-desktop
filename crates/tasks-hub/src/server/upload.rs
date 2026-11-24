@@ -891,7 +891,7 @@ mod tests {
     #[tokio::test]
     async fn files_on_their_way_together_stay_within_the_room() {
         let dir = std::env::temp_dir().join(format!("upload-room-{}", std::process::id()));
-        let first = receive(
+        let Ok(first) = receive(
             dir.clone(),
             Some(60),
             100,
@@ -899,8 +899,9 @@ mod tests {
             axum::body::Body::from(vec![0u8; 60]),
         )
         .await
-        .ok()
-        .expect("the first file fits");
+        else {
+            panic!("the first file fits");
+        };
         assert_eq!(ROOM.load(Ordering::SeqCst), 60);
         // Known size: refused before a byte is read.
         let known = receive(
