@@ -80,6 +80,8 @@ async fn the_page_and_its_assets_are_served_with_the_page_headers() {
         .is_some_and(|t| t.starts_with("text/javascript")));
     assert_eq!(js.header("x-content-type-options"), Some("nosniff"));
     assert!(js.header("content-security-policy").is_some());
+    // A hashed file too: the hub is local, so nothing is cached (docs/PERFORMANCE.md, "Caching of the page's files").
+    assert_eq!(js.header("cache-control"), Some("no-store"));
 
     let css = client::request(port, "GET", "/assets/app-1.css", &[], "")
         .await

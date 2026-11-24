@@ -78,3 +78,15 @@ start times only within one run.
   later it is asked of the engine again.
 - **The search index is built about half a second after the first snapshot**; until then the search says
   `building`. A query on the built index takes about 2 ms.
+
+## Caching of the page's files
+
+The build names its files with a hash (`assets/<name>-<hash>.js`), so a file never changes under its name. The hub
+nevertheless answers every file, hashed or not, with `Cache-Control: no-store` (`docs/SECURITY.md`). That is decided
+and stays: the hub is a local program on `127.0.0.1`, the page comes from the disk of the same machine (a request takes
+a millisecond or two, nothing crosses a network), and `no-store` keeps an old page, written against an old hub, from
+ever being served after an update, and keeps the page (which holds the session) out of any shared or synced cache.
+Long cache lifetimes (`public, max-age=31536000, immutable` under `assets/`) are for a server that is reached over a
+network; where this page is served so (the phone page, `/m/`, over a tunnel) they are the rule of that server. The test
+`ui_files.rs` pins the answer for the page and for an asset.
+Compression is not used for the same reason: on loopback it costs time and saves nothing.

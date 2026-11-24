@@ -85,7 +85,10 @@ test('a field of New task is described while it has the focus; Tab shows the pop
   await page.keyboard.press('Escape');
   await expect(tip).toBeHidden();
   await expect(dialog).toBeVisible();
+  // The title holds what was typed: the next one asks before the dialog closes, and "Discard" closes it.
   await page.keyboard.press('Escape');
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole('button', { name: 'Discard' }).click();
   await expect(dialog).toBeHidden();
 });
 

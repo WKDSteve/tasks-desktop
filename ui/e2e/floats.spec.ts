@@ -432,8 +432,12 @@ test('the handle of a dialog comes first in the order of the focus without takin
     const capture = page.getByRole('dialog', { name: 'New task' });
     const title = capture.getByLabel('Title', { exact: true });
     await expect(title).toBeFocused();
+    // Back from the title: the info button in the head of the dialog, then the handle in front of it.
+    await page.keyboard.press('Shift+Tab');
+    await expect(capture.getByRole('button', { name: /^Explanation: New task/ })).toBeFocused();
     await page.keyboard.press('Shift+Tab');
     await expect(capture.getByRole('button', { name: 'Move or resize the window' })).toBeFocused();
+    await page.keyboard.press('Tab');
     await page.keyboard.press('Tab');
     await expect(title).toBeFocused();
     // Tab brought the focus to the field: its hint shows, and the first Escape closes the hint, the second the dialog.

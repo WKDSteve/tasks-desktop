@@ -1,4 +1,8 @@
 <script lang="ts">
+  import { tick } from 'svelte';
+  import { focusFirstInvalid } from '../lib/formErrors';
+  import { leaveGuard } from '../lib/leaveGuard';
+  import LeaveAsk from './LeaveAsk.svelte';
   import Info from 'appkit-ui/Info.svelte';
   import { untrack } from 'svelte';
   import { closeOnBackdrop } from 'appkit-ui/backdrop';
@@ -19,6 +23,12 @@
 
   const BODY_MAX = 20000;
   let dialog: HTMLDialogElement | undefined = $state();
+  // Something typed or chosen that closing would lose: Escape asks first (leaveGuard).
+  let leaving = $state(false);
+  // A send that found something missing: the fields say it (formErrors.ts).
+  let attempted = $state(false);
+  let formEl: HTMLFormElement | undefined = $state();
+  const isDirty = (): boolean => files.length > 0 || [title, context, acceptance, notes, summary, tags, other, refs, links].some((v) => v.trim() !== '');
   let title = $state('');
   let area = $state('');
   let prio = $state('');
@@ -137,6 +147,8 @@
       draftBusy = false;
       draftNote = '';
       opened += 1;
+      leaving = false;
+      attempted = false;
       dialog.showModal();
     }
     if (!app.capturing) {
@@ -198,9 +210,16 @@
       draft.dropped.length > 0 ? t('draft.filled_dropped', { list: draft.dropped.join(', ') }) : t('draft.filled');
   }
 
+  const titleMissing = $derived(attempted && title.trim() === '');
   async function submit(event: SubmitEvent): Promise<void> {
     event.preventDefault();
-    if (busy || title.trim() === '' || area === '') return;
+    if (busy) return;
+    if (title.trim() === '' || area === '') {
+      attempted = true;
+      await tick();
+      focusFirstInvalid(formEl);
+      return;
+    }
     busy = true;
     try {
       const fields: Record<string, unknown> = {};
@@ -269,12 +288,13 @@
   }
 </script>
 
-<dialog bind:this={dialog} use:floating={{ kind: 'capture', moveLabel: t('float.move'), moveHint: t('hint.float.move') }} use:closeOnBackdrop={{ closeable: () => files.length === 0 && [title, context, acceptance, notes, summary, tags, other, refs, links].every((v) => v.trim() === '') }} aria-labelledby="capture-title" onclose={() => app.closeCapture()}>
-  <form onsubmit={submit}>
+<dialog bind:this={dialog} use:floating={{ kind: 'capture', moveLabel: t('float.move'), moveHint: t('hint.float.move') }} use:closeOnBackdrop={{ closeable: () => !isDirty() }} use:leaveGuard={{ dirty: isDirty, ask: () => (leaving = true) }} aria-labelledby="capture-title" onclose={() => app.closeCapture()}>
+  <form onsubmit={submit} novalidate aria-busy={busy} bind:this={formEl}>
     <div class="dialog-head">
       <h2 id="capture-title">{t('capture.title')}</h2>
       <Info hint={t('hint.dialog.capture')} label={t('hint.about', { what: t('capture.title') })} />
     </div>
+    {#if leaving}<LeaveAsk {app} ondiscard={() => { leaving = false; dialog?.close(); }} onkeep={() => (leaving = false)} />{/if}
     {#if app.aiFeatures}
       <div class="draft">
         {#if !draftOpen}
@@ -305,8 +325,9 @@
     <label data-hint={t('hint.form.task.title')}>
       <span>{t('capture.name')}</span>
       <!-- svelte-ignore a11y_autofocus -->
-      <input spellcheck="true" type="text" bind:value={title} maxlength="300" required autofocus />
+      <input spellcheck="true" type="text" bind:value={title} maxlength="300" required autofocus aria-invalid={titleMissing ? 'true' : undefined} aria-describedby={titleMissing ? 'capture-title-error' : undefined} />
     </label>
+    {#if titleMissing}<small class="field-error" id="capture-title-error">{t('form.title_required')}</small>{/if}
     <label data-hint={t('hint.form.task.area')}>
       <span>{t('capture.area')}</span>
       <select bind:value={area} required>
@@ -521,7 +542,7 @@
     {#if problem}<p class="problem" role="alert">{problem}</p>{/if}
     <div class="actions">
       <button type="button" onclick={() => app.closeCapture()}>{t('dialog.cancel')}</button>
-      <button type="submit" class="primary" disabled={busy || title.trim() === ''}
+      <button type="submit" class="primary" disabled={busy}
         >{t('capture.create')}</button
       >
     </div>

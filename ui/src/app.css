@@ -23,3 +23,50 @@
 .dialog-head > h2 {
   margin: 0;
 }
+
+/* A control is at least 24 x 24 px (what sits under the pointer, not the size of its icon), and on a coarse pointer, a
+   finger, at least 44 x 44. A link inside a line of text is exempt: it is not a control of its own. The extra room is
+   padding-free (a minimum, not a size), so a button that is larger already stays as it is. */
+button,
+summary,
+select,
+[role='button'] {
+  min-block-size: 24px;
+}
+button,
+[role='button'],
+button.info {
+  min-inline-size: 24px; /* button.info: the kit sets 1.4rem (22 px) on .info, which wins over a bare button */
+}
+input[type='checkbox'],
+input[type='radio'] {
+  inline-size: 24px;
+  block-size: 24px;
+  margin: 0;
+}
+@media (pointer: coarse) {
+  /* !important: the minimum of a control of a component (`min-width: 1.6rem` on a class) is more specific than this rule
+     and smaller than a finger; a finger is the case where nothing may win against it. */
+  button,
+  summary,
+  select,
+  [role='button'] {
+    min-block-size: 44px !important;
+  }
+  button,
+  [role='button'],
+  button.info {
+    min-inline-size: 44px !important;
+  }
+  input[type='checkbox'],
+  input[type='radio'] {
+    inline-size: 44px;
+    block-size: 44px;
+  }
+}
+
+/* What a form that was sent incomplete says beside the field (the field carries `aria-invalid`). */
+.field-error {
+  display: block;
+  color: var(--bad);
+}

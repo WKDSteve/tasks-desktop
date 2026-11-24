@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { leaveGuard } from '../lib/leaveGuard';
+  import LeaveAsk from './LeaveAsk.svelte';
   // Add tasks to a plan (or one of its phases) or to a project: a searchable choice of several open tasks (`PickList`),
   // narrowed to the areas of the target at first. A task that belongs to another plan or project is marked and is moved
   // only after a question. One write for all of them (`App.addTasksTo`); what the engine refuses is listed task by task
@@ -28,6 +30,9 @@
   const t = (key: Key, params: Record<string, string | number> = {}) => translate(app.lang, key, params);
 
   let dialog: HTMLDialogElement | undefined = $state();
+  // Something typed or chosen that closing would lose: Escape asks first (leaveGuard).
+  let leaving = $state(false);
+  const isDirty = (): boolean => chosen.length > 0;
   let chosen = $state<string[]>([]);
   let onlyAreas = $state(true);
   // The chosen tasks of another plan or project, while the question whether to move them stands.
@@ -66,6 +71,7 @@
       onlyAreas = true;
       asking = null;
       failed = [];
+      leaving = false;
       dialog.showModal();
       // The modal puts the focus on its first control (the switch of the areas): the words are typed first.
       dialog.querySelector<HTMLInputElement>('input[role="combobox"]')?.focus();
@@ -127,12 +133,13 @@
   bind:this={dialog}
   class="add-tasks"
   aria-labelledby="add-tasks-title"
-  use:closeOnBackdrop={{ closeable: () => chosen.length === 0 }}
+  use:closeOnBackdrop={{ closeable: () => !isDirty() }} use:leaveGuard={{ dirty: isDirty, ask: () => (leaving = true) }}
   onclose={() => {
     if (target) onclose();
   }}
 >
   <h2 id="add-tasks-title">{markHidden(heading)}</h2>
+  {#if leaving}<LeaveAsk {app} ondiscard={() => { leaving = false; dialog?.close(); }} onkeep={() => (leaving = false)} />{/if}
   {#if target && target.areas.length > 0}
     <label class="check" data-hint={t('hint.ui.add.only_areas')}>
       <input type="checkbox" bind:checked={onlyAreas} />

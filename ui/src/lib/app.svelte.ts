@@ -213,6 +213,9 @@ const WITHOUT_LEARNING: readonly string[] = [LEARNING];
 
 /** The longest line of the notes the engine takes (`append_note`), in characters. */
 const NOTE_MAX = 1000;
+/** The look at a followed run while the tab is shown, and the wait of a hidden tab between two checks of `visible`. */
+const RUN_POLL_MS = 1000;
+const RUN_HIDDEN_MS = 30_000;
 
 export type Phase = 'starting' | 'needs_pairing' | 'offline' | 'unavailable' | 'ready';
 export type Connection = 'live' | 'reconnecting' | 'offline';
@@ -4934,12 +4937,40 @@ export class App {
     return this.env.hub.estimate({ ids }, signal);
   }
 
+  /** Wakes the wait of a run poll that stands in a hidden tab (`tabShown`, `focused`). */
+  #wakeRun: (() => void) | null = null;
+
+  /**
+   * The pause before the next look at a run that is followed (a test sheet takes minutes, the check of all vaults
+   * seconds): a look each second while the tab is shown, because the person watches the run and no event stream of the
+   * hub names its end. A hidden tab asks nothing: it waits (a long sleep, cut short by `tabShown` or `focused`) and then
+   * looks once, so that the state is right the moment the person is back.
+   */
+  private async runBeat(): Promise<void> {
+    await this.env.sleep(RUN_POLL_MS);
+    while (this.env.visible && !this.env.visible() && !this.stopped) {
+      await new Promise<void>((resolve) => {
+        const wake = (): void => {
+          if (this.#wakeRun === wake) this.#wakeRun = null;
+          resolve();
+        };
+        this.#wakeRun = wake;
+        void this.env.sleep(RUN_HIDDEN_MS).then(wake);
+      });
+    }
+  }
+
+  /** The tab is shown again (`visibilitychange`): a run that is followed looks at once. */
+  tabShown(): void {
+    this.#wakeRun?.();
+  }
+
   /** Run the test sheets of `id` and follow the run: a sheet takes minutes. The watcher brings the new block of the task. */
   async runSheets(id: string): Promise<void> {
     try {
       this.sheetRun = await this.env.hub.startSheetRun(id);
       while (this.sheetRun.state === 'running') {
-        await new Promise((resolve) => setTimeout(resolve, 1000));
+        await this.runBeat();
         this.sheetRun = await this.env.hub.sheetRun();
       }
       if (this.sheetRun.id === id) this.focused();
@@ -4953,7 +4984,7 @@ export class App {
     try {
       this.checkAll = await this.env.hub.startCheckAll();
       while (this.checkAll.state === 'running') {
-        await new Promise((resolve) => setTimeout(resolve, 1000));
+        await this.runBeat();
         this.checkAll = await this.env.hub.checkAll();
       }
     } catch {
@@ -6379,6 +6410,7 @@ export class App {
     if (this.streamsFull) this.#wakeStream?.();
     // A page that lost its hub asks at once, not at the end of its wait.
     this.#wakeWatch?.();
+    this.#wakeRun?.();
     // A page that outlived its hub: the tab the new start opened may hand over its session now.
     if (this.hubState === 'replaced') void this.askForNewSession();
     // Not before the hub has confirmed the session: a page on the cached list holds the token already.

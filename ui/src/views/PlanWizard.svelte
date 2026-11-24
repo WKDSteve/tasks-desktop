@@ -1,4 +1,8 @@
 <script lang="ts">
+  import { tick } from 'svelte';
+  import { focusFirstInvalid } from '../lib/formErrors';
+  import { leaveGuard } from '../lib/leaveGuard';
+  import LeaveAsk from './LeaveAsk.svelte';
   import Info from 'appkit-ui/Info.svelte';
   import { closeOnBackdrop } from 'appkit-ui/backdrop';
   import { floating } from '../lib/floating';
@@ -26,6 +30,12 @@
     translate(app.lang, key, params);
 
   let dialog: HTMLDialogElement | undefined = $state();
+  // Something typed or chosen that closing would lose: Escape asks first (leaveGuard).
+  let leaving = $state(false);
+  // A send that found something missing: the fields say it (formErrors.ts).
+  let attempted = $state(false);
+  let formEl: HTMLFormElement | undefined = $state();
+  const isDirty = (): boolean => form.title.trim() !== '' || files.length > 0;
   let form = $state<PlanForm>(emptyForm());
   // The answer of the dry run, with the form it was asked for: an answer for an older form is none for this one.
   let answer = $state<{ key: string; value: PlanPreview } | null>(null);
@@ -65,6 +75,8 @@
       areasTouched = false;
       files = [];
       screenshot = false;
+      leaving = false;
+      attempted = false;
       dialog.showModal();
     }
     if (!app.planning && dialog.open) dialog.close();
@@ -87,9 +99,17 @@
     };
   });
 
+  const titleMissing = $derived(attempted && form.title.trim() === '');
   async function submit(event: SubmitEvent): Promise<void> {
     event.preventDefault();
-    if (busy || app.saving || notLink !== null || !canCreate(form, preview)) return;
+    if (busy) return;
+    if (form.title.trim() === '' || form.area === '') {
+      attempted = true;
+      await tick();
+      focusFirstInvalid(formEl);
+      return;
+    }
+    if (app.saving || notLink !== null || !canCreate(form, preview)) return;
     busy = true;
     try {
       const id = await app.createPlan($state.snapshot(form) as PlanForm, preview);
@@ -101,12 +121,13 @@
   }
 </script>
 
-<dialog bind:this={dialog} use:floating={{ kind: 'plan-wizard', moveLabel: t('float.move'), moveHint: t('hint.float.move') }} use:closeOnBackdrop={{ closeable: () => form.title.trim() === '' && files.length === 0 }} aria-labelledby="plan-title" onclose={() => app.closePlanWizard()}>
-  <form onsubmit={submit}>
+<dialog bind:this={dialog} use:floating={{ kind: 'plan-wizard', moveLabel: t('float.move'), moveHint: t('hint.float.move') }} use:closeOnBackdrop={{ closeable: () => !isDirty() }} use:leaveGuard={{ dirty: isDirty, ask: () => (leaving = true) }} aria-labelledby="plan-title" onclose={() => app.closePlanWizard()}>
+  <form onsubmit={submit} novalidate aria-busy={busy} bind:this={formEl}>
     <div class="dialog-head">
       <h2 id="plan-title">{t(form.kind === 'project' ? 'plan.new.project_title' : 'plan.new.title')}</h2>
       <Info hint={t('hint.dialog.plan')} label={t('hint.about', { what: t(form.kind === 'project' ? 'plan.new.project_title' : 'plan.new.title') })} />
     </div>
+    {#if leaving}<LeaveAsk {app} ondiscard={() => { leaving = false; dialog?.close(); }} onkeep={() => (leaving = false)} />{/if}
     {#if app.can('project_new')}
       <div class="kind" role="radiogroup" aria-label={t('plan.new.kind')}>
         {#each ['plan', 'project'] as const as kind (kind)}
@@ -133,8 +154,9 @@
     <label data-hint={t(form.kind === 'project' ? 'hint.form.project.title' : 'hint.form.plan.title')}>
       <span>{t('capture.name')}</span>
       <!-- svelte-ignore a11y_autofocus -->
-      <input spellcheck="true" type="text" bind:value={form.title} maxlength="300" required autofocus />
+      <input spellcheck="true" type="text" bind:value={form.title} maxlength="300" required autofocus aria-invalid={titleMissing ? 'true' : undefined} aria-describedby={titleMissing ? 'plan-title-error' : undefined} />
     </label>
+    {#if titleMissing}<small class="field-error" id="plan-title-error">{t('form.title_required')}</small>{/if}
     <label data-hint={t('hint.form.plan.area')}>
       <span>{t('plan.new.area')}</span>
       <select
@@ -300,7 +322,9 @@
 
     <div class="actions">
       <button type="button" onclick={() => app.closePlanWizard()}>{t('dialog.cancel')}</button>
-      <button type="submit" class="primary" disabled={busy || app.locked || notLink !== null || !canCreate(form, preview)}
+      <!-- Locked while a request runs, while a link is wrong, and while the engine has not yet confirmed a form that is filled in
+           (a wait, not a mistake); an empty form can be sent and says what is missing. -->
+      <button type="submit" class="primary" disabled={busy || app.locked || notLink !== null || (form.title.trim() !== '' && form.area !== '' && !canCreate(form, preview))}
         >{t('capture.create')}</button
       >
     </div>

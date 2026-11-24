@@ -35,6 +35,9 @@ no-referrer`, `Cache-Control: no-store` and `Cross-Origin-Resource-Policy:
 same-origin`. The page also carries a restrictive `Content-Security-Policy`;
 the strict policy with Trusted Types arrives with the user interface.
 
+`no-store` is on the files of the page too, hashed ones included: the hub is a local program, so a cache saves a
+millisecond and an old page could outlive an update (`docs/PERFORMANCE.md`, "Caching of the page's files").
+
 Routes are classified by their raw path. Everything under `/api/` needs a
 session unless it is on the short list below, so a route that is added later
 is closed until someone opens it on purpose; a path with percent escapes or

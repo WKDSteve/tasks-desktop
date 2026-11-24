@@ -80,14 +80,19 @@ of the form and of the open page, the two reads of the hub, the way back of a co
 language. Raised by 4 kB to 950 (the cheap trims were made: the work of the views out of `App`, one path builder for the
 reads of the hub, one branch for the three inverses).
 
-usage: check-bundle-size.py [--dist ui/dist] [--budget-kb 950]
+On 2026-11-24 the web-platform rules took the start to 955 kB: `translate` and `spellcheck` on 160 elements and fields (the
+templates carry them), the info buttons in the heads of six dialogs with their twelve words, the question before a dialog
+with typed text is left (`leaveGuard`, `LeaveAsk`), the errors at the fields of three forms, and `numbers.ts`. All of it is
+what the first screen draws or what a dialog needs when it opens, and the dialogs are in the start. Raised by 8 kB to 958.
+
+usage: check-bundle-size.py [--dist ui/dist] [--budget-kb 958]
 """
 import argparse
 import pathlib
 import re
 import sys
 
-BUDGET_KB = 950
+BUDGET_KB = 958
 
 # `from"./x.js"` and `import"./x.js"` of a built chunk: a static import. A dynamic `import("./x.js")` has a bracket.
 STATIC_IMPORT = re.compile(r'(?:from|import)\s*"\./([^"]+\.js)"')

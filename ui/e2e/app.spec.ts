@@ -4490,7 +4490,11 @@ test('the plan wizard names the plan with a dry run, refuses what the engine ref
   };
   await open();
   const create = dialog.getByRole('button', { name: 'Create', exact: true });
-  await expect(create).toBeDisabled();
+  // An empty form can be sent: it says what is missing at the title and puts the focus there.
+  await expect(create).toBeEnabled();
+  await create.click();
+  await expect(dialog.getByLabel('Title', { exact: true })).toHaveAttribute('aria-invalid', 'true');
+  await expect(dialog.getByLabel('Title', { exact: true })).toBeFocused();
   expect(await violations(page)).toEqual([]);
 
   // The engine names the plan while the person types; nothing is written yet.
@@ -10101,7 +10105,7 @@ test('the plan view compares the open plans: the engine\'s figures, sorted by a 
     await expect(a.locator('[data-col="open"]')).toContainText('3 of 4');
     await expect(a.locator('[data-col="open"]')).toContainText('1 held');
     await expect(a.getByRole('meter')).toHaveAttribute('aria-valuenow', '1');
-    await expect(a.locator('[data-col="progress"]')).toContainText('25 %');
+    await expect(a.locator('[data-col="progress"]')).toContainText(/25\s?%/);
     await expect(a.locator('[data-col="effort"]')).toContainText('2 d');
     await expect(a.locator('[data-col="path"]')).toContainText('1 d');
     await expect(a.locator('[data-col="forecast"]')).toContainText('3–12 weeks');

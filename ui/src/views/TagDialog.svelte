@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { leaveGuard } from '../lib/leaveGuard';
+  import LeaveAsk from './LeaveAsk.svelte';
   // Give tags to a task, or to all the marked ones at once, or take tags away: a searchable choice of several
   // (`PickList`) of the tags the open tasks carry; a typed word that is no tag yet can be added as a new one. One write
   // for all the tasks (`App.editTags`); what the engine refuses is listed task by task with its words, the rest stays
@@ -14,6 +16,9 @@
   const t = (key: Key, params: Record<string, string | number> = {}) => translate(app.lang, key, params);
 
   let dialog: HTMLDialogElement | undefined = $state();
+  // Something typed or chosen that closing would lose: Escape asks first (leaveGuard).
+  let leaving = $state(false);
+  const isDirty = (): boolean => chosen.length > 0;
   let chosen = $state<string[]>([]);
   // The tags typed here that no task carries yet: listed with the others, so they can be unticked again.
   let made = $state<string[]>([]);
@@ -53,6 +58,7 @@
       chosen = [];
       made = [];
       failed = [];
+      leaving = false;
       dialog.showModal();
       dialog.querySelector<HTMLInputElement>('input[role="combobox"]')?.focus();
     }
@@ -88,12 +94,13 @@
   bind:this={dialog}
   class="tag-dialog"
   aria-labelledby="tag-dialog-title"
-  use:closeOnBackdrop={{ closeable: () => chosen.length === 0 }}
+  use:closeOnBackdrop={{ closeable: () => !isDirty() }} use:leaveGuard={{ dirty: isDirty, ask: () => (leaving = true) }}
   onclose={() => {
     if (asked) app.closeTagging();
   }}
 >
   <h2 id="tag-dialog-title">{markHidden(heading)}</h2>
+  {#if leaving}<LeaveAsk {app} ondiscard={() => { leaving = false; dialog?.close(); }} onkeep={() => (leaving = false)} />{/if}
   {#if asked}
     <PickList
       {options}

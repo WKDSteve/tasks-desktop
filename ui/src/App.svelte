@@ -85,11 +85,17 @@
     void import('./lib/menuGroupHints').then((m) => (groupHint = m.groupHint));
     const onFocus = () => void app.focused();
     window.addEventListener('focus', onFocus);
+    // A tab shown again wakes the poll of a followed run (a focus event does not come for a tab switch in every browser).
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') app.tabShown();
+    };
+    document.addEventListener('visibilitychange', onVisible);
     // A middle click or Ctrl+click on a task opens it in a new tab, as a link does.
     const stopApart = installTaskApart(app, window);
     return () => {
       stopApart();
       window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onVisible);
       clearTimeout(chordTimer);
       app.stop();
     };

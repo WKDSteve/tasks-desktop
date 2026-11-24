@@ -55,9 +55,19 @@
   // The line of now moves on every minute.
   let minute = $state(0);
   const nowAt = $derived((void minute, wallTime(app.nowMs())));
+  // A minute is the finest step the line has; a hidden tab does not move it, and shows the right minute when it is back.
   $effect(() => {
-    const timer = setInterval(() => (minute += 1), 60_000);
-    return () => clearInterval(timer);
+    const timer = setInterval(() => {
+      if (document.visibilityState !== 'hidden') minute += 1;
+    }, 60_000);
+    const back = () => {
+      if (document.visibilityState === 'visible') minute += 1;
+    };
+    document.addEventListener('visibilitychange', back);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener('visibilitychange', back);
+    };
   });
   const now = $derived(nowOnGrid(nowAt));
 

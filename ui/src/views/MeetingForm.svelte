@@ -1,4 +1,8 @@
 <script lang="ts">
+  import { tick } from 'svelte';
+  import { focusFirstInvalid } from '../lib/formErrors';
+  import { leaveGuard } from '../lib/leaveGuard';
+  import LeaveAsk from './LeaveAsk.svelte';
   import Info from 'appkit-ui/Info.svelte';
   // The form of a new meeting (concept 7.1): one dialog, two columns. On the left the time and the place (title, area,
   // date, beginning, end or duration, all day, the time zone folded away, place, the address to join with the service
@@ -25,6 +29,12 @@
   const s = (key: SeriesWord) => seriesWord(app.lang, key);
 
   let dialog: HTMLDialogElement | undefined = $state();
+  // Something typed or chosen that closing would lose: Escape asks first (leaveGuard).
+  let leaving = $state(false);
+  // A send that found something missing: the fields say it (formErrors.ts).
+  let attempted = $state(false);
+  let formEl: HTMLFormElement | undefined = $state();
+  const isDirty = (): boolean => (form?.title.trim() ?? '') !== '' || files.length > 0;
   let form = $state<MeetingForm | null>(null);
   let answer = $state<{ key: string; value: MeetingPreview } | null>(null);
   const formKey = $derived(JSON.stringify(form));
@@ -66,6 +76,8 @@
       coverFirst = true;
       ownNotify = '';
       service = null;
+      leaving = false;
+      attempted = false;
       dialog.showModal();
     }
     if (app.meetingDraft === null && dialog.open) dialog.close();
@@ -153,9 +165,18 @@
 
   const canCreate = $derived(form !== null && form.title.trim() !== '' && form.area !== '' && form.date !== '' && preview?.kind !== 'refused');
 
+  const titleMissing = $derived(attempted && (form?.title.trim() ?? '') === '');
+  const dateMissing = $derived(attempted && form !== null && form.date === '');
   async function submit(event: SubmitEvent): Promise<void> {
     event.preventDefault();
-    if (busy || app.saving || form === null || !canCreate) return;
+    if (busy) return;
+    if (form === null || form.title.trim() === '' || form.area === '' || form.date === '') {
+      attempted = true;
+      await tick();
+      focusFirstInvalid(formEl);
+      return;
+    }
+    if (app.saving || !canCreate) return;
     busy = true;
     try {
       await app.createMeeting($state.snapshot(form) as MeetingForm, files, screenshot, coverFirst && hasImage);
@@ -169,16 +190,17 @@
   bind:this={dialog}
   class="meeting-form"
   use:floating={{ kind: 'meeting-form', moveLabel: t('float.move'), moveHint: t('hint.float.move') }}
-  use:closeOnBackdrop={{ closeable: () => (form?.title.trim() ?? '') === '' && files.length === 0 }}
+  use:closeOnBackdrop={{ closeable: () => !isDirty() }} use:leaveGuard={{ dirty: isDirty, ask: () => (leaving = true) }}
   aria-labelledby="meeting-form-title"
   onclose={() => app.closeMeetingForm()}
 >
   {#if form}
-    <form onsubmit={submit}>
+    <form onsubmit={submit} novalidate aria-busy={busy} bind:this={formEl}>
       <div class="dialog-head">
         <h2 id="meeting-form-title">{t('meeting.new.title')}</h2>
         <Info hint={t('hint.dialog.meeting')} label={t('hint.about', { what: t('meeting.new.title') })} />
       </div>
+    {#if leaving}<LeaveAsk {app} ondiscard={() => { leaving = false; dialog?.close(); }} onkeep={() => (leaving = false)} />{/if}
       {#if app.meetingNotes.problems.length > 0 || app.meetingNotes.assumedDay}
         <div class="notes" role="status">
           {#if app.meetingNotes.problems.length > 0}<p class="warn">{t('meeting.quick.problems', { words: app.meetingNotes.problems.join(' ') })}</p>{/if}
@@ -191,8 +213,9 @@
           <label data-hint={t('hint.form.meeting.title')}>
             <span>{t('meeting.field.title')}</span>
             <!-- svelte-ignore a11y_autofocus -->
-            <input spellcheck="true" type="text" bind:value={form.title} maxlength="300" required autofocus data-meeting-title />
+            <input spellcheck="true" type="text" bind:value={form.title} maxlength="300" required autofocus aria-invalid={titleMissing ? 'true' : undefined} aria-describedby={titleMissing ? 'meeting-title-error' : undefined} data-meeting-title />
           </label>
+          {#if titleMissing}<small class="field-error" id="meeting-title-error">{t('form.title_required')}</small>{/if}
           <label data-hint={t('hint.form.meeting.area')}>
             <span>{t('meeting.field.area')}</span>
             <select bind:value={form.area} required>
@@ -202,8 +225,9 @@
           <div class="row">
             <label data-hint={t('hint.form.meeting.date')}>
               <span>{t('meeting.field.date')}</span>
-              <input type="date" bind:value={form.date} required />
+              <input type="date" bind:value={form.date} required aria-invalid={dateMissing ? 'true' : undefined} aria-describedby={dateMissing ? 'meeting-date-error' : undefined} />
             </label>
+            {#if dateMissing}<small class="field-error" id="meeting-date-error">{t('form.date_required')}</small>{/if}
             <label class="check" data-hint={t('hint.form.meeting.all_day')}>
               <input type="checkbox" bind:checked={form.allDay} />
               <span>{t('meeting.field.all_day')}</span>
@@ -429,7 +453,7 @@
 
       <div class="actions">
         <button type="button" onclick={() => app.closeMeetingForm()}>{t('dialog.cancel')}</button>
-        <button type="submit" class="primary" disabled={busy || app.locked || !canCreate} data-meeting-create>{t('capture.create')}</button>
+        <button type="submit" class="primary" disabled={busy || app.locked} data-meeting-create>{t('capture.create')}</button>
       </div>
     </form>
   {/if}
