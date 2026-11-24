@@ -39,6 +39,29 @@ async function board(tasks: TaskEntry[]) {
   return { m: made, bar, button, target };
 }
 
+describe('the selection of the board', () => {
+  it('says on the grip of a card that a click there selects it without opening it', async () => {
+    const { m, target } = await board([card('pub/a', 'doing', 'doing|1', 'e1')]);
+    const grip = target.querySelector('.grip')!;
+    expect(grip.getAttribute('data-hint')).toBe(translate(m.app.lang, 'hint.ui.board.grip'));
+    expect(translate('en', 'hint.ui.board.grip')).toContain('select the card without opening it');
+    expect(translate('de', 'hint.ui.board.grip')).toContain('auszuwählen, ohne sie zu öffnen');
+  });
+
+  it('is told to a screen reader when j / k (or the grip) moves it, in a status of its own', async () => {
+    const { m, target } = await board([card('pub/a', 'doing', 'doing|1', 'e1'), card('pub/b', 'doing', 'doing|1', 'e2')]);
+    const told = () => target.querySelector('[data-board-selected]');
+    expect(told()?.getAttribute('role')).toBe('status');
+    expect(told()?.textContent).toBe('');
+    m.app.select('pub/b');
+    flushSync();
+    expect(told()?.textContent).toBe(translate(m.app.lang, 'board.selected', { title: 'Card pub/b' }));
+    m.app.select('pub/a');
+    flushSync();
+    expect(told()?.textContent).toBe(translate(m.app.lang, 'board.selected', { title: 'Card pub/a' }));
+  });
+});
+
 describe('the move bar of the board', () => {
   it('says how to select a card while none is selected, and offers no move', async () => {
     const { bar, button } = await board([card('pub/a', 'open', 'open|1', 'e1')]);

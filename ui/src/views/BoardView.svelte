@@ -177,6 +177,15 @@
 
   // The selected card stays in view when the keys move it. Only a change of the selection scrolls: the board is drawn
   // again for every change of the vault, and that must not pull the page to the selected card.
+  // The card j / k (or a click on its grip) selects is told to a screen reader: `aria-current` alone is not spoken. A card
+  // the keyboard focused is read by the focus itself, so it is not told twice.
+  let told = $state('');
+  $effect(() => {
+    const id = app.selectedId;
+    const card = id === null ? undefined : app.tasks.find((x) => x.id === id);
+    const focusedHere = id !== null && document.activeElement instanceof HTMLElement && document.activeElement.dataset['card'] === id;
+    told = card && !focusedHere ? t('board.selected', { title: card.title }) : '';
+  });
   let scrollTo = $state<string | null>(null);
   $effect(() => {
     scrollTo = app.selectedId;
@@ -218,6 +227,7 @@
   <MarksNote {app} />
   <p class="count">
     <span role="status">{t('list.count', { shown: app.shown.length, total: app.tasks.length })}</span>
+    <span class="sr-only" role="status" data-board-selected>{told}</span>
     <span class="help">{t('board.help')}</span>
     <Info hint={t('hint.board')} label={t('hint.about', { what: t('nav.board') })} />
     <Info hint={marksLegend(app.lang)} label={t('hint.about', { what: t('mark.legend.what') })} />

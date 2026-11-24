@@ -175,8 +175,8 @@
     {/if}
 
     {#if asking}
-      <div class="ask" role="alertdialog" aria-label={t('contact.delete')} data-contact-ask>
-        <p>{t('contact.delete_ask', { name: c.name })}</p>
+      <div class="ask" role="group" aria-label={t('contact.delete')} data-contact-ask>
+        <p role="alert">{t('contact.delete_ask', { name: c.name })}</p>
         <div class="actions">
           <button type="button" onclick={() => (asking = false)}>{t('contact.delete_no')}</button>
           <button type="button" class="danger" onclick={remove} disabled={app.saving} data-contact-delete-yes>{t('contact.delete_yes')}</button>

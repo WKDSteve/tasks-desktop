@@ -34,6 +34,11 @@
   const statuses = $derived(app.ranges.statuses);
 
   // A name for the filter and the order shown now: kept in this browser, for the vault that is read.
+  // Deleting a list asks first: a list of the page has no way back (it lives in this browser, not in the vault).
+  let askDeleteList = $state(false);
+  let deleteButton = $state<HTMLButtonElement | null>(null);
+  let keepButton = $state<HTMLButtonElement | null>(null);
+  let listSelect = $state<HTMLSelectElement | null>(null);
   let saveListOpen = $state(false);
   let listName = $state('');
   function keepList(): void {
@@ -264,6 +269,7 @@
       <label class="pick lists" data-hint={t('hint.ui.list.lists')}>
         <span>{t('lists.label')}</span>
         <select
+          bind:this={listSelect}
           data-lists
           value={app.shownList ? `mine:${app.shownList.name}` : ''}
           onchange={(e) => {
@@ -293,13 +299,43 @@
       </label>
       {#if app.shownList}
         {@const shown = app.shownList}
-        <button
-          type="button"
-          class="list-delete"
-          aria-label={t('lists.delete', { name: shown.name })}
-          title={t('lists.delete', { name: shown.name })}
-          onclick={() => app.deleteList(shown.name)}>×</button
-        >
+        {#if askDeleteList}
+          <span class="list-ask" role="group" aria-label={t('lists.delete', { name: shown.name })} data-list-ask>
+            <span role="alert">{t('lists.delete_ask', { name: shown.name })}</span>
+            <button
+              type="button"
+              class="list-delete"
+              data-list-delete-yes
+              onclick={() => {
+                askDeleteList = false;
+                app.deleteList(shown.name);
+                void tick().then(() => listSelect?.focus());
+              }}>{t('lists.delete_yes')}</button
+            >
+            <button
+              type="button"
+              bind:this={keepButton}
+              data-list-delete-no
+              onclick={() => {
+                askDeleteList = false;
+                void tick().then(() => deleteButton?.focus());
+              }}>{t('lists.delete_no')}</button
+            >
+          </span>
+        {:else}
+          <button
+            type="button"
+            class="list-delete"
+            bind:this={deleteButton}
+            aria-label={t('lists.delete', { name: shown.name })}
+            title={t('lists.delete', { name: shown.name })}
+            onclick={() => {
+              askDeleteList = true;
+              // The button is gone once the question is there: the focus goes to the safe answer.
+              void tick().then(() => keepButton?.focus());
+            }}>×</button
+          >
+        {/if}
       {/if}
       <details class="save-list" bind:open={saveListOpen}>
         <summary data-hint={t('hint.ui.list.save')}>{t('lists.save')}</summary>
@@ -552,6 +588,12 @@
     border: 1px solid var(--border);
     border-radius: var(--radius);
     padding: 0.25rem 0.4rem;
+  }
+  .list-ask {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.4rem;
   }
   .list-delete {
     background: var(--surface-2);

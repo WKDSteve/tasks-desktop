@@ -32,6 +32,13 @@ describe('the Info dialog', () => {
     expect(out).toContain('with the hub (tasks-hub)');
   });
 
+  it('lets the keyboard reach every word that has an explanation (the hint shows on focus)', () => {
+    const out = html(hub);
+    const hinted = out.match(/<span[^>]*data-hint=[^>]*>/g) ?? [];
+    expect(hinted.length).toBeGreaterThanOrEqual(3);
+    for (const span of hinted) expect(span, span).toContain('tabindex="0"');
+  });
+
   it('in the web variant says so and names the runtime of the browser, never a Neovim', () => {
     const out = html(web);
     expect(out).toContain('data-mode="web"');

@@ -83,7 +83,7 @@
     <dl>
       <dt>{t('about.version')}</dt>
       <dd><code translate="no">{doc.version}</code></dd>
-      <dt><span data-hint={hintOf(app.lang, 'hint.about', 'build')}>{t('about.build')}</span></dt>
+      <dt><!-- svelte-ignore a11y_no_noninteractive_tabindex --><span tabindex="0" data-hint={hintOf(app.lang, 'hint.about', 'build')}>{t('about.build')}</span></dt>
       <dd>{#if doc.build}<code translate="no">{doc.build}</code>{:else}{t('about.build_release')}{/if}</dd>
       <dt>{t('about.platform')}</dt>
       <dd>{doc.os} {doc.arch}</dd>
@@ -103,9 +103,9 @@
           {t('about.engine_none')}
         {/if}
       </dd>
-      <dt><span data-hint={hintOf(app.lang, 'hint.about', 'pinned')}>{t('about.pinned_engine')}</span></dt>
+      <dt><!-- svelte-ignore a11y_no_noninteractive_tabindex --><span tabindex="0" data-hint={hintOf(app.lang, 'hint.about', 'pinned')}>{t('about.pinned_engine')}</span></dt>
       <dd><code translate="no">{doc.pinned.engine ?? unknown}</code></dd>
-      <dt><span data-hint={hintOf(app.lang, 'hint.about', 'pinned')}>{t('about.pinned_lib')}</span></dt>
+      <dt><!-- svelte-ignore a11y_no_noninteractive_tabindex --><span tabindex="0" data-hint={hintOf(app.lang, 'hint.about', 'pinned')}>{t('about.pinned_lib')}</span></dt>
       <dd><code translate="no">{doc.pinned.lib ?? unknown}</code></dd>
     </dl>
     <AboutLinks repo={REPO_URL} repoLabel={t('kit.help.repo')} license={LICENSE} licenseLabel={t('kit.help.license', { name: LICENSE.name })} />

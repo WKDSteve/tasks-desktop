@@ -187,8 +187,8 @@
       </p>
 
       {#if asking}
-        <div class="ask" role="alertdialog" aria-label={t('contactform.discard')} data-contact-discard-ask>
-          <p>{t('contactform.discard_ask')}</p>
+        <div class="ask" role="group" aria-label={t('contactform.discard')} data-contact-discard-ask>
+          <p role="alert">{t('contactform.discard_ask')}</p>
           <div class="actions">
             <button type="button" onclick={() => (asking = false)} data-contact-keep>{t('contactform.keep')}</button>
             <button type="button" class="danger" onclick={() => app.closeContactForm()} data-contact-discard>{t('contactform.discard')}</button>

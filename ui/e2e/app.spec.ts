@@ -2799,7 +2799,7 @@ test('a routine: its detail lists the finished rounds, and discarding it asks fi
     // Discarding asks first: it ends the routine. Keeping it writes nothing.
     await detail.locator('[data-field="reason"]').fill('no longer needed');
     await detail.getByRole('button', { name: 'Discard', exact: true }).click();
-    const ask = detail.getByRole('alertdialog');
+    const ask = detail.getByRole('group', { name: /Discarding it ends the routine/ });
     await expect(ask).toContainText('This task repeats (1w). Discarding it ends the routine: no further round comes.');
     expect(await violations(page)).toEqual([]);
     await ask.getByRole('button', { name: 'Keep it' }).click();
@@ -2858,7 +2858,7 @@ test('a ladder that waits for a finish: the detail names it and its round, the f
     // Discarding names the ladder and its round; keeping it writes nothing.
     await detail.locator('[data-field="reason"]').fill('no longer needed');
     await detail.getByRole('button', { name: 'Discard', exact: true }).click();
-    const ask = detail.getByRole('alertdialog');
+    const ask = detail.getByRole('group', { name: /This task repeats as a ladder/ });
     await expect(ask).toContainText('This task repeats as a ladder (1w, 4w, 12w; round 1 of 3).');
     expect(await violations(page)).toEqual([]);
     await ask.getByRole('button', { name: 'Keep it' }).click();
@@ -7601,7 +7601,17 @@ test('a filter and an order are kept under a name, brought back from the list of
   await expect(page.getByRole('menubar')).toBeVisible();
   await expect(page.locator('select[data-lists] option', { hasText: 'E2E doing by prio' })).toHaveCount(1);
   await page.locator('select[data-lists]').selectOption({ label: 'E2E doing by prio' });
+  // A list has no way back: deleting asks first, the focus goes to the safe answer, and keeping it puts it back.
   await page.getByRole('button', { name: 'Delete the list E2E doing by prio' }).click();
+  const ask = page.getByRole('group', { name: 'Delete the list E2E doing by prio' });
+  await expect(ask).toContainText('there is no way back');
+  await expect(ask.getByRole('button', { name: 'Keep it' })).toBeFocused();
+  await ask.getByRole('button', { name: 'Keep it' }).click();
+  await expect(page.getByRole('button', { name: 'Delete the list E2E doing by prio' })).toBeFocused();
+  await expect(page.locator('select[data-lists] option', { hasText: 'E2E doing by prio' })).toHaveCount(1);
+  await page.getByRole('button', { name: 'Delete the list E2E doing by prio' }).click();
+  await ask.getByRole('button', { name: 'Delete', exact: true }).click();
+  await expect(page.locator('select[data-lists]')).toBeFocused();
   await expect(page.locator('select[data-lists] option', { hasText: 'E2E doing by prio' })).toHaveCount(0);
   expect(await violations(page)).toEqual([]);
 });
@@ -8380,6 +8390,8 @@ test('with the option to save with a button, the fields of a task are held until
   await bar.getByRole('button', { name: 'Discard' }).click();
   await expect(detail.getByLabel('Effort')).toHaveValue('');
   await expect(bar.getByRole('status')).toHaveText('No unsaved changes.');
+  // The button that was pressed is disabled now: the focus stays in the bar, on its status, not on the page.
+  await expect(bar.getByRole('status')).toBeFocused();
 
   // Two fields, one Save.
   await detail.getByLabel('Effort').selectOption('L');
@@ -8400,6 +8412,7 @@ test('with the option to save with a button, the fields of a task are held until
   await expect(page.getByRole('status').getByText('Saved.')).toBeVisible();
   await expect(bar.getByRole('status')).toHaveText('No unsaved changes.');
   await expect(draftMark).toHaveCount(0);
+  await expect(bar.getByRole('status')).toBeFocused();
 
   // Ctrl+S in a field that is being typed in takes what was typed.
   await detail.getByLabel('Title').fill('Saved with the keys e2e');

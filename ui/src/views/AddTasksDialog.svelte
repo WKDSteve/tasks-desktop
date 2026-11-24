@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { tick } from 'svelte';
   import { leaveGuard } from '../lib/leaveGuard';
   import LeaveAsk from './LeaveAsk.svelte';
   // Add tasks to a plan (or one of its phases) or to a project: a searchable choice of several open tasks (`PickList`),
@@ -39,6 +40,9 @@
   let asking = $state<string[] | null>(null);
   let failed = $state<{ id: string; message: string }[]>([]);
   let busy = $state(false);
+  // The buttons the focus is handed to when the one that was pressed is gone (the question replaces the row).
+  let applyButton = $state<HTMLButtonElement | null>(null);
+  let askYes = $state<HTMLButtonElement | null>(null);
 
   const options = $derived(
     target
@@ -92,6 +96,8 @@
     });
     if (away.length > 0) {
       asking = away;
+      // The row with Apply is replaced by the question: the focus goes to its first answer, not to the page.
+      void tick().then(() => askYes?.focus());
       return;
     }
     void send(chosen);
@@ -114,6 +120,8 @@
     } finally {
       busy = false;
     }
+    // Back to the row (a refused file stays chosen for a second try): the button of the question is gone.
+    if (target) void tick().then(() => applyButton?.focus());
   }
 
   function newTask(): void {
@@ -172,13 +180,13 @@
     </div>
   {/if}
   {#if asking}
-    <div class="ask" role="alertdialog" aria-label={t('add.ask_move', { n: asking.length })}>
-      <p>{t('add.ask_move', { n: asking.length })}</p>
+    <div class="ask" role="group" aria-label={t('add.ask_move', { n: asking.length })}>
+      <p role="alert">{t('add.ask_move', { n: asking.length })}</p>
       <ul>
         {#each asking as id (id)}<li>{markHidden(titleOf(id))}</li>{/each}
       </ul>
       <div class="buttons">
-        <button type="button" class="primary" onclick={() => void send(chosen)}>{t('add.move_yes')}</button>
+        <button type="button" class="primary" bind:this={askYes} onclick={() => void send(chosen)}>{t('add.move_yes')}</button>
         <button type="button" onclick={() => void send(chosen.filter((id) => !asking?.includes(id)))}
           >{t('add.move_no')}</button
         >
@@ -189,6 +197,7 @@
       <button
         type="button"
         class="primary"
+        bind:this={applyButton}
         disabled={chosen.length === 0 || busy || app.saving}
         onclick={apply}>{t('add.apply')}</button
       >

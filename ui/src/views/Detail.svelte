@@ -295,6 +295,9 @@
   }
 
   let root = $state<HTMLElement | undefined>();
+  // Where the focus goes when Save or Discard of a draft is pressed and has nothing left to do (the button is disabled).
+  let draftStatus = $state<HTMLElement | null>(null);
+  const afterDraft = (): void => void tick().then(() => draftStatus?.focus());
   let followed: string | null = null;
   const fieldOf = (target: EventTarget | null): string | null =>
     target instanceof HTMLElement ? (target.dataset['field'] ?? null) : null;
@@ -453,20 +456,23 @@
     {#if app.saveMode === 'manual'}
       <!-- The fields are held until saved: what is held, and the two ways out of it. -->
       <div class="draft" role="group" aria-label={t('draft.label')}>
-        <span class="muted" role="status">{pending > 0 ? t('draft.pending', { n: pending }) : t('draft.none')}</span>
+        <span class="muted" role="status" tabindex="-1" bind:this={draftStatus}>{pending > 0 ? t('draft.pending', { n: pending }) : t('draft.none')}</span>
         <button
           type="button"
           class="primary"
           data-hint={t('hint.ui.draft.save')}
           disabled={pending === 0 || app.locked}
-          onclick={() => void app.saveDraft(task.id)}>{t('draft.save')}</button
+          onclick={() => void app.saveDraft(task.id).then(afterDraft)}>{t('draft.save')}</button
         >
         <button
           type="button"
           class="quiet"
           data-hint={t('hint.ui.draft.discard')}
           disabled={pending === 0 || app.locked}
-          onclick={() => app.discardDraft(task.id)}
+          onclick={() => {
+            app.discardDraft(task.id);
+            afterDraft();
+          }}
           >{t('draft.discard')}</button
         >
       </div>
@@ -1288,8 +1294,8 @@
             />
           </label>
           {#if endingRoutine}
-            <span class="ask" role="alertdialog" aria-label={endRoutineAsk}>
-              <span class="warn">{endRoutineAsk}</span>
+            <span class="ask" role="group" aria-label={endRoutineAsk}>
+              <span class="warn" role="alert">{endRoutineAsk}</span>
               <button type="button" disabled={app.locked} onclick={() => void discard(true)}>{t('discard.routine.yes')}</button>
               <button type="button" onclick={() => (endingRoutine = false)}>{t('discard.routine.no')}</button>
             </span>
