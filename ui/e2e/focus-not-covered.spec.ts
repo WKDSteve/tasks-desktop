@@ -110,3 +110,41 @@ test('Tab through the list by area never leaves the focus under an area head', a
   expect(visited).toBeGreaterThan(20);
   expect(covered).toEqual([]);
 });
+
+test('Tab through the matrix of the marked tasks never leaves the focus covered', async ({ page }) => {
+  await pair(page, '/#view=list');
+  const row = page.locator('button.row').first();
+  await expect(row).toBeVisible();
+  const menu = page.getByRole('menu', { name: 'Context menu' });
+  // The list may draw again (the engine's fields arrive) and take the focus from the row: ask again until it opens.
+  await expect(async () => {
+    await row.focus();
+    await page.keyboard.press('Shift+F10');
+    await expect(menu).toBeVisible({ timeout: 1500 });
+  }).toPass({ timeout: 10_000 });
+  await menu.getByRole('menuitem', { name: 'Matrix', exact: true }).click();
+  await expect(page.locator('section.open table')).toBeVisible();
+  const { visited, covered } = await tabAndCollect(page, 60);
+  expect(visited).toBeGreaterThan(10);
+  expect(covered).toEqual([]);
+});
+
+test('Tab through the finished task never leaves the dialog and never covers the focus', async ({ page }) => {
+  await pair(page, '/#view=list');
+  await page.getByText('More filters', { exact: false }).first().click();
+  await page.getByLabel('Show finished tasks under the list').check();
+  const finished = page.getByRole('region', { name: 'Finished' });
+  await finished.getByLabel('Period').selectOption('all');
+  await finished.getByRole('button', { name: /Shipped bug/ }).click();
+  const dialog = page.getByRole('dialog', { name: 'Finished task' });
+  await expect(dialog).toBeVisible();
+  const { visited, covered } = await tabAndCollect(page, 25);
+  expect(visited).toBeGreaterThan(2);
+  expect(covered).toEqual([]);
+  // A modal is the only thing the keys reach: an element of the page behind it never has the focus (the focus leaves
+  // the page for the browser, which shows as the body, and comes back into the dialog).
+  for (let tab = 0; tab < 8; tab++) {
+    await page.keyboard.press('Tab');
+    expect(await dialog.evaluate((d) => document.activeElement === document.body || d.contains(document.activeElement))).toBe(true);
+  }
+});
