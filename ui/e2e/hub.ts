@@ -7,6 +7,7 @@ import { cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { withoutMachineVars } from '../web/nvim-env.mjs';
+import { pairingLink as pairing, sessionToken as token, type HubTarget } from 'appkit-web/e2e-node';
 import { removeTree, tempDir, tempRoot } from '../web/tmp.mjs';
 import { interfaceProblem } from './fresh.ts';
 import { e2ePort } from './port.ts';
@@ -429,21 +430,15 @@ async function waitUntilReady(config: string, timeout: number): Promise<void> {
   await assertFreshBinary();
 }
 
+/** What `appkit-web/e2e-node` needs of this app's hub for the pairing. */
+const target = (): HubTarget => ({ exe, env, origin: origin() });
+
 /**
  * A session token, got the way the page gets one. The hub allows ten
  * exchanges a minute (that is the point of the limit), so the tests share one
  * session and only the pairing tests go through a link.
  */
-export async function sessionToken(config: string): Promise<string> {
-  const code = pairingLink(config).split('#pair=')[1] ?? '';
-  const response = await fetch(`${origin()}/auth/exchange`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Origin: origin() },
-    body: JSON.stringify({ code }),
-  });
-  if (!response.ok) throw new Error(`exchange refused: ${response.status}`);
-  return ((await response.json()) as { token: string }).token;
-}
+export const sessionToken = (config: string): Promise<string> => token(config, target());
 
 /** `tasks-hub devices [revoke <id>]` of the running hub, as the person at the PC runs it. */
 export function devicesCommand(config: string, ...args: string[]): string {
@@ -451,12 +446,7 @@ export function devicesCommand(config: string, ...args: string[]): string {
 }
 
 /** A pairing link, as `tasks-desktop link` prints it. */
-export function pairingLink(config: string): string {
-  const out = execFileSync(exe, ['link'], { env: env(config), encoding: 'utf8' });
-  const link = out.trim().split(/\r?\n/)[0] ?? '';
-  if (!link.startsWith(`${origin()}/#pair=`)) throw new Error(`unexpected link: ${link}`);
-  return link;
-}
+export const pairingLink = (config: string): string => pairing(config, target());
 
 /**
  * Remove a file the hub may still hold for a moment (its watcher or the engine reading it). On Windows that fails with

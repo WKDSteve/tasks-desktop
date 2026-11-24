@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { expectAccessible, watchViolations } from './a11y';
 import { expect, test } from './fixtures';
 import { env, exe, prepareVault } from './hub';
-import { freePort } from './port';
+import { freePort } from 'appkit-web/e2e-node';
 import { removeTree } from '../web/tmp.mjs';
 
 // "Open in DocMap" where docmap-desktop is not installed: the button opens the page docmap.nvim generated in the repo

@@ -4,7 +4,7 @@
 
 import { execFileSync } from 'node:child_process';
 import { chromium, type Browser, type BrowserContext } from '@playwright/test';
-import { freePort } from '../e2e/port.ts';
+import { freePort } from 'appkit-web/e2e-node';
 import { startFilter, type FilterProxy } from './cdp-filter.ts';
 
 /** The port of the real hub on this PC; the suite never forwards or removes it. */

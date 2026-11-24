@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { expectAccessible, watchViolations } from './a11y';
 import { expect, test } from './fixtures';
 import { env, exe, prepareVault } from './hub';
-import { freePort } from './port';
+import { freePort } from 'appkit-web/e2e-node';
 import { removeTree } from '../web/tmp.mjs';
 
 // The page when its hub ends, and when a new one is started in its place. The hub all the tests share must not end,
