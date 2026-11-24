@@ -1,14 +1,11 @@
 // What every dialog of the page keeps (APG modal dialog), read from the source: jsdom knows nothing of the focus a
 // native `showModal()` takes, so the browser tests have the behaviour itself (Esc, focus in, focus back); this keeps the
 // shape that behaviour rests on, so that a new dialog cannot leave it out.
-import { readdirSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-const views = join(import.meta.dirname);
-const sources = readdirSync(views)
-  .filter((f) => f.endsWith('.svelte'))
-  .map((f) => ({ file: f, text: readFileSync(join(views, f), 'utf8') }));
+// Vite reads the sources of the views as text (the same way `dialogInfo.test.ts` reads three of them).
+const raw = import.meta.glob<string>('./*.svelte', { query: '?raw', import: 'default', eager: true });
+const sources = Object.entries(raw).map(([path, text]) => ({ file: path.replace('./', ''), text }));
 const dialogs = sources.filter((s) => /<dialog\b/.test(s.text));
 
 describe('the dialogs of the page', () => {
