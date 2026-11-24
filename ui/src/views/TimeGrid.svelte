@@ -408,6 +408,7 @@
     position: relative;
   }
   .hours span {
+    font-variant-numeric: tabular-nums;
     position: absolute;
     right: 0.3rem;
     transform: translateY(-0.5em);
@@ -468,6 +469,7 @@
     outline-offset: -2px;
   }
   .time {
+    font-variant-numeric: tabular-nums;
     color: var(--muted);
   }
   .warn {

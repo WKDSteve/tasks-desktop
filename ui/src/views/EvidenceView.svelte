@@ -120,7 +120,7 @@
     <div class="empty" data-evidence-empty>
       <p>{t('evidence.none')}</p>
       <p class="none">{t('evidence.none_how')}</p>
-      <pre><code>## Lernpunkte
+      <pre translate="no"><code translate="no">## Lernpunkte
 
 {t('evidence.none_example')}</code></pre>
       <button type="button" onclick={() => app.setView('paths')}>{t('evidence.open_paths')}</button>

@@ -150,7 +150,7 @@
 
 <div class="filters">
   <span class="search">
-    <input
+    <input spellcheck="false"
       bind:this={searchBox}
       type="search"
       data-hint={t('hint.ui.list.search')}

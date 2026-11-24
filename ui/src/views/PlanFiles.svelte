@@ -51,7 +51,7 @@
           <span>{t('plan.files.links')} <small>({t('field.tags_hint')})</small></span>
           <!-- {#key}: a value the engine refused, or one changed elsewhere, is drawn anew from the file -->
           {#key tagsText(links)}
-            <input
+            <input spellcheck="false"
               type="text"
               value={tagsText(links)}
               placeholder="https://"

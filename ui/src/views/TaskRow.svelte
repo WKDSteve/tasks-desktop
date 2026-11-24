@@ -120,7 +120,7 @@
   use:contextTarget={target}
   onmouseover={hintWhenCut}
 >
-  <span class="id">{task.id}</span>
+  <span class="id" translate="no">{task.id}</span>
   <!-- The area stands beside the title, not in it: the title's cell holds the title alone (its hint when cut, the tests). -->
   <span class="what">{#if area}<span class="area" data-area={area.name}><span class="sr-only">{translate(lang, 'areas.row', { area: area.name })} </span><span aria-hidden="true">{area.label}</span></span>{/if}{#if app && icon}<ItemIcon {app} shown={icon} />{/if}<span class="title">{markHidden(task.title)}</span></span>
   <span class="meta">

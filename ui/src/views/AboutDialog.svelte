@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Info from 'appkit-ui/Info.svelte';
   import { closeOnBackdrop } from 'appkit-ui/backdrop';
   import { floating } from '../lib/floating';
   // What this build is and which engine answers (rule APP-09), and the bug report: a text without any path that the
@@ -58,7 +59,10 @@
     if (app.about.state !== 'closed') app.closeAbout();
   }}
 >
-  <h2 id="about-title">{reporting ? t('about.report_title') : t('about.title')}</h2>
+  <div class="dialog-head">
+    <h2 id="about-title">{reporting ? t('about.report_title') : t('about.title')}</h2>
+    <Info hint={t('hint.dialog.about')} label={t('hint.about', { what: reporting ? t('about.report_title') : t('about.title') })} />
+  </div>
   {#if app.about.state === 'loading'}
     <p class="muted" role="status">{t('about.loading')}</p>
   {:else if app.about.state === 'failed'}
@@ -78,9 +82,9 @@
   {:else if doc}
     <dl>
       <dt>{t('about.version')}</dt>
-      <dd><code>{doc.version}</code></dd>
+      <dd><code translate="no">{doc.version}</code></dd>
       <dt><span data-hint={hintOf(app.lang, 'hint.about', 'build')}>{t('about.build')}</span></dt>
-      <dd>{#if doc.build}<code>{doc.build}</code>{:else}{t('about.build_release')}{/if}</dd>
+      <dd>{#if doc.build}<code translate="no">{doc.build}</code>{:else}{t('about.build_release')}{/if}</dd>
       <dt>{t('about.platform')}</dt>
       <dd>{doc.os} {doc.arch}</dd>
       <dt>{t('about.mode')}</dt>
@@ -88,11 +92,11 @@
       <dt>{t('about.engine')}</dt>
       <dd>
         {#if doc.engine && web}
-          {doc.engine.version ?? unknown}, <code>{doc.engine.git ?? unknown}</code>, {t('about.runtime_web', {
+          {doc.engine.version ?? unknown}, <code translate="no">{doc.engine.git ?? unknown}</code>, {t('about.runtime_web', {
             runtime: doc.engine.nvim ?? unknown,
           })}
         {:else if doc.engine}
-          {doc.engine.version ?? unknown}, <code>{doc.engine.git ?? unknown}</code>, Neovim {doc.engine.nvim ?? unknown}
+          {doc.engine.version ?? unknown}, <code translate="no">{doc.engine.git ?? unknown}</code>, Neovim {doc.engine.nvim ?? unknown}
         {:else if doc.engineProblem}
           {t('about.engine_failed', { problem: doc.engineProblem })}
         {:else}
@@ -100,9 +104,9 @@
         {/if}
       </dd>
       <dt><span data-hint={hintOf(app.lang, 'hint.about', 'pinned')}>{t('about.pinned_engine')}</span></dt>
-      <dd><code>{doc.pinned.engine ?? unknown}</code></dd>
+      <dd><code translate="no">{doc.pinned.engine ?? unknown}</code></dd>
       <dt><span data-hint={hintOf(app.lang, 'hint.about', 'pinned')}>{t('about.pinned_lib')}</span></dt>
-      <dd><code>{doc.pinned.lib ?? unknown}</code></dd>
+      <dd><code translate="no">{doc.pinned.lib ?? unknown}</code></dd>
     </dl>
     <AboutLinks repo={REPO_URL} repoLabel={t('kit.help.repo')} license={LICENSE} licenseLabel={t('kit.help.license', { name: LICENSE.name })} />
     {#if match === false}
@@ -170,7 +174,7 @@
     box-sizing: border-box;
     font: inherit;
     font-family: var(--mono);
-    font-size: 0.85rem;
+    font-size: 1rem;
     background: var(--surface-2);
     color: var(--text);
     border: 1px solid var(--border);

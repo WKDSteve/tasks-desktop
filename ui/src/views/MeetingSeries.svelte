@@ -86,7 +86,7 @@
     </label>
     <label class="wide" data-hint={s('hint_except')}>
       <span>{s('exceptions')}</span>
-      <input type="text" bind:value={except} maxlength="2200" disabled={!canWrite} />
+      <input spellcheck="false" type="text" bind:value={except} maxlength="2200" disabled={!canWrite} />
     </label>
     {#if canWrite}<button type="submit" disabled={busy}>{s('save')}</button>{/if}
   </form>

@@ -130,7 +130,7 @@
       <label data-hint={t('contactform.name.hint')}>
         <span>{t('contactform.name')}</span>
         <!-- svelte-ignore a11y_autofocus -->
-        <input type="text" bind:value={form.name} maxlength="300" required autofocus data-contact-name />
+        <input spellcheck="true" type="text" bind:value={form.name} maxlength="300" required autofocus data-contact-name />
       </label>
       <label data-hint={t('contactform.area.hint')}>
         <span>{t('contactform.area')}</span>
@@ -141,36 +141,36 @@
       <div class="row">
         <label data-hint={t('contactform.org.hint')}>
           <span>{t('contactform.org')}</span>
-          <input type="text" bind:value={form.org} maxlength="300" data-contact-org />
+          <input spellcheck="true" type="text" bind:value={form.org} maxlength="300" data-contact-org />
         </label>
         <label data-hint={t('contactform.role.hint')}>
           <span>{t('contactform.role')}</span>
-          <input type="text" bind:value={form.role} maxlength="300" data-contact-role />
+          <input spellcheck="true" type="text" bind:value={form.role} maxlength="300" data-contact-role />
         </label>
       </div>
       <label data-hint={t('contactform.emails.hint')}>
         <span>{t('contactform.emails')} <small>({t('contactform.list_hint')})</small></span>
-        <input type="text" bind:value={form.emails} maxlength="2000" autocomplete="off" data-contact-emails />
+        <input spellcheck="false" type="text" bind:value={form.emails} maxlength="2000" autocomplete="off" data-contact-emails />
       </label>
       <label data-hint={t('contactform.phones.hint')}>
         <span>{t('contactform.phones')} <small>({t('contactform.list_hint')})</small></span>
-        <input type="text" bind:value={form.phones} maxlength="2000" autocomplete="off" data-contact-phones />
+        <input spellcheck="false" type="text" bind:value={form.phones} maxlength="2000" autocomplete="off" data-contact-phones />
       </label>
       <div class="row">
         <label data-hint={t('contactform.tz.hint')}>
           <span>{t('contactform.tz')}</span>
-          <input type="text" bind:value={form.tz} maxlength="100" list="contact-zones" autocomplete="off" data-contact-tz />
+          <input spellcheck="false" type="text" bind:value={form.tz} maxlength="100" list="contact-zones" autocomplete="off" data-contact-tz />
           <datalist id="contact-zones">{#each zones as zone (zone)}<option value={zone}></option>{/each}</datalist>
         </label>
         <label data-hint={t('contactform.tags.hint')}>
           <span>{t('contactform.tags')} <small>({t('contactform.list_hint')})</small></span>
-          <input type="text" bind:value={form.tags} maxlength="500" data-contact-tags />
+          <input spellcheck="false" type="text" bind:value={form.tags} maxlength="500" data-contact-tags />
         </label>
       </div>
       {#if isNew}
         <label data-hint={t('contactform.notes.hint')}>
           <span>{t('contactform.notes')}</span>
-          <textarea bind:value={form.notes} rows="4" maxlength="20000" data-contact-notes></textarea>
+          <textarea spellcheck="true" bind:value={form.notes} rows="4" maxlength="20000" data-contact-notes></textarea>
         </label>
       {/if}
 

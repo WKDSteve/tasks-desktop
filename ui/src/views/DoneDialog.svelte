@@ -44,7 +44,7 @@
   {#if finishing}
     <h2 id="done-title">{t('done.title')}</h2>
     <p class="what">{markHidden(title)}</p>
-    <p class="id"><code>{finishing.id}</code></p>
+    <p class="id" translate="no"><code translate="no">{finishing.id}</code></p>
     <ul>
       <li>{t('done.moves', { to: finishing.preview.to })}</li>
       {#if (finishing.preview.steps_ticked ?? 0) > 0}
@@ -67,7 +67,7 @@
       {#if (finishing.preview.freed?.length ?? 0) > 0}
         <li>
           {t('done.freed', { n: finishing.preview.freed?.length ?? 0 })}:
-          {#each finishing.preview.freed ?? [] as id, i (id)}{i > 0 ? ', ' : ''}<code>{id}</code
+          {#each finishing.preview.freed ?? [] as id, i (id)}{i > 0 ? ', ' : ''}<code translate="no">{id}</code
             >{/each}
         </li>
       {/if}

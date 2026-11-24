@@ -42,6 +42,7 @@
     type InkWidth,
   } from '../lib/ink';
   import { inkText, type InkKey } from '../lib/inkTexts';
+  import { percentText } from '../lib/numbers';
 
   let {
     app,
@@ -528,7 +529,7 @@
     </div>
     <div class="group">
       <button type="button" aria-label={t('zoomOut')} title={t('zoomOut')} onclick={() => zoomBy(1 / 1.25)}>−</button>
-      <button type="button" onclick={fit}>{Math.round(scale * 100)}%</button>
+      <button type="button" class="zoom-fit" onclick={fit}>{percentText(app.lang, scale)}</button>
       <button type="button" aria-label={t('zoomIn')} title={t('zoomIn')} onclick={() => zoomBy(1.25)}>+</button>
     </div>
     <div class="group">
@@ -659,6 +660,7 @@
     background: var(--text);
     border-radius: 2px;
   }
+  .zoom-fit,
   .page {
     font-variant-numeric: tabular-nums;
     font-size: 0.85rem;

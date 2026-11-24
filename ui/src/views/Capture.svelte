@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Info from 'appkit-ui/Info.svelte';
   import { untrack } from 'svelte';
   import { closeOnBackdrop } from 'appkit-ui/backdrop';
   import { floating } from '../lib/floating';
@@ -270,7 +271,10 @@
 
 <dialog bind:this={dialog} use:floating={{ kind: 'capture', moveLabel: t('float.move'), moveHint: t('hint.float.move') }} use:closeOnBackdrop={{ closeable: () => files.length === 0 && [title, context, acceptance, notes, summary, tags, other, refs, links].every((v) => v.trim() === '') }} aria-labelledby="capture-title" onclose={() => app.closeCapture()}>
   <form onsubmit={submit}>
-    <h2 id="capture-title">{t('capture.title')}</h2>
+    <div class="dialog-head">
+      <h2 id="capture-title">{t('capture.title')}</h2>
+      <Info hint={t('hint.dialog.capture')} label={t('hint.about', { what: t('capture.title') })} />
+    </div>
     {#if app.aiFeatures}
       <div class="draft">
         {#if !draftOpen}
@@ -280,7 +284,7 @@
         {:else}
           <label data-hint={t('hint.form.draft_text')}>
             <span>{t('draft.text_label')}</span>
-            <textarea bind:value={draftText} rows="4" maxlength="20000" disabled={draftBusy}></textarea>
+            <textarea spellcheck="true" bind:value={draftText} rows="4" maxlength="20000" disabled={draftBusy}></textarea>
           </label>
           {#if draftAnswer}
             <p class="draft-ask" role="alert">{t('draft.confirm')}</p>
@@ -301,7 +305,7 @@
     <label data-hint={t('hint.form.task.title')}>
       <span>{t('capture.name')}</span>
       <!-- svelte-ignore a11y_autofocus -->
-      <input type="text" bind:value={title} maxlength="300" required autofocus />
+      <input spellcheck="true" type="text" bind:value={title} maxlength="300" required autofocus />
     </label>
     <label data-hint={t('hint.form.task.area')}>
       <span>{t('capture.area')}</span>
@@ -380,11 +384,11 @@
       <summary>{t('capture.more')}</summary>
       <label data-hint={hintOf(app.lang, 'hint.field', 'summary')}>
         <span>{t('field.summary')}</span>
-        <input type="text" bind:value={summary} maxlength="300" />
+        <input spellcheck="true" type="text" bind:value={summary} maxlength="300" />
       </label>
       <label data-hint={hintOf(app.lang, 'hint.field', 'tags')}>
         <span>{t('field.tags')} <small>({t('field.tags_hint')})</small></span>
-        <input type="text" bind:value={tags} />
+        <input spellcheck="false" type="text" bind:value={tags} />
       </label>
       <fieldset class="cats" data-hint={hintOf(app.lang, 'hint.field', 'category')}>
         <legend>{t('field.category')}</legend>
@@ -410,7 +414,7 @@
       </fieldset>
       <label data-hint={hintOf(app.lang, 'hint.field', 'scope_other')}>
         <span>{t('field.scope_other')} <small>({t('field.scope_other_hint')})</small></span>
-        <input type="text" bind:value={other} />
+        <input spellcheck="false" type="text" bind:value={other} />
       </label>
       <label data-hint={hintOf(app.lang, 'hint.field', 'severity')}>
         <span>{t('field.severity')}{#if !severityFits} <small>({t('field.severity_only')})</small>{/if}</span>
@@ -421,15 +425,15 @@
       </label>
       <label data-hint={hintOf(app.lang, 'hint.field', 'refs')}>
         <span>{t('field.refs')} <small>({t('field.tags_hint')})</small></span>
-        <input type="text" bind:value={refs} />
+        <input spellcheck="false" type="text" bind:value={refs} />
       </label>
       <label data-hint={hintOf(app.lang, 'hint.field', 'links')}>
         <span>{t('field.links')} <small>({t('field.tags_hint')})</small></span>
-        <input type="text" bind:value={links} placeholder="https://" />
+        <input spellcheck="false" type="text" bind:value={links} placeholder="https://" />
       </label>
       <label data-hint={hintOf(app.lang, 'hint.field', 'after')}>
         <span>{t('field.after')} <small>({t('field.tags_hint')})</small></span>
-        <input type="text" bind:value={after} placeholder="area/task" />
+        <input spellcheck="false" type="text" bind:value={after} placeholder="area/task" />
       </label>
       <PickField
         label={t('field.plan')}
@@ -479,7 +483,7 @@
     </details>
     <label data-hint={t('hint.form.task.context')}>
       <span>{t('capture.context')} <small>({t('capture.sections_hint')})</small></span>
-      <textarea bind:value={context} rows="3" maxlength="20000"></textarea>
+      <textarea spellcheck="true" bind:value={context} rows="3" maxlength="20000"></textarea>
     </label>
     {#if scaffold.length > 0}
       <fieldset class="cats" data-hint={t('hint.form.task.scaffold')}>
@@ -502,11 +506,11 @@
     {/if}
     <label data-hint={t('hint.form.task.acceptance')}>
       <span>{t('capture.acceptance')} <small>({t('capture.acceptance_hint')})</small></span>
-      <textarea bind:value={acceptance} rows="3" maxlength="20000"></textarea>
+      <textarea spellcheck="true" bind:value={acceptance} rows="3" maxlength="20000"></textarea>
     </label>
     <label data-hint={t('hint.form.task.notes')}>
       <span>{t('capture.notes')}</span>
-      <textarea bind:value={notes} rows="2" maxlength="20000"></textarea>
+      <textarea spellcheck="true" bind:value={notes} rows="2" maxlength="20000"></textarea>
     </label>
     <!-- loaded when it can be used: the main chunk of the page stays within its budget -->
     {#if app.canAttach}

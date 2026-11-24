@@ -99,7 +99,7 @@
               <span class="muted"
                 >{item.area} · {item.done ?? t('done.undated_row')}{#if group.extra === 'effort' && item.effort_days !== undefined}
                   · {t('daily.list.days', { n: item.effort_days })}{:else if group.extra === 'commit' && item.done_in}
-                  · <code>{markHidden(item.done_in)}</code>{/if}</span
+                  · <code translate="no">{markHidden(item.done_in)}</code>{/if}</span
               >
             </li>
           {/each}

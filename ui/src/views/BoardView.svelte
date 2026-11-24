@@ -341,7 +341,7 @@
                     onpointerup={(e) => grip(e, card.id, 'end')}
                     onpointercancel={(e) => grip(e, card.id, 'cancel')}>⠿</span
                   >
-                  <span class="id">{card.id}</span>
+                  <span class="id" translate="no">{card.id}</span>
                   <ClaimTag task={card} lang={app.lang} me={app.claimName} />
                   {#if isLearning(card)}<span class="tag soft" data-learning data-hint={t('hint.learning')}>{t('mark.learning')}</span>{/if}
                   {#if Object.keys(app.draftOf(card.id)).length > 0}

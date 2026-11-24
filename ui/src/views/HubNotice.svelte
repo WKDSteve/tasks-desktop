@@ -11,10 +11,10 @@
 
 <div role="status" class="hub-notice" class:shown={app.hubState !== 'here'}>
   {#if app.hubState === 'gone'}
-    <p>{t('hub.gone')} <code>tasks-desktop start --open</code></p>
+    <p>{t('hub.gone')} <code translate="no">tasks-desktop start --open</code></p>
     <p>{t('hub.gone.then')}</p>
   {:else if app.hubState === 'replaced'}
-    <p>{t('hub.replaced')} <code>tasks-desktop link</code></p>
+    <p>{t('hub.replaced')} <code translate="no">tasks-desktop link</code></p>
   {/if}
   {#if app.hubState !== 'here' && app.hasDrafts}
     <p class="unsaved">{t('hub.unsaved')}</p>

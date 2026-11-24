@@ -26,7 +26,7 @@
   {#if asking}
     <h2 id="prio-title">{t('board.prio.title', { prio: asking.prio })}</h2>
     <p class="what">{markHidden(card?.title ?? asking.id)}</p>
-    <p class="id"><code>{asking.id}</code></p>
+    <p class="id" translate="no"><code translate="no">{asking.id}</code></p>
     <p>{t('board.prio.body', { from: asking.from, prio: asking.prio })}</p>
     <div class="actions">
       <button type="button" onclick={() => app.cancelRepriority()}>{t('dialog.cancel')}</button>

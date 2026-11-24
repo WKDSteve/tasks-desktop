@@ -101,7 +101,7 @@
           <span class="field threshold" data-hint={w('hint.threshold')}>
             <label for="level-threshold-{i}">{w('threshold')}</label>
             <span class="pair">
-              <input
+              <input spellcheck="false"
                 id="level-threshold-{i}"
                 type="text"
                 inputmode="numeric"
@@ -120,7 +120,7 @@
           </span>
           <span class="field" data-hint={w('hint.name')}>
             <label for="level-name-{i}">{w('name')}</label>
-            <input id="level-name-{i}" type="text" maxlength={LEVEL_NAME_MAX} bind:value={row.name} />
+            <input spellcheck="true" id="level-name-{i}" type="text" maxlength={LEVEL_NAME_MAX} bind:value={row.name} />
           </span>
           <span class="field" data-hint={w('hint.badge')}>
             <label for="level-badge-{i}">{w('badge')}</label>
@@ -133,7 +133,7 @@
           </span>
           <span class="field" data-hint={w('hint.reward')}>
             <label for="level-reward-{i}">{w('reward')}</label>
-            <input id="level-reward-{i}" type="text" maxlength={LEVEL_REWARD_MAX} bind:value={row.reward} />
+            <input spellcheck="true" id="level-reward-{i}" type="text" maxlength={LEVEL_REWARD_MAX} bind:value={row.reward} />
           </span>
           <span class="actions">
             <button type="button" aria-label={w('up', { n: i + 1 })} disabled={i === 0} onclick={() => move(i, -1)}>↑</button>
@@ -156,7 +156,7 @@
     {#if done.on}
       <span class="field">
         <label for="level-done-reward">{w('reward')}</label>
-        <input id="level-done-reward" type="text" maxlength={LEVEL_REWARD_MAX} bind:value={done.reward} />
+        <input spellcheck="true" id="level-done-reward" type="text" maxlength={LEVEL_REWARD_MAX} bind:value={done.reward} />
       </span>
     {/if}
   </fieldset>

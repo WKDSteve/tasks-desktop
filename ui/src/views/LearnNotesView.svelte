@@ -212,7 +212,7 @@
     <search class="tools">
       <label class="field grow" data-hint={t('learnnotes.hint.search')}
         ><span class="sr-only">{t('learnnotes.search')}</span>
-        <input
+        <input spellcheck="false"
           type="search"
           bind:this={searchBox}
           bind:value={typed}

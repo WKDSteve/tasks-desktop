@@ -58,7 +58,7 @@
   {:else if shown.kind === 'holding'}
     <p>{t('project.close.holding')}</p>
     <ul class="holding">
-      {#each shown.ids as held (held)}<li>{markHidden(names.get(held) ?? held)} <code>{held}</code></li>{/each}
+      {#each shown.ids as held (held)}<li>{markHidden(names.get(held) ?? held)} <code translate="no">{held}</code></li>{/each}
     </ul>
   {:else if shown.kind === 'refused'}
     <p class="bad">{shown.message}</p>

@@ -214,7 +214,7 @@
     <form class="entry" onsubmit={add}>
       <label data-hint={t('hint.form.meeting.minutes')}>
         <span class="visually-hidden">{t('minutes.input')}</span>
-        <input type="text" bind:value={text} maxlength={MAX_CAPTURE + 20} placeholder={t('minutes.input')} aria-describedby="minutes-help" />
+        <input spellcheck="true" type="text" bind:value={text} maxlength={MAX_CAPTURE + 20} placeholder={t('minutes.input')} aria-describedby="minutes-help" />
       </label>
       <button type="submit" disabled={text.trim() === ''}>{t('minutes.add')}</button>
     </form>
@@ -239,7 +239,7 @@
         {#each Object.keys(DEFAULT_SHORTCUTS) as (keyof Shortcuts)[] as key (key)}
           <label data-hint={t('hint.form.meeting.shortcut')}>
             <span>{t((key === 'checklist' || key === 'mark' ? `minutes.shortcut.${key}` : `minutes.kind.${key}`) as Key)}</span>
-            <input type="text" bind:value={editing[key]} maxlength="8" size="4" />
+            <input spellcheck="false" type="text" bind:value={editing[key]} maxlength="8" size="4" />
           </label>
         {/each}
         <button type="submit">{t('minutes.shortcuts.save')}</button>

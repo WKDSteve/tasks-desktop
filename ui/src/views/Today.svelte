@@ -353,7 +353,7 @@
           <button type="button" class="big" onclick={() => open(next.task!.id)}>
             <TaskIcon {app} task={fullTask(next.task)} size={18} /><span class="title">{markHidden(next.task.title)}</span>
           </button>
-          <p class="id"><code>{next.task.id}</code></p>
+          <p class="id" translate="no"><code translate="no">{next.task.id}</code></p>
           <p class="muted">
             <span data-hint={hintOf(app.lang, 'hint.status', next.task.status)}>{labelOf(app.lang, 'status', next.task.status)}</span> ·
             <span data-hint={hintOf(app.lang, 'hint', 'prio')}>{next.task.prio !== undefined ? t('today.next.prio', { n: next.task.prio }) : t('mark.no_prio')}</span> ·
@@ -369,7 +369,7 @@
                   <TaskIcon {app} task={fullTask(alt)} /><button type="button" class="link" onclick={() => open(alt.id)}
                     >{markHidden(alt.title)}</button
                   >
-                  <span class="muted"><code>{alt.id}</code></span>
+                  <span class="muted"><code translate="no">{alt.id}</code></span>
                 </li>
               {/each}
             </ul>
@@ -422,7 +422,7 @@
               <TaskIcon {app} {task} /><button type="button" class="link" onclick={() => open(task.id)}
                 >{markHidden(task.title)}</button
               >
-              <span class="muted"><code>{task.id}</code></span>
+              <span class="muted"><code translate="no">{task.id}</code></span>
             </li>
           {/each}
         </ul>
@@ -514,7 +514,7 @@
                 >
               {/if}
               <span class="muted"
-                ><code>{item.id}</code> · {item.remind}{item.finished
+                ><code translate="no">{item.id}</code> · {item.remind}{item.finished
                   ? ` · ${t('remind.finished')}`
                   : ''}</span
               >
@@ -551,7 +551,7 @@
               <button type="button" class="link" onclick={() => open(brief.id)}
                 >{markHidden(brief.title)}</button
               >
-              <span class="muted"><code>{brief.id}</code></span>
+              <span class="muted"><code translate="no">{brief.id}</code></span>
             </li>
           {/each}
         </ul>

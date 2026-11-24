@@ -8,6 +8,7 @@
   import { tick, untrack } from 'svelte';
   import type { App } from '../lib/app.svelte';
   import { translate, type Key } from '../lib/i18n';
+  import { percentText } from '../lib/numbers';
   import { isPathMapKey, pathMapText, type PathMapKey } from '../lib/pathMapTexts';
   import type { PathEntry, Paths, PathStage } from '../lib/contract';
   import Info from 'appkit-ui/Info.svelte';
@@ -446,7 +447,7 @@
         )}</label
       >
       <label class="field" data-hint={t('hint.form.pathmap.search')}
-        ><span class="sr">{t('pathmap.search')}</span><input
+        ><span class="sr">{t('pathmap.search')}</span><input spellcheck="false"
           type="search"
           bind:this={searchBox}
           bind:value={search}
@@ -456,9 +457,9 @@
         /></label
       >
       {#if mode === 'map'}
-        <span class="zoom" role="group" aria-label={t('pathmap.zoom', { n: Math.round(zoom * 100) })}>
+        <span class="zoom" role="group" aria-label={t('pathmap.zoom', { n: percentText(app.lang, zoom) })}>
           <button type="button" aria-label={t('pathmap.zoom_out')} disabled={zoom <= MIN_ZOOM} onclick={() => zoomTo(zoom - 0.1)}>−</button>
-          <output aria-live="polite">{Math.round(zoom * 100)} %</output>
+          <output aria-live="polite">{percentText(app.lang, zoom)}</output>
           <button type="button" aria-label={t('pathmap.zoom_in')} disabled={zoom >= MAX_ZOOM} onclick={() => zoomTo(zoom + 0.1)}>+</button>
           <button type="button" onclick={fit}>{t('pathmap.fit')}</button>
         </span>
@@ -605,7 +606,7 @@
                 onpointerleave={() => hover === box.key && (hover = null)}
               >
                 {#if box.kind === 'ghost'}
-                  <span class="line1"><span class="sym" aria-hidden="true">?</span><span class="title">{box.id}</span></span>
+                  <span class="line1"><span class="sym" aria-hidden="true">?</span><span class="title" translate="no">{box.id}</span></span>
                   {#if !compact}<span class="line2">{t(`pathmap.ghost.${box.ghost ?? 'missing'}`)}</span>{/if}
                 {:else if entry && stage}
                   <span class="line1"
@@ -748,6 +749,7 @@
     gap: 0.3rem;
   }
   .zoom output {
+    font-variant-numeric: tabular-nums;
     min-width: 3.5em;
     text-align: center;
   }

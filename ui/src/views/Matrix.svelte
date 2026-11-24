@@ -58,7 +58,7 @@
             <tr class:edited={cell !== undefined}>
               <th scope="row">
                 <span class="title">{markHidden(task.title)}</span>
-                <span class="id">{task.id}</span>
+                <span class="id" translate="no">{task.id}</span>
               </th>
               <td>
                 <select

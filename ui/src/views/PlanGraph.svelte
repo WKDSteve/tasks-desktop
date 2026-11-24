@@ -602,7 +602,7 @@
       >
         <h3 class="row-head">{rowName(row)} ({all})</h3>
         {#if isCycle(row)}
-          {#each cycles as cycle, i (i)}<p class="cycle-note">{t('plan.cycle')}: <code>{markHidden(cycle.join(' → '))}</code></p>{/each}
+          {#each cycles as cycle, i (i)}<p class="cycle-note">{t('plan.cycle')}: <code translate="no">{markHidden(cycle.join(' → '))}</code></p>{/each}
         {/if}
         <div class="nodes">
           {#each row.ids as id (id)}
@@ -638,7 +638,7 @@
                 {#if task?.effort}<span class="tag soft">{markHidden(task.effort)}</span>{/if}
                 {#if hidden > 0}<span class="tag soft" data-hint={t('graph.hidden_hint')}>{t('graph.hidden', { n: hidden })}</span>{/if}
               </span>
-              <span class="id">{id}</span>
+              <span class="id" translate="no">{id}</span>
               <!-- A finger joins by this grip (the keys have l, the mouse drags the whole task). -->
               <span
                 class="grip"

@@ -122,7 +122,7 @@
 </script>
 
 <div class="picklist" data-pick={name || undefined}>
-  <input
+  <input spellcheck="false"
     bind:this={input}
     type="search"
     role="combobox"

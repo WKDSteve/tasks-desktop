@@ -38,7 +38,7 @@
 >
   {#if view}
     <h2 id="answer-title">{view.kind === 'handoff' ? handoffTitle : t(view.kind === 'review-done' ? 'answer.title.review' : 'answer.title.decision')}</h2>
-    <p class="what">{markHidden(view.title)} <code>{view.id}</code></p>
+    <p class="what">{markHidden(view.title)} <code translate="no">{view.id}</code></p>
     {#if view.phase === 'waiting'}
       <p class="status" role="status">
         {view.job ? t('answer.waiting', { job: view.job }) : t('answer.sending')}

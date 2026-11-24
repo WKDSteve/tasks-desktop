@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Info from 'appkit-ui/Info.svelte';
   // The form of a new meeting (concept 7.1): one dialog, two columns. On the left the time and the place (title, area,
   // date, beginning, end or duration, all day, the time zone folded away, place, the address to join with the service
   // the engine names and Open / Copy, the tasks); on the right the people and the rest (participants, notification,
@@ -174,7 +175,10 @@
 >
   {#if form}
     <form onsubmit={submit}>
-      <h2 id="meeting-form-title">{t('meeting.new.title')}</h2>
+      <div class="dialog-head">
+        <h2 id="meeting-form-title">{t('meeting.new.title')}</h2>
+        <Info hint={t('hint.dialog.meeting')} label={t('hint.about', { what: t('meeting.new.title') })} />
+      </div>
       {#if app.meetingNotes.problems.length > 0 || app.meetingNotes.assumedDay}
         <div class="notes" role="status">
           {#if app.meetingNotes.problems.length > 0}<p class="warn">{t('meeting.quick.problems', { words: app.meetingNotes.problems.join(' ') })}</p>{/if}
@@ -187,7 +191,7 @@
           <label data-hint={t('hint.form.meeting.title')}>
             <span>{t('meeting.field.title')}</span>
             <!-- svelte-ignore a11y_autofocus -->
-            <input type="text" bind:value={form.title} maxlength="300" required autofocus data-meeting-title />
+            <input spellcheck="true" type="text" bind:value={form.title} maxlength="300" required autofocus data-meeting-title />
           </label>
           <label data-hint={t('hint.form.meeting.area')}>
             <span>{t('meeting.field.area')}</span>
@@ -226,7 +230,7 @@
               {:else}
                 <label data-hint={t('hint.form.meeting.duration')}>
                   <span>{t('meeting.field.duration')}</span>
-                  <input type="text" bind:value={form.duration} placeholder="60m" maxlength="10" size="6" />
+                  <input spellcheck="false" type="text" bind:value={form.duration} placeholder="60m" maxlength="10" size="6" />
                 </label>
               {/if}
             </div>
@@ -235,7 +239,7 @@
             <summary>{t('meeting.field.tz')}{form.tz !== '' ? `: ${form.tz}` : ''}</summary>
             <label data-hint={t('hint.form.meeting.tz')}>
               <span>{t('meeting.field.tz')}</span>
-              <input type="text" bind:value={form.tz} list="meeting-zones" placeholder="Europe/Vienna" maxlength="64" aria-describedby="meeting-tz-help" />
+              <input spellcheck="false" type="text" bind:value={form.tz} list="meeting-zones" placeholder="Europe/Vienna" maxlength="64" aria-describedby="meeting-tz-help" />
             </label>
             <datalist id="meeting-zones">
               {#each zones as zone (zone)}<option value={zone}></option>{/each}
@@ -262,7 +266,7 @@
               {#if form.repeat}
                 <label data-hint={s('hint_except')}>
                   <span>{s('exceptions')}</span>
-                  <input
+                  <input spellcheck="false"
                     type="text"
                     value={(form.except ?? []).join(', ')}
                     onchange={(e) => {
@@ -278,12 +282,12 @@
           {/if}
           <label data-hint={t('hint.form.meeting.location')}>
             <span>{t('meeting.field.location')}</span>
-            <input type="text" bind:value={form.location} maxlength="300" />
+            <input spellcheck="true" type="text" bind:value={form.location} maxlength="300" />
           </label>
           <div class="field">
             <label data-hint={t('hint.form.meeting.online')}>
               <span>{t('meeting.field.online')}</span>
-              <input type="url" bind:value={form.online} placeholder="https://" maxlength="2000" aria-describedby="meeting-online-state" />
+              <input spellcheck="false" type="url" bind:value={form.online} placeholder="https://" maxlength="2000" aria-describedby="meeting-online-state" />
             </label>
             <div class="online-row" id="meeting-online-state">
               {#if serviceName}
@@ -323,7 +327,7 @@
               <div class="person" role="group" aria-label={t('meeting.participant.row', { n: i + 1 })}>
                 <label data-hint={t('hint.form.meeting.participant')}>
                   <span class="sr-only">{t('meeting.participant.name')}</span>
-                  <input
+                  <input spellcheck="true"
                     type="text"
                     bind:value={p.name}
                     placeholder={t('meeting.participant.name')}
@@ -337,11 +341,11 @@
                 </label>
                 <label data-hint={t('hint.form.meeting.participant')}>
                   <span class="sr-only">{t('meeting.participant.email')}</span>
-                  <input type="email" bind:value={p.email} placeholder={t('meeting.participant.email')} maxlength="200" />
+                  <input spellcheck="false" type="email" bind:value={p.email} placeholder={t('meeting.participant.email')} maxlength="200" />
                 </label>
                 <label data-hint={t('hint.form.meeting.participant')}>
                   <span class="sr-only">{t('meeting.participant.role')}</span>
-                  <input type="text" bind:value={p.role} placeholder={t('meeting.participant.role')} maxlength="60" size="8" />
+                  <input spellcheck="true" type="text" bind:value={p.role} placeholder={t('meeting.participant.role')} maxlength="60" size="8" />
                 </label>
                 <button
                   type="button"
@@ -375,7 +379,7 @@
             <div class="row">
               <label data-hint={t('hint.form.meeting.notify')}>
                 <span>{t('meeting.notify.own')}</span>
-                <input
+                <input spellcheck="false"
                   type="text"
                   bind:value={ownNotify}
                   maxlength="20"
@@ -395,11 +399,11 @@
 
           <label data-hint={t('hint.form.meeting.icon')}>
             <span>{t('meeting.field.icon')}</span>
-            <input type="text" bind:value={form.icon} maxlength="64" />
+            <input spellcheck="false" type="text" bind:value={form.icon} maxlength="64" />
           </label>
           <label data-hint={t('hint.form.meeting.tags')}>
             <span>{t('meeting.field.tags')} <small>({t('field.tags_hint')})</small></span>
-            <input type="text" bind:value={form.tags} maxlength="500" />
+            <input spellcheck="false" type="text" bind:value={form.tags} maxlength="500" />
           </label>
           {#if app.can('attach')}
             <PendingAttachments {app} bind:files bind:screenshot />

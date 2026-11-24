@@ -124,7 +124,7 @@
   <div class="bar" role="group" aria-label={t('meetings.filters')}>
     <label class="field" data-hint={t('meetings.search.hint')}>
       <span>{t('meetings.search')}</span>
-      <input type="search" bind:value={filter.text} data-meetings-search />
+      <input spellcheck="false" type="search" bind:value={filter.text} data-meetings-search />
     </label>
     <label class="field" data-hint={t('meetings.area.hint')}>
       <span>{t('meetings.area')}</span>

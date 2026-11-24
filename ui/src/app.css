@@ -12,3 +12,14 @@
 #app {
   height: 100%;
 }
+
+/* The head of a dialog or a form: the title and, at the same place in every one, the button that explains it. */
+.dialog-head {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: 0.5em;
+}
+.dialog-head > h2 {
+  margin: 0;
+}

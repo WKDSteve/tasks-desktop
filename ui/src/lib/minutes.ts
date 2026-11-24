@@ -246,7 +246,7 @@ export function draftsOf(raw: string | null): Record<string, MinutesDraft[]> {
   return out;
 }
 
-/** `HH:MM` of a wall clock in milliseconds. */
+/** `HH:MM` of a wall clock in milliseconds: the 24-hour machine format the minutes file stores, not text for the screen. */
 export function clockOf(ms: number): string {
   const d = new Date(ms);
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;

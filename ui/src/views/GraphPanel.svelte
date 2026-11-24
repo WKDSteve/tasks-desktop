@@ -131,7 +131,7 @@
         <li style:padding-left={`${Math.min(node.distance, 8) * 1.25}rem`} aria-level={node.distance + 1}>
           <button type="button" class="node" class:target={node.distance === 0} onclick={() => app.peek(node.id)}>
             <span class="title">{markHidden(node.title)}</span>
-            <span class="id">{node.id}</span>
+            <span class="id" translate="no">{node.id}</span>
           </button>
           <span class="meta">
             <span class="tag" data-hint={tags.status.hint}>{tags.status.label}</span>

@@ -69,7 +69,7 @@
   {#if asking === null && choosing !== null}
     <h2 id="drop-move-title">{t('drop.choose')}</h2>
     <p class="what">{markHidden(chosenTask?.title ?? choosing)}</p>
-    <p class="id"><code>{choosing}</code></p>
+    <p class="id" translate="no"><code translate="no">{choosing}</code></p>
     <label class="pick" data-hint={t('hint.form.move_area')}>
       <span>{t('drop.choose_area')}</span>
       <select bind:value={area}>
@@ -110,7 +110,7 @@
       {/if}
     {:else}
       <p class="what">{markHidden(task?.title ?? asking.id)}</p>
-      <p class="id"><code>{asking.id}</code></p>
+      <p class="id" translate="no"><code translate="no">{asking.id}</code></p>
       {#if answer === null}
         <p class="muted" role="status">{t('drop.checking')}</p>
       {:else if answer.kind === 'ok'}

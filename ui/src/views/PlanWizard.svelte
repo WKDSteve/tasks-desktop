@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Info from 'appkit-ui/Info.svelte';
   import { closeOnBackdrop } from 'appkit-ui/backdrop';
   import { floating } from '../lib/floating';
   // The plan wizard: a title and an area are enough; the rest (the areas it covers, the phases, the target, the gate)
@@ -102,7 +103,10 @@
 
 <dialog bind:this={dialog} use:floating={{ kind: 'plan-wizard', moveLabel: t('float.move'), moveHint: t('hint.float.move') }} use:closeOnBackdrop={{ closeable: () => form.title.trim() === '' && files.length === 0 }} aria-labelledby="plan-title" onclose={() => app.closePlanWizard()}>
   <form onsubmit={submit}>
-    <h2 id="plan-title">{t(form.kind === 'project' ? 'plan.new.project_title' : 'plan.new.title')}</h2>
+    <div class="dialog-head">
+      <h2 id="plan-title">{t(form.kind === 'project' ? 'plan.new.project_title' : 'plan.new.title')}</h2>
+      <Info hint={t('hint.dialog.plan')} label={t('hint.about', { what: t(form.kind === 'project' ? 'plan.new.project_title' : 'plan.new.title') })} />
+    </div>
     {#if app.can('project_new')}
       <div class="kind" role="radiogroup" aria-label={t('plan.new.kind')}>
         {#each ['plan', 'project'] as const as kind (kind)}
@@ -129,7 +133,7 @@
     <label data-hint={t(form.kind === 'project' ? 'hint.form.project.title' : 'hint.form.plan.title')}>
       <span>{t('capture.name')}</span>
       <!-- svelte-ignore a11y_autofocus -->
-      <input type="text" bind:value={form.title} maxlength="300" required autofocus />
+      <input spellcheck="true" type="text" bind:value={form.title} maxlength="300" required autofocus />
     </label>
     <label data-hint={t('hint.form.plan.area')}>
       <span>{t('plan.new.area')}</span>
@@ -164,7 +168,7 @@
     </div>
     <label data-hint={t('hint.form.plan.phases')}>
       <span>{t('plan.new.phases')} <small>({t('field.tags_hint')})</small></span>
-      <input type="text" bind:value={form.phases} placeholder={t('plan.new.phases_example')} />
+      <input spellcheck="false" type="text" bind:value={form.phases} placeholder={t('plan.new.phases_example')} />
     </label>
     {#if phases.length > 0}
       <p class="phases" role="group" aria-label={t('plan.new.order')}>
@@ -193,7 +197,7 @@
       {#if form.targetNew}
         <label for="plan-target-title" data-hint={t('hint.form.plan.target_new')}>{t('plan.new.target')}</label>
         <div class="row">
-          <input
+          <input spellcheck="true"
             id="plan-target-title"
             data-hint={t('hint.form.plan.target_new')}
             type="text"
@@ -212,7 +216,7 @@
       {:else}
         <label for="plan-target" data-hint={t('hint.form.plan.target')}>{t('plan.new.target')}</label>
         <div class="row">
-          <input
+          <input spellcheck="false"
             id="plan-target"
             data-hint={t('hint.form.plan.target')}
             type="text"
@@ -259,13 +263,13 @@
     </label>
     <label data-hint={t('hint.form.plan.summary')}>
       <span>{t('plan.new.summary')}</span>
-      <input type="text" bind:value={form.summary} maxlength="1000" aria-describedby="plan-summary-help" />
+      <input spellcheck="true" type="text" bind:value={form.summary} maxlength="1000" aria-describedby="plan-summary-help" />
       <small class="hint" id="plan-summary-help">{t('plan.new.summary_help')}</small>
     </label>
     {#if app.can('plan_links')}
       <label data-hint={t('hint.form.plan.links')}>
         <span>{t('field.links')} <small>({t('field.tags_hint')})</small></span>
-        <input
+        <input spellcheck="false"
           type="text"
           bind:value={form.links}
           placeholder="https://"

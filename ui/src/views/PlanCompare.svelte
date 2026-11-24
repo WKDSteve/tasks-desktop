@@ -5,6 +5,7 @@
   // A click on a plan opens it in the plan view.
   import type { App } from '../lib/app.svelte';
   import type { PlanCompare } from '../lib/contract';
+  import { percentText } from '../lib/numbers';
   import { formatNumber, translate, type Key } from '../lib/i18n';
   import { markHidden } from '../lib/text';
   import Info from 'appkit-ui/Info.svelte';
@@ -199,7 +200,7 @@
                     aria-label={t('compare.progress', { done: r.tasks.done, total })}
                     ><span class="fill ok" style:width={`${Math.round(r.progress * 100)}%`}></span></span
                   >
-                  {Math.round(r.progress * 100)} %
+                  {percentText(app.lang, r.progress)}
                 </td>
                 <td class="num" data-col="effort">
                   <span class="bar" aria-hidden="true"

@@ -81,7 +81,7 @@
   <div class="bar" role="group" aria-label={t('contacts.filters')}>
     <label class="field" data-hint={t('contacts.search.hint')}>
       <span>{t('contacts.search')}</span>
-      <input type="search" bind:value={filter.text} data-contacts-search />
+      <input spellcheck="false" type="search" bind:value={filter.text} data-contacts-search />
     </label>
     <label class="field" data-hint={t('contacts.org.hint')}>
       <span>{t('contacts.org')}</span>

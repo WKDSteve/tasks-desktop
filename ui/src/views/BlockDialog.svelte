@@ -56,7 +56,7 @@
   {#if asking}
     <h2 id="block-title">{t('board.block.title')}</h2>
     <p class="what">{markHidden(card?.title ?? asking.id)}</p>
-    <p class="id"><code>{asking.id}</code></p>
+    <p class="id" translate="no"><code translate="no">{asking.id}</code></p>
     <form
       onsubmit={(e) => {
         e.preventDefault();
@@ -65,7 +65,7 @@
     >
       <label data-hint={t('hint.form.blocked_by')}>
         <span>{t('board.block.by')}</span>
-        <input type="text" list="block-choices" bind:value={text} autocomplete="off" />
+        <input spellcheck="false" type="text" list="block-choices" bind:value={text} autocomplete="off" />
         <datalist id="block-choices">
           {#each choices as id (id)}<option value={id}></option>{/each}
         </datalist>

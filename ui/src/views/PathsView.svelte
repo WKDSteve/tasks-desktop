@@ -884,7 +884,7 @@
                     }}
                   >
                     <label for="reason-{node.index}">{t(`paths.reason.${editing.state}` as Key)}</label>
-                    <input
+                    <input spellcheck="true"
                       id="reason-{node.index}"
                       type="text"
                       aria-required="true"
@@ -912,7 +912,7 @@
                     }}
                   >
                     <label for="note-{node.index}">{t('paths.note_of', { label })}</label>
-                    <textarea
+                    <textarea spellcheck="true"
                       id="note-{node.index}"
                       rows="3"
                       bind:value={draft}
@@ -935,7 +935,7 @@
                     }}
                   >
                     <label for="task-xp-{node.index}">{t('paths.task_xp.label', { id: node.promoted ?? '' })}</label>
-                    <input
+                    <input spellcheck="false"
                       id="task-xp-{node.index}"
                       type="text"
                       inputmode="numeric"
@@ -963,7 +963,7 @@
                     }}
                   >
                     <label for="xp-{node.index}">{t('paths.xp.label', { label })}</label>
-                    <input
+                    <input spellcheck="false"
                       id="xp-{node.index}"
                       type="text"
                       inputmode="numeric"

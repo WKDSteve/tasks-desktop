@@ -80,7 +80,7 @@ describe('the fields of the detail', () => {
     app.tasks = [task('pub/a', { summary: 'A summary' })];
     const out = detail(app);
     expect(out).toMatch(/<label class="line[^"]*"[^>]*><span[^>]*>Title<\/span>\s*<input/);
-    expect(out).toMatch(/<label class="line[^"]*"[^>]*><span[^>]*>Summary<\/span>\s*<textarea class="summary[^"]*" rows="3"/);
+    expect(out).toMatch(/<label class="line[^"]*"[^>]*><span[^>]*>Summary<\/span>\s*<textarea[^>]*class="summary[^"]*"[^>]*rows="3"/);
     expect(out).toContain('>A summary</textarea>');
     // The choices from a few values share lines among themselves, not with the title.
     expect(out).toMatch(/<div class="picks[^"]*"><label/);
@@ -172,15 +172,15 @@ describe('a ladder and a routine that waits for a finish', () => {
     app.tasks = [task('pub/a', { repeat: '1w,4w', repeat_after: 'pub/b' }), task('pub/b', { status: 'doing' })];
     let out = detail(app);
     expect(out).toContain('<h3>Starts once this is finished</h3>');
-    expect(out).toMatch(/<p data-repeat-after[^>]*>\s*<button type="button" class="link[^"]*"><code>pub\/b<\/code><\/button>/);
+    expect(out).toMatch(/<p data-repeat-after[^>]*>\s*<button type="button" class="link[^"]*"><code[^>]*>pub\/b<\/code><\/button>/);
     expect(out).toContain('once this is finished, its first round is due 1w later.');
     // A point of a path: not a task of the list, so the link goes to the view of the paths.
     app.tasks = [task('pub/a', { repeat: '2w', repeat_after: 'pub/path#k1' })];
     out = detail(app);
-    expect(out).toMatch(/<button type="button" class="link[^"]*"><code>pub\/path#k1<\/code><\/button>/);
+    expect(out).toMatch(/<button type="button" class="link[^"]*"><code[^>]*>pub\/path#k1<\/code><\/button>/);
     // Without the view of the paths it is named, not linked.
     app.capabilities = ['repeat', 'repeat_steps'];
-    expect(detail(app)).toMatch(/<p data-repeat-after[^>]*>\s*<code>pub\/path#k1<\/code>/);
+    expect(detail(app)).toMatch(/<p data-repeat-after[^>]*>\s*<code[^>]*>pub\/path#k1<\/code>/);
     // Started: the finish wrote its due date, nothing waits any more.
     app.tasks = [task('pub/a', { repeat: '2w', repeat_after: 'pub/path#k1', due: '2027-01-05' })];
     expect(detail(app)).not.toContain('data-repeat-after');
@@ -216,8 +216,8 @@ describe('the history and the end of a routine', () => {
     const out = detail(app);
     expect(out).toContain('<h3>Earlier rounds</h3>');
     // Each part stands apart: a blank on both sides of the dot.
-    expect(out).toMatch(/<li data-round="pub\/a-2026-02-01"[^>]*>\s*finished 2026-02-02 · due 2026-02-01 · done · <code>repo@abc1234, other@def5678<\/code>/);
-    expect(out).toMatch(/<li data-round="pub\/a"[^>]*>\s*finished \(no date\) · due 2026-01-04 · done · <code>repo@0001111<\/code>/);
+    expect(out).toMatch(/<li data-round="pub\/a-2026-02-01"[^>]*>\s*finished 2026-02-02 · due 2026-02-01 · done · <code[^>]*>repo@abc1234, other@def5678<\/code>/);
+    expect(out).toMatch(/<li data-round="pub\/a"[^>]*>\s*finished \(no date\) · due 2026-01-04 · done · <code[^>]*>repo@0001111<\/code>/);
     expect(out.indexOf('pub/a-2026-02-01')).toBeLessThan(out.indexOf('data-round="pub/a"'));
     expect(out).not.toContain('Older rounds are not listed.');
     app.detail = { state: 'ok', id: 'pub/a', doc: doc({ rounds: [{ id: 'pub/a' }], rounds_truncated: true }) };

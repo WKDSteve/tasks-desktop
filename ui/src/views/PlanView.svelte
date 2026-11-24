@@ -162,7 +162,7 @@
       </div>
       <div class="toolbar">
         <!-- The same words as the search of the list (one filter for every view): the stages narrow to them. -->
-        <input
+        <input spellcheck="false"
           type="search"
           class="plan-search"
           data-hint={t('hint.ui.list.search')}
@@ -306,18 +306,18 @@
         </summary>
         <ul class="plain">
           {#each cycles as cycle, i (i)}
-            <li>{t('plan.cycle')}: <code>{markHidden(cycle.join(' → '))}</code></li>
+            <li>{t('plan.cycle')}: <code translate="no">{markHidden(cycle.join(' → '))}</code></li>
           {/each}
           {#each sameFile as group, i (i)}
             <li>
-              <code>{markHidden(group.file)}</code>
+              <code translate="no">{markHidden(group.file)}</code>
               {t('plan.same_file_named', { stage: group.stage })}
               {markHidden(group.ids.join(', '))}
               <Info hint={t('hint.same_file')} label={t('hint.about', { what: t('plan.same_file_what') })} />
             </li>
           {/each}
           {#each warnings as w, i (i)}
-            <li><code>{markHidden(w.code)}</code> {markHidden(w.msg)}</li>
+            <li><code translate="no">{markHidden(w.code)}</code> {markHidden(w.msg)}</li>
           {/each}
         </ul>
       </details>
@@ -544,7 +544,7 @@
     gap: 0.5rem;
     min-width: 0;
     max-width: 100%;
-    font-size: 0.85rem;
+    font-size: 1rem;
     color: var(--muted);
   }
   .plan-select select,

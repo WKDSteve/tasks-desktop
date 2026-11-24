@@ -59,7 +59,7 @@
   {#if id !== null}
     <h2 id="agent-title">{t('agent.title')}</h2>
     <p class="what">{markHidden(task?.title ?? id)}</p>
-    <p class="id"><code>{id}</code></p>
+    <p class="id" translate="no"><code translate="no">{id}</code></p>
     <fieldset>
       <legend>{t('agent.mode.label')}</legend>
       {#each ['prefill', 'run'] as const as value (value)}

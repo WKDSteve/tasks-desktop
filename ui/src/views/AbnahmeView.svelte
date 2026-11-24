@@ -253,7 +253,7 @@
           <article class="task" data-task={task.id} data-group={groupOf(task)}>
             <header class="thead" class:cursor={head} data-cursor={head ? 'true' : undefined}>
               <h4>{markHidden(task.title)}</h4>
-              <span class="id">{task.id}</span>
+              <span class="id" translate="no">{task.id}</span>
               {#if app.machineActions && task.sheets}
                 <button
                   type="button"
@@ -279,7 +279,7 @@
                 {:else}
                   <strong>{t(app.sheetRun.code === 0 ? 'abnahme.run_green' : app.sheetRun.code === 1 ? 'abnahme.run_red' : 'abnahme.run_not_run')}</strong>
                   {#if app.sheetRun.lines && app.sheetRun.lines.length > 0}
-                    <pre class="grid">{markHidden(app.sheetRun.lines.join('\n'))}</pre>
+                    <pre class="grid" translate="no">{markHidden(app.sheetRun.lines.join('\n'))}</pre>
                   {/if}
                 {/if}
               </div>
@@ -311,7 +311,7 @@
                           {:else if snap.state === 'failed'}
                             <p class="note" role="alert">{t('abnahme.snap_failed', { code: snap.code })}</p>
                           {:else}
-                            <pre class="grid">{snap.rows.join('\n')}</pre>
+                            <pre class="grid" translate="no">{snap.rows.join('\n')}</pre>
                           {/if}
                         </figure>
                       {/each}

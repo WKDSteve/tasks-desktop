@@ -134,7 +134,7 @@
         <dd>{c.tags.map((x) => markHidden(x)).join(', ')}</dd>
       {/if}
       <dt>{t('contact.file')}</dt>
-      <dd class="muted">{c.file}</dd>
+      <dd class="muted" translate="no">{c.file}</dd>
     </dl>
 
     <h3>{t('contact.notes')}</h3>

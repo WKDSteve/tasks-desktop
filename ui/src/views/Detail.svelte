@@ -432,14 +432,14 @@
         />
       </div>
     {/if}
-    <p class="id"><code>{task.id}</code></p>
+    <p class="id" translate="no"><code translate="no">{task.id}</code></p>
 
     {#if task.problems.length > 0 || !task.valid}
       <div class="problems" role="alert">
         <h3>{t('detail.problems')}</h3>
         <ul>
           {#each task.problems as problem, i (i)}
-            <li><code>{problem.code}</code> {markHidden(problem.msg)}</li>
+            <li><code translate="no">{problem.code}</code> {markHidden(problem.msg)}</li>
           {/each}
         </ul>
       </div>
@@ -477,7 +477,7 @@
     <div class="edit" role="group" aria-label={t('detail.edit')}>
       <label class="line" data-hint={t('hint.form.task.title_edit')}>
         <span>{t('field.title')}</span>
-        <input
+        <input spellcheck="true"
           type="text"
           value={shown.title}
           data-field="title"
@@ -499,7 +499,7 @@
         <span>{t('field.summary')}</span>
         <!-- Several lines to read and write in; the engine keeps the summary as one line, so Enter writes it (as in a
              field of one line, the focus stays in it) and a line break that was pasted becomes a space. -->
-        <textarea
+        <textarea spellcheck="true"
           class="summary"
           rows="3"
           value={shown.summary ?? ''}
@@ -842,7 +842,7 @@
       {/if}
       <label class="line" data-hint={hintOf(app.lang, 'hint.field', 'tags')}>
         <span>{t('field.tags')} <small>({t('field.tags_hint')})</small></span>
-        <input
+        <input spellcheck="false"
           type="text"
           value={tagsText(shown.tags)}
           data-field="tags"
@@ -875,7 +875,7 @@
       </div>
       <label class="line" data-hint={hintOf(app.lang, 'hint.field', 'after')}>
         <span>{t('field.after')} <small>({t('field.tags_hint')})</small></span>
-        <input
+        <input spellcheck="false"
           type="text"
           value={tagsText(shown.after)}
           data-field="after"
@@ -887,7 +887,7 @@
       </label>
       <label class="line" data-hint={hintOf(app.lang, 'hint.field', 'refs')}>
         <span>{t('field.refs')} <small>({t('field.tags_hint')})</small></span>
-        <input
+        <input spellcheck="false"
           type="text"
           value={tagsText(shown.refs)}
           data-field="refs"
@@ -899,7 +899,7 @@
       </label>
       <label class="line" data-hint={hintOf(app.lang, 'hint.field', 'links')}>
         <span>{t('field.links')} <small>({t('field.tags_hint')})</small></span>
-        <input
+        <input spellcheck="false"
           type="text"
           value={tagsText(shown.links)}
           data-field="links"
@@ -969,10 +969,10 @@
         {#each task.blocked_by as id, i (`${id}:${i}`)}
           <li>
             {#if byId.has(id)}
-              <button type="button" class="link" onclick={() => app.reveal(id)}><code>{id}</code></button>
+              <button type="button" class="link" onclick={() => app.reveal(id)}><code translate="no">{id}</code></button>
             {:else}
               <!-- Not in the list (finished, or a task the page may not show): nothing to reveal, so no button. -->
-              <code>{id}</code>
+              <code translate="no">{id}</code>
             {/if}
             <span class="muted">{statusOf(id)}</span>
           </li>
@@ -987,12 +987,12 @@
       <h3>{t('detail.repeat_after')}</h3>
       <p data-repeat-after>
         {#if byId.has(after)}
-          <button type="button" class="link" onclick={() => app.reveal(after)}><code>{after}</code></button>
+          <button type="button" class="link" onclick={() => app.reveal(after)}><code translate="no">{after}</code></button>
           <span class="muted">{statusOf(after)}</span>
         {:else if app.can('paths')}
-          <button type="button" class="link" onclick={() => app.openPath(pathOfRef(after))}><code>{after}</code></button>
+          <button type="button" class="link" onclick={() => app.openPath(pathOfRef(after))}><code translate="no">{after}</code></button>
         {:else}
-          <code>{after}</code>
+          <code translate="no">{after}</code>
         {/if}
         <br /><span class="muted">{t('detail.repeat_after_hint', { every: intervalsOf(task.repeat)[0] ?? '' })}</span>
       </p>
@@ -1001,7 +1001,7 @@
       <h3>{t('detail.after')}</h3>
       <ul class="plain">
         {#each task.after as id, i (`${id}:${i}`)}
-          <li><code>{id}</code> <span class="muted">{statusOf(id)}</span></li>
+          <li><code translate="no">{id}</code> <span class="muted">{statusOf(id)}</span></li>
         {/each}
       </ul>
     {/if}
@@ -1055,7 +1055,7 @@
         <div class="note" role="group" aria-label={t('detail.step_label')}>
           <label data-hint={t('hint.form.detail.step')}>
             <span>{t('detail.step_label')} <small>({t('detail.step_hint')})</small></span>
-            <input
+            <input spellcheck="true"
               type="text"
               bind:value={newStep}
               data-field="new-step"
@@ -1086,8 +1086,8 @@
               <li data-round={r.id}>
                 {r.done ? t('rounds.done', { date: r.done }) : t('rounds.undated')}{#if r.due}{' · '}{t('rounds.due', { date: r.due })}{/if}{#if r.status}{' · '}{t(
                     `status.${r.status}` as Key,
-                  )}{/if}{#if r.commits && r.commits.length > 0}{' · '}<code>{r.commits.map(markHidden).join(', ')}</code
-                  >{:else if r.done_in}{' · '}<code>{markHidden(r.done_in)}</code>{/if}
+                  )}{/if}{#if r.commits && r.commits.length > 0}{' · '}<code translate="no">{r.commits.map(markHidden).join(', ')}</code
+                  >{:else if r.done_in}{' · '}<code translate="no">{markHidden(r.done_in)}</code>{/if}
               </li>
             {/each}
           </ul>
@@ -1139,7 +1139,7 @@
           {#each sheets as sheet, i (i)}
             <li>
               <span class="sheet-title">{markHidden(sheet.title)}</span>
-              {#if sheet.id}<code>{sheet.id}</code>{/if}
+              {#if sheet.id}<code translate="no">{sheet.id}</code>{/if}
               <span class="muted">{sheetState(sheet.state)}</span>
             </li>
           {/each}
@@ -1162,7 +1162,7 @@
       {#if editing}
         <label class="body-edit" data-hint={t('hint.form.detail.body')}>
           <span class="muted">{t('detail.body_label')} <small>({t('detail.body_hint')})</small></span>
-          <textarea
+          <textarea spellcheck="true"
             bind:value={draft}
             rows="14"
             maxlength={MAX_BODY_EDIT}
@@ -1184,7 +1184,7 @@
         </div>
       {:else if raw}
         <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
-        <pre class="body" tabindex="0">{markHidden(body)}</pre>
+        <pre class="body" tabindex="0" translate="yes">{markHidden(body)}</pre>
       {:else}
         <!-- A long text scrolls in its box: the box takes the focus, so the keyboard can scroll it (as the plain text). -->
         <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
@@ -1196,7 +1196,7 @@
         <div class="note" role="group" aria-label={t('detail.note_label')}>
           <label data-hint={t('hint.form.detail.note')}>
             <span>{t('detail.note_label')} <small>({t('detail.note_hint')})</small></span>
-            <input
+            <input spellcheck="true"
               type="text"
               bind:value={note}
               data-field="note"
@@ -1273,7 +1273,7 @@
             <span
               >{t('discard.label')} <small>({t('discard.hint')}{#if task.repeat}; {t('discard.routine')}{/if})</small></span
             >
-            <input
+            <input spellcheck="true"
               type="text"
               bind:value={reason}
               data-field="reason"
@@ -1309,13 +1309,13 @@
       <h3>{t('check.section')}</h3>
       <ul class="findings">
         {#each app.findingsFor(task.id) as f, i (i)}
-          <li><code>{f.code}</code> {markHidden(f.message)}</li>
+          <li><code translate="no">{f.code}</code> {markHidden(f.message)}</li>
         {/each}
       </ul>
     {/if}
 
     <h3>{t('detail.file')}</h3>
-    <p><code class="file">{task.file}</code></p>
+    <p><code class="file" translate="no">{task.file}</code></p>
     <p>
       {#if app.machineActions}
         <button type="button" class="open-editor" data-hint={t('hint.ui.detail.open_editor')} onclick={() => void app.openInEditor(task.id)}
@@ -1467,11 +1467,11 @@
     border: 1px solid var(--border);
     border-radius: var(--radius);
     padding: 0.25rem 0.5rem;
-    font-size: 0.9rem;
+    font-size: 1rem;
   }
   .edit textarea.summary {
     font: inherit;
-    font-size: 0.9rem;
+    font-size: 1rem;
     resize: vertical;
   }
   .sheets {
@@ -1689,7 +1689,7 @@
     border: 1px solid var(--border);
     border-radius: var(--radius);
     padding: 0.25rem 0.5rem;
-    font-size: 0.9rem;
+    font-size: 1rem;
   }
   .note button {
     cursor: pointer;

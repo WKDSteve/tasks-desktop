@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Info from 'appkit-ui/Info.svelte';
   // The first start in the page: the step for what the hub misses (the vault, Neovim) and the installation it offers.
   // Every choice is made in the dialog of the system that the hub shows on its machine; the page names no path.
   import type { App } from '../lib/app.svelte';
@@ -22,7 +23,10 @@
       <!-- the steps of what the hub misses are the card's, not the dialog's -->
     {:else if setup.vaultStep}
       <section aria-labelledby="setup-vault">
-        <h2 id="setup-vault">{t('setup.page.vault_title')}</h2>
+        <div class="dialog-head">
+          <h2 id="setup-vault">{t('setup.page.vault_title')}</h2>
+          <Info hint={t('hint.dialog.setup')} label={t('hint.about', { what: t('setup.page.vault_title') })} />
+        </div>
         <p>{t('setup.page.vault_body')}</p>
         <div class="row">
           <button type="button" class="primary" disabled={setup.busy} onclick={() => void setup.chooseVault(null)}
@@ -32,7 +36,7 @@
         </div>
         {#if newVault}
           <div class="row">
-            <label data-hint={t('hint.form.vaults.area')}>{t('setup.page.vault_area')} <input type="text" bind:value={area} maxlength="128" /></label>
+            <label data-hint={t('hint.form.vaults.area')}>{t('setup.page.vault_area')} <input spellcheck="false" type="text" bind:value={area} maxlength="128" /></label>
             <button
               type="button"
               disabled={setup.busy || area.trim() === ''}
@@ -52,7 +56,10 @@
       </section>
     {:else if setup.nvimStep && setup.info.pickProgram}
       <section aria-labelledby="setup-nvim">
-        <h2 id="setup-nvim">{t('setup.page.nvim_title')}</h2>
+        <div class="dialog-head">
+          <h2 id="setup-nvim">{t('setup.page.nvim_title')}</h2>
+          <Info hint={t('hint.dialog.setup')} label={t('hint.about', { what: t('setup.page.nvim_title') })} />
+        </div>
         <p>{t('setup.page.nvim_body', { program })}</p>
         <button type="button" class="primary" disabled={setup.busy} onclick={() => void setup.chooseNvim()}
           >{t('setup.page.nvim_choose', { program })}</button
@@ -64,7 +71,10 @@
       <p role="status">{t('setup.page.installing')}</p>
     {:else if setup.installStep}
       <section aria-labelledby="setup-install">
-        <h2 id="setup-install">{t('setup.page.install_title')}</h2>
+        <div class="dialog-head">
+          <h2 id="setup-install">{t('setup.page.install_title')}</h2>
+          <Info hint={t('hint.dialog.setup')} label={t('hint.about', { what: t('setup.page.install_title') })} />
+        </div>
         <p>{t(setup.info.install === 'replace' ? 'setup.page.replace_body' : 'setup.page.install_body')}</p>
         <label data-hint={t('hint.item.menu.autostart')}><input type="checkbox" bind:checked={autostart} /> {t('setup.page.install_autostart')}</label>
         <label data-hint={t('hint.form.setup.shortcut')}><input type="checkbox" bind:checked={shortcut} /> {t('setup.page.install_shortcut')}</label>

@@ -158,7 +158,7 @@
               <td>
                 <span class="light local-{state.local.state}" aria-hidden="true">{LOCAL_SIGN[state.local.state]}</span>
                 <span>{localWords(state)}</span>
-                {#if state.local.branch}<small class="branch">{state.local.branch}</small>{/if}
+                {#if state.local.branch}<small class="branch" translate="no">{state.local.branch}</small>{/if}
               </td>
               <td>
                 <span class="light ci-{state.ci.state}" aria-hidden="true">{CI_SIGN[state.ci.state]}</span>
@@ -173,7 +173,7 @@
                 {#if state.ci.trust}
                   {@const command = state.ci.trust}
                   <span class="trust">
-                    <code>{command}</code>
+                    <code translate="no">{command}</code>
                     <button type="button" data-copy aria-label={t('repostatus.copy_of', { name: row.name })} onclick={() => void copy(row.name, command)}>
                       {t('repostatus.copy')}
                     </button>

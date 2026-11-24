@@ -384,7 +384,7 @@
     <form class="card form" aria-label={t('views.new')} onsubmit={(e) => void make(e)}>
       <label data-hint={t('hint.form.views.title')}>
         {t('views.form.title')}
-        <input bind:this={titleBox} bind:value={title} maxlength="300" required />
+        <input spellcheck="true" bind:this={titleBox} bind:value={title} maxlength="300" required />
       </label>
       <label data-hint={t('hint.form.views.area')}>
         {t('views.form.area')}
@@ -466,7 +466,7 @@
         <form class="rename" onsubmit={(e) => void rename(e, open)}>
           <label data-hint={t('hint.form.views.title')}>
             {t('views.form.title')}
-            <input bind:value={renaming} maxlength="300" readonly={app.readOnly && open.id !== DRAFT_ID} />
+            <input spellcheck="true" bind:value={renaming} maxlength="300" readonly={app.readOnly && open.id !== DRAFT_ID} />
           </label>
           <button type="submit" disabled={app.locked}>{t('views.rename')}</button>
         </form>
@@ -584,7 +584,7 @@
                         onkeydown={(e) => onCellItemKey(e, task.id, cell)}
                       >
                         <span class="titled"><TaskIcon {app} {task} /><span class="title">{#if app.marks.includes(task.id)}<span class="sr-only">{t('mark.marked')} </span>{/if}{markHidden(task.title)}</span></span>
-                        <span class="id">{task.id}</span>
+                        <span class="id" translate="no">{task.id}</span>
                       </button>
                     </li>
                   {:else}
@@ -626,7 +626,7 @@
                   use:contextTarget={taskTarget(task)}
                 >
                   <span class="titled"><TaskIcon {app} {task} /><span class="title">{#if app.marks.includes(task.id)}<span class="sr-only">{t('mark.marked')} </span>{/if}{markHidden(task.title)}</span></span>
-                  <span class="id">{task.id}</span>
+                  <span class="id" translate="no">{task.id}</span>
                 </button>
               {/snippet}
             </Groups>

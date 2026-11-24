@@ -114,7 +114,7 @@
       }}
     >
       <label for="exercise-result">{w('ex.ergebnis')}</label>
-      <textarea
+      <textarea spellcheck="true"
         id="exercise-result"
         rows="5"
         bind:value={draft}

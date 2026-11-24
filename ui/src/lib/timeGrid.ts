@@ -174,6 +174,7 @@ export function durationText(minutes: number): string {
   return `${h > 0 ? `${h}h` : ''}${m > 0 || h === 0 ? `${m}m` : ''}`;
 }
 
+/** `HH:MM` on a 24-hour clock: the form field of a meeting takes and the grid axis shows exactly this, in every language. */
 export const hhmm = (minutes: number): string => `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
 
 /** The minute snapped to a quarter hour. */

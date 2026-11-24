@@ -152,7 +152,7 @@
     <div class="empty" data-rewards-empty>
       <p>{t('rewards.none')}</p>
       <p class="none">{t('rewards.none_how')}</p>
-      <pre><code>## Level
+      <pre translate="no"><code translate="no">## Level
 
 {t('rewards.none_example')}</code></pre>
       <button type="button" onclick={() => app.setView('paths')}>{t('rewards.open_paths')}</button>

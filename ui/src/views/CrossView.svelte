@@ -419,7 +419,7 @@
   }
   .guide-pick select {
     font: inherit;
-    font-size: 0.8rem;
+    font-size: 1rem;
   }
   /* The numbers sit in the middle of their cells, so that the line of a column meets them from above. */
   .guided td.num {

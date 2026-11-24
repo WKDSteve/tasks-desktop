@@ -76,7 +76,7 @@
           <li class:stale={i >= findings.length}>
             <span class="tag" class:err={f.severity === 'error'}>{f.severity === 'error' ? t('check.error') : t('check.warn')}</span>
             {#if i >= findings.length}<span class="tag">{t('check.stale_task')}</span>{/if}
-            <code data-hint={hintOf(app.lang, 'hint.check', f.code) || t('hint.check.code')}>{markHidden(f.code)}</code>
+            <code data-hint={hintOf(app.lang, 'hint.check', f.code) || t('hint.check.code')} translate="no">{markHidden(f.code)}</code>
             {#if f.id}
               <button type="button" class="linkish" onclick={() => jump(f.id as string)}>{markHidden(f.id)}</button>
             {:else}

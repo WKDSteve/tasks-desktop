@@ -216,10 +216,13 @@
     color: var(--text);
     cursor: pointer;
     font: inherit;
-    font-size: 0.8rem;
+    font-size: 1rem;
     line-height: 1.3;
     padding: 0 0.35rem;
     min-width: 1.6rem;
+  }
+  button {
+    font-size: 0.8rem;
   }
   select {
     background: var(--surface);
@@ -233,7 +236,7 @@
     border: 1px solid var(--border);
     border-radius: var(--radius);
     color: var(--text);
-    font-size: 0.8rem;
+    font-size: 1rem;
     line-height: 1.3;
     min-width: 1.6rem;
     max-width: 7.5rem;

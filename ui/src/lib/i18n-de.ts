@@ -486,6 +486,12 @@ const de: Record<PageKey, string> = {
   'hint.cross':
     'Ein Task verbindet Bereiche, wenn er auf einen offenen Task eines anderen Bereichs wartet (blocked_by) oder nach ihm kommt (after), oder wenn ein Task eines anderen Bereichs das für ihn tut. Ein Task verbindet Bereiche auch, wenn er in einer Referenz einen anderen Bereich nennt (als bereich@commit oder bereich:anker; ein bloßer Pfad sagt nichts über das Repo), und die offenen Tasks eines Plans verbinden die Bereiche, in denen sie liegen. Sind Bereiche gewählt, zählen nur Verbindungen zwischen den gewählten. Erledigte Tasks zählen nicht.',
   'hint.about': 'Erklärung: {what}',
+  'hint.dialog.about': 'Zeigt Version, Build und Engine dieser App und sammelt, was an eine Fehlermeldung gehört.',
+  'hint.dialog.plan': 'Ein Plan ordnet Tasks für ein Ziel in Etappen; ein Projekt fasst Tasks und Pläne unter einem Namen zusammen.',
+  'hint.dialog.setup': 'Der Hub braucht einen Vault (den Ordner mit deinen Tasks) und die Engine; diese Karte führt durch beides.',
+  'hint.dialog.meeting': 'Ein Meeting ist eine Notiz mit Datum, Uhrzeit und Teilnehmern; es kann sich wiederholen und eigene Tasks haben.',
+  'hint.dialog.capture': 'Legt einen Task im Vault an. Nur der Titel ist Pflicht; alles andere lässt sich später nachtragen.',
+  'hint.dialog.defaults': 'Womit neue Tasks, Meetings und Claims beginnen, wenn du nichts anderes sagst.',
   'hint.board.count': 'Wie viele Karten diese Spalte hat, nach den Filtern der Liste.',
   'hint.board.done': 'Karte auf diesen Streifen ziehen, um den Task zu erledigen. Du siehst vorher, was das Erledigen tut, und bestätigst.',
   'hint.board.group': 'Die Marke über einer Reihe von Karten: die Priorität, nach der sie gruppiert sind, und ihre Stufe im Plan. Ein Task wird nach seiner eigenen Priorität gruppiert oder, wenn ein dringenderer Task auf ihn wartet, nach dessen.',

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Info from 'appkit-ui/Info.svelte';
   // "Defaults ...": where the page starts and what it shows without a choice of the person's own (`lib/defaults.ts`),
   // with the switches that stand until changed (counts in the choice of areas, short area names, saving fields with a
   // button). Everything is kept in this browser at once; nothing here writes to the vault.
@@ -64,7 +65,10 @@
   data-testid="defaults-dialog"
 >
   {#if open}
-    <h2 id="defaults-title">{t('defaults.title')}</h2>
+    <div class="dialog-head">
+      <h2 id="defaults-title">{t('defaults.title')}</h2>
+      <Info hint={t('hint.dialog.defaults')} label={t('hint.about', { what: t('defaults.title') })} />
+    </div>
     <p class="muted">{t('defaults.intro')}</p>
 
     <fieldset>
@@ -159,7 +163,7 @@
         {t('menu.save_manual')}
       </label>
       <label for="defaults-claim-name" data-hint={t('hint.defaults.claim_name')}>{t('defaults.claim_name')}</label>
-      <input
+      <input spellcheck="false"
         id="defaults-claim-name"
         data-hint={t('hint.defaults.claim_name')}
         type="text"

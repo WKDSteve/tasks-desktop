@@ -176,7 +176,7 @@
     <div class="empty" data-competences-empty>
       <p>{t('competences.none')}</p>
       <p class="none">{t('competences.none_how')}</p>
-      <pre><code>{COMPETENCE_EXAMPLE}</code></pre>
+      <pre translate="no"><code translate="no">{COMPETENCE_EXAMPLE}</code></pre>
       <button type="button" onclick={() => app.setView('paths')}>{t('competences.open_paths')}</button>
     </div>
   {:else}
@@ -195,7 +195,7 @@
         </select></label
       >
       <label class="field" data-hint={t('hint.form.competences.search')}
-        ><span class="sr">{t('competences.search')}</span><input
+        ><span class="sr">{t('competences.search')}</span><input spellcheck="false"
           type="search"
           bind:value={text}
           placeholder={t('competences.search_placeholder')}
@@ -292,7 +292,7 @@
                         </ul>
                       {/if}
                       <p class="file">
-                        {t('competences.file')}: <code>{markHidden(item.file)}</code>
+                        {t('competences.file')}: <code translate="no">{markHidden(item.file)}</code>
                         {#if app.machineActions}
                           <!-- The hub opens the file the engine names for this id; the page sends the id, never the path. -->
                           <button

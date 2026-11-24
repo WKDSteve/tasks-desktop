@@ -314,7 +314,7 @@
                   }}
                 >
                   <label for="learnnext-reason-{item.path}">{t(open.state === 'seen' ? 'learnnext.reason.seen' : 'learnnext.reason.dropped')}</label>
-                  <input
+                  <input spellcheck="true"
                     id="learnnext-reason-{item.path}"
                     class="reason"
                     type="text"

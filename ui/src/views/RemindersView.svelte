@@ -203,7 +203,7 @@
           <dd>{mail.subject}</dd>
         </dl>
         {#if mail.included.length > 0}
-          <pre>{mail.text}</pre>
+          <pre translate="yes">{mail.text}</pre>
         {:else}
           <p class="note">{t('reminders.nothing')}</p>
         {/if}

@@ -52,7 +52,7 @@
     <p class="note">{t('done.read.note')}</p>
     <dl>
       <dt>{t('done.read.id')}</dt>
-      <dd class="id">{item.id}</dd>
+      <dd class="id" translate="no">{item.id}</dd>
       <dt>{t('done.read.when')}</dt>
       <dd>{item.done ?? t('done.undated_row')}</dd>
       {#if item.kind}<dt>{t('field.kind')}</dt><dd>{labelOf(app.lang, 'kind', item.kind)}</dd>{/if}
@@ -64,7 +64,7 @@
       {#if item.done_in}<dt>{t('done.read.done_in')}</dt><dd>{markHidden(item.done_in)}</dd>{/if}
       {#if item.commits && item.commits.length > 0}
         <dt>{t('done.read.commits')}</dt>
-        <dd class="id">{item.commits.map(markHidden).join(', ')}</dd>
+        <dd class="id" translate="no">{item.commits.map(markHidden).join(', ')}</dd>
       {/if}
       {#if item.ci}
         <!-- The CI state of those commits, beside them (the word carries it, the colour only repeats it). -->

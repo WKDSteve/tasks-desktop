@@ -485,6 +485,12 @@ const en = {
   'hint.cross':
     'A task connects areas when it waits for (blocked_by) or comes after (after) an open task of another area, or when a task of another area does so for it. A task also connects areas when it names another area in a ref (as area@commit or area:anchor; a plain path says nothing about the repo), and the open tasks of one plan connect the areas they lie in. With areas chosen, only links between the chosen areas count. Finished tasks are not part of it.',
   'hint.about': 'Explanation: {what}',
+  'hint.dialog.about': 'Lists the version, build and engine of this app, and gathers what to attach to a bug report.',
+  'hint.dialog.plan': 'A plan groups tasks into phases for one goal; a project groups tasks and plans under one name.',
+  'hint.dialog.setup': 'The hub needs a vault (the folder with your tasks) and the engine; this card walks through both.',
+  'hint.dialog.meeting': 'A meeting is a note with a date, a time and people; it can repeat and it can have its own tasks.',
+  'hint.dialog.capture': 'Creates a task in the vault. Only the title is required; everything else can be added later.',
+  'hint.dialog.defaults': 'What new tasks, meetings and claims start with, when you do not say otherwise.',
   'hint.board.count': 'How many cards this column holds, after the filters of the list.',
   'hint.board.done': 'Drop a card on this strip to finish its task. You see what finishing does and confirm first.',
   'hint.board.group': 'The label over a run of cards: the priority they are grouped by, and their stage in the plan. A task is grouped by its own priority or, if a more urgent task waits for it, by that one.',

@@ -127,7 +127,7 @@
   textarea {
     width: 100%;
     font-family: var(--mono, monospace);
-    font-size: 0.85rem;
+    font-size: 1rem;
     resize: vertical;
   }
   .refused {

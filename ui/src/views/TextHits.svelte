@@ -54,7 +54,7 @@
               <span class="title"
                 >{#if banded}<span class="area" data-area={area}><span class="sr-only">{t('areas.row', { area })} </span><span aria-hidden="true">{app.shortAreas ? areaLabel(area, allNames) : area}</span></span>{/if}{markHidden(byId.get(hit.id)?.title ?? hit.id)}</span
               >
-              <span class="id">{hit.id}</span>
+              <span class="id" translate="no">{hit.id}</span>
               <span class="snippet">
                 {#if hit.snippet.more_before}…{/if}
                 {#each pieces(hit.snippet.text, hit.snippet.marks) as piece, i (i)}

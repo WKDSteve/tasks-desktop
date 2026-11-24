@@ -105,7 +105,7 @@
     flex: 1;
     min-width: 0;
     font-family: var(--mono);
-    font-size: 0.8rem;
+    font-size: 1rem;
     background: var(--surface-2);
     color: var(--text);
     border: 1px solid var(--border);

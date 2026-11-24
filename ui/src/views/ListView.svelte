@@ -305,7 +305,7 @@
         <summary data-hint={t('hint.ui.list.save')}>{t('lists.save')}</summary>
         <!-- Not a form: a page of tasks has none (the tests of markup count them), and Enter does the same. -->
         <div class="save-row" role="group" aria-label={t('lists.save')}>
-          <input
+          <input spellcheck="true"
             type="text"
             aria-label={t('lists.name')}
             data-hint={t('hint.form.list.name')}
@@ -390,11 +390,11 @@
       </label>
       <label data-hint={t('hint.form.bulk.tags_add')}>
         <span class="sr-only">{t('bulk.tags_add')}</span>
-        <input type="text" placeholder={t('bulk.tags_add')} bind:value={draft.addTags} disabled={app.locked} onkeydown={applyOnEnter} />
+        <input spellcheck="false" type="text" placeholder={t('bulk.tags_add')} bind:value={draft.addTags} disabled={app.locked} onkeydown={applyOnEnter} />
       </label>
       <label data-hint={t('hint.form.bulk.tags_remove')}>
         <span class="sr-only">{t('bulk.tags_remove')}</span>
-        <input type="text" placeholder={t('bulk.tags_remove')} bind:value={draft.removeTags} disabled={app.locked} onkeydown={applyOnEnter} />
+        <input spellcheck="false" type="text" placeholder={t('bulk.tags_remove')} bind:value={draft.removeTags} disabled={app.locked} onkeydown={applyOnEnter} />
       </label>
       <button
         type="button"

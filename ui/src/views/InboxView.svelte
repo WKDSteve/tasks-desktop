@@ -72,17 +72,17 @@
       </div>
       <p class="about">{t('inbox.intro')}</p>
       <ul class="keys" aria-label={t('inbox.keys.label')}>
-        <li><span class="kgroup">{t('inbox.keys.move')}</span><kbd>j</kbd><kbd>k</kbd></li>
-        <li><span class="kgroup">{t('inbox.keys.prio')}</span><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd></li>
+        <li><span class="kgroup">{t('inbox.keys.move')}</span><kbd translate="no">j</kbd><kbd translate="no">k</kbd></li>
+        <li><span class="kgroup">{t('inbox.keys.prio')}</span><kbd translate="no">1</kbd><kbd translate="no">2</kbd><kbd translate="no">3</kbd></li>
         <li>
           <span class="kgroup">{t('inbox.keys.effort')}</span>
-          {#each EFFORT_KEYS as [key, size] (size)}<span class="pair"><kbd>{key}</kbd>{size}</span>{/each}
+          {#each EFFORT_KEYS as [key, size] (size)}<span class="pair"><kbd translate="no">{key}</kbd>{size}</span>{/each}
         </li>
         <li>
           <span class="kgroup">{t('inbox.keys.who')}</span>
-          {#each WHO_KEYS as [key, who] (who)}<span class="pair"><kbd>{key}</kbd>{t(`inbox.who.${who}` as Key)}</span>{/each}
+          {#each WHO_KEYS as [key, who] (who)}<span class="pair"><kbd translate="no">{key}</kbd>{t(`inbox.who.${who}` as Key)}</span>{/each}
         </li>
-        <li><span class="kgroup">{t('inbox.keys.undo')}</span><kbd>u</kbd></li>
+        <li><span class="kgroup">{t('inbox.keys.undo')}</span><kbd translate="no">u</kbd></li>
       </ul>
     </header>
     <div class="rows">
@@ -103,7 +103,7 @@
           use:markGesture={app}
           onclick={() => app.select(task.id)}
         >
-          <span class="id">{task.id}</span>
+          <span class="id" translate="no">{task.id}</span>
           <span class="titled"><TaskIcon {app} {task} /><span class="title">{#if app.marks.includes(task.id)}<span class="sr-only">{t('mark.marked')} </span>{/if}{markHidden(task.title)}</span></span>
           <span class="meta">
             {#each missingOf(task) as field (field)}

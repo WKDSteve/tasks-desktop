@@ -394,7 +394,7 @@
             <form class="row" onsubmit={addDocument} data-document-add>
               <label data-hint={t('hint.form.meeting.document')}>
                 <span>{t('meeting.documents.add')}</span>
-                <input type="text" bind:value={documentText} maxlength="2000" />
+                <input spellcheck="false" type="text" bind:value={documentText} maxlength="2000" />
               </label>
               <button type="submit" disabled={documentText.trim() === '' || busy}>{t('meeting.documents.add_button')}</button>
             </form>
@@ -465,7 +465,7 @@
           <h3 id="meeting-decisions">{t('meeting.decisions')}</h3>
           {#if section('Beschlüsse', 'Decisions') !== '' && images && hasAssetImage(section('Beschlüsse', 'Decisions'))}<div class="prose"
             ><Blocks blocks={blocksOf(section('Beschlüsse', 'Decisions'))} headingBase={3} images={imageSource} /></div
-          >{:else if section('Beschlüsse', 'Decisions') !== ''}<pre>{markHidden(section('Beschlüsse', 'Decisions'))}</pre>{:else}<p class="muted">{t('meeting.empty')}</p>{/if}
+          >{:else if section('Beschlüsse', 'Decisions') !== ''}<pre translate="yes">{markHidden(section('Beschlüsse', 'Decisions'))}</pre>{:else}<p class="muted">{t('meeting.empty')}</p>{/if}
         </section>
         <section aria-labelledby="meeting-followups">
           <h3 id="meeting-followups">{t('meeting.followups')}</h3>
@@ -491,7 +491,7 @@
           <h3 id="meeting-result">{t('meeting.result')}</h3>
           {#if section('Ergebnis', 'Result') !== '' && images && hasAssetImage(section('Ergebnis', 'Result'))}<div class="prose"
             ><Blocks blocks={blocksOf(section('Ergebnis', 'Result'))} headingBase={3} images={imageSource} /></div
-          >{:else if section('Ergebnis', 'Result') !== ''}<pre>{markHidden(section('Ergebnis', 'Result'))}</pre>{:else}<p class="muted">{t('meeting.empty')}</p>{/if}
+          >{:else if section('Ergebnis', 'Result') !== ''}<pre translate="yes">{markHidden(section('Ergebnis', 'Result'))}</pre>{:else}<p class="muted">{t('meeting.empty')}</p>{/if}
           {#if m.recording && joinLink(m.recording)}
             <p><a href={joinLink(m.recording)} target="_blank" rel="noopener noreferrer">{t('meeting.recording')}</a></p>
           {/if}
@@ -499,7 +499,7 @@
             <form class="stack" onsubmit={saveResult}>
               <label data-hint={t('hint.form.meeting.result')}>
                 <span>{t('meeting.result')}</span>
-                <textarea rows="4" maxlength="20000" bind:value={resultText} oninput={() => (resultDirty = true)}></textarea>
+                <textarea spellcheck="true" rows="4" maxlength="20000" bind:value={resultText} oninput={() => (resultDirty = true)}></textarea>
               </label>
               <button type="submit" disabled={busy || !resultDirty}>{t('meeting.result.save')}</button>
             </form>
@@ -508,7 +508,7 @@
             <form class="row" onsubmit={saveRecording}>
               <label data-hint={t('hint.form.meeting.recording')}>
                 <span>{t('meeting.recording.link')}</span>
-                <input type="url" bind:value={recordingText} maxlength="2000" oninput={() => (recordingDirty = true)} />
+                <input spellcheck="false" type="url" bind:value={recordingText} maxlength="2000" oninput={() => (recordingDirty = true)} />
               </label>
               <button type="submit" disabled={busy || !recordingDirty}>{t('meeting.recording.save')}</button>
             </form>

@@ -81,7 +81,7 @@
           }}>{markHidden(task.title)}</button
         >
         <span class="muted"
-          ><code>{task.id}</code>{task.prio !== undefined ? ` · P${task.prio}` : ''}</span
+          ><code translate="no">{task.id}</code>{task.prio !== undefined ? ` · P${task.prio}` : ''}</span
         >
         {#if onpointerdrag}
           <!-- A finger drags by this grip (a screen reader and the keys have the button beside it). -->

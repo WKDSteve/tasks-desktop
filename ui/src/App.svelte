@@ -832,7 +832,7 @@
   <header class="bar">
     <!-- The mark alone: beside the menu Tasks the word stood twice. The name and the version are in the hint. -->
     <Brand label={t('app.title')} hint={t('hint.ui.brand', { name: t('app.title'), version: app.appVersion })} onclick={() => app.setView('today')}>
-      <span class="brand-mark"><img src={logo} alt="" width="24" height="24" /></span>
+      <span class="brand-mark" translate="no"><img src={logo} alt="" width="24" height="24" /></span>
     </Brand>
     <MenuBar {menus} label={t('menu.label')} labels={{ submenuCurrent: t('menu.current') }} />
     <span class="spacer"></span>
@@ -865,19 +865,19 @@
             <p role="alert">{t('state.needs_pairing.refused')}</p>
           {/if}
           <p>{t('state.needs_pairing.body')}</p>
-          <pre><code>tasks-desktop open</code></pre>
+          <pre translate="no"><code translate="no">tasks-desktop open</code></pre>
         </section>
       {:else if app.phase === 'offline'}
         <section class="card centered">
           <h1>{t('state.offline.title')}</h1>
           <p>{t('state.offline.body')}</p>
-          <pre><code>tasks-desktop serve</code></pre>
+          <pre translate="no"><code translate="no">tasks-desktop serve</code></pre>
         </section>
       {:else if app.phase === 'unavailable'}
         <section class="card centered">
           <h1>{t(`setup.${setupKey}.title` as Key)}</h1>
           <p>{t(`setup.${setupKey}.body` as Key)}</p>
-          <p class="muted">{t('state.unavailable.body')} <code>{app.problem ?? '?'}</code></p>
+          <p class="muted">{t('state.unavailable.body')} <code translate="no">{app.problem ?? '?'}</code></p>
           <SetupCard {app} />
         </section>
       {:else}

@@ -233,7 +233,7 @@
     <div class="empty" data-badges-empty>
       <p>{t('badges.none')}</p>
       <p class="none">{t('badges.none_how')}</p>
-      <pre><code>## Level
+      <pre translate="no"><code translate="no">## Level
 
 {t('badges.none_example')}</code></pre>
       <button type="button" onclick={() => app.setView('paths')}>{t('badges.open_paths')}</button>

@@ -346,7 +346,7 @@
 {#if taking === null}
   {#each kept as one (one.file)}
     <div class="taking" role="group" aria-label={t('attach.capture.kept')} data-kept={one.kind}>
-      <p class="state">{t('attach.capture.kept')} <code>{one.file.name}</code></p>
+      <p class="state">{t('attach.capture.kept')} <code translate="no">{one.file.name}</code></p>
       <p class="actions">
         <button type="button" class="attach go" disabled={busy} onclick={() => void attach(one.task, one.file, one.kind)}
           >{t('attach.capture.retry')}</button

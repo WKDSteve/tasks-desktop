@@ -103,7 +103,7 @@
 >
   {#if plan !== null}
     <h2 id="split-title">{t('split.title')}</h2>
-    <p class="what">{markHidden(planEntry?.title ?? plan)} <code>{plan}</code></p>
+    <p class="what">{markHidden(planEntry?.title ?? plan)} <code translate="no">{plan}</code></p>
     {#if stage === 'asking'}
       <p role="status">{t('split.asking')}</p>
     {:else if stage === 'confirm'}

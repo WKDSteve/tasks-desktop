@@ -34,6 +34,7 @@
   import { bucketLabel, bucketName } from '../lib/statsWords';
   import Info from 'appkit-ui/Info.svelte';
   import StatsCard from './StatsCard.svelte';
+  import { decimalText } from '../lib/numbers';
 
   let {
     app,
@@ -139,7 +140,7 @@
   });
 
   const metricName = (metric: HistoryMetric): string => t(`stats.history.metric.${metric}` as Key);
-  const shown = (n: number): string => String(Math.round(n * 100) / 100);
+  const shown = (n: number): string => decimalText(app.lang, n);
   const label = (bucket: string): string => bucketLabel(app.lang, dim, bucket);
   const dayHead = $derived(t(frame.resolution === 'week' ? 'stats.history.week' : 'stats.history.day'));
 
