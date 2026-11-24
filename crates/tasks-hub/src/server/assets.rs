@@ -165,6 +165,7 @@ pub(super) async fn asset(
         Err(response) => return response,
     };
     let seen = single(&headers, &header::IF_NONE_MATCH).ok().flatten();
+    let shown_as = file.rsplit('/').next().unwrap_or("file").to_owned();
     let read = tokio::task::spawn_blocking(move || {
         let (path, kind) = assets::resolve(&vault, &container, &file)?;
         std::fs::read(path)
@@ -186,6 +187,7 @@ pub(super) async fn asset(
             if let Ok(value) = HeaderValue::from_str(&format!("\"{tag}\"")) {
                 headers.insert(header::ETAG, value);
             }
+            self::meetings::inline_named(headers, &shown_as);
             self::meetings::sealed(headers);
             response
         }

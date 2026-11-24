@@ -345,6 +345,27 @@ fn download(body: String, content_type: &'static str, name: &str) -> Response {
     response
 }
 
+/// `Content-Disposition: inline` with a file name of the hub's making: what the browser offers when the picture is saved,
+/// whatever the page asked for. Letters, digits, `.`, `_` and `-` only (the name came from a path of the vault).
+pub(super) fn inline_named(headers: &mut HeaderMap, name: &str) {
+    let mut safe: String = name
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-') {
+                c
+            } else {
+                '-'
+            }
+        })
+        .collect();
+    safe.truncate(100);
+    let safe = safe.trim_start_matches('.');
+    let safe = if safe.is_empty() { "file" } else { safe };
+    if let Ok(value) = HeaderValue::from_str(&format!("inline; filename=\"{safe}\"")) {
+        headers.insert(header::CONTENT_DISPOSITION, value);
+    }
+}
+
 /// The headers of an answer that is a file, not a page: no sniffing, no scripts, not kept.
 pub(super) fn sealed(headers: &mut HeaderMap) {
     headers.insert(
@@ -400,6 +421,14 @@ pub(super) async fn meeting_thumb(
             let mut response = Response::new(Body::from(bytes));
             let headers = response.headers_mut();
             headers.insert(header::CONTENT_TYPE, HeaderValue::from_static(content_type));
+            inline_named(
+                headers,
+                if content_type == "image/svg+xml" {
+                    "thumb.svg"
+                } else {
+                    "thumb.png"
+                },
+            );
             sealed(headers);
             response
         }

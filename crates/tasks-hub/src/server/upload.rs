@@ -11,7 +11,8 @@
 //! configuration; the engine takes it from there (`from: upload`) and the hub removes it afterwards, whatever came of
 //! it. The size is limited ([`DEFAULT_UPLOAD_MAX_BYTES`], `upload_max_mb` of `config.json`, `413 too_large`, asked up front when the size is known and counted
 //! while the body streams in) and so is the type: the ending of the name must be on the allow-list of its kind
-//! ([`extension_allowed`], `415 unsupported_type`); the disk is asked for the room up front when the size is known.
+//! ([`extension_allowed`], `415 unsupported_type`), and the first bytes of a picture, a video or a recording must be those of
+//! its format ([`content_matches`], `415 unsupported_type` too); the disk is asked for the room up front when the size is known.
 //! The name the person sees travels in `X-Upload-Name`, percent-encoded; a name with a control character or a `..`
 //! part is refused (`400 bad_name`, [`refused_name`]), any other is cleaned here to what the engine takes as an asset
 //! name.
@@ -125,6 +126,73 @@ fn extension_allowed(name: &str, kind: Option<&str>) -> bool {
             .iter()
             .any(|list| list.contains(&ext)),
     }
+}
+
+/// How many bytes of the start of a file [`content_matches`] looks at.
+const HEAD_BYTES: usize = 16;
+
+/// Does the start of a file say what its ending says? A picture, a video or a voice note must begin the way its format
+/// does: an `a.png` that is a script or a page is no picture, whatever the page called it. Documents and data have no
+/// fixed start worth judging (a text may begin with anything), so they pass; an ending with no rule here passes too.
+fn content_matches(name: &str, head: &[u8]) -> bool {
+    let Some((_, ext)) = name.rsplit_once('.') else {
+        return true;
+    };
+    let ext = ext.to_ascii_lowercase();
+    let starts = |magic: &[u8]| head.starts_with(magic);
+    let at = |from: usize, magic: &[u8]| head.get(from..from + magic.len()) == Some(magic);
+    match ext.as_str() {
+        "png" => starts(&[0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a]),
+        "jpg" | "jpeg" => starts(&[0xff, 0xd8, 0xff]),
+        "gif" => starts(b"GIF87a") || starts(b"GIF89a"),
+        "webp" => starts(b"RIFF") && at(8, b"WEBP"),
+        "bmp" => starts(b"BM"),
+        "tif" | "tiff" => starts(&[b'I', b'I', 0x2a, 0]) || starts(&[b'M', b'M', 0, 0x2a]),
+        "avif" | "heic" | "heif" | "mp4" | "m4v" | "m4a" | "3gp" => at(4, b"ftyp"),
+        // A QuickTime file may begin with an atom other than `ftyp`.
+        "mov" => [&b"ftyp"[..], b"moov", b"mdat", b"free", b"wide", b"skip"]
+            .iter()
+            .any(|atom| at(4, atom)),
+        "webm" | "mkv" | "weba" => starts(&[0x1a, 0x45, 0xdf, 0xa3]),
+        "avi" => starts(b"RIFF") && at(8, b"AVI "),
+        "wav" => starts(b"RIFF") && at(8, b"WAVE"),
+        "ogv" | "ogg" | "oga" | "opus" => starts(b"OggS"),
+        "flac" => starts(b"fLaC"),
+        "amr" => starts(b"#!AMR"),
+        // MP3 and AAC: a tag, or the sync word of a frame.
+        "mp3" | "aac" => {
+            starts(b"ID3")
+                || starts(b"ADIF")
+                || (head.len() >= 2 && head[0] == 0xff && head[1] & 0xe0 == 0xe0)
+        }
+        "svg" => {
+            let text = head.strip_prefix(&[0xef, 0xbb, 0xbf]).unwrap_or(head);
+            text.trim_ascii_start().first() == Some(&b'<')
+        }
+        _ => true,
+    }
+}
+
+/// The first bytes of the file the hub wrote.
+async fn head_of(path: &Path) -> std::io::Result<Vec<u8>> {
+    let path = path.to_path_buf();
+    tokio::task::spawn_blocking(move || {
+        use std::io::Read as _;
+        let mut head = vec![0u8; HEAD_BYTES];
+        let mut file = std::fs::File::open(path)?;
+        let mut filled = 0;
+        while filled < HEAD_BYTES {
+            let n = file.read(&mut head[filled..])?;
+            if n == 0 {
+                break;
+            }
+            filled += n;
+        }
+        head.truncate(filled);
+        Ok(head)
+    })
+    .await
+    .map_err(|e| std::io::Error::other(e.to_string()))?
 }
 
 fn too_large() -> Response {
@@ -503,6 +571,25 @@ pub(super) async fn upload(
         Ok(done) => done,
         Err(response) => return response,
     };
+    // The start of the file must be what its ending says (a picture, a video, a voice note): the name came from the page.
+    match head_of(&incoming.path).await {
+        Ok(head) if content_matches(&name, &head) => {}
+        Ok(_) => {
+            return error_body(
+                StatusCode::UNSUPPORTED_MEDIA_TYPE,
+                "unsupported_type",
+                "the content of the file is not what its ending says",
+            )
+        }
+        Err(e) => {
+            eprintln!("upload: {e}");
+            return error_body(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "upload_failed",
+                "the file could not be read",
+            );
+        }
+    }
     // The file was meant for the vault that was read when it was sent.
     if st.rt().vault != rt.vault {
         return error_body(
@@ -591,8 +678,8 @@ static UPLOAD_NAME: header::HeaderName = header::HeaderName::from_static("x-uplo
 #[cfg(test)]
 mod tests {
     use super::{
-        asked_kind, attach_op, clean_name, extension_allowed, kind_for_meeting, percent_decoded,
-        receive, refused_name,
+        asked_kind, attach_op, clean_name, content_matches, extension_allowed, kind_for_meeting,
+        percent_decoded, receive, refused_name,
     };
 
     #[test]
@@ -664,6 +751,48 @@ mod tests {
             ("a.pdf", Some("audio")),
         ] {
             assert!(!extension_allowed(name, kind), "{name} {kind:?}");
+        }
+    }
+
+    #[test]
+    fn the_start_of_a_picture_or_a_recording_says_what_its_ending_says() {
+        let png = [0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a, 0, 0];
+        let mut mp4 = vec![0, 0, 0, 0x18];
+        mp4.extend_from_slice(b"ftypmp42");
+        let mut webp = b"RIFF".to_vec();
+        webp.extend_from_slice(&[1, 2, 3, 4]);
+        webp.extend_from_slice(b"WEBPVP8 ");
+        for (name, head) in [
+            ("a.png", &png[..]),
+            ("A.PNG", &png[..]),
+            ("a.jpg", &[0xff, 0xd8, 0xff, 0xe0][..]),
+            ("a.gif", b"GIF89a.."),
+            ("a.webp", &webp[..]),
+            ("a.mp4", &mp4[..]),
+            ("a.m4a", &mp4[..]),
+            ("a.webm", &[0x1a, 0x45, 0xdf, 0xa3, 1][..]),
+            ("a.mp3", b"ID3\x04"),
+            ("a.mp3", &[0xff, 0xfb, 0x90][..]),
+            ("a.svg", b"\xef\xbb\xbf <svg xmlns"),
+            // No rule for documents or an ending without one.
+            ("a.txt", b"anything"),
+            ("a.pdf", b""),
+        ] {
+            assert!(content_matches(name, head), "{name}");
+        }
+        for (name, head) in [
+            ("a.png", &b"<script>alert(1)</script>"[..]),
+            ("a.png", b""),
+            ("a.jpg", &png[..]),
+            ("a.gif", b"GIF"),
+            ("a.webp", b"RIFF\0\0\0\0WAVE"),
+            ("a.mp4", b"not really a video"),
+            ("a.m4a", b"m4a"),
+            ("a.webm", b"x"),
+            ("a.mp3", b"MZ\x90"),
+            ("a.svg", b"MZ\x90"),
+        ] {
+            assert!(!content_matches(name, head), "{name}");
         }
     }
 

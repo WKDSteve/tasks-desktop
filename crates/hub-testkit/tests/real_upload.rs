@@ -237,7 +237,7 @@ async fn a_second_upload_of_the_same_name_is_exists_and_the_task_keeps_one_asset
     let video = upload(
         "/api/tasks/upload?id=lib.nvim/alpha&kind=video",
         "note.mp4",
-        "video",
+        "\0\0\0\x18ftypvideo",
     )
     .await;
     assert_eq!(video["results"][0]["ok"], true, "{video}");
@@ -260,12 +260,15 @@ async fn a_second_upload_of_the_same_name_is_exists_and_the_task_keeps_one_asset
             .ends_with("/assets/videos/note.mp4"),
         "{added:?}"
     );
-    assert_eq!(std::fs::read_to_string(&added[0]).unwrap(), "video");
+    assert_eq!(
+        std::fs::read_to_string(&added[0]).unwrap(),
+        "\0\0\0\x18ftypvideo"
+    );
     // A recording (a meeting's, a dictation) has its own folder.
     let audio = upload(
         "/api/tasks/upload?id=lib.nvim/alpha&kind=audio",
         "note.m4a",
-        "audio",
+        "\0\0\0\x18ftypaudio",
     )
     .await;
     assert_eq!(audio["results"][0]["ok"], true, "{audio}");

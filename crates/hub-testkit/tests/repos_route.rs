@@ -213,6 +213,10 @@ async fn a_group_and_a_tile_are_made_and_the_image_comes_with_a_policy_that_runs
     assert_eq!(image.status, 200);
     assert_eq!(image.header("content-type"), Some("image/svg+xml"));
     assert_eq!(image.header("x-content-type-options"), Some("nosniff"));
+    assert_eq!(
+        image.header("content-disposition"),
+        Some("inline; filename=\"repo-image.svg\"")
+    );
     assert!(image
         .header("content-security-policy")
         .unwrap()

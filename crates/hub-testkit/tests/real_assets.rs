@@ -343,6 +343,12 @@ async fn the_images_below_assets_of_a_container_are_handed_on_sealed_and_nothing
         );
         assert!(lower.contains("sandbox"), "{head}");
         assert!(lower.contains("cache-control: no-store"), "{head}");
+        // The picture is shown in the page; saved, it carries the name of its file and nothing the page chose.
+        let name = query.rsplit('/').next().unwrap().to_ascii_lowercase();
+        assert!(
+            lower.contains(&format!("content-disposition: inline; filename=\"{name}\"")),
+            "{query}: {head}"
+        );
         assert_eq!(body, bytes, "{query}");
     }
 

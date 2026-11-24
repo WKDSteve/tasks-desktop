@@ -710,7 +710,13 @@ async fn a_check_that_runs_does_not_hold_up_the_other_questions_of_the_engine() 
 async fn upload(r: &Rig, id: &str, name: &str, body: &str) -> (u16, Value) {
     let auth = format!("Bearer {}", r.token);
     let origin = format!("http://127.0.0.1:{}", r.server.addr().port());
-    let reply = client::request(
+    // An empty body is the start of a file of the ending of the name (the hub judges it).
+    let sent = if body.is_empty() {
+        hub_testkit::media::body_for(&name.replace("%20", " "))
+    } else {
+        body.as_bytes().to_vec()
+    };
+    let reply = hub_testkit::patient::request(
         r.server.addr().port(),
         "POST",
         &format!("/api/tasks/upload?id={id}"),
@@ -720,7 +726,7 @@ async fn upload(r: &Rig, id: &str, name: &str, body: &str) -> (u16, Value) {
             ("Authorization", &auth),
             ("X-Upload-Name", name),
         ],
-        body,
+        sent,
     )
     .await
     .unwrap();
@@ -883,7 +889,39 @@ async fn a_file_of_a_type_the_hub_does_not_take_is_refused_and_nothing_is_writte
     );
     assert_eq!(leftovers(&r), 0);
     // A listed type is taken, in either case.
-    let (status, doc) = upload(&r, "alpha.nvim/t1&kind=image", "PHOTO.JPG", "x").await;
+    let (status, doc) = upload(&r, "alpha.nvim/t1&kind=image", "PHOTO.JPG", "").await;
+    assert_eq!(status, 200, "{doc}");
+}
+
+#[tokio::test]
+async fn a_file_whose_start_is_not_what_its_ending_says_is_refused_and_nothing_is_attached() {
+    let _one_at_a_time = ONE_AT_A_TIME.lock().await;
+    let r = rig("upload-content").await;
+    for (query, name, body) in [
+        ("alpha.nvim/t1", "a.png", "<script>alert(1)</script>"),
+        ("alpha.nvim/t1&kind=image", "photo.jpg", "not a picture"),
+        ("alpha.nvim/t1&kind=audio", "note.m4a", "plain text"),
+        ("alpha.nvim/t1&kind=video", "clip.webm", "MZ program"),
+        ("alpha.nvim/t1", "a.png", "GIF89a but named png"),
+    ] {
+        let (status, doc) = upload(&r, query, name, body).await;
+        assert_eq!(
+            (status, doc["error"]["code"].clone()),
+            (415, Value::from("unsupported_type")),
+            "{query} {name}: {doc}"
+        );
+    }
+    // Only the look before the transfer (a dry run) reached the engine: no file was attached.
+    let asked = std::fs::read_to_string(r.vault.join(".fake-exact")).unwrap_or_default();
+    assert!(
+        !asked.is_empty() && asked.lines().all(|line| line.starts_with("true ")),
+        "only dry runs: {asked}"
+    );
+    assert_eq!(leftovers(&r), 0, "the refused file is gone");
+    // A document has no start to judge, a picture with its own start is taken.
+    let (status, doc) = upload(&r, "alpha.nvim/t1", "a.txt", "anything").await;
+    assert_eq!(status, 200, "{doc}");
+    let (status, doc) = upload(&r, "alpha.nvim/t1&kind=image", "ok.png", "").await;
     assert_eq!(status, 200, "{doc}");
 }
 

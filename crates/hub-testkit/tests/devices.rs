@@ -798,7 +798,7 @@ async fn a_phone_uploads_to_a_task_and_only_a_photo_or_voice_note_to_a_meeting()
             } else {
                 format!("&kind={kind}")
             };
-            let reply = client::request(
+            let reply = hub_testkit::patient::request(
                 port,
                 "POST",
                 &format!("/api/tasks/upload?id={id}{kind}"),
@@ -808,7 +808,7 @@ async fn a_phone_uploads_to_a_task_and_only_a_photo_or_voice_note_to_a_meeting()
                     ("Content-Type", "application/octet-stream"),
                     ("X-Upload-Name", name),
                 ],
-                "bytes",
+                hub_testkit::media::body_for(name),
             )
             .await
             .unwrap();
@@ -894,7 +894,8 @@ async fn a_phone_upload_whose_meeting_is_gone_during_the_transfer_attaches_nothi
     std::fs::write(vault.join(".fake-not-tasks"), "alpha.nvim/standup\n").unwrap();
     std::fs::write(vault.join(".fake-meetings"), "alpha.nvim/standup\n").unwrap();
     let (_, phone) = r.phone().await;
-    let body = "x".repeat(4096);
+    let mut body = hub_testkit::media::body_for("photo.jpg");
+    body.resize(4096, b'x');
     let head = format!(
         "POST /api/tasks/upload?id=alpha.nvim/standup&kind=image HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nAuthorization: Bearer {phone}\r\nOrigin: {origin}\r\nContent-Type: application/octet-stream\r\nX-Upload-Name: photo.jpg\r\nContent-Length: {len}\r\nConnection: close\r\n\r\n",
         port = r.server.addr().port(),
@@ -905,7 +906,7 @@ async fn a_phone_upload_whose_meeting_is_gone_during_the_transfer_attaches_nothi
         .await
         .unwrap();
     stream.write_all(head.as_bytes()).await.unwrap();
-    stream.write_all(&body.as_bytes()[..2048]).await.unwrap();
+    stream.write_all(&body[..2048]).await.unwrap();
     let asked = vault.join(".fake-exact");
     let deadline = std::time::Instant::now() + Duration::from_secs(10);
     while !std::fs::read_to_string(&asked).is_ok_and(|t| t.lines().any(|l| l.starts_with("true ")))
@@ -915,7 +916,7 @@ async fn a_phone_upload_whose_meeting_is_gone_during_the_transfer_attaches_nothi
     }
     // The meeting is gone; a plan of that name is there now.
     std::fs::write(vault.join(".fake-meetings"), "").unwrap();
-    stream.write_all(&body.as_bytes()[2048..]).await.unwrap();
+    stream.write_all(&body[2048..]).await.unwrap();
     let mut reply = Vec::new();
     tokio::time::timeout(Duration::from_secs(10), stream.read_to_end(&mut reply))
         .await
@@ -939,7 +940,8 @@ async fn a_phone_upload_whose_task_is_gone_during_the_transfer_attaches_nothing(
     let r = Rig::new("gone-in-transfer").await;
     let vault = r._dir.join("vault");
     let (_, phone) = r.phone().await;
-    let body = "x".repeat(4096);
+    let mut body = hub_testkit::media::body_for("note.m4a");
+    body.resize(4096, b'x');
     let head = format!(
         "POST /api/tasks/upload?id=alpha.nvim/t1&kind=audio HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nAuthorization: Bearer {phone}\r\nOrigin: {origin}\r\nContent-Type: application/octet-stream\r\nX-Upload-Name: note.m4a\r\nContent-Length: {len}\r\nConnection: close\r\n\r\n",
         port = r.server.addr().port(),
@@ -950,7 +952,7 @@ async fn a_phone_upload_whose_task_is_gone_during_the_transfer_attaches_nothing(
         .await
         .unwrap();
     stream.write_all(head.as_bytes()).await.unwrap();
-    stream.write_all(&body.as_bytes()[..2048]).await.unwrap();
+    stream.write_all(&body[..2048]).await.unwrap();
     // The dry run has passed (the task was open then) ...
     let asked = vault.join(".fake-exact");
     let deadline = std::time::Instant::now() + Duration::from_secs(10);
@@ -961,7 +963,7 @@ async fn a_phone_upload_whose_task_is_gone_during_the_transfer_attaches_nothing(
     }
     // ... and while the file is on its way, the task is finished: its id now names a meeting of that name.
     std::fs::write(vault.join(".fake-not-tasks"), "alpha.nvim/t1\n").unwrap();
-    stream.write_all(&body.as_bytes()[2048..]).await.unwrap();
+    stream.write_all(&body[2048..]).await.unwrap();
     let mut reply = Vec::new();
     tokio::time::timeout(Duration::from_secs(10), stream.read_to_end(&mut reply))
         .await
@@ -1681,7 +1683,7 @@ async fn a_write_tells_a_phone_only_what_it_may_know() {
     // An upload answers in the same words.
     let origin = r.origin();
     let auth = format!("Bearer {phone}");
-    let reply = client::request(
+    let reply = hub_testkit::patient::request(
         r.server.addr().port(),
         "POST",
         "/api/tasks/upload?id=alpha.nvim/t2&exact=1",
@@ -1691,7 +1693,7 @@ async fn a_write_tells_a_phone_only_what_it_may_know() {
             ("Content-Type", "application/octet-stream"),
             ("X-Upload-Name", "photo.png"),
         ],
-        "png",
+        hub_testkit::media::body_for("photo.png"),
     )
     .await
     .unwrap();

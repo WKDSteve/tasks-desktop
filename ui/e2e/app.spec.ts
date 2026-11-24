@@ -10818,9 +10818,9 @@ for (const scheme of ['light', 'dark'] as const) {
     await videoChoices.getByRole('button', { name: 'Upload a video' }).click();
     const picked = await chooser;
     expect(await picked.element().getAttribute('accept')).toBe('video/*');
-    await picked.setFiles({ name: 'Demo Clip.webm', mimeType: 'video/webm', buffer: Buffer.from('not really a video') });
+    await picked.setFiles({ name: 'Demo Clip.webm', mimeType: 'video/webm', buffer: Buffer.concat([Buffer.from([0x1a, 0x45, 0xdf, 0xa3]), Buffer.from('not really a video')]) });
     await expect(attached).toHaveValue('[Demo-Clip.webm](assets/videos/Demo-Clip.webm)', { timeout: WRITE_BUDGET });
-    expect(readFileSync(join(dir, 'assets', 'videos', 'Demo-Clip.webm'), 'utf8')).toBe('not really a video');
+    expect(readFileSync(join(dir, 'assets', 'videos', 'Demo-Clip.webm'), 'utf8')).toBe(Buffer.concat([Buffer.from([0x1a, 0x45, 0xdf, 0xa3]), Buffer.from('not really a video')]).toString('utf8'));
     await expect(video).not.toHaveAttribute('open', '');
 
     // Recording needs the camera, which the hub lets its page use (the guard's `with_page_capture`: the page says
@@ -11534,7 +11534,7 @@ test('the minutes of a meeting: every kind of entry, a line turned into a decisi
     // As a person does: the next recording once the button takes one again (the page reads the meeting after each
     // write; a file handed over meanwhile is refused with "still reading").
     await expect(meetingPage.getByRole('button', { name: '♪ Audio' })).toBeEnabled();
-    await meetingPage.locator('input[type="file"][accept="audio/*"]').setInputFiles({ name: 'note-e2e.m4a', mimeType: 'audio/mp4', buffer: Buffer.from('m4a') });
+    await meetingPage.locator('input[type="file"][accept="audio/*"]').setInputFiles({ name: 'note-e2e.m4a', mimeType: 'audio/mp4', buffer: Buffer.concat([Buffer.from([0, 0, 0, 0x18]), Buffer.from('ftypm4a')]) });
     await expect.poll(text, { timeout: 15_000 }).toMatch(/\[Audio: [^\]]*\]\(assets\/audio\/note-e2e\.m4a\)/);
     await expectAccessible(page, 'the minutes of a meeting');
 

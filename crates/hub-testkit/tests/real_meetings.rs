@@ -463,6 +463,10 @@ b"}"#,
     let lower = head.to_ascii_lowercase();
     assert!(lower.contains("content-type: image/png"), "{head}");
     assert!(lower.contains("x-content-type-options: nosniff"), "{head}");
+    assert!(
+        lower.contains("content-disposition: inline; filename=\"thumb.png\""),
+        "{head}"
+    );
     let small = image::load_from_memory_with_format(&png, image::ImageFormat::Png).unwrap();
     assert_eq!(
         (small.width(), small.height()),
@@ -508,7 +512,7 @@ b"}"#,
                     ("Content-Type", "application/octet-stream"),
                     ("X-Upload-Name", name),
                 ],
-                "bytes",
+                hub_testkit::media::body_for(name),
             )
             .await
             .unwrap();
@@ -681,7 +685,7 @@ async fn a_paired_phone_puts_a_photo_and_a_voice_note_into_a_meeting_but_nothing
                     ("Content-Type", "application/octet-stream"),
                     ("X-Upload-Name", name),
                 ],
-                "bytes",
+                hub_testkit::media::body_for(name),
             )
             .await
             .unwrap();

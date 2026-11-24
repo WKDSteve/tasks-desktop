@@ -115,6 +115,9 @@ pub(super) async fn repo_image(
         HeaderValue::from_static("default-src 'none'; style-src 'unsafe-inline'; sandbox"),
     );
     headers.insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+    let ext = image.content_type.rsplit('/').next().unwrap_or("png");
+    let ext = ext.split('+').next().unwrap_or(ext);
+    super::meetings::inline_named(headers, &format!("repo-image.{ext}"));
     response
 }
 

@@ -11,6 +11,7 @@
 pub mod dialect;
 pub mod documents;
 pub mod engine_home;
+pub mod media;
 pub mod patient;
 pub mod scratch;
 pub mod subjects;

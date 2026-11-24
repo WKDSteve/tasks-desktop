@@ -26,7 +26,7 @@ pub async fn request(
     method: &str,
     path: &str,
     headers: &[(&str, &str)],
-    body: &str,
+    body: impl AsRef<[u8]>,
 ) -> io::Result<Reply> {
     request_within(TIMEOUT, port, method, path, headers, body).await
 }
@@ -42,19 +42,22 @@ pub async fn request_within(
     method: &str,
     path: &str,
     headers: &[(&str, &str)],
-    body: &str,
+    body: impl AsRef<[u8]>,
 ) -> io::Result<Reply> {
+    let body = body.as_ref();
     let mut text = format!("{method} {path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n");
     for (name, value) in headers {
         text.push_str(&format!("{name}: {value}\r\n"));
     }
     text.push_str(&format!(
-        "Content-Length: {}\r\nConnection: close\r\n\r\n{body}",
+        "Content-Length: {}\r\nConnection: close\r\n\r\n",
         body.len()
     ));
+    let mut sent = text.into_bytes();
+    sent.extend_from_slice(body);
     let exchange = async {
         let mut stream = TcpStream::connect(("127.0.0.1", port)).await?;
-        stream.write_all(text.as_bytes()).await?;
+        stream.write_all(&sent).await?;
         let mut buf = Vec::new();
         let mut chunk = [0u8; 4096];
         loop {
