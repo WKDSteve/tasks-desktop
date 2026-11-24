@@ -347,9 +347,6 @@ async fn a_phone_reaches_the_routes_of_the_phone_page_and_nothing_else() {
         ),
         ("POST", "/api/tasks/meeting_parse"),
         ("POST", "/api/tasks/board"),
-        // a contact is a person of a third party: the list and the document stay on the PC
-        ("GET", "/api/tasks/contacts"),
-        ("GET", "/api/tasks/contact?id=alpha.nvim/rick"),
         ("GET", "/api/tasks/hello-not-a-route"),
     ] {
         let (status, doc) = r.send(method, path, &phone, r#"{"name":"main"}"#).await;
@@ -395,9 +392,11 @@ async fn ops_takes_from_a_phone_only_what_the_phone_page_sends_at_its_level() {
         json!({ "op": "view_delete", "name": "v" }),
         json!({ "op": "meeting_new", "area": "alpha.nvim", "title": "m", "fields": { "date": "2026-11-24" } }),
         json!({ "op": "meeting_close", "id": "alpha.nvim/m1" }),
-        json!({ "op": "contact_new", "area": "alpha.nvim", "name": "Rick" }),
-        json!({ "op": "contact_set", "id": "alpha.nvim/rick", "patch": { "role": "x" } }),
-        json!({ "op": "contact_delete", "id": "alpha.nvim/rick" }),
+        // a contact with a field a phone has no form for, or one it may not send
+        json!({ "op": "contact_new", "area": "gamma.nvim", "name": "Rick", "fields": { "file": "x" } }),
+        json!({ "op": "contact_set", "id": "gamma.nvim/rick", "patch": { "type": "x" } }),
+        json!({ "op": "contact_set", "id": "gamma.nvim/rick", "patch": {} }),
+        json!({ "op": "contact_delete", "id": "gamma.nvim/rick", "by": "x" }),
         json!({ "op": "promote", "container": "alpha.nvim/p1", "point": "a" }),
         json!({ "op": "unpromote", "container": "alpha.nvim/p1", "point": "a" }),
     ];
@@ -452,6 +451,171 @@ async fn ops_takes_from_a_phone_only_what_the_phone_page_sends_at_its_level() {
     let pc = r.pc().await;
     let (status, doc) = r.op(&pc, &others[1]).await;
     assert_eq!(status, 200, "{doc}");
+}
+
+/// The contacts reach a phone cut (MOB-02, decided 2026-11-24): those of released areas; the mail addresses, numbers and
+/// text only where the people are released (`public`, or `internal` with `meetings.internal_people`), never those of a
+/// private or unclassified area. A phone writes a contact only there, at `create` (new) or `change` (set, delete), and
+/// no field the form has no place for; no answer names an address or a number.
+#[tokio::test]
+async fn a_phone_reads_the_contacts_of_released_areas_and_writes_them_only_where_their_data_is_released(
+) {
+    let _one = ONE_AT_A_TIME.lock().await;
+    let entry = |area: &str| {
+        json!({ "id": format!("{area}/rick"), "area": area, "slug": "rick", "name": "Rick", "org": "ACME",
+                "emails": ["rick@example.org"], "phones": ["+49 170 1234567"], "tags": ["a"],
+                "summary": "Reach me at rick-private@example.org", "file": format!("E:/v/{area}/CONTACTS/rick.md"),
+                "etag": "e1", "valid": true, "problems": [] })
+    };
+    let list = json!({ "items": [entry("alpha.nvim"), entry("gamma.nvim"), entry("secret-area"), entry("beta.nvim")],
+                       "total": 4, "incomplete": [] });
+    let one = |area: &str| {
+        json!({ "contact": entry(area), "body": "Text rick-body@example.org", "notes": "note +49 170 1234567",
+                "history": [ { "id": "alpha.nvim/m1", "title": "Open", "present": true },
+                             { "id": "secret-area/m9", "title": "Hidden", "present": true } ] })
+    };
+    let new = |area: &str| json!({ "op": "contact_new", "area": area, "name": "Rick", "fields": { "emails": ["a@b.de"] } });
+    let set = |id: &str| json!({ "op": "contact_set", "id": id, "patch": { "role": "x", "phones": ["1"] } });
+    let delete = |id: &str| json!({ "op": "contact_delete", "id": id });
+
+    // Without the setting: public with its data, internal by name only, nothing of private and unclassified.
+    let r = Rig::new("contacts-off").await;
+    r.merge("contacts", &list);
+    let (device, phone) = r.phone().await;
+    let (status, doc) = r.send("GET", "/api/tasks/contacts", &phone, "").await;
+    assert_eq!(status, 200, "{doc}");
+    let ids: Vec<&str> = doc["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|e| e["id"].as_str().unwrap())
+        .collect();
+    assert_eq!(ids, ["alpha.nvim/rick", "gamma.nvim/rick"], "{doc}");
+    assert_eq!(doc["items"][0].get("emails"), None, "{doc}");
+    assert_eq!(doc["items"][0].get("phones"), None, "{doc}");
+    assert_eq!(doc["items"][0].get("summary"), None, "{doc}");
+    assert_eq!(doc["items"][0]["name"], "Rick");
+    assert_eq!(
+        doc["items"][1]["emails"],
+        json!(["rick@example.org"]),
+        "{doc}"
+    );
+    for word in ["secret-area", "beta.nvim", "E:/", "\"total\""] {
+        assert!(!doc.to_string().contains(word), "{word} in {doc}");
+    }
+    assert!(
+        !doc["items"][0].to_string().contains("example.org"),
+        "{doc}"
+    );
+    r.merge("contact", &one("alpha.nvim"));
+    let (status, doc) = r
+        .send("GET", "/api/tasks/contact?id=alpha.nvim/rick", &phone, "")
+        .await;
+    assert_eq!(status, 200, "{doc}");
+    assert_eq!(
+        (doc["notes"].clone(), doc["body"].clone()),
+        (json!(""), json!("")),
+        "{doc}"
+    );
+    for word in ["example.org", "1234567", "Hidden", "secret-area", "E:/"] {
+        assert!(!doc.to_string().contains(word), "{word} in {doc}");
+    }
+    assert_eq!(doc["history"].as_array().unwrap().len(), 1, "{doc}");
+    r.merge("contact", &one("gamma.nvim"));
+    let (status, doc) = r
+        .send("GET", "/api/tasks/contact?id=gamma.nvim/rick", &phone, "")
+        .await;
+    assert_eq!(status, 200, "{doc}");
+    assert!(doc["notes"].as_str().unwrap().contains("1234567"), "{doc}");
+    for id in ["secret-area/rick", "beta.nvim/rick"] {
+        let path = format!("/api/tasks/contact?id={id}");
+        let (status, doc) = r.send("GET", &path, &phone, "").await;
+        assert_eq!(
+            (status, doc["error"]["code"].clone()),
+            (404, json!("not_found")),
+            "{id} {doc}"
+        );
+    }
+    // Writes: public yes, internal no (its data is not released), private and unclassified are not there.
+    for op in [
+        new("gamma.nvim"),
+        set("gamma.nvim/rick"),
+        delete("gamma.nvim/rick"),
+    ] {
+        let (status, doc) = r.op(&phone, &op).await;
+        assert_eq!(status, 200, "{op}: {doc}");
+        let text = doc.to_string();
+        assert!(!text.contains('@') && !text.contains("1234567"), "{text}");
+    }
+    for op in [
+        new("alpha.nvim"),
+        set("alpha.nvim/rick"),
+        delete("alpha.nvim/rick"),
+    ] {
+        let (status, doc) = r.op(&phone, &op).await;
+        assert!(
+            refused(status, &doc, "not_for_devices"),
+            "{op}: {status} {doc}"
+        );
+    }
+    for op in [
+        new("secret-area"),
+        set("secret-area/rick"),
+        delete("beta.nvim/rick"),
+        new("beta.nvim"),
+    ] {
+        let (status, doc) = r.op(&phone, &op).await;
+        assert_eq!(status, 404, "{op}: {doc}");
+    }
+    // Levels: new creates, set and delete change, a read-only phone writes none.
+    r.set_level(&device, "create").await;
+    let (status, doc) = r.op(&phone, &new("gamma.nvim")).await;
+    assert_eq!(status, 200, "{doc}");
+    for op in [set("gamma.nvim/rick"), delete("gamma.nvim/rick")] {
+        let (status, doc) = r.op(&phone, &op).await;
+        assert!(
+            refused(status, &doc, "level_too_low"),
+            "{op}: {status} {doc}"
+        );
+    }
+    r.set_level(&device, "read").await;
+    let (status, doc) = r.op(&phone, &new("gamma.nvim")).await;
+    assert!(refused(status, &doc, "level_too_low"), "{status} {doc}");
+    let (status, _) = r.send("GET", "/api/tasks/contacts", &phone, "").await;
+    assert_eq!(status, 200);
+    // The PC gets the documents as the engine wrote them.
+    let pc = r.pc().await;
+    let (_, doc) = r.send("GET", "/api/tasks/contacts", &pc, "").await;
+    assert_eq!(doc["items"].as_array().unwrap().len(), 4, "{doc}");
+    drop(r);
+
+    // With the setting: the internal area gives and takes its data too; a private one still nothing.
+    let r = Rig::with_internal_people("contacts-on").await;
+    r.merge("contacts", &list);
+    r.merge("contact", &one("alpha.nvim"));
+    let (_, phone) = r.phone().await;
+    let (_, doc) = r.send("GET", "/api/tasks/contacts", &phone, "").await;
+    assert_eq!(
+        doc["items"][0]["emails"],
+        json!(["rick@example.org"]),
+        "{doc}"
+    );
+    assert_eq!(doc["items"].as_array().unwrap().len(), 2, "{doc}");
+    let (status, doc) = r
+        .send("GET", "/api/tasks/contact?id=alpha.nvim/rick", &phone, "")
+        .await;
+    assert_eq!(status, 200, "{doc}");
+    assert!(doc["notes"].as_str().unwrap().contains("1234567"), "{doc}");
+    for op in [
+        new("alpha.nvim"),
+        set("alpha.nvim/rick"),
+        delete("alpha.nvim/rick"),
+    ] {
+        let (status, doc) = r.op(&phone, &op).await;
+        assert_eq!(status, 200, "{op}: {doc}");
+    }
+    let (status, doc) = r.op(&phone, &new("secret-area")).await;
+    assert_eq!(status, 404, "{doc}");
 }
 
 #[tokio::test]

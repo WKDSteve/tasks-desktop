@@ -3,8 +3,10 @@
 //!
 //! A contact is a person of a third party: a mail address and a phone number are theirs. The documents of the engine
 //! are passed on as it wrote them (it names no address and no number in any message), the page draws them and computes
-//! nothing (WEB-13). A paired phone gets none of it: the routes are no device routes (fail closed, MOB-02), and the
-//! operations `contact_new`, `contact_set` and `contact_delete` have no level for a device (`device_op_level`). The
+//! nothing (WEB-13). A paired phone gets them cut (`device_cut::contacts`, `device_cut::contact`, MOB-02): only
+//! contacts of released areas, their mail addresses, numbers and text only where the data is released (a `public` area,
+//! an `internal` one with the settings' `meetings.internal_people`). The operations `contact_new`, `contact_set` and
+//! `contact_delete` are done by a phone only there, at `create` or `change` (`device_op_level`, `device_refusal`). The
 //! writes go through `ops`.
 
 use super::*;
@@ -49,12 +51,24 @@ pub(super) fn contacts_request(query: Option<&str>) -> Result<serde_json::Value,
 
 /// `GET /api/tasks/contacts?area=&limit=&offset=`: the contacts by name, one page (`tasks.contacts`). Asked each time:
 /// the state of the vault (the `rev` of the snapshot) is over the tasks, a contact written would come back as it was.
-pub(super) async fn contacts(State(st): State<Arc<Shared>>, RawQuery(query): RawQuery) -> Response {
+pub(super) async fn contacts(
+    State(st): State<Arc<Shared>>,
+    caller: Option<axum::Extension<Caller>>,
+    RawQuery(query): RawQuery,
+) -> Response {
     let request = match contacts_request(query.as_deref()) {
         Ok(r) => r,
         Err(why) => return bad_query(why),
     };
-    match ask(&st, Calls::Contacts, Some(&request)).await {
+    let device = is_device(caller.as_deref());
+    match ask_as(&st, device, Calls::Contacts, Some(&request)).await {
+        // A phone gets the contacts of the released areas, cut (`device_cut::contacts`, MOB-02).
+        Ok(reply) if device => {
+            let doc = serde_json::from_str::<serde_json::Value>(&reply.text).unwrap_or_default();
+            let cut =
+                device_cut::contacts(&st.rt().classes, &doc, super::meetings::release_of(&st));
+            json_response(StatusCode::OK, cut.to_string(), None)
+        }
         Ok(reply) => json_response(StatusCode::OK, reply.text, None),
         Err(response) => response,
     }
@@ -71,12 +85,32 @@ pub(super) fn contact_id(query: Option<&str>) -> Result<String, &'static str> {
 }
 
 /// `GET /api/tasks/contact?id=<area>/<slug>`: one contact with its text and its notes (`tasks.contact`).
-pub(super) async fn contact(State(st): State<Arc<Shared>>, RawQuery(query): RawQuery) -> Response {
+pub(super) async fn contact(
+    State(st): State<Arc<Shared>>,
+    caller: Option<axum::Extension<Caller>>,
+    RawQuery(query): RawQuery,
+) -> Response {
     let id = match contact_id(query.as_deref()) {
         Ok(id) => id,
         Err(why) => return error_body(StatusCode::BAD_REQUEST, "bad_id", why),
     };
-    match ask(&st, Calls::Contact, Some(&json!({ "id": id }))).await {
+    let device = is_device(caller.as_deref());
+    // Not even asked for a contact a phone may not see: the engine's answer would tell whether it is there.
+    if device && !device_cut::released_id(&st.rt().classes, &id) {
+        return not_found();
+    }
+    match ask_as(&st, device, Calls::Contact, Some(&json!({ "id": id }))).await {
+        Ok(reply) if device => {
+            let cut = serde_json::from_str::<serde_json::Value>(&reply.text)
+                .ok()
+                .and_then(|doc| {
+                    device_cut::contact(&st.rt().classes, &doc, super::meetings::release_of(&st))
+                });
+            match cut {
+                Some(doc) => json_response(StatusCode::OK, doc.to_string(), None),
+                None => not_found(),
+            }
+        }
         Ok(reply) => json_response(StatusCode::OK, reply.text, None),
         Err(response) => response,
     }

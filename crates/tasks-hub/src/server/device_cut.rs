@@ -498,7 +498,7 @@ pub(crate) fn result(classes: &AreaPolicy, doc: &Value, released_plans: &[String
 /// The area an operation of `ops` touches: the area of its task, or the area a new task goes to.
 pub(crate) fn op_area(op: &Value) -> Option<&str> {
     match op["op"].as_str() {
-        Some("new") => op["area"].as_str(),
+        Some("new" | "contact_new") => op["area"].as_str(),
         _ => op["id"].as_str().and_then(area_of),
     }
 }
@@ -1098,6 +1098,109 @@ pub(crate) fn meeting(classes: &AreaPolicy, doc: &Value, release: Release) -> Op
         })
         .collect();
     out.insert("followups".to_owned(), Value::Array(followups));
+    Some(Value::Object(out))
+}
+
+/// The fields of a contact entry a phone is given when the people are released: the person and how to reach them. Not
+/// its `file` (a path of the vault), nor its `problems` and `assets`.
+const CONTACT_FIELDS: &[&str] = &[
+    "id", "area", "slug", "name", "org", "role", "emails", "phones", "tz", "tags", "summary",
+    "created", "updated", "etag", "valid",
+];
+
+/// What stays when the people are not released: who the person is, never a mail address or a number (the `summary`, the
+/// first paragraph of the text, may hold one).
+const CONTACT_FIELDS_NO_ADDRESS: &[&str] = &[
+    "id", "area", "slug", "name", "org", "role", "tz", "tags", "created", "updated", "etag",
+    "valid",
+];
+
+/// Whether the mail addresses, the numbers and the text of the contacts of `area` may reach a phone, and the phone may
+/// write them: as the people of a meeting (`meeting_people`, the settings' `meetings.internal_people` for an internal
+/// area). Fail closed.
+pub(crate) fn contact_data(classes: &AreaPolicy, area: &str, release: Release) -> bool {
+    meeting_people(classes, area, release)
+}
+
+/// A contact entry for a phone, or `None` when the contact is not of a released area.
+pub(crate) fn contact_entry(
+    classes: &AreaPolicy,
+    entry: &Value,
+    release: Release,
+) -> Option<Value> {
+    let id = entry["id"].as_str()?;
+    let area = area_of(id)?;
+    if !released(classes, area) || entry["area"].as_str() != Some(area) {
+        return None;
+    }
+    let fields = if contact_data(classes, area, release) {
+        CONTACT_FIELDS
+    } else {
+        CONTACT_FIELDS_NO_ADDRESS
+    };
+    Some(Value::Object(copy(entry, fields)))
+}
+
+/// `tasks.contacts` for a phone: the contacts of released areas. No count over the vault; `partial` says that the page
+/// held more than this one or that an area could not be read.
+pub(crate) fn contacts(classes: &AreaPolicy, doc: &Value, release: Release) -> Value {
+    let mut out = copy(doc, &["kind", "schema", "plugin", "engine", "generated_at"]);
+    let items: Vec<Value> = doc["items"]
+        .as_array()
+        .map_or(&[][..], Vec::as_slice)
+        .iter()
+        .filter_map(|entry| contact_entry(classes, entry, release))
+        .collect();
+    out.insert("items".to_owned(), Value::Array(items));
+    let partial = doc.get("next_offset").is_some_and(|n| !n.is_null())
+        || doc["incomplete"]
+            .as_array()
+            .is_some_and(|list| !list.is_empty());
+    out.insert("partial".to_owned(), Value::Bool(partial));
+    Value::Object(out)
+}
+
+/// `tasks.contact` for a phone, or `None` (the hub answers `not_found`) when the contact is not of a released area. Its
+/// text and notes only where the data is released; its meetings only those of released areas.
+pub(crate) fn contact(classes: &AreaPolicy, doc: &Value, release: Release) -> Option<Value> {
+    let entry = contact_entry(classes, &doc["contact"], release)?;
+    let area = area_of(entry["id"].as_str()?)?.to_owned();
+    let mut out = copy(
+        doc,
+        &[
+            "kind",
+            "schema",
+            "plugin",
+            "engine",
+            "generated_at",
+            "body_truncated",
+        ],
+    );
+    out.insert("contact".to_owned(), entry);
+    if contact_data(classes, &area, release) {
+        for field in ["body", "notes"] {
+            out.insert(
+                field.to_owned(),
+                json_str(doc[field].as_str().unwrap_or("")),
+            );
+        }
+    } else {
+        out.insert("body".to_owned(), json_str(""));
+        out.insert("notes".to_owned(), json_str(""));
+    }
+    let history: Vec<Value> = doc["history"]
+        .as_array()
+        .map_or(&[][..], Vec::as_slice)
+        .iter()
+        .filter(|h| h["id"].as_str().is_some_and(|id| released_id(classes, id)))
+        .map(|h| {
+            Value::Object(copy(
+                h,
+                &["id", "title", "status", "date", "starts_at", "present"],
+            ))
+        })
+        .collect();
+    out.insert("history".to_owned(), Value::Array(history));
     Some(Value::Object(out))
 }
 

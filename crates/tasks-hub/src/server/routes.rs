@@ -565,7 +565,7 @@ pub(super) const OPS_ALLOWED: [&str; 36] = [
     "meeting_capture",
     "meeting_attend",
     "meeting_followups",
-    // the contacts (capabilities `contacts`, `contact`); not for devices: a contact is a person of a third party
+    // the contacts (capabilities `contacts`, `contact`); a phone does them only where their data is released (`device_refusal`)
     "contact_new",
     "contact_set",
     "contact_delete",
@@ -2740,6 +2740,9 @@ pub(super) fn guard_rules() -> GuardRules {
     // The meetings of the released areas, cut for a phone (`device_cut::meetings`, `device_cut::meeting`).
     .with_device_route(crate::IDENTITY.route("meetings"), Level::Read)
     .with_device_route(crate::IDENTITY.route("meeting"), Level::Read)
+    // The contacts of the released areas, cut for a phone (`device_cut::contacts`, `device_cut::contact`).
+    .with_device_route(crate::IDENTITY.route("contacts"), Level::Read)
+    .with_device_route(crate::IDENTITY.route("contact"), Level::Read)
     .with_device_route(crate::IDENTITY.route("path"), Level::Read)
     // The page Lernen of the phone: the next steps and the series of the released areas (`learn::read_for`).
     .with_device_route(crate::IDENTITY.route("learn_next"), Level::Read)
@@ -2756,9 +2759,10 @@ pub(super) fn guard_rules() -> GuardRules {
 /// task to another area, the text of a task) the phone page does not offer.
 pub(super) fn device_op_level(op: &str) -> Option<Level> {
     match op {
-        "new" | "answer" => Some(Level::Create),
+        "new" | "answer" | "contact_new" => Some(Level::Create),
         // A participant ticked present: only where the people of the meeting may reach the phone (`device_refusal`).
-        "set" | "done" | "node_set" | "meeting_capture" | "meeting_attend" => Some(Level::Change),
+        "set" | "done" | "node_set" | "meeting_capture" | "meeting_attend" | "contact_set"
+        | "contact_delete" => Some(Level::Change),
         _ => None,
     }
 }
@@ -2780,9 +2784,16 @@ pub(super) fn device_op_fields(op: &str) -> &'static [&'static str] {
         "meeting_capture" => &["op", "id", "entry"],
         // A participant ticked present or not, by number or by name.
         "meeting_attend" => &["op", "id", "n", "name", "present", "if_match"],
+        // A contact written on the phone: only where the data of the contacts is released (`device_refusal`).
+        "contact_new" => &["op", "area", "name", "fields", "body", "slug", "lang"],
+        "contact_set" => &["op", "id", "patch", "if_match"],
+        "contact_delete" => &["op", "id", "if_match"],
         _ => &[],
     }
 }
+
+/// The frontmatter fields of a contact a device may write (what the form of tasks-mobile has).
+const DEVICE_CONTACT_FIELDS: [&str; 6] = ["org", "role", "emails", "phones", "tz", "tags"];
 
 /// What a device may set through `set`: the status, nothing else.
 pub(super) const DEVICE_PATCH_FIELDS: [&str; 1] = ["status"];
@@ -2799,6 +2810,26 @@ pub(super) fn device_op_shape(op: &serde_json::Value) -> bool {
     let fields = device_op_fields(name);
     if !map.keys().all(|k| fields.contains(&k.as_str())) {
         return false;
+    }
+    // A contact: the name and the fields of the form, nothing else (no `type`, no id by hand).
+    if name == "contact_set" {
+        return map
+            .get("patch")
+            .and_then(serde_json::Value::as_object)
+            .is_some_and(|p| {
+                !p.is_empty()
+                    && p.keys()
+                        .all(|k| k == "name" || DEVICE_CONTACT_FIELDS.contains(&k.as_str()))
+            });
+    }
+    if name == "contact_new" {
+        return map
+            .get("fields")
+            .and_then(serde_json::Value::as_object)
+            .is_none_or(|f| {
+                f.keys()
+                    .all(|k| DEVICE_CONTACT_FIELDS.contains(&k.as_str()))
+            });
     }
     if name == "meeting_capture" {
         return map
@@ -2913,6 +2944,19 @@ fn device_refusal(
                 StatusCode::FORBIDDEN,
                 "not_for_devices",
                 "the people of this meeting are not released for devices",
+            ));
+        }
+        // A contact is written only where its data is released (public; internal with `meetings.internal_people`):
+        // its result and its undo hold the old addresses and numbers (fail closed).
+        if op["op"].as_str().is_some_and(|o| o.starts_with("contact_"))
+            && !area.is_some_and(|area| {
+                device_cut::contact_data(&st.rt().classes, area, super::meetings::release_of(st))
+            })
+        {
+            return Some(error_body(
+                StatusCode::FORBIDDEN,
+                "not_for_devices",
+                "the contacts of this area are not released for devices",
             ));
         }
     }
