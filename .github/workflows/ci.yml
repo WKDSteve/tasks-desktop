@@ -331,6 +331,10 @@ jobs:
       # A colour the CSS of the page states is a token of appkit-ui (the same check runs in appkit).
       - if: ${{ !cancelled() }}
         run: python tools/check-color-literals.py --root ui/src --tokens ui/src/palette.css
+      # A key that comes from data is no property name: no `name in object`, no assignment into a plain record by a
+      # computed key (`__proto__`, `constructor`); tools/own-keys.allow names what may, with the reason.
+      - if: ${{ !cancelled() }}
+        run: python tools/check-own-keys.py --root ui/src
       # The shell scripts of the repository (NREL-16): ShellCheck is on the runner (`scoop install shellcheck`).
       - if: ${{ !cancelled() }}
         run: shellcheck scripts/*.sh

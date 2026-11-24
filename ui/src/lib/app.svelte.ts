@@ -4225,7 +4225,7 @@ export class App {
   /** Whether any task has unsaved changes (the page asks before it is closed). */
   get hasDrafts(): boolean {
     // A draft of a task that is not in the list any more (finished, removed outside) cannot be saved: not asked about.
-    return this.saveMode === 'manual' && this.tasks.some((t) => t.id in this.drafts);
+    return this.saveMode === 'manual' && this.tasks.some((t) => Object.hasOwn(this.drafts, t.id));
   }
 
   /**
@@ -4294,7 +4294,7 @@ export class App {
     const patch = { ...this.draftOf(id) };
     const task = this.tasks.find((t) => t.id === id);
     if (!task || Object.keys(patch).length === 0) return false;
-    const base = id in this.draftBase ? this.draftBase[id] : task.etag;
+    const base = Object.hasOwn(this.draftBase, id) ? this.draftBase[id] : task.etag;
     // The entries of the conflict center now: a refusal of this save adds one (or replaces the one of the same change).
     const conflictsBefore = new Set(this.conflicts);
     const result = await this.write([{ op: 'set', id, patch, ...(base ? { if_match: base } : {}) }]);
@@ -4306,7 +4306,7 @@ export class App {
       return false;
     }
     // What was saved is not a draft any more; a field changed again while the write was under way stays one.
-    this.setDraft(id, Object.fromEntries(Object.entries(this.draftOf(id)).filter(([k, v]) => !(k in patch) || !sameField(v, patch[k] ?? null))));
+    this.setDraft(id, Object.fromEntries(Object.entries(this.draftOf(id)).filter(([k, v]) => !Object.hasOwn(patch, k) || !sameField(v, patch[k] ?? null))));
     return true;
   }
 

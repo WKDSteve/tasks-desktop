@@ -107,5 +107,5 @@ export function isLearnTimeKey(key: string): key is LearnTimeKey {
 /** A word of the view; `{h=N}` and the like in a text stay as written (only the named values are put in). */
 export function learnTimeText(lang: Lang, key: LearnTimeKey, params: Record<string, string | number> = {}): string {
   const text: string = lang === 'de' ? DE[key] : EN[key];
-  return text.replace(/\{(\w+)\}/g, (all, k: string) => (k in params ? String(params[k]) : all));
+  return text.replace(/\{(\w+)\}/g, (all, k: string) => (Object.hasOwn(params, k) ? String(params[k]) : all));
 }

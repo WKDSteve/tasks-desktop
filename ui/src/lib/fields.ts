@@ -87,7 +87,8 @@ const isRow = (r: unknown): r is ScaffoldRow => {
 };
 
 function rowsByWord(given: unknown): Record<string, readonly ScaffoldRow[]> {
-  const out: Record<string, readonly ScaffoldRow[]> = {};
+  // A word of the hub's answer is a plain key, `__proto__` too: the record has no prototype.
+  const out: Record<string, readonly ScaffoldRow[]> = Object.create(null);
   if (given === null || typeof given !== 'object' || Array.isArray(given)) return out;
   for (const [word, rows] of Object.entries(given as Record<string, unknown>)) {
     if (word.length <= 40 && Array.isArray(rows) && rows.length <= MOST && rows.every(isRow)) out[word] = rows;

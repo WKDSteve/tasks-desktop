@@ -167,8 +167,9 @@ export function askFor(areas: readonly string[]): { areas: (string | undefined)[
 }
 
 const addMaps = (a: Record<string, number> | undefined, b: Record<string, number> | undefined): Record<string, number> => {
-  const out: Record<string, number> = { ...(a ?? {}) };
-  for (const [key, n] of Object.entries(b ?? {})) out[key] = (out[key] ?? 0) + n;
+  // The keys are values of tasks: no prototype, so `__proto__` is a plain key.
+  const out: Record<string, number> = Object.create(null);
+  for (const map of [a, b]) for (const [key, n] of Object.entries(map ?? {})) out[key] = (out[key] ?? 0) + n;
   return out;
 };
 

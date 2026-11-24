@@ -136,8 +136,13 @@ pub(super) async fn board(
             "ink and svg are the texts of the board and its preview",
         );
     };
-    if ink.is_empty() || !svg.trim_start().starts_with("<svg") {
-        return bad("bad_board", "ink is the board, svg an SVG of it");
+    // The format is the engine's to judge; the hub only holds that the board is a JSON object, not some other text.
+    let ink_is_object = serde_json::from_str::<serde_json::Value>(ink).is_ok_and(|v| v.is_object());
+    if !ink_is_object || !svg.trim_start().starts_with("<svg") {
+        return bad(
+            "bad_board",
+            "ink is the board as a JSON object, svg an SVG of it",
+        );
     }
     if !st.post_limit.allow() {
         return too_many();

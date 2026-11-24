@@ -191,6 +191,20 @@ describe('the histories of several areas', () => {
     expect(sum?.points[1]?.by_status).toMatchObject({ doing: 2, open: 5 });
   });
 
+  it('add the counts of a status called __proto__ like any other', () => {
+    const odd = (text: string) => {
+      const point = level('2026-01-02', 1, 1);
+      point.by_status = JSON.parse(text) as typeof point.by_status;
+      return doc([point]);
+    };
+    // The word is only in the second area: it is then a new key of the sum, not an assignment to the prototype.
+    const sum = sumHistories([odd('{ "open": 1 }'), odd('{ "__proto__": 3, "open": 1 }')]);
+    const by = sum?.points[0]?.by_status as Record<string, number>;
+    expect(Object.hasOwn(by, '__proto__')).toBe(true);
+    expect(by['__proto__']).toBe(3);
+    expect(by['open']).toBe(2);
+  });
+
   it('leave the documents they were made of as they were', () => {
     const a = doc([level('2026-01-02', 4, 2)]);
     const b = doc([level('2026-01-02', 3, 3)]);

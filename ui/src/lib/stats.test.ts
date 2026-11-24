@@ -26,6 +26,21 @@ describe('the stack of a task', () => {
   });
 });
 
+describe('the statistics with a value that is the name of a property of every object', () => {
+  it('count a tag called __proto__ and constructor like any other', () => {
+    const odd = [
+      task('a/p1', { tags: ['__proto__', 'constructor'] }),
+      task('a/p2', { tags: ['__proto__'] }),
+    ];
+    const stats = statsOf(odd, 'tag');
+    expect(Object.hasOwn(stats.totals, '__proto__')).toBe(true);
+    expect(stats.totals['__proto__']).toBe(2);
+    expect(stats.totals['constructor']).toBe(1);
+    expect(stats.rows[0]?.counts['__proto__']).toBe(2);
+    expect(stats.buckets).toEqual(expect.arrayContaining(['__proto__', 'constructor']));
+  });
+});
+
 describe('the statistics', () => {
   it('count every task once: the rows and the stacks add up to the tasks', () => {
     for (const dim of STAT_DIMS) {

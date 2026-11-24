@@ -15,7 +15,7 @@ export interface ChunkTexts<K extends string> {
 }
 
 const fill = (text: string, params: Record<string, string | number>): string =>
-  text.replace(/\{(\w+)\}/g, (all, k: string) => (k in params ? String(params[k]) : all));
+  text.replace(/\{(\w+)\}/g, (all, k: string) => (Object.hasOwn(params, k) ? String(params[k]) : all));
 
 /** German must name every key English names (the type says so). */
 export function chunkTexts<K extends string>(en: Record<K, string>, de: Record<K, string>): ChunkTexts<K> {

@@ -191,5 +191,5 @@ export function isContactsKey(key: string): key is ContactsKey {
 /** A word of the views of the contacts. */
 export function contactsText(lang: Lang, key: ContactsKey, params: Record<string, string | number> = {}): string {
   const text: string = lang === 'de' ? DE[key] : EN[key];
-  return text.replace(/\{(\w+)\}/g, (all, k: string) => (k in params ? String(params[k]) : all));
+  return text.replace(/\{(\w+)\}/g, (all, k: string) => (Object.hasOwn(params, k) ? String(params[k]) : all));
 }

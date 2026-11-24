@@ -1,0 +1,10 @@
+# Places the check for foreign keys lets by, each with the reason the key can never be `__proto__` or `constructor`.
+ui/src/lib/app.svelte.ts:seen the key is the id of a learning point (area/slug), it has a slash
+ui/src/lib/contacts.ts:out the keys are the fixed fields of a contact form
+ui/src/lib/contacts.ts:patch the keys are the fixed fields of a contact form
+ui/src/lib/filter.ts:out the keys are the fixed fields of the filter
+ui/src/lib/minutes.ts:out the keys are task ids (area/slug), they have a slash
+ui/src/lib/repos.ts:repos the key matches the id pattern of 8 lowercase letters or digits, checked before
+ui/src/views/ProjectPage.svelte:next the keys are plan ids (area/slug), they have a slash
+ui/src/web/hub.ts:params the keys come from a fixed list of query names
+ui/src/lib/app.svelte.ts:in the words 'in the' sit in a regular expression, no operator

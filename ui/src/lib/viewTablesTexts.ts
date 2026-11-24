@@ -42,7 +42,7 @@ const DE: Record<keyof typeof EN, string> = {
 /** The word of an export entry for tables, or undefined where the page's word stands (it names no tasks). */
 export function tablesLabel(lang: Lang, key: string, params: Record<string, string | number> = {}): string | undefined {
   const text = ((lang === 'de' ? DE : EN) as Record<string, string | undefined>)[key];
-  return text?.replace(/\{(\w+)\}/g, (all, k: string) => (k in params ? String(params[k]) : all));
+  return text?.replace(/\{(\w+)\}/g, (all, k: string) => (Object.hasOwn(params, k) ? String(params[k]) : all));
 }
 
 /** Every key, for the tests (both languages name the same). */

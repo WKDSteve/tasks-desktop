@@ -967,6 +967,19 @@ async fn a_board_is_saved_replaced_on_its_version_and_read_back_through_the_hub(
             json!({ "id": id, "name": "a", "ink": ink, "svg": "<html/>" }),
             "bad_board",
         ),
+        // The board is a JSON object: a word, a list, a number or a broken text is none.
+        (
+            json!({ "id": id, "name": "a", "ink": "not json", "svg": svg }),
+            "bad_board",
+        ),
+        (
+            json!({ "id": id, "name": "a", "ink": "[1]", "svg": svg }),
+            "bad_board",
+        ),
+        (
+            json!({ "id": id, "name": "a", "ink": "{\"schema\":", "svg": svg }),
+            "bad_board",
+        ),
     ] {
         let (status, doc) = save(body.clone()).await;
         assert_eq!(

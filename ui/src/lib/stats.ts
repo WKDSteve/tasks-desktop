@@ -176,11 +176,12 @@ export function statsOf(
 ): Stats {
   const c = cut(of);
   const rows = new Map<string, StatRow>();
-  const totals: Record<string, number> = {};
+  // A bucket is a value of a task (a tag, a category): a plain key, `__proto__` too, so no prototype.
+  const totals: Record<string, number> = Object.create(null);
   for (const task of tasks) {
     let row = rows.get(task.area);
     if (!row) {
-      row = { area: task.area, total: 0, counts: {} };
+      row = { area: task.area, total: 0, counts: Object.create(null) };
       rows.set(task.area, row);
     }
     row.total += 1;

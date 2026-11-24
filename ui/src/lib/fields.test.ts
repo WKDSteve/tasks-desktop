@@ -18,6 +18,17 @@ describe('a category that comes from the kind or a tag', () => {
   });
 });
 
+describe('the scaffold of the hub', () => {
+  it('keeps a word called __proto__ as a word of its own', () => {
+    const rows = [{ id: 'x', de: 'X', en: 'X' }];
+    const given = { kind: JSON.parse('{ "__proto__": [{ "id": "x", "de": "X", "en": "X" }], "bug": [] }'), category: {}, scope: {} };
+    const kind = scaffoldOf(given).kind;
+    expect(Object.hasOwn(kind, '__proto__')).toBe(true);
+    expect(kind['__proto__']).toEqual(rows);
+    expect(Object.hasOwn(kind, 'bug')).toBe(true);
+  });
+});
+
 describe('the title of a task made from a step', () => {
   it('drops the number of the plan, not a number of the text', () => {
     expect(stepTitle('2. tidy up')).toBe('tidy up');

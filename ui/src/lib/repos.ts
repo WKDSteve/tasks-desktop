@@ -81,7 +81,7 @@ export function parseRepos(value: unknown): HubRepos {
     if (typeof raw !== 'object' || raw === null) continue;
     const g = raw as Record<string, unknown>;
     if (!isText(g['id']) || !ID.test(g['id']) || !isText(g['title'])) continue;
-    const tiles = (Array.isArray(g['tiles']) ? g['tiles'] : []).filter((t): t is string => isText(t) && t in repos);
+    const tiles = (Array.isArray(g['tiles']) ? g['tiles'] : []).filter((t): t is string => isText(t) && Object.hasOwn(repos, t));
     groups.push({ id: g['id'], title: g['title'], tiles: tiles.filter((t, i) => tiles.indexOf(t) === i) });
   }
   const out: HubRepos = { kind: 'hub.repos', rev: doc['rev'], repos, groups };

@@ -83,5 +83,5 @@ export function isMeetingsKey(key: string): key is MeetingsKey {
 /** A word of the view. */
 export function meetingsText(lang: Lang, key: MeetingsKey, params: Record<string, string | number> = {}): string {
   const text: string = lang === 'de' ? DE[key] : EN[key];
-  return text.replace(/\{(\w+)\}/g, (all, k: string) => (k in params ? String(params[k]) : all));
+  return text.replace(/\{(\w+)\}/g, (all, k: string) => (Object.hasOwn(params, k) ? String(params[k]) : all));
 }

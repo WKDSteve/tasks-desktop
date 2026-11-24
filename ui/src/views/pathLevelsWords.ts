@@ -67,5 +67,5 @@ export type LevelWord = keyof (typeof WORDS)['en'];
 /** A word of the form in the language of the page, `{name}` filled from `params`. */
 export function levelWord(lang: Lang, key: LevelWord, params: Record<string, string | number> = {}): string {
   const table: Record<LevelWord, string> = lang === 'de' ? WORDS.de : WORDS.en;
-  return table[key].replace(/\{(\w+)\}/g, (all, name: string) => (name in params ? String(params[name]) : all));
+  return table[key].replace(/\{(\w+)\}/g, (all, name: string) => (Object.hasOwn(params, name) ? String(params[name]) : all));
 }
