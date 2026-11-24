@@ -80,7 +80,7 @@ fn start_phone_hub(
     })
 }
 
-const DATA_ROUTES: [&str; 31] = [
+const DATA_ROUTES: [&str; 33] = [
     "snapshot",
     "task",
     "next",
@@ -102,6 +102,8 @@ const DATA_ROUTES: [&str; 31] = [
     "meeting",
     "meeting/ics",
     "meeting/thumb",
+    "contacts",
+    "contact",
     "asset",
     "paths",
     "path",

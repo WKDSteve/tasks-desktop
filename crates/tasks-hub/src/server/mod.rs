@@ -60,6 +60,7 @@ mod answer;
 mod assets;
 mod boards;
 mod check;
+mod contacts;
 pub(crate) mod device_cut;
 mod events;
 mod history;
@@ -378,6 +379,9 @@ fn app_routes(core: &Arc<Shared>) -> Router<Arc<Shared>> {
         .route(&r("meeting"), get(self::meetings::meeting))
         .route(&r("meeting/ics"), get(self::meetings::meeting_ics))
         .route(&r("meeting/thumb"), get(self::meetings::meeting_thumb))
+        // The contacts (Office concept, wave 3): the list and one contact; the writes are `ops`. Not for a phone.
+        .route(&r("contacts"), get(self::contacts::contacts))
+        .route(&r("contact"), get(self::contacts::contact))
         // The image files below `assets/` of a task, plan, project, path or meeting (concept "Lernplan" 11.3, E12).
         .route(&r("asset"), get(self::assets::asset))
         // The learning paths (concept "Lernplan" 11.3): the open paths, one path with its tree; the writes are `ops`.

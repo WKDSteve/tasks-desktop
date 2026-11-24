@@ -712,6 +712,13 @@ test('meetings, meeting and meeting_parse: judged as the Rust hub judges them, t
     ['meetings?x=1', 'bad_query'],
     ['meeting', 'bad_id'],
     ['meeting?id=nope', 'bad_id'],
+    ['contacts?limit=0', 'bad_query'],
+    ['contacts?limit=101', 'bad_query'],
+    ['contacts?offset=100001', 'bad_query'],
+    ['contacts?area=.x', 'bad_query'],
+    ['contacts?org=x', 'bad_query'],
+    ['contact', 'bad_id'],
+    ['contact?id=nope', 'bad_id'],
   ]) {
     const r = await h.get(path);
     assert.equal(r.status, 400, path);
@@ -725,10 +732,14 @@ test('meetings, meeting and meeting_parse: judged as the Rust hub judges them, t
   assert.equal((await h.get('meetings?since=2026-11-01&until=2026-11-30&area=lib.nvim&status=planned&task=lib.nvim/a&limit=5&offset=10')).status, 200);
   assert.equal(await (await h.get('meeting?id=lib.nvim/m1')).text(), '{"kind":"tasks.meeting"}');
   assert.equal((await h.post('meeting_parse', { text: 'Mo 14:00 Sync' })).status, 200);
+  assert.equal((await h.get('contacts?area=lib.nvim&limit=50&offset=100')).status, 200);
+  assert.equal((await h.get('contact?id=lib.nvim/rick')).status, 200);
   assert.deepEqual(h.calls, [
     ['meetings', { params: { since: '2026-11-01', until: '2026-11-30', area: 'lib.nvim', status: ['planned'], task: 'lib.nvim/a', limit: 5, offset: 10 } }],
     ['meeting', { params: { id: 'lib.nvim/m1' } }],
     ['meeting_parse', { params: { text: 'Mo 14:00 Sync' } }],
+    ['contacts', { params: { area: 'lib.nvim', limit: 50, offset: 100 } }],
+    ['contact', { params: { id: 'lib.nvim/rick' } }],
   ]);
 });
 

@@ -67,7 +67,7 @@ pub fn cli_config_from_setup(setup: &Setup, env: Env) -> CliEngineConfig {
 
 /// The calls of the contract `tasks-export/1` and `tasks-ops/1`: the table of this app. The seam
 /// reads the flags of each entry; it knows no call by name.
-static SPECS: [MethodSpec; 33] = [
+static SPECS: [MethodSpec; 35] = [
     MethodSpec::bare("hello", "tasks.hello"),
     MethodSpec::bare("snapshot", "tasks.snapshot"),
     MethodSpec::read("list", "tasks.list"),
@@ -109,6 +109,9 @@ static SPECS: [MethodSpec; 33] = [
     MethodSpec::read("learn_evidence", "tasks.learn_evidence"),
     MethodSpec::read("learn_history", "tasks.learn_history"),
     MethodSpec::read("competences", "tasks.competences"),
+    // The contacts of the vault, by name, one page, and one contact with its notes (capabilities `contacts`, `contact`).
+    MethodSpec::read("contacts", "tasks.contacts"),
+    MethodSpec::read("contact", "tasks.contact"),
 ];
 
 /// The calls of the tasks engine, by name.
@@ -149,9 +152,11 @@ impl Calls {
     pub const LearnEvidence: Method = Method::new(&SPECS[30]);
     pub const LearnHistory: Method = Method::new(&SPECS[31]);
     pub const Competences: Method = Method::new(&SPECS[32]);
+    pub const Contacts: Method = Method::new(&SPECS[33]);
+    pub const Contact: Method = Method::new(&SPECS[34]);
 
     /// Every call of the table.
-    pub const ALL: [Method; 33] = [
+    pub const ALL: [Method; 35] = [
         Self::Hello,
         Self::Snapshot,
         Self::List,
@@ -185,6 +190,8 @@ impl Calls {
         Self::LearnEvidence,
         Self::LearnHistory,
         Self::Competences,
+        Self::Contacts,
+        Self::Contact,
     ];
 
     /// Parse the name of a route or a request. Nothing else is accepted.
@@ -237,6 +244,6 @@ mod table_tests {
             assert_eq!(Calls::parse(m.as_str()), Some(m));
             assert!(m.reply_kind().starts_with("tasks."), "{}", m.as_str());
         }
-        assert_eq!(Calls::ALL.len(), 33);
+        assert_eq!(Calls::ALL.len(), 35);
     }
 }

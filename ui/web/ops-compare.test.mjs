@@ -134,9 +134,13 @@ test('every kind of write answers and writes as nvim does on the same commit', {
     ['done of a folder task', () => ops({ op: 'done', id: 'lib.nvim/fold', confirm: confirm('lib.nvim/fold') })],
     ['reopen', () => ops({ op: 'reopen', id: 'lib.nvim/done-here' })],
     ['a request the engine refuses as a whole', () => JSON.stringify({ client_op_id: 'cmp', schema: 99, ops: [{ op: 'set', id: 'lib.nvim/alpha', patch: {} }] })],
+    // the contacts: a file of their own per person, the notes as the section of the language, the taken id gets -2
+    ['contact_new with fields and notes', () => ops({ op: 'contact_new', area: 'lib.nvim', name: 'Rick Beispiel', fields: { org: 'Beispiel GmbH', role: 'Support', emails: ['rick@example.org'], phones: ['+43 1 2345678'], tz: 'Europe/Vienna', tags: ['t2', 'kunde'] }, body: '\n## Notes\nLikes tea.\n', lang: 'en' })],
+    ['contact_new with the same name', () => ops({ op: 'contact_new', area: 'lib.nvim', name: 'Rick Beispiel' })],
+    ['contact_set (a key changed, one removed)', () => ops({ op: 'contact_set', id: 'lib.nvim/rick-beispiel', patch: { role: 'Lead', org: null } })],
+    ['contact_set refused (no mail address, and the answer names none)', () => ops({ op: 'contact_set', id: 'lib.nvim/rick-beispiel', patch: { emails: ['nope'] } })],
   ];
-  for (const [name, build] of steps) {
-    const request = build();
+  const compare = (name, request) => {
     const here = web.call('ops', request, { root: '/vault', today: TODAY });
     const there = nvim('ops', request);
     assert.equal(mask(here.text), mask(there), `${name}: the answer differs`);
@@ -144,7 +148,20 @@ test('every kind of write answers and writes as nvim does on the same commit', {
     const right = filesOnDisk(nvimVault);
     const differ = [...new Set([...Object.keys(left), ...Object.keys(right)])].filter((p) => left[p] !== right[p]);
     assert.deepEqual(differ, [], `${name}: files that differ between the web engine and nvim`);
-  }
+  };
+  for (const [name, build] of steps) compare(name, build());
+  // a positive check: the contacts were written (a comparison of two refusals would pass too)
+  assert.ok(filesOnDisk(nvimVault)['lib.nvim/CONTACTS/rick-beispiel.md'], 'the first contact is a file');
+  assert.ok(filesOnDisk(nvimVault)['lib.nvim/CONTACTS/rick-beispiel-2.md'], 'the second one has the id -2');
+  assert.match(web.call('contacts', null, { root: '/vault', today: TODAY }).text, /"total":2/);
+  // the contacts as the page reads them: the list and one contact, the same on both sides
+  assert.equal(mask(web.call('contacts', null, { root: '/vault', today: TODAY }).text), mask(nvim('contacts')), 'contacts');
+  assert.equal(
+    mask(web.call('contact', JSON.stringify({ params: { id: 'lib.nvim/rick-beispiel' } }), { root: '/vault', today: TODAY }).text),
+    mask(nvim('contact', JSON.stringify({ id: 'lib.nvim/rick-beispiel' }))),
+    'contact',
+  );
+  compare('contact_delete', ops({ op: 'contact_delete', id: 'lib.nvim/rick-beispiel-2' }));
   // what the page reads after all these writes: the same documents on both sides (numbers written as "2.0" are read as 2)
   for (const method of ['snapshot', 'list', 'order', 'check']) {
     assert.equal(mask(web.call(method, null, { root: '/vault', today: TODAY }).text), mask(nvim(method)), `${method} after the writes`);

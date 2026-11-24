@@ -89,7 +89,7 @@ test('a plain request of ops goes to the write path as it is, and its answer is 
   assert.equal(r.status, 200);
   assert.equal(await r.text(), text);
   assert.deepEqual(w.seen, [request]);
-  const names = ['set', 'new', 'reorder', 'done', 'move_area', 'plan_new', 'tick_step', 'answer', 'append_note', 'reopen', 'set_body', 'view_save', 'view_delete'];
+  const names = ['contact_new', 'contact_set', 'contact_delete', 'set', 'new', 'reorder', 'done', 'move_area', 'plan_new', 'tick_step', 'answer', 'append_note', 'reopen', 'set_body', 'view_save', 'view_delete'];
   for (const name of names) assert.equal((await w.post({ ops: [{ op: name }] })).status, 200, name);
 });
 

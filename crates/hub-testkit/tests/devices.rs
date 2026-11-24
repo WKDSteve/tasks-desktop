@@ -347,6 +347,9 @@ async fn a_phone_reaches_the_routes_of_the_phone_page_and_nothing_else() {
         ),
         ("POST", "/api/tasks/meeting_parse"),
         ("POST", "/api/tasks/board"),
+        // a contact is a person of a third party: the list and the document stay on the PC
+        ("GET", "/api/tasks/contacts"),
+        ("GET", "/api/tasks/contact?id=alpha.nvim/rick"),
         ("GET", "/api/tasks/hello-not-a-route"),
     ] {
         let (status, doc) = r.send(method, path, &phone, r#"{"name":"main"}"#).await;
@@ -392,6 +395,9 @@ async fn ops_takes_from_a_phone_only_what_the_phone_page_sends_at_its_level() {
         json!({ "op": "view_delete", "name": "v" }),
         json!({ "op": "meeting_new", "area": "alpha.nvim", "title": "m", "fields": { "date": "2026-11-24" } }),
         json!({ "op": "meeting_close", "id": "alpha.nvim/m1" }),
+        json!({ "op": "contact_new", "area": "alpha.nvim", "name": "Rick" }),
+        json!({ "op": "contact_set", "id": "alpha.nvim/rick", "patch": { "role": "x" } }),
+        json!({ "op": "contact_delete", "id": "alpha.nvim/rick" }),
         json!({ "op": "promote", "container": "alpha.nvim/p1", "point": "a" }),
         json!({ "op": "unpromote", "container": "alpha.nvim/p1", "point": "a" }),
     ];

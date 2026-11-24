@@ -249,6 +249,27 @@ export function isDay(text: string): boolean {
   return at.getUTCFullYear() === y && at.getUTCMonth() === mo - 1 && at.getUTCDate() === d;
 }
 
+/** The question of `contacts` from its query, as the hub asks it (`contacts_request`), or why it is refused. */
+export function contactsParams(q: Map<string, string>): Record<string, unknown> | string {
+  const out: Record<string, unknown> = {};
+  const area = q.get('area');
+  if (area !== undefined) {
+    if (!validAreaName(area)) return 'area is not a name';
+    out['area'] = area;
+  }
+  const limit = q.get('limit');
+  if (limit !== undefined) {
+    if (!/^[0-9]+$/.test(limit) || Number(limit) < 1 || Number(limit) > 100) return 'limit is 1 to 100';
+    out['limit'] = Number(limit);
+  }
+  const offset = q.get('offset');
+  if (offset !== undefined) {
+    if (!/^[0-9]+$/.test(offset) || Number(offset) > 100000) return 'offset is a number from 0';
+    out['offset'] = Number(offset);
+  }
+  return out;
+}
+
 /** The question of `meetings` from its query, as the hub asks it (`meetings_request`), or why it is refused. */
 export function meetingsParams(q: Map<string, string>): Record<string, unknown> | string {
   const params: Record<string, unknown> = {};
@@ -494,6 +515,19 @@ export function createWebHub(deps: HubDeps): WebHub {
         if (typeof q === 'string') return errorBody(400, 'bad_query', q);
         const id = idRequired(q);
         return typeof id === 'string' ? passOn('meeting', { id }) : id;
+      }
+      case 'contacts': {
+        // The contacts by name, one page (`GET /api/tasks/contacts`), judged as the hub judges the query.
+        const q = parseQuery(query, ['area', 'limit', 'offset']);
+        if (typeof q === 'string') return errorBody(400, 'bad_query', q);
+        const params = contactsParams(q);
+        return typeof params === 'string' ? errorBody(400, 'bad_query', params) : passOn('contacts', params);
+      }
+      case 'contact': {
+        const q = parseQuery(query, ['id']);
+        if (typeof q === 'string') return errorBody(400, 'bad_query', q);
+        const id = idRequired(q);
+        return typeof id === 'string' ? passOn('contact', { id }) : id;
       }
       case 'next': {
         const q = parseQuery(query, ['n', 'actor', 'area', 'not_category']);
@@ -1046,6 +1080,10 @@ export const OPS_ALLOWED = [
   'unpromote',
   'path_reward',
   'path_levels',
+  // the contacts: a person of a third party, a file of their own
+  'contact_new',
+  'contact_set',
+  'contact_delete',
   'history_record',
 ];
 const OPS_FIELDS = ['schema', 'client_op_id', 'dry_run', 'ops'];
