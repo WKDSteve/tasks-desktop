@@ -30,7 +30,7 @@ const bar = (page: Page) => page.getByRole('menubar');
 test('the tab Learning plans: after View, the learning paths with the dot of the view shown, by keys, axe', async ({ page }) => {
   const problems = await pair(page, '/#view=list');
   const triggers = bar(page).locator('button.mb-trigger');
-  await expect(triggers).toHaveText(['Work', 'Project', /^\W*View$/, 'Learning plans', 'Options', 'Help']);
+  await expect(triggers).toHaveText(['Work', 'Project', /^\W*View$/, 'Office', 'Learning plans', 'Options', 'Help']);
   const tab = bar(page).getByRole('menuitem', { name: 'Learning plans', exact: true });
   // The list is shown: no dot on the tab.
   await expect(tab.locator('.mb-current')).toHaveCount(0);
@@ -72,7 +72,7 @@ test('the tab Learning plans: after View, the learning paths with the dot of the
   await expect(page).toHaveURL(/#view=paths/);
 
   // By keys: from View, Right goes to the tab; Down opens it on its first item; the view shown is checked.
-  await bar(page).getByRole('menuitem', { name: /^View(,|$)/ }).focus();
+  await bar(page).getByRole('menuitem', { name: /^Office(,|$)/ }).focus();
   await page.keyboard.press('ArrowRight');
   await expect(page.getByRole('menuitem', { name: 'Learning plans, current: Learning paths' })).toBeFocused();
   await page.keyboard.press('ArrowDown');

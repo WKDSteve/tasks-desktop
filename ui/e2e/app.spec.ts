@@ -2212,25 +2212,25 @@ test('the page loads only the language it shows, and the other one when the pers
   });
   await pair(page);
   const bar = page.getByRole('menubar').getByRole('menuitem');
-  await expect(bar).toHaveText(['Work', 'Project', /^\W*View$/, 'Learning plans', 'Options', 'Help']);
+  await expect(bar).toHaveText(['Work', 'Project', /^\W*View$/, 'Office', 'Learning plans', 'Options', 'Help']);
   expect(words).toEqual(['i18n-en']);
   await page.getByRole('menuitem', { name: 'Options' }).click();
   await page.getByRole('menuitemradio', { name: 'Deutsch' }).click();
   await expect.poll(() => words).toEqual(['i18n-en', 'i18n-de']);
   // While German loads, the page stays English: never a key in place of a word.
-  await expect(bar).toHaveText(['Work', 'Project', /^\W*View$/, 'Learning plans', 'Options', 'Help']);
+  await expect(bar).toHaveText(['Work', 'Project', /^\W*View$/, 'Office', 'Learning plans', 'Options', 'Help']);
   release();
-  await expect(bar).toHaveText(['Arbeit', 'Projekt', /^\W*Ansicht$/, 'Lernpläne', 'Optionen', 'Hilfe']);
+  await expect(bar).toHaveText(['Arbeit', 'Projekt', /^\W*Ansicht$/, 'Office', 'Lernpläne', 'Optionen', 'Hilfe']);
   // A reload starts in German, with the German words alone.
   await page.unroute(/\/assets\/i18n-de-[^/]+\.js$/);
   words.length = 0;
   await page.reload();
-  await expect(bar).toHaveText(['Arbeit', 'Projekt', /^\W*Ansicht$/, 'Lernpläne', 'Optionen', 'Hilfe']);
+  await expect(bar).toHaveText(['Arbeit', 'Projekt', /^\W*Ansicht$/, 'Office', 'Lernpläne', 'Optionen', 'Hilfe']);
   expect(words).toEqual(['i18n-de']);
   // Back to English for the tests after this one in the same profile.
   await page.getByRole('menuitem', { name: 'Optionen' }).click();
   await page.getByRole('menuitemradio', { name: 'English' }).click();
-  await expect(bar).toHaveText(['Work', 'Project', /^\W*View$/, 'Learning plans', 'Options', 'Help']);
+  await expect(bar).toHaveText(['Work', 'Project', /^\W*View$/, 'Office', 'Learning plans', 'Options', 'Help']);
 });
 
 test('the German page has no violations either', async ({ page }) => {
@@ -2247,7 +2247,7 @@ test('the German page has no violations either', async ({ page }) => {
   // Its icon is really drawn: the policy of the page lets it through.
   await expect.poll(() => page.locator('.kit-brand img').evaluate((i: HTMLImageElement) => i.naturalWidth)).toBeGreaterThan(0);
   const bar = page.getByRole('menubar').getByRole('menuitem');
-  await expect(bar).toHaveText(['Arbeit', 'Projekt', /^\W*Ansicht$/, 'Lernpläne', 'Optionen', 'Hilfe']);
+  await expect(bar).toHaveText(['Arbeit', 'Projekt', /^\W*Ansicht$/, 'Office', 'Lernpläne', 'Optionen', 'Hilfe']);
   await showListDe(page);
   const result = await new AxeBuilder({ page }).analyze();
   expect(result.violations, JSON.stringify(result.violations, null, 1)).toEqual([]);
@@ -3052,6 +3052,7 @@ test('every entry of the header explains itself on hover: the six menus and the 
     [page.getByRole('menuitem', { name: 'Work', exact: true }), /Create, find and edit tasks/],
     [page.getByRole('menuitem', { name: 'Project', exact: true }), /vault, the plan and the export/],
     [page.getByRole('menuitem', { name: /^View(,|$)/ }), /Switch the view/],
+    [page.getByRole('menuitem', { name: /^Office(,|$)/ }), /Appointments and reminders/],
     [page.getByRole('menuitem', { name: 'Learning plans', exact: true }), /views of the learning plans/],
     [page.getByRole('menuitem', { name: 'Options', exact: true }), /the look and how the page behaves/],
     [page.getByRole('menuitem', { name: 'Help', exact: true }), /About this app/],
@@ -3065,7 +3066,7 @@ test('every entry of the header explains itself on hover: the six menus and the 
     await expect(tip).toBeHidden();
   }
   // Every entry of the bar is on the list above: a menu added without a hint fails here.
-  await expect(page.getByRole('menubar').getByRole('menuitem')).toHaveCount(6);
+  await expect(page.getByRole('menubar').getByRole('menuitem')).toHaveCount(7);
 });
 
 test('the controls of the list and the headings of the tiles explain themselves on hover', async ({ page }) => {
@@ -3100,7 +3101,7 @@ test('the menus are Tasks, Project, View, Options and Help, with sections and th
   await pair(page);
   await showList(page);
   const bar = page.getByRole('menubar').getByRole('menuitem');
-  await expect(bar).toHaveText(['Work', 'Project', /^\W*View$/, 'Learning plans', 'Options', 'Help']);
+  await expect(bar).toHaveText(['Work', 'Project', /^\W*View$/, 'Office', 'Learning plans', 'Options', 'Help']);
   // The name of the app is no name of a menu too: one word must not stand twice in the bar.
   const brandName = (await page.locator('.kit-brand').getAttribute('aria-label')) ?? '';
   expect(await bar.allTextContents()).not.toContain(brandName);
@@ -3173,6 +3174,8 @@ test('the menu bar opens with the keyboard, switches views, language and theme',
   await page.getByRole('menuitem', { name: 'View' }).focus();
 
   // Left and Right walk the menus.
+  await page.keyboard.press('ArrowRight');
+  await expect(page.getByRole('menuitem', { name: 'Office' })).toBeFocused();
   await page.keyboard.press('ArrowRight');
   await expect(page.getByRole('menuitem', { name: 'Learning plans' })).toBeFocused();
   await page.keyboard.press('ArrowRight');
@@ -5571,7 +5574,7 @@ test('the calendar shows a task on its due day; dragging sets the date, dragging
   await pair(page);
   const title = `Calendar drag ${Date.now()}`;
   await capture(page, title);
-  await chooseView(page, 'View', 'Calendar');
+  await chooseView(page, 'Office', 'Calendar');
   const heading = page.locator('[data-calendar-heading]');
   await expect(heading).toBeVisible();
   const today = page.locator('td.today');
@@ -5621,7 +5624,7 @@ test('the calendar is worked with the keys: m and Enter put a task on a day, Shi
   await pair(page);
   const title = `Calendar keys ${Date.now()}`;
   await capture(page, title);
-  await chooseView(page, 'View', 'Calendar');
+  await chooseView(page, 'Office', 'Calendar');
   // The month has the day cells the keys walk over (the week is the hour grid).
   await page.locator('label.mode select').first().selectOption('month');
   const today = page.locator('td.today');
@@ -5693,7 +5696,7 @@ test('the timeline shows a task as a bar from start to due; the keys, a drag and
   await pair(page);
   await showList(page);
   await page.getByRole('searchbox', { name: /search/i }).first().fill('Timeline bar e2e');
-  await chooseView(page, 'View', 'Timeline');
+  await chooseView(page, 'Office', 'Timeline');
   const id = 'lib.nvim/timeline-bar-e2e';
   const bar = page.locator(`[data-bar="${id}"]`);
   await expect(bar).toBeVisible();
@@ -5770,7 +5773,7 @@ test('the reminders view lists a reminder by its day and shows the mail of the h
   writeFileSync(file, `---\ntitle: Reminder mail e2e\nstatus: open\nkind: task\nremind: ${localDay(-1)}\n---\n\nThe text of the task is not for a mail.\n`);
   await watchViolations(page);
   await pair(page);
-  await chooseView(page, 'View', 'Reminders');
+  await chooseView(page, 'Office', 'Reminders');
   const id = 'lib.nvim/reminder-mail-e2e';
   const row = page.locator(`[data-reminder="${id}"]`);
   await expect(row).toBeVisible();
@@ -7807,7 +7810,7 @@ test.describe('a finger', () => {
     writeFileSync(file, `---\ntitle: Calendar finger e2e\nstatus: open\nkind: task\n---\n\nTo be moved by a finger.\n`);
     await watchViolations(page);
     await pair(page);
-    await chooseView(page, 'View', 'Calendar');
+    await chooseView(page, 'Office', 'Calendar');
     await page.locator('label.mode select').first().selectOption('month');
     const today = page.locator('td.today');
     const day = (await today.getAttribute('data-day')) ?? '';
@@ -7872,7 +7875,7 @@ test.describe('a finger', () => {
     await pair(page);
     await showList(page);
     await page.getByRole('searchbox', { name: /search/i }).first().fill('Timeline finger e2e');
-    await chooseView(page, 'View', 'Timeline');
+    await chooseView(page, 'Office', 'Timeline');
     // A week zoom: 40 pixels a day, and an end wide enough for a finger.
     await page.locator('select[data-timeline-zoom]').selectOption('week');
     const id = 'lib.nvim/timeline-touch-e2e';

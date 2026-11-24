@@ -542,8 +542,8 @@ for (const lang of ['en', 'de'] as const) {
         await page.keyboard.press('Escape');
       }
       expect(plain).toBeGreaterThan(4);
-      // The export submenu has no view in it, the others have two or three.
-      expect(sizes.filter((n) => n > 0).length).toBeGreaterThanOrEqual(3);
+      // The export submenu has no view in it, Review and Repos have two.
+      expect(sizes.filter((n) => n > 0).length).toBeGreaterThanOrEqual(2);
       const visit = async (sub: number | null, i: number): Promise<void> => {
         await viewMenu.click();
         if (sub !== null) await page.locator('button.mb-parent:not([disabled])').nth(sub).click();
@@ -555,6 +555,20 @@ for (const lang of ['en', 'de'] as const) {
       };
       for (let i = 0; i < plain; i++) await visit(null, i);
       for (let j = 0; j < sizes.length; j++) for (let i = 0; i < sizes[j]!; i++) await visit(j, i);
+      // The tab Office: its views (meetings, calendar, timeline, reminders) read well too.
+      const officeTab = page.getByRole('menubar').getByRole('menuitem', { name: /^Office(,|$)/ });
+      await officeTab.click();
+      const offices = await page.getByRole('menuitemradio').count();
+      await page.keyboard.press('Escape');
+      expect(offices).toBeGreaterThanOrEqual(3);
+      for (let i = 0; i < offices; i++) {
+        await officeTab.click();
+        const radio = page.getByRole('menuitemradio').nth(i);
+        const name = (await radio.textContent())?.trim() ?? String(i);
+        await radio.click();
+        await page.waitForTimeout(400);
+        await readsWell(name);
+      }
 
       // The views beyond their tab: the context menu of a row, open, and a matrix (a view to try) with an open cell.
       await viewMenu.click();
