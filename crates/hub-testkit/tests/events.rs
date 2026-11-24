@@ -388,6 +388,60 @@ async fn a_stream_ends_with_its_session() {
     assert!(!other.ended(Duration::from_millis(700)).await);
 }
 
+/// The stream ends when its session is signed out, at once, though the next heartbeat is a long way off.
+#[tokio::test]
+async fn a_stream_ends_when_its_session_signs_out() {
+    let _one_at_a_time = ONE_AT_A_TIME.lock().await;
+    let r = rig("logout", Timing::default()).await;
+    let other = session(&r).await;
+    let mut sse = Sse::open(r.server.addr(), Some(&r.token)).await.unwrap();
+    let _hello = sse.next(WAIT).await.unwrap();
+    let mut kept = Sse::open(r.server.addr(), Some(&other)).await.unwrap();
+    let _hello = kept.next(WAIT).await.unwrap();
+    let origin = format!("http://127.0.0.1:{}", port(&r));
+    let auth = format!("Bearer {}", r.token);
+    let reply = client::request(
+        port(&r),
+        "POST",
+        "/api/session/logout",
+        &[
+            ("Authorization", &auth),
+            ("Origin", &origin),
+            ("Content-Type", "application/json"),
+        ],
+        "{}",
+    )
+    .await
+    .unwrap();
+    assert_eq!(reply.status, 200, "{reply:?}");
+    assert!(
+        sse.ended(Duration::from_secs(3)).await,
+        "the stream outlived the sign-out"
+    );
+    // Another session's stream is not touched.
+    assert!(!kept.ended(Duration::from_millis(700)).await);
+}
+
+/// What the raw answer of the stream says (the type with its charset, a policy that lets nothing run, no cookie).
+#[tokio::test]
+async fn the_head_of_a_stream_is_sealed_like_the_rest_of_the_hub() {
+    let _one_at_a_time = ONE_AT_A_TIME.lock().await;
+    let r = rig("head", Timing::default()).await;
+    let sse = Sse::open(r.server.addr(), Some(&r.token)).await.unwrap();
+    let head = sse.head.to_ascii_lowercase();
+    assert!(
+        head.contains("content-type: text/event-stream; charset=utf-8"),
+        "{head}"
+    );
+    assert!(head.contains("x-content-type-options: nosniff"), "{head}");
+    assert!(head.contains("cache-control: no-"), "{head}");
+    assert!(
+        head.contains("content-security-policy: default-src 'none'"),
+        "{head}"
+    );
+    assert!(!head.contains("set-cookie"), "{head}");
+}
+
 #[tokio::test]
 async fn a_client_can_ask_for_a_scan() {
     let _one_at_a_time = ONE_AT_A_TIME.lock().await;

@@ -15,6 +15,10 @@ pub const HEAD_BUDGET: Duration = Duration::from_secs(35);
 
 /// An open event stream, read the way a browser's `fetch` would.
 pub struct Sse {
+    /// The status line and headers of the answer.
+    // Shared by several test crates; not each of them reads the head.
+    #[allow(dead_code)]
+    pub head: String,
     stream: TcpStream,
     buf: Vec<u8>,
 }
@@ -52,7 +56,11 @@ impl Sse {
         }
         assert!(head.to_lowercase().contains("text/event-stream"), "{head}");
         let rest = buf.split_off(head_end + 4);
-        Ok(Self { stream, buf: rest })
+        Ok(Self {
+            head,
+            stream,
+            buf: rest,
+        })
     }
 
     /// The next message of the stream, whole (one chunk is one message), or

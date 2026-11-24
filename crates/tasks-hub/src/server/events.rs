@@ -1,6 +1,7 @@
 //! The event stream of one session.
 
 use super::*;
+use appkit_hub::guard::SessionEnd;
 
 /// One open event stream in the usage log; ends with the stream.
 pub(super) struct VisitGuard(Option<Arc<UsageLog>>);
@@ -22,6 +23,14 @@ impl Drop for VisitGuard {
     }
 }
 
+/// Resolves when the session of the stream ends; never, for a request that carries none.
+async fn session_ended(end: Option<&SessionEnd>) {
+    match end {
+        Some(end) => end.ended().await,
+        None => std::future::pending().await,
+    }
+}
+
 /// `GET /api/tasks/events`: server-sent events (concept 3.4). A `hello`
 /// first (with where the stream stands), then one `tasks` event per change.
 /// An event is a hint: what changed, as ids; the client reads again. There
@@ -30,6 +39,7 @@ pub(super) async fn events(
     State(st): State<Arc<Shared>>,
     RawQuery(query): RawQuery,
     headers: HeaderMap,
+    session_end: Option<axum::Extension<SessionEnd>>,
 ) -> Response {
     if let Some(response) = no_query(query.as_deref()) {
         return response;
@@ -57,6 +67,7 @@ pub(super) async fn events(
     let heartbeat = st.limits.heartbeat;
     let instance = st.instance.clone();
     let shared = Arc::clone(&st);
+    let session_end = session_end.map(|axum::Extension(end)| end);
     // The visit is counted while the stream lives, and ends with it.
     let visit = VisitGuard::new(rt.usage.clone());
     tokio::spawn(async move {
@@ -93,6 +104,8 @@ pub(super) async fn events(
                 },
                 _ = ticker.tick() => ": ping\n\n".to_owned(),
                 () = tx.closed() => return,
+                // The session was signed out, revoked or pushed out: the stream ends now, not at the next message.
+                () = session_ended(session_end.as_ref()) => return,
             };
             // The session was checked when the stream was opened. One that
             // was closed since (the oldest is closed when newer ones open)

@@ -894,6 +894,28 @@ async fn a_file_of_a_type_the_hub_does_not_take_is_refused_and_nothing_is_writte
 }
 
 #[tokio::test]
+async fn a_failure_on_the_disk_is_a_500_with_a_code_and_a_fixed_text_and_no_path() {
+    let _one_at_a_time = ONE_AT_A_TIME.lock().await;
+    let r = rig("upload-500").await;
+    // A file where the hub's folder should be: the folder cannot be made.
+    std::fs::write(r.vault.join(".uploads"), "in the way").unwrap();
+    let (status, doc) = upload(&r, "alpha.nvim/t1", "a.pdf", "x").await;
+    assert_eq!(status, 500, "{doc}");
+    assert_eq!(doc["error"]["code"], "upload_failed", "{doc}");
+    assert_eq!(
+        doc["error"]["message"], "the file could not be written",
+        "{doc}"
+    );
+    let text = doc.to_string();
+    // The folder the hub tried and the scratch folder of the run it is in: neither is named.
+    let scratch = r.vault.parent().and_then(|p| p.file_name()).unwrap();
+    assert!(
+        !text.contains(".uploads") && !text.contains(&*scratch.to_string_lossy()),
+        "a path in the answer: {text}"
+    );
+}
+
+#[tokio::test]
 async fn a_file_whose_start_is_not_what_its_ending_says_is_refused_and_nothing_is_attached() {
     let _one_at_a_time = ONE_AT_A_TIME.lock().await;
     let r = rig("upload-content").await;
