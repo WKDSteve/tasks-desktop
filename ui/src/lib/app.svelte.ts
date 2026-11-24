@@ -5775,6 +5775,21 @@ export class App {
     });
   }
 
+  /**
+   * Sign this tab's session out: the hub is asked to end it (its streams end with it, the token is dead), and the page
+   * goes to the pairing state whatever the hub answers, also when it does not answer at all. The web variant has no hub.
+   */
+  async signOut(): Promise<void> {
+    if (this.env.mode === 'web') return;
+    this.#sessionGen += 1;
+    try {
+      await this.env.hub.logout();
+    } catch {
+      // The hub is down or has forgotten the session already: the page forgets it either way.
+    }
+    this.dropSession();
+  }
+
   private dropSession(): void {
     this.sessionHeld = false;
     // The loss is not about a code that was refused at the start.

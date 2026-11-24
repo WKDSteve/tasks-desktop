@@ -854,6 +854,11 @@
         {t(`conn.${connState}` as Key)}
       </span>
     {/if}
+    {#if app.phase === 'ready' && app.mode !== 'web'}
+      <!-- In every view: the bar is the same in all of them. The hub ends the session and its streams; the page then
+           shows the pairing state. -->
+      <button type="button" class="sign-out" data-hint={t('hint.ui.session.sign_out')} onclick={() => void app.signOut()}>{t('session.sign_out')}</button>
+    {/if}
   </header>
 
   <main tabindex="-1" bind:this={mainArea} use:contextTarget={viewTarget(app.view)}>
@@ -1121,6 +1126,14 @@
   }
   .spacer {
     flex: 1;
+  }
+  .sign-out {
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text);
+    padding: 0.15rem 0.6rem;
+    cursor: pointer;
   }
   .conn {
     font-size: 0.8rem;

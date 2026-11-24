@@ -1061,6 +1061,8 @@ const de: Record<PageKey, string> = {
     'Die Datei ist angehängt: {asset}. Sie ist über 100 MB groß, und dieser Vault ist ein Git-Repository: GitHub lehnt solche Dateien beim Push ab.',
   'attach.one_file': 'Bitte nur eine Datei auf einmal: nichts angehängt.',
   'attach.disk_full': 'Auf der Platte des Hubs ist kein Platz für die Datei: nichts angehängt.',
+  'session.sign_out': 'Abmelden',
+  'hint.ui.session.sign_out': 'Diese Sitzung beenden: das Token ist tot, dieser Tab fragt wieder nach der Kopplung.',
   'attach.too_large': 'Die Datei ist größer, als der Hub annimmt: nichts angehängt.',
   'attach.unsupported_type': 'Der Hub nimmt hier keine Datei dieser Art, oder ihr Inhalt ist nicht, was ihr Name sagt: nichts angehängt.',
   'attach.bad_name': 'Der Name der Datei hat ein Zeichen, das der Hub nicht annimmt: umbenennen und noch einmal versuchen. Nichts angehängt.',

@@ -349,6 +349,13 @@ export class FakeHub {
     if (this.enumsDoc === null) throw new ApiError(502, 'engine_failed', 'no ranges');
     return { enums: this.enumsDoc };
   }
+  logoutCalls = 0;
+  /** `logout` fails with this error when set (the hub is down). */
+  logoutError: Error | null = null;
+  async logout() {
+    this.logoutCalls += 1;
+    if (this.logoutError) throw this.logoutError;
+  }
   async lists() {
     this.listsCalls += 1;
     if (this.engineListDoc === null) throw new ApiError(404, 'not_found', 'no lists');

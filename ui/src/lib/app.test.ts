@@ -119,6 +119,29 @@ describe('App', () => {
     });
   });
 
+  it('signs out: the hub is asked, then the token and what was read are forgotten', async () => {
+    const { app, hub } = make({ token: 't' });
+    await app.start(null);
+    await vi.waitFor(() => expect(app.phase).toBe('ready'));
+    await app.signOut();
+    expect(hub.logoutCalls).toBe(1);
+    expect(app.phase).toBe('needs_pairing');
+    expect(app.tasks).toEqual([]);
+    expect(app.snapshot).toBeNull();
+    app.stop();
+  });
+
+  it('signs out in the page even when the hub does not answer', async () => {
+    const { app, hub } = make({ token: 't' });
+    await app.start(null);
+    await vi.waitFor(() => expect(app.phase).toBe('ready'));
+    hub.logoutError = new Error('down');
+    await app.signOut();
+    expect(hub.logoutCalls).toBe(1);
+    expect(app.phase).toBe('needs_pairing');
+    app.stop();
+  });
+
   it('asks for pairing when there is no code and no session', async () => {
     const { app } = make();
     await app.start(null);

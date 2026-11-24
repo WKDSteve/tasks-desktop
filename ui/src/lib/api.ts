@@ -439,6 +439,11 @@ export class Hub extends HubClient<Snapshot> {
     return this.json<VaultList>('/api/vaults');
   }
 
+  /** End this tab's session: the hub forgets the token and closes the streams that are open with it. */
+  logout(): Promise<void> {
+    return this.post('/api/session/logout', {});
+  }
+
   private vaultPost(path: string, body: Record<string, unknown>): Promise<void> {
     return this.post(path, body);
   }

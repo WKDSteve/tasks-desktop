@@ -1060,6 +1060,8 @@ const en = {
     'The file is attached: {asset}. It is over 100 MB, and this vault is a Git repository: GitHub refuses such a file on a push.',
   'attach.one_file': 'One file at a time: nothing was attached.',
   'attach.disk_full': 'There is no room for the file on the disk of the hub: nothing was attached.',
+  'session.sign_out': 'Sign out',
+  'hint.ui.session.sign_out': 'End this session: the token is dead and this tab asks for pairing again.',
   'attach.too_large': 'The file is larger than the hub takes: nothing was attached.',
   'attach.unsupported_type': 'The hub takes no file of this type here, or its content is not what its name says: nothing was attached.',
   'attach.bad_name': 'The name of the file has a character the hub does not take: rename it and try again. Nothing was attached.',
