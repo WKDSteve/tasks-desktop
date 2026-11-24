@@ -213,7 +213,7 @@ const NOTE_MAX = 1000;
 
 export type Phase = 'starting' | 'needs_pairing' | 'offline' | 'unavailable' | 'ready';
 export type Connection = 'live' | 'reconnecting' | 'offline';
-export type View = 'today' | 'list' | 'board' | 'plan' | 'inbox' | 'abnahme' | 'cross' | 'calendar' | 'timeline' | 'reminders' | 'stats' | 'done' | 'views' | 'repos' | 'repostatus' | 'paths' | 'pathmap' | 'competences' | 'badges' | 'rewards' | 'evidence' | 'learn' | 'learnnext' | 'learnstats' | 'learntime' | 'learnnotes';
+export type View = 'today' | 'list' | 'board' | 'plan' | 'inbox' | 'abnahme' | 'cross' | 'meetings' | 'calendar' | 'timeline' | 'reminders' | 'stats' | 'done' | 'views' | 'repos' | 'repostatus' | 'paths' | 'pathmap' | 'competences' | 'badges' | 'rewards' | 'evidence' | 'learn' | 'learnnext' | 'learnstats' | 'learntime' | 'learnnotes';
 export type Theme = 'auto' | 'light' | 'dark';
 /** The blocks of the Today view that a person may hide. */
 export { ORDERED_TILES, TILES, type OrderedTile, type Tile } from './tiles-list';

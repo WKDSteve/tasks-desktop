@@ -43,7 +43,7 @@ const labels = (menu: HTMLElement) => [...menu.querySelectorAll('.mb-item .mb-te
 it('stands after View with its sections, and View has no learning paths any more', async () => {
   const { app } = await start(['paths', 'path']);
   expect(app.phase).toBe('ready');
-  expect(triggers().map((b) => b.dataset.for)).toEqual(['tasks', 'project', 'view', 'learn', 'options', 'help']);
+  expect(triggers().map((b) => b.dataset.for)).toEqual(['tasks', 'project', 'view', 'office', 'learn', 'options', 'help']);
   expect(trigger('learn')!.textContent).toBe('Lernpläne');
   const learn = open('learn');
   expect(learn.getAttribute('aria-label')).toBe('Lernpläne');
@@ -80,5 +80,5 @@ it('carries the dot and says the view shown, and View then has nothing checked a
 it('is missing without the learning paths of the engine (not greyed)', async () => {
   await start(['reorder']);
   expect(trigger('learn')).toBeNull();
-  expect(triggers().map((b) => b.dataset.for)).toEqual(['tasks', 'project', 'view', 'options', 'help']);
+  expect(triggers().map((b) => b.dataset.for)).toEqual(['tasks', 'project', 'view', 'office', 'options', 'help']);
 });

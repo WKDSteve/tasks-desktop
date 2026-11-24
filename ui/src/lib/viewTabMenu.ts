@@ -2,9 +2,10 @@
 // ALL/Menue-Struktur-tasks-desktop-Konzept-2026-11-23.md). The groups are data: a group changes from a section to a
 // submenu (or back) by one word here. A view that is not offered (the engine does not serve it, the variant has not
 // got it) is left out, not greyed; a submenu is shown from two views on, with one it becomes a plain entry, with none
-// it is missing. The learning plans have a tab of their own (learnViews.ts).
+// it is missing. The learning plans (learnViews.ts) and the appointments (officeViews.ts: meetings, calendar, timeline,
+// reminders) have a tab of their own.
 
-export type ViewGroupId = 'daily' | 'plan' | 'time' | 'review' | 'saved' | 'repos';
+export type ViewGroupId = 'daily' | 'plan' | 'review' | 'saved' | 'repos';
 
 /** How a group is shown: a section with a heading, a submenu, or its views alone (no heading). */
 export type ViewGroupForm = 'section' | 'submenu' | 'bare';
@@ -39,7 +40,6 @@ export const VIEW_GROUPS: readonly ViewGroup[] = [
     ],
   },
   { id: 'plan', form: 'section', views: [{ id: 'plan' }, { id: 'cross' }, { id: 'abnahme' }] },
-  { id: 'time', form: 'submenu', views: [{ id: 'calendar' }, { id: 'timeline' }, { id: 'reminders' }] },
   { id: 'review', form: 'submenu', views: [{ id: 'stats' }, { id: 'done', needs: ['finished'] }] },
   { id: 'saved', form: 'bare', views: [{ id: 'views', needs: ['views'] }] },
   { id: 'repos', form: 'submenu', views: [{ id: 'repos' }, { id: 'repostatus', machine: true }] },

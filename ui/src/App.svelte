@@ -36,6 +36,7 @@
   import { createContextRegistry, taskTarget, viewTarget } from './lib/context';
   import { vaultMenuItems, vaultMenuOpened } from './lib/vaultMenu';
   import { isLearnView, learnMenu } from './lib/learnViews';
+  import { isOfficeView, officeMenu } from './lib/officeViews';
   import { isMenuView, viewMenu } from './lib/viewTabMenu';
   import SetupCard from './views/SetupCard.svelte';
   import HubNotice from './views/HubNotice.svelte';
@@ -323,7 +324,8 @@
   const viewItem = (id: string, disabled: boolean): MenuItem => ({
     kind: 'radio',
     label: viewLabel(id),
-    hint: t(`hint.item.nav.${id}` as Key),
+    // Some hints come with the part loaded after the start (menuGroupHints.ts), the others are the page's.
+    hint: groupHint(app.lang, `nav.${id}`) || t(`hint.item.nav.${id}` as Key),
     ...(disabled ? { disabled } : {}),
     checked: app.view === id,
     onselect: () => app.setView(id as View),
@@ -368,6 +370,8 @@
 
   // The views of the tab Learning plans that are offered now (learnViews.ts).
   const learnSections = $derived(learnMenu({ can: (c) => app.can(c), gamification: app.gamification }));
+  // The views of the tab Office the engine serves now (officeViews.ts).
+  const officeSections = $derived(officeMenu((c) => app.can(c)));
   // The menu bar of the page (the native shell shows the same entries).
   const menus = $derived.by((): Menu[] => {
     const ready = app.phase === 'ready';
@@ -456,17 +460,6 @@
             disabled: app.phase !== 'ready' || !app.can('plan_new'),
             onselect: () => app.openPlanWizard(),
           },
-          ...(app.canMeetings
-            ? [
-                {
-                  kind: 'action' as const,
-                  label: t('menu.meeting'),
-                  hint: t('hint.item.menu.meeting'),
-                  disabled: app.phase !== 'ready' || !app.canMakeMeetings,
-                  onselect: () => app.openMeetingForm(),
-                },
-              ]
-            : []),
           { kind: 'section', label: t('menu.sec.export') },
           { kind: 'info', label: t('menu.export_where') },
           ...exportItems(ready),
@@ -496,7 +489,37 @@
           exportSubmenu(ready),
         ],
       },
-      // The tab of the learning plans, after View: only with the learning paths of the engine, and only the views the
+      // The tab Office, after View: appointments (meetings, calendar, timeline), reminders and the new meeting
+      // (officeViews.ts); only the views the engine serves.
+      ...(officeSections.length > 0
+        ? [
+            {
+              id: 'office',
+              label: t('menu.office'),
+              hint: groupHint(app.lang, 'office'),
+              current: isOfficeView(app.view) ? t(`nav.${app.view}` as Key) : null,
+              items: [
+                ...officeSections.flatMap(({ section, views }): MenuItem[] => [
+                  { kind: 'section', label: t(`menu.sec.office_${section}` as Key) },
+                  ...views.map((id) => viewItem(id, false)),
+                ]),
+                ...(app.canMeetings
+                  ? ([
+                      { kind: 'section', label: t('menu.sec.office_create') },
+                      {
+                        kind: 'action',
+                        label: t('menu.meeting'),
+                        hint: t('hint.item.menu.meeting'),
+                        disabled: app.phase !== 'ready' || !app.canMakeMeetings,
+                        onselect: () => app.openMeetingForm(),
+                      },
+                    ] as MenuItem[])
+                  : []),
+              ],
+            },
+          ]
+        : []),
+      // The tab of the learning plans, after Office: only with the learning paths of the engine, and only the views the
       // page has and the engine serves (learnViews.ts); the export and the print of the view shown stay in View.
       ...(learnSections.length > 0
         ? [
@@ -868,6 +891,8 @@
                     ? t('nav.abnahme')
                   : app.view === 'cross'
                     ? t('nav.cross')
+                  : app.view === 'meetings'
+                    ? t('nav.meetings')
                   : app.view === 'calendar'
                     ? t('nav.calendar')
                   : app.view === 'timeline'
@@ -904,6 +929,8 @@
           <Lazy {app} load={() => import('./views/AbnahmeView.svelte')} />
         {:else if app.view === 'cross'}
           <Lazy {app} load={() => import('./views/CrossView.svelte')} />
+        {:else if app.view === 'meetings'}
+          <Lazy {app} load={() => import('./views/MeetingsView.svelte')} />
         {:else if app.view === 'calendar'}
           <Lazy {app} load={() => import('./views/CalendarView.svelte')} />
         {:else if app.view === 'timeline'}

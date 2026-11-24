@@ -14,7 +14,6 @@ describe('viewTabMenu', () => {
     expect(shape(facts(['finished', 'views', 'reorder']))).toEqual([
       '§daily', 'today', 'list', 'board', 'inbox',
       '§plan', 'plan', 'cross', 'abnahme',
-      'time▸calendar,timeline,reminders',
       'review▸stats,done',
       'views',
       'repos▸repos,repostatus',
@@ -29,7 +28,7 @@ describe('viewTabMenu', () => {
     expect(out.some((e) => e.startsWith('review▸') || e.startsWith('repos▸'))).toBe(false);
     // The saved views need the engine: without them no entry at all.
     expect(out).not.toContain('views');
-    const none: ViewGroup[] = [{ id: 'time', form: 'submenu', views: [{ id: 'x', needs: ['nope'] }] }];
+    const none: ViewGroup[] = [{ id: 'review', form: 'submenu', views: [{ id: 'x', needs: ['nope'] }] }];
     expect(shape(facts([]), none)).toEqual([]);
   });
 
@@ -42,8 +41,9 @@ describe('viewTabMenu', () => {
   });
 
   it('knows which views belong to the tab', () => {
-    expect(isMenuView('calendar')).toBe(true);
+    expect(isMenuView('stats')).toBe(true);
+    expect(isMenuView('calendar')).toBe(false);
     expect(isMenuView('learn')).toBe(false);
-    expect(VIEW_GROUPS.flatMap((g) => g.views.map((v) => v.id))).toHaveLength(15);
+    expect(VIEW_GROUPS.flatMap((g) => g.views.map((v) => v.id))).toHaveLength(12);
   });
 });

@@ -1,15 +1,9 @@
 // The menu bar from the tests: the tab View shows the view that is shown as its `current` ("View, current: Today"), so
-// it is found by the start of its name, and a view in a submenu (Time, Review, Repos) is chosen through its parent.
+// it is found by the start of its name, and a view in a submenu (Review, Repos) is chosen through its parent.
 import type { Locator, Page } from '@playwright/test';
 
 /** The submenu a view of the tab View sits in (English and German names), by the name of the view. */
 const SUBMENU: Record<string, string> = {
-  Calendar: 'Time',
-  Timeline: 'Time',
-  Reminders: 'Time',
-  Kalender: 'Zeit',
-  Zeitleiste: 'Zeit',
-  Erinnerungen: 'Zeit',
   Statistics: 'Review',
   Finished: 'Review',
   Statistik: 'Auswertung',

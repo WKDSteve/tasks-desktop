@@ -5,7 +5,7 @@ import { expectAccessible, watchViolations } from './a11y';
 import { STATE } from './global';
 import { menuTab, openExportMenu, submenu } from './menu';
 
-// The tab View of the menu bar against the real hub and engine: only views, with the submenus Time, Review and Repos,
+// The tab View of the menu bar against the real hub and engine: only views, with the submenus Review and Repos,
 // the saved views under their own name, the export as a submenu, and the theme and the tiles in Options. Which view
 // is offered where is viewTabMenu.ts (unit tests).
 
@@ -26,7 +26,7 @@ async function pair(page: Page, path: string): Promise<string[]> {
   return problems;
 }
 
-test('View: sections, the submenus Time, Review and Repos, a view chosen from one, its link and its dot', async ({ page }) => {
+test('View: sections, the submenus Review and Repos, a view chosen from one, its link and its dot', async ({ page }) => {
   const problems = await pair(page, '/#view=list');
   await expect(menuTab(page, 'View')).toHaveAccessibleName('View, current: List');
   await menuTab(page, 'View').click();
@@ -36,26 +36,26 @@ test('View: sections, the submenus Time, Review and Repos, a view chosen from on
   for (const name of ['Today', 'List', 'Board', 'Inbox', 'Plan', 'Connections', 'Acceptance']) {
     await expect(menu.getByRole('menuitemradio', { name, exact: true })).toBeVisible();
   }
-  // Time, Review and Repos hold their views: they are not in the tab itself.
+  // Review and Repos hold their views; the calendar and the other dates are in the tab Office: they are not in the tab itself.
   await expect(menu.getByRole('menuitemradio', { name: 'Calendar', exact: true })).toHaveCount(0);
   await expect(menu.getByRole('menuitem', { name: 'Save tasks as CSV file ...' })).toHaveCount(0);
   await expect(menu.getByRole('menuitem', { name: /tiles/ })).toHaveCount(0);
   await expect(menu.getByRole('menuitemradio', { name: 'Dark' })).toHaveCount(0);
-  for (const name of ['Time', 'Review', 'Repos', 'Export']) await expect(submenu(page, name)).toBeVisible();
+  for (const name of ['Review', 'Repos', 'Export']) await expect(submenu(page, name)).toBeVisible();
   // The saved views are named so, and are a plain entry of the tab.
   await expect(menu.getByRole('menuitemradio', { name: 'Saved views', exact: true })).toHaveAttribute('href', /#view=views/);
 
   // The pointer opens the submenu beside its item; its views are links to their places.
-  await submenu(page, 'Time').hover();
-  const time = page.getByRole('menu', { name: 'Time' });
-  await expect(time.getByRole('menuitemradio')).toHaveText(['Calendar', 'Timeline', 'Reminders']);
-  await expect(time.getByRole('menuitemradio', { name: 'Timeline' })).toHaveAttribute('href', /#view=timeline/);
-  await time.getByRole('menuitemradio', { name: 'Calendar' }).click();
-  await expect(page).toHaveURL(/#view=calendar/);
+  await submenu(page, 'Review').hover();
+  const review = page.getByRole('menu', { name: 'Review' });
+  await expect(review.getByRole('menuitemradio')).toHaveText(['Statistics', 'Finished']);
+  await expect(review.getByRole('menuitemradio', { name: 'Finished' })).toHaveAttribute('href', /#view=done/);
+  await review.getByRole('menuitemradio', { name: 'Statistics' }).click();
+  await expect(page).toHaveURL(/#view=stats/);
   // The view shown is named by the tab and by its submenu.
-  await expect(menuTab(page, 'View')).toHaveAccessibleName('View, current: Calendar');
+  await expect(menuTab(page, 'View')).toHaveAccessibleName('View, current: Statistics');
   await menuTab(page, 'View').click();
-  await expect(submenu(page, 'Time')).toHaveAccessibleName('Time, current: Calendar');
+  await expect(submenu(page, 'Review')).toHaveAccessibleName('Review, current: Statistics');
   await page.keyboard.press('Escape');
   expect(problems).toEqual([]);
 });
@@ -114,8 +114,8 @@ test('View: in a narrow window the submenu folds open inside the menu, in the li
   for (const scheme of ['light', 'dark'] as const) {
     await page.emulateMedia({ colorScheme: scheme });
     await menuTab(page, 'View').click();
-    await submenu(page, 'Time').click();
-    const time = page.getByRole('menu', { name: 'Time' });
+    await submenu(page, 'Review').click();
+    const time = page.getByRole('menu', { name: 'Review' });
     await expect(time).toBeVisible();
     await expect(time).toHaveClass(/mb-fold/);
     const box = await time.boundingBox();
