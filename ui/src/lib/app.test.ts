@@ -6811,6 +6811,32 @@ describe('App, attaching a screenshot', () => {
     expect(sent[1]).toEqual(['pub/a', 'notes.txt', undefined]);
   });
 
+  it('says in words why the hub refused a file, and the code of anything else', async () => {
+    const m = await started();
+    const hub = m.hub as unknown as { upload: (id: string, file: File) => Promise<Result> };
+    for (const [code, key] of [
+      ['too_large', 'attach.too_large'],
+      ['unsupported_type', 'attach.unsupported_type'],
+      ['bad_name', 'attach.bad_name'],
+      ['upload_busy', 'attach.busy'],
+      ['disk_full', 'attach.disk_full'],
+    ] as const) {
+      hub.upload = async () => {
+        throw new ApiError(400, code, 'refused');
+      };
+      expect(await m.app.attachFile('pub/a', new File(['x'], 'a.png'))).toBe(false);
+      expect(m.app.toast?.text).toBe(translate(m.app.lang, key));
+    }
+    // A code that names a property of every object is no refusal the page knows: it shows the code.
+    for (const code of ['__proto__', 'constructor', 'toString', 'teapot']) {
+      hub.upload = async () => {
+        throw new ApiError(400, code, 'refused');
+      };
+      await m.app.attachFile('pub/a', new File(['x'], 'a.png'));
+      expect(m.app.toast?.text).toBe(translate(m.app.lang, 'write.failed', { code }));
+    }
+  });
+
   it('attaches what a form gathered once the thing is made: each file, then the screenshot', async () => {
     const m = await started();
     const sent: [string, string, string | undefined][] = [];

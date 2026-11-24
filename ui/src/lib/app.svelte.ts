@@ -397,6 +397,15 @@ export function clipboardHoldsNoImage(message: string): boolean {
   return /no image in the clipboard|holds no png image/i.test(message);
 }
 
+/** What the hub's refusal of an upload says in words, by its code (a `Map`: a code is data, never a property name). */
+const UPLOAD_REFUSALS = new Map<string, string>([
+  ['disk_full', 'attach.disk_full'],
+  ['too_large', 'attach.too_large'],
+  ['unsupported_type', 'attach.unsupported_type'],
+  ['bad_name', 'attach.bad_name'],
+  ['upload_busy', 'attach.busy'],
+]);
+
 /** A window that gets the focus reads the start at login again at most this often (it can change in hub-desktop). */
 const AUTOSTART_EVERY_MS = 30_000;
 
@@ -4043,7 +4052,8 @@ export class App {
       );
       return typeof entry.asset === 'string' ? entry.asset : '';
     } catch (error) {
-      if (error instanceof ApiError && error.code === 'disk_full') this.say('error', 'attach.disk_full');
+      const known = error instanceof ApiError ? UPLOAD_REFUSALS.get(error.code) : undefined;
+      if (known) this.say('error', known);
       else this.say('error', 'write.failed', { code: error instanceof ApiError ? error.code : 'offline' });
       return null;
     } finally {

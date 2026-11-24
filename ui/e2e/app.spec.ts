@@ -9753,6 +9753,24 @@ test('the Options menu keeps the hub running in the background: the real route w
   expect(consoleProblems.get(page)).toEqual([]);
 });
 
+test('a file the hub refuses is refused in words: a picture that is none, and nothing is attached', async ({ page }) => {
+  const slug = `refused-upload-e2e-${Date.now().toString(36)}`;
+  const file = join(state().vault, 'lib.nvim', 'ROADMAP', 'tasks', `${slug}.md`);
+  writeFileSync(file, `---\ntitle: Refused upload e2e\nstatus: open\nkind: task\n---\n\nNo file comes to this one.\n`);
+  await pair(page);
+  await showList(page);
+  await page.getByRole('searchbox', { name: /search/i }).first().fill('Refused upload e2e');
+  await page.locator('button.row', { hasText: 'Refused upload e2e' }).click();
+  const float = taskFloat(page);
+  await expect(float).toBeVisible();
+
+  // A page named like a picture: the hub reads the start of the file, not the name.
+  await float.locator('[data-file-picker]').setInputFiles({ name: 'fake.png', mimeType: 'image/png', buffer: Buffer.from('<script>alert(1)</script>') });
+  await expect(page.getByText('The hub takes no file of this type here, or its content is not what its name says: nothing was attached.')).toBeVisible({ timeout: WRITE_BUDGET });
+  expect(existsSync(join(state().vault, 'lib.nvim', 'ROADMAP', 'tasks', slug))).toBe(false);
+  expect(existsSync(file)).toBe(true);
+});
+
 test('a file from this computer is attached to a task: a plain task becomes a folder, and the link is offered', async ({ page }) => {
   const slug = `upload-e2e-${Date.now().toString(36)}`;
   const file = join(state().vault, 'lib.nvim', 'ROADMAP', 'tasks', `${slug}.md`);

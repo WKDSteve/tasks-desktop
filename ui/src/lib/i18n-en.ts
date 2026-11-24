@@ -1060,6 +1060,10 @@ const en = {
     'The file is attached: {asset}. It is over 100 MB, and this vault is a Git repository: GitHub refuses such a file on a push.',
   'attach.one_file': 'One file at a time: nothing was attached.',
   'attach.disk_full': 'There is no room for the file on the disk of the hub: nothing was attached.',
+  'attach.too_large': 'The file is larger than the hub takes: nothing was attached.',
+  'attach.unsupported_type': 'The hub takes no file of this type here, or its content is not what its name says: nothing was attached.',
+  'attach.bad_name': 'The name of the file has a character the hub does not take: rename it and try again. Nothing was attached.',
+  'attach.busy': 'Other files are on their way to the hub: try again in a moment. Nothing was attached.',
   'attach.drop': 'Drop the file here to attach it to this task',
   'hint.ui.detail.attach_file':
     'Choose a file of any kind and size, or drop one on this card. It is put with the task (a video into assets/videos, an image into assets/images); a plain task becomes a folder for that.',

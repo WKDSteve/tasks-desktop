@@ -34,9 +34,51 @@ pub const DEFAULT_UPLOAD_MAX_BYTES: u64 = 2 * 1024 * 1024 * 1024;
 /// A file left behind by a hub that was killed is gone after this long.
 const LEFTOVER_AFTER: Duration = Duration::from_secs(24 * 60 * 60);
 
+/// How many files of the page may be on their way at once, in units of the largest single file: the disk of the hub
+/// holds them all until the engine has copied them, so a flood of parallel transfers would fill it.
+const IN_FLIGHT_FILES: u64 = 2;
+
+/// The bytes of all uploads that are on disk in the hub's folder right now.
+static ON_DISK: AtomicU64 = AtomicU64::new(0);
+
+/// A claim on the room for the bytes of one upload; gives them back when it goes.
+struct Claim {
+    counter: &'static AtomicU64,
+    bytes: u64,
+}
+
+impl Claim {
+    fn new(counter: &'static AtomicU64) -> Self {
+        Self { counter, bytes: 0 }
+    }
+
+    /// Holds `bytes` altogether; false (and nothing more held) when that would pass `cap` for all uploads together.
+    fn hold(&mut self, bytes: u64, cap: u64) -> bool {
+        if bytes <= self.bytes {
+            return true;
+        }
+        let more = bytes - self.bytes;
+        let before = self.counter.fetch_add(more, Ordering::SeqCst);
+        if before.saturating_add(more) > cap {
+            self.counter.fetch_sub(more, Ordering::SeqCst);
+            return false;
+        }
+        self.bytes = bytes;
+        true
+    }
+}
+
+impl Drop for Claim {
+    fn drop(&mut self) {
+        self.counter.fetch_sub(self.bytes, Ordering::SeqCst);
+    }
+}
+
 /// The file while it is on its way; it goes when this does, also when the request is abandoned.
 struct Incoming {
     path: PathBuf,
+    /// Held as long as the file is on the disk.
+    claim: Claim,
 }
 
 impl Drop for Incoming {
@@ -195,6 +237,14 @@ async fn head_of(path: &Path) -> std::io::Result<Vec<u8>> {
     .map_err(|e| std::io::Error::other(e.to_string()))?
 }
 
+fn too_busy() -> Response {
+    error_body(
+        StatusCode::SERVICE_UNAVAILABLE,
+        "upload_busy",
+        "other files are on their way: try again in a moment",
+    )
+}
+
 fn too_large() -> Response {
     error_body(
         StatusCode::PAYLOAD_TOO_LARGE,
@@ -288,8 +338,15 @@ async fn receive(
     dir: PathBuf,
     size: Option<u64>,
     max: u64,
+    room: (&'static AtomicU64, u64),
     body: Body,
 ) -> Result<(Incoming, u64), Response> {
+    let (counter, cap) = room;
+    let mut claim = Claim::new(counter);
+    // A size that is known is held at once: the second big file waits outside, not half way.
+    if size.is_some_and(|size| !claim.hold(size, cap)) {
+        return Err(too_busy());
+    }
     let failed = |e: std::io::Error| {
         if e.kind() == std::io::ErrorKind::StorageFull {
             too_little_room()
@@ -302,14 +359,14 @@ async fn receive(
             )
         }
     };
-    let (mut file, incoming) = tokio::task::spawn_blocking(move || {
+    let (mut file, mut incoming) = tokio::task::spawn_blocking(move || {
         std::fs::create_dir_all(&dir)?;
         let path = dir.join(fresh_name());
         let file = std::fs::OpenOptions::new()
             .write(true)
             .create_new(true)
             .open(&path)?;
-        let incoming = Incoming { path };
+        let incoming = Incoming { path, claim };
         if let Some(size) = size {
             file.set_len(size)?;
         }
@@ -345,6 +402,10 @@ async fn receive(
         // A body without a size, or with a false one, is counted as it comes: it stops at the limit.
         if written > max {
             return Err(too_large());
+        }
+        // The files on their way together stay within the room of the hub (a body of no or a false size is held as it comes).
+        if !incoming.claim.hold(written, cap) {
+            return Err(too_busy());
         }
         file = tokio::task::spawn_blocking(move || file.write_all(&chunk).map(|()| file))
             .await
@@ -567,7 +628,18 @@ pub(super) async fn upload(
             "a phone attaches only to a task, and a photo or a voice note to a meeting",
         );
     }
-    let (incoming, written) = match receive(dir.clone(), size, rt.upload_max_bytes, body).await {
+    let (incoming, written) = match receive(
+        dir.clone(),
+        size,
+        rt.upload_max_bytes,
+        (
+            &ON_DISK,
+            rt.upload_max_bytes.saturating_mul(IN_FLIGHT_FILES),
+        ),
+        body,
+    )
+    .await
+    {
         Ok(done) => done,
         Err(response) => return response,
     };
@@ -679,7 +751,7 @@ static UPLOAD_NAME: header::HeaderName = header::HeaderName::from_static("x-uplo
 mod tests {
     use super::{
         asked_kind, attach_op, clean_name, content_matches, extension_allowed, kind_for_meeting,
-        percent_decoded, receive, refused_name,
+        percent_decoded, receive, refused_name, AtomicU64, Ordering,
     };
 
     #[test]
@@ -801,13 +873,71 @@ mod tests {
     async fn a_body_over_the_limit_is_stopped_as_it_comes() {
         let dir = std::env::temp_dir().join(format!("upload-limit-{}", std::process::id()));
         let body = axum::body::Body::from(vec![0u8; 100]);
-        let over = receive(dir.clone(), None, 99, body).await;
+        let over = receive(dir.clone(), None, 99, (&FREE, u64::MAX), body).await;
         assert_eq!(over.err().map(|r| r.status().as_u16()), Some(413));
         let body = axum::body::Body::from(vec![0u8; 100]);
-        let exact = receive(dir.clone(), None, 100, body).await;
+        let exact = receive(dir.clone(), None, 100, (&FREE, u64::MAX), body).await;
         assert_eq!(exact.ok().map(|(_, n)| n), Some(100));
         let left = std::fs::read_dir(&dir).map_or(0, Iterator::count);
         assert_eq!(left, 0, "a file that was refused or dropped is gone");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    static FREE: AtomicU64 = AtomicU64::new(0);
+    static ROOM: AtomicU64 = AtomicU64::new(0);
+
+    /// Files on their way together may not pass the room of the hub: the one that would is turned away at once (known
+    /// size) or when its bytes pass it (no size), and what a file held is given back when it is gone.
+    #[tokio::test]
+    async fn files_on_their_way_together_stay_within_the_room() {
+        let dir = std::env::temp_dir().join(format!("upload-room-{}", std::process::id()));
+        let first = receive(
+            dir.clone(),
+            Some(60),
+            100,
+            (&ROOM, 100),
+            axum::body::Body::from(vec![0u8; 60]),
+        )
+        .await
+        .ok()
+        .expect("the first file fits");
+        assert_eq!(ROOM.load(Ordering::SeqCst), 60);
+        // Known size: refused before a byte is read.
+        let known = receive(
+            dir.clone(),
+            Some(60),
+            100,
+            (&ROOM, 100),
+            axum::body::Body::from(vec![0u8; 60]),
+        )
+        .await;
+        assert_eq!(known.err().map(|r| r.status().as_u16()), Some(503));
+        // No size: stopped when its bytes pass the room.
+        let unknown = receive(
+            dir.clone(),
+            None,
+            100,
+            (&ROOM, 100),
+            axum::body::Body::from(vec![0u8; 60]),
+        )
+        .await;
+        assert_eq!(unknown.err().map(|r| r.status().as_u16()), Some(503));
+        assert_eq!(ROOM.load(Ordering::SeqCst), 60, "a refusal holds nothing");
+        drop(first);
+        assert_eq!(
+            ROOM.load(Ordering::SeqCst),
+            0,
+            "a gone file gives its room back"
+        );
+        let again = receive(
+            dir.clone(),
+            Some(60),
+            100,
+            (&ROOM, 100),
+            axum::body::Body::from(vec![0u8; 60]),
+        )
+        .await;
+        assert!(again.is_ok());
         let _ = std::fs::remove_dir_all(&dir);
     }
 
