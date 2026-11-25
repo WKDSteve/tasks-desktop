@@ -8053,10 +8053,26 @@ test('the actions of a row: only on the row under the pointer or with the focus,
   const slug = 'row-actions-e2e';
   const file = join(state().vault, 'lib.nvim', 'ROADMAP', 'tasks', `${slug}.md`);
   writeFileSync(file, `---\ntitle: Rowact a001\nstatus: open\nkind: task\n---\n\nA row with actions.\n`);
+  // The marks "touches n areas" come from their own request (`/api/tasks/links`), later than the rows: a mark that arrives
+  // between two measures widens the marks of its row and narrows the title (seen on the runner: 672.97 to 633.28 px
+  // after the pointer had gone over the row, in the trace of CI run 45476442565). The request is held here until the
+  // test lets it go, so that the late arrival is the rule of this test and not a matter of the machine.
+  let letGo: () => void = () => undefined;
+  const gate = new Promise<void>((open) => (letGo = open));
+  await page.route(
+    (url) => url.pathname === '/api/tasks/links',
+    async (route) => {
+      await gate;
+      await route.continue().catch(() => undefined);
+    },
+  );
   await pair(page);
   await showList(page);
   const hosts = page.locator('.rows .row-host');
   await expect(hosts.nth(2)).toBeVisible();
+  // Measure the state, not the time: the second row (alpha) carries a cross-area mark once the links are in.
+  letGo();
+  await expect(hosts.nth(1).locator('.meta')).toContainText('↔');
   /** The controls of the bars that are drawn, as the row that holds each: `visibility` is what hides a bar. */
   const drawn = () =>
     page.locator('.rows [data-row-action]').evaluateAll((els) =>
