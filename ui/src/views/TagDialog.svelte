@@ -135,6 +135,8 @@
     </div>
   {/if}
   <div class="buttons">
+    <!-- Locked while nothing is chosen, not an error of a field: the choice is a list, the button carries the number of changes
+         it would make (0 here), and a send without a choice has nothing to say at a field. Locked while it writes (`busy`). -->
     <button type="button" class="primary" disabled={chosen.length === 0 || busy || app.saving} onclick={() => void apply()}
       >{t(mode === 'add' ? 'tags.apply_add' : 'tags.apply_remove', { n: changes })}</button
     >

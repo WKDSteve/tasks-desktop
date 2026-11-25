@@ -194,6 +194,8 @@
     </div>
   {:else}
     <div class="buttons">
+      <!-- Locked while nothing is chosen, not an error of a field: the choice is a list with its count ("0 chosen") beside it, and
+           a send without a choice has no field to say it at. Locked while it writes (`busy`). -->
       <button
         type="button"
         class="primary"

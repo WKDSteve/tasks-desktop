@@ -178,6 +178,8 @@
     {/if}
     <div class="actions">
       {#if stage === 'choose'}
+        <!-- Locked while no draft is ticked: the button names the number it would make, the drafts are a list of choices and no
+             field is wrong. -->
         <button type="button" class="primary" disabled={ticked.length === 0} onclick={create}
           >{t('split.create_ticked', { n: ticked.length })}</button
         >
