@@ -79,6 +79,19 @@ class BundleSize(unittest.TestCase):
         with self.assertRaises(ValueError):
             check.check(dist, 800)
 
+    def test_the_markdown_reader_in_the_start_fails_however_small_the_start(self) -> None:
+        dist = self.with_chunks(100, 12)
+        assets = dist / 'assets'
+        # In a lazy chunk it is where it belongs.
+        (assets / 'lazy.js').write_bytes(b'x' * 1000 + b'rules:["smartquotes","text_join"]')
+        good, words = check.check(dist, 800)
+        self.assertTrue(good, words)
+        # In a chunk the main chunk imports statically, down the chain, it is parsed at every start.
+        (assets / 'deep-2.js').write_bytes(b'x' * 1000 + b'rules:["smartquotes","text_join"]')
+        good, words = check.check(dist, 800)
+        self.assertFalse(good)
+        self.assertIn('the Markdown reader (markdown-it) is in the start (deep-2.js)', words)
+
     def test_a_page_without_a_script_is_an_error(self) -> None:
         dist = self.page(1)
         (dist / 'index.html').write_text('<p>')

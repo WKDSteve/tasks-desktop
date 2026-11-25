@@ -17,7 +17,6 @@
   import { copyText } from './lib/exportDom';
   import { exportWord } from './lib/exportWord';
   import Brand from 'appkit-ui/Brand.svelte';
-  import DocsDialog from 'appkit-ui/DocsDialog.svelte';
   import { helpItems, type DocEntry } from 'appkit-ui/docs';
   import MenuBar, { type Menu, type MenuItem } from 'appkit-ui/MenuBar.svelte';
   import AreaFilter from './views/AreaFilter.svelte';
@@ -44,6 +43,7 @@
   import Lazy from './views/Lazy.svelte';
   import { loader, preload } from './views/loader';
   import { loadAttachBar } from './views/attachLoader';
+  import { loadMarkdown } from './views/markdownLoader';
 
   let { app, code }: { app: App; code: string | null } = $props();
 
@@ -70,11 +70,12 @@
   const loadViews = loader(() => import('./views/ViewsView.svelte'));
   const loadBoard = loader(() => import('./views/BoardView.svelte'));
   const loadInbox = loader(() => import('./views/InboxView.svelte'));
+  const loadDocsDialog = loader(() => import('appkit-ui/DocsDialog.svelte'));
   let preloaded = false;
   $effect(() => {
     if (app.phase !== 'ready' || preloaded) return;
     preloaded = true;
-    preload([loadViews, loadBoard, loadInbox, loadAttachBar]);
+    preload([loadViews, loadBoard, loadInbox, loadAttachBar, loadMarkdown]);
   });
   let chordTimer: ReturnType<typeof setTimeout> | undefined;
   let searchBox = $state<HTMLInputElement | null>(null);
@@ -841,9 +842,14 @@
   let docsOpen = $state(false);
   let docsAt = $state<string | null>(null);
   let docTexts = $state.raw<readonly DocEntry[]>([]);
+  // The window of the kit reads the documents with its Markdown reader: it comes with the documents, when Help is first
+  // opened, so that the reader is not in the start of the page (tools/check-bundle-size.py).
+  let DocsDialog = $state.raw<(typeof import('appkit-ui/DocsDialog.svelte'))['default'] | null>(null);
   async function openDocs(id: string | null): Promise<void> {
     try {
-      docTexts = await loadDocs();
+      const [texts, dialog] = await Promise.all([loadDocs(), loadDocsDialog()]);
+      docTexts = texts;
+      DocsDialog = dialog.default;
     } catch {
       app.toast = { kind: 'error', text: t('lazy.failed') };
       return;
@@ -1071,7 +1077,7 @@
     <BlockDialog {app} />
     <DropMoveDialog {app} />
     <Palette {app} />
-    <DocsDialog
+    {#if DocsDialog}<DocsDialog
       float={floating}
       floatParams={{ kind: 'docs', moveLabel: t('float.move'), moveHint: t('hint.float.move') }}
       open={docsOpen}
@@ -1086,7 +1092,7 @@
         list: t('kit.docs.list'),
         close: t('kit.dismiss'),
       }}
-    />
+    />{/if}
     <Lazy {app} when={app.conflictsOpen} load={() => import('./views/ConflictCenter.svelte')} onfailed={() => app.closeConflicts()} />
     <Lazy {app} when={app.managingVaults} load={() => import('./views/VaultsDialog.svelte')} onfailed={() => app.closeVaults()} />
     <Lazy {app} when={app.agentFor !== null} load={() => import('./views/AgentDialog.svelte')} onfailed={() => app.closeAgent()} />

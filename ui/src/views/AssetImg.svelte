@@ -2,7 +2,7 @@
   // One image below `assets/` of a container, from the container's store (`AssetImages`): the picture once it is
   // there, its description while it loads, and the page's word for a missing one (or nothing, for a small icon). Only
   // the `blob:` address the store made is ever put into the `<img>` (drawableImageUrl of the kit).
-  import { drawableImageUrl } from 'appkit-ui/markdown';
+  import { drawableImageUrl } from 'appkit-ui/image-url';
   import type { AssetImages } from '../lib/assetImages.svelte';
   import { markHidden } from '../lib/text';
 

@@ -4,11 +4,12 @@
 // task without a folder, an address of another host or `data:` stays text and asks nothing. The addresses are given
 // back when another task is shown. The icon and the cover stand in the head.
 import { flushSync, mount, tick, unmount } from 'svelte';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { make, snapshot } from '../lib/appDouble';
 import { task } from '../lib/fixtures';
 import type { TaskEntry } from '../lib/contract';
 import Detail from './Detail.svelte';
+import { loadMarkdown } from './markdownLoader';
 
 type Made = ReturnType<typeof make>;
 
@@ -16,6 +17,11 @@ let mounted: ReturnType<typeof mount> | undefined;
 let made: Made | undefined;
 let made_urls: string[] = [];
 let revoked: string[] = [];
+
+// The Markdown reader is fetched when the page is idle after its start: here it is there, as for a detail opened later.
+beforeAll(async () => {
+  await loadMarkdown();
+});
 
 beforeEach(() => {
   made_urls = [];

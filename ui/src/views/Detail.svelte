@@ -8,7 +8,7 @@
   import type { App } from '../lib/app.svelte';
   import { formatNumber, hintOf, labelOf, translate, type Key } from '../lib/i18n';
   import { areaLabel } from '../lib/filter';
-  import { parseMarkdown } from 'appkit-ui/markdown';
+  import { loadMarkdown } from './markdownLoader';
   import { editableBody, hasHidden, markHidden, MAX_BODY_EDIT } from '../lib/text';
   import { REMIND_CHOICES } from '../lib/remind';
   import { REPEAT_FROMS } from '../lib/next';
@@ -81,7 +81,18 @@
   let viewing = $state<{ url: string; alt: string } | null>(null);
   const openImage = (_src: string, url: string, alt: string) => (viewing = { url, alt });
   const imageSource = $derived(images?.source(t('image.missing'), openImage));
-  const blocks = $derived(raw ? [] : parseMarkdown(body, { assets: images !== null }));
+  // The Markdown reader is a chunk of its own (`markdownLoader.ts`), fetched when the page is idle after its start; a
+  // detail opened before it has come shows the text as written and draws it once the reader is there.
+  let markdown = $state(loadMarkdown.loaded());
+  $effect(() => {
+    if (markdown || raw || body === '') return;
+    loadMarkdown().then(
+      (module) => (markdown = module),
+      // The chunk did not come: the text stays as written, the next detail asks again.
+      () => undefined,
+    );
+  });
+  const blocks = $derived(raw || !markdown ? [] : markdown.parseMarkdown(body, { assets: images !== null }));
   const icon = $derived(
     task ? shownIcon({ kind: 'task', id: task.id, icon: task.icon, point: task.point, category: task.category }, app.pathIcons, app.categoryIcons) : null,
   );
@@ -1188,7 +1199,7 @@
           <button type="button" disabled={app.locked} onclick={() => void saveBody()}>{t('detail.body_save')}</button>
           <button type="button" disabled={app.locked} onclick={() => (editing = false)}>{t('detail.body_cancel')}</button>
         </div>
-      {:else if raw}
+      {:else if raw || !markdown}
         <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
         <pre class="body" tabindex="0" translate="yes">{markHidden(body)}</pre>
       {:else}

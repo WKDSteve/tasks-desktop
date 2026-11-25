@@ -91,20 +91,34 @@ words of the tab and of the recording, and the recording in `AttachBar`. The vie
 of their own. `AttachBar` (the buttons of the detail that attach a file: camera, screen, microphone, board) loads on
 demand since (`ui/src/views/attachLoader.ts`), fetched when the page is idle like the board: the start is 949 kB.
 
-usage: check-bundle-size.py [--dist ui/dist] [--budget-kb 958]
+Lowered on 2026-11-25 to 931 kB: the Markdown reader of the kit (markdown-it, 101.6 kB) left the start. Only the
+detail of a task (its text), the address check of an image (`AssetImg`) and the help window used it there: the image
+check comes from `appkit-ui/image-url` (no parser), the detail loads the reader when the page is idle after its start
+(`ui/src/views/markdownLoader.ts`; a detail opened before shows the text as written), and the help window comes with
+its documents. The start went from 949.1 to 846.4 kB; the budget is the measured start plus 10 %, and the check fails
+when the reader is back in the start, whatever the room (`KEPT_OUT`).
+
+usage: check-bundle-size.py [--dist ui/dist] [--budget-kb 931]
 """
 import argparse
 import pathlib
 import re
 import sys
 
-BUDGET_KB = 958
+BUDGET_KB = 931
 
 # `from"./x.js"` and `import"./x.js"` of a built chunk: a static import. A dynamic `import("./x.js")` has a bracket.
 STATIC_IMPORT = re.compile(r'(?:from|import)\s*"\./([^"]+\.js)"')
 # The words of one language (`ui/src/lib/i18n-de.ts`): loaded on demand, but one of them before the page shows. The
 # languages are named: the hash of the shared `i18n-<hash>.js` may itself start with two letters and a dash.
 LANGUAGE_CHUNK = re.compile(r'^i18n-(?:de|en)-[A-Za-z0-9_-]+\.js$')
+# What must never be parsed at the start, by a text only its code holds (the names survive minification). The Markdown
+# reader of the kit (markdown-it, about 100 kB) is read by the detail of a task and the help window, both after the
+# start: one static import of `appkit-ui/markdown` (or of a component of the kit that imports it) brings it back, and
+# the budget alone would only notice that once the room is used up.
+KEPT_OUT = {
+    'the Markdown reader (markdown-it)': b'smartquotes',
+}
 
 
 def main_chunk(dist: pathlib.Path) -> pathlib.Path:
@@ -143,11 +157,19 @@ def check(dist: pathlib.Path, budget_kb: int) -> tuple[bool, str]:
     chunks.setdefault(language.name, language.stat().st_size)
     main = main_chunk(dist)
     total = sum(chunks.values()) / 1000
+    inside = [
+        f'{what} is in the start ({name}): load it on demand (ui/src/views/markdownLoader.ts)'
+        for what, marker in KEPT_OUT.items()
+        for name in sorted(chunks)
+        if marker in (dist / 'assets' / name).read_bytes()
+    ]
     words = f'{main.name}: {chunks[main.name] / 1000:.0f} kB, with {len(chunks) - 1} chunks of the start (language {language.name}): start {total:.0f} kB, budget {budget_kb} kB'
     if total > budget_kb:
         biggest = sorted(chunks.items(), key=lambda item: -item[1])[:6]
         words += '; the start is made of ' + ', '.join(f'{name} {size / 1000:.0f} kB' for name, size in biggest)
-    return total <= budget_kb, words
+    if inside:
+        words += '; ' + '; '.join(inside)
+    return total <= budget_kb and not inside, words
 
 
 def main() -> int:
@@ -156,7 +178,7 @@ def main() -> int:
     parser.add_argument('--budget-kb', default=BUDGET_KB, type=int)
     args = parser.parse_args()
     good, words = check(args.dist, args.budget_kb)
-    print(('ok: ' if good else 'too large: ') + words)
+    print(('ok: ' if good else 'failed: ') + words)
     return 0 if good else 1
 
 
