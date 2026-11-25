@@ -1,13 +1,12 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
-import { createServer, type IncomingHttpHeaders } from 'node:http';
-import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import AxeBuilder from '@axe-core/playwright';
 import type { Locator, Page, Route } from '@playwright/test';
 import { expect, isMachineFault, test } from './fixtures';
 import { expectAccessible, violations, watchViolations } from './a11y';
+import { aiDesktopDoubleIn } from './ai-desktop';
 import { STATE } from './global';
 import { ABNAHME_SLUG, HAND_KEYS_SLUG, HAND_SLUG, MIXED_SLUG, origin, pairingLink, pickedFolder, removeFile } from './hub';
 import { chooseFromMenu, openExportMenu } from './menu';
@@ -9214,42 +9213,8 @@ test('without ai-desktop the real hub offers no AI: the switch is greyed out wit
   expect(consoleProblems.get(page)).toEqual([]);
 });
 
-/**
- * ai-desktop as a double for the hub of the run: its `hub.json` and `control.secret` in the config folder the hub is
- * given (`AI_DESKTOP_CONFIG_DIR`, see `env` in hub.ts), a server that answers `/health` and `/jobs` and keeps what came.
- * This process stands in for its pid, so the record counts as running.
- */
-async function aiDesktopDouble(jobs: (body: Record<string, unknown>, path: string) => { status: number; body: unknown }) {
-  const dir = join(state().config, '..', 'ai-desktop');
-  mkdirSync(dir, { recursive: true });
-  const secret = 'ab'.repeat(32);
-  const instance = 'e2e-instance';
-  const seen: { path: string; headers: IncomingHttpHeaders; body: Record<string, unknown> }[] = [];
-  const server = createServer((req, res) => {
-    let text = '';
-    req.on('data', (chunk: Buffer) => (text += chunk.toString('utf8')));
-    req.on('end', () => {
-      const body = text === '' ? {} : (JSON.parse(text) as Record<string, unknown>);
-      seen.push({ path: req.url ?? '', headers: req.headers, body });
-      const answer = req.url === '/health' ? { status: 200, body: { app: 'ai-desktop', version: '0.1.0', instance } } : jobs(body, req.url ?? '');
-      res.writeHead(answer.status, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify(answer.body));
-    });
-  });
-  await new Promise<void>((done) => server.listen(0, '127.0.0.1', done));
-  const port = (server.address() as AddressInfo).port;
-  writeFileSync(join(dir, 'hub.json'), JSON.stringify({ app: 'ai-desktop', port, pid: process.pid, version: '0.1.0', instance }));
-  writeFileSync(join(dir, 'control.secret'), `${secret}\n`);
-  return {
-    port,
-    secret,
-    seen,
-    close: async () => {
-      rmSync(dir, { recursive: true, force: true });
-      await new Promise<void>((done) => server.close(() => done()));
-    },
-  };
-}
+/** ai-desktop as a double for the hub of the run (`ai-desktop.ts`). */
+const aiDesktopDouble = (jobs: (body: Record<string, unknown>, path: string) => { status: number; body: unknown }) => aiDesktopDoubleIn(state().config, jobs);
 
 /** The engine's command line on the vault of the run: what an agent of ai-desktop runs (`tasks claim`, `tasks done`). */
 function engineCli(...args: string[]): string {

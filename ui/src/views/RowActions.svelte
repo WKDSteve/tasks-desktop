@@ -33,6 +33,9 @@
   let focused = $state(false);
   let writing = $state(false);
   const meant = $derived(selected || hovered || focused || writing);
+  // The choice of an area for this task is open (a modal dialog over the page): the row has no pointer and no focus then,
+  // and the button that opened it must stay one that can take the focus back when the dialog closes (a hidden one cannot).
+  const asking = $derived(app.dropChoose === task.id || app.dropMove?.id === task.id);
   $effect(() => {
     const host = bar?.closest('.row-host');
     if (!host) return;
@@ -92,7 +95,7 @@
 </script>
 
 {#if offered.length > 0}
-  <span bind:this={bar} class="row-actions" class:shown={barShown(app.rowActions, selected)} class:always={app.rowActions.always} role="group" aria-label={t('rowact.group', { id: task.id })}>
+  <span bind:this={bar} class="row-actions" class:shown={barShown(app.rowActions, selected) || asking} class:always={app.rowActions.always} role="group" aria-label={t('rowact.group', { id: task.id })}>
     {#each offered as action (action)}
       {#if action === 'move'}
         <button

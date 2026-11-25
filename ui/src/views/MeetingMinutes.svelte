@@ -225,7 +225,8 @@
       {#if app.canAttach}
         <button type="button" disabled={busy || app.uploading !== null} onclick={() => photoInput?.click()}>{SIGNS.image} {t('minutes.kind.image')}</button>
         <button type="button" disabled={busy || app.uploading !== null} onclick={() => audioInput?.click()}>{SIGNS.audio} {t('minutes.kind.audio')}</button>
-        <button type="button" disabled={board !== null} onclick={() => (board = {})}>✎ {t('minutes.kind.board')}</button>
+        <!-- Not disabled while its board is open: the dialog gives the focus back to this button when it closes, and a disabled one cannot take it. -->
+        <button type="button" onclick={() => (board = board ?? {})}>✎ {t('minutes.kind.board')}</button>
         <input bind:this={photoInput} type="file" accept="image/*" capture="environment" hidden onchange={() => attach('photo', photoInput)} />
         <input bind:this={audioInput} type="file" accept="audio/*" capture="user" hidden onchange={() => attach('audio', audioInput)} />
       {/if}

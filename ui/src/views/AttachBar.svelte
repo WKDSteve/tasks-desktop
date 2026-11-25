@@ -279,12 +279,13 @@
     disabled={busy || taking !== null}
     onclick={() => audioPicker?.click()}>{t('attach.audio')}</button
   >
+  <!-- Not disabled while the board is open: the dialog gives the focus back to this button when it closes. -->
   <button
     type="button"
     class="attach"
     data-attach="board"
     data-hint={t('hint.ui.detail.attach_board')}
-    disabled={busy || drawing}
+    disabled={busy}
     onclick={() => (drawing = true)}>✎ {t('minutes.kind.board')}</button
   >
   <input

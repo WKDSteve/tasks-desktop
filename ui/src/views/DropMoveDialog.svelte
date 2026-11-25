@@ -59,6 +59,12 @@
     if (open && !dialog.open) dialog.showModal();
     if (!open && dialog.open) dialog.close();
   });
+  // The choice of an area gives way to the question "move it?" in the same dialog: the field the focus was on is gone then,
+  // and a change to a file starts on the safe answer (Cancel), so the focus goes there when it is drawn.
+  let cancelAsk: HTMLButtonElement | undefined = $state();
+  $effect(() => {
+    cancelAsk?.focus();
+  });
   function closed(): void {
     app.cancelDropMove();
     app.cancelDropChoose();
@@ -131,7 +137,7 @@
       {/if}
     {/if}
     <div class="actions">
-      <button type="button" onclick={() => app.cancelDropMove()}>{t('dialog.cancel')}</button>
+      <button type="button" bind:this={cancelAsk} onclick={() => app.cancelDropMove()}>{t('dialog.cancel')}</button>
       <button
         type="button"
         class="primary"
