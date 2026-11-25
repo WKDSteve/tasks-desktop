@@ -4,6 +4,7 @@
 // written is read from the hub of the tests), the filters, m/w/d/n. Dragging with a pointer is the browser tests'.
 import { flushSync, mount, tick, unmount } from 'svelte';
 import { afterEach, describe, expect, it } from 'vitest';
+import { addDays } from '../lib/calendar';
 import { make, snapshot } from '../lib/appDouble';
 import type { MeetingEntry } from '../lib/contract';
 import { task } from '../lib/fixtures';
@@ -143,6 +144,14 @@ describe('the month', () => {
     const all = await show(six.slice(0, 5), CAPS, 1);
     expect(all.root.querySelectorAll('.chip[data-meeting]')).toHaveLength(5);
     expect(all.root.querySelector('[data-meetings-cut]')).toBeNull();
+  });
+
+  it('reads a day more on each side, for a meeting of another zone that falls on a day on view only here', async () => {
+    const { root, m } = await show([]);
+    const days = [...root.querySelectorAll<HTMLElement>('td[data-day]')].map((td) => td.dataset.day!);
+    const query = m.hub.meetingQueries[0]!;
+    expect(query.since).toBe(addDays(days[0]!, -1));
+    expect(query.until).toBe(addDays(days[days.length - 1]!, 1));
   });
 
   it('offers no meetings where the engine has none', async () => {

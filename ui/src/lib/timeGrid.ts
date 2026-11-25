@@ -114,7 +114,7 @@ export function durationMinutes(text: string): number {
 /**
  * The meetings a new one would share its time with (concept 7.3, `meeting-overlap`): `meetings` as this machine sees
  * them (`localized`), the new one from `start` to `end` (wall times of this machine, `YYYY-MM-DDTHH:MM`). A cancelled
- * meeting, one with `overlap: ok`, a series template and an all-day one are no conflict. The engine says the same in
+ * or done meeting, one with `overlap: ok`, a series template and an all-day one are no conflict. The engine says the same in
  * `check` once the file is written; this only shows it before.
  */
 export function conflictsWith(meetings: readonly MeetingEntry[], start: string, end: string): MeetingEntry[] {
@@ -122,7 +122,8 @@ export function conflictsWith(meetings: readonly MeetingEntry[], start: string, 
   const b = wallMinutes(end);
   if (Number.isNaN(a) || Number.isNaN(b) || b <= a) return [];
   return meetings.filter((m) => {
-    if (!countsForConflict(m) || m.all_day || m.repeat || !m.starts_at || m.starts_at.length < 16) return false;
+    // as `meeting-overlap` of the engine: only a planned meeting, not one that is done
+    if (!countsForConflict(m) || m.status === 'done' || m.all_day || m.repeat || !m.starts_at || m.starts_at.length < 16) return false;
     const s = wallMinutes(m.starts_at);
     const e = m.ends_at && m.ends_at.length >= 16 ? wallMinutes(m.ends_at) : s + DEFAULT_LENGTH;
     return s < b && a < e;

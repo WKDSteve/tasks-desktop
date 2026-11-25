@@ -104,6 +104,7 @@ describe('the conflicts of a new meeting', () => {
     meeting('a', '2026-11-24T10:00', '2026-11-24T11:00'),
     meeting('ok', '2026-11-24T10:00', '2026-11-24T11:00', { overlap: 'ok' }),
     meeting('gone', '2026-11-24T10:00', '2026-11-24T11:00', { status: 'cancelled' }),
+    meeting('held', '2026-11-24T10:00', '2026-11-24T11:00', { status: 'done' }),
     meeting('series', '2026-11-24T10:00', '2026-11-24T11:00', { repeat: '1w' }),
     meeting('short', '2026-11-24T12:00', undefined),
     meeting('allday', '2026-11-24', '2026-11-24', { all_day: true }),

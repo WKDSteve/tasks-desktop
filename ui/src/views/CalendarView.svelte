@@ -36,6 +36,7 @@
   import { filterMeetings, meetingsByDay, NO_FILTER, placeSign, type MeetingFilter } from '../lib/timeGrid';
   import { seriesNote } from '../lib/series';
   import { localized, originalTime } from '../lib/zones';
+  import { addDays } from '../lib/calendar';
 
   let { app }: { app: App } = $props();
   const t = (key: Key, params: Record<string, string | number> = {}) => translate(app.lang, key, params);
@@ -72,7 +73,8 @@
     }
     const abort = new AbortController();
     app
-      .meetingsIn(first, last, abort.signal)
+      // a day more on each side: a meeting of another zone may fall on a day on view only in this machine's time
+      .meetingsIn(addDays(first, -1), addDays(last, 1), abort.signal)
       .then((read) => {
         if (abort.signal.aborted) return;
         found = read.items;

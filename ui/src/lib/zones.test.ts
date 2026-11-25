@@ -3,7 +3,7 @@
 // change on 2026-03-08 and 2026-11-01, Europe on 2026-03-29 and 2026-10-25: between those days New York and Vienna are
 // five hours apart, else six.
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { MeetingEntry } from './contract';
 import { instantOf, knownZone, localized, localWall, originalTime, zoneName, zoneWall } from './zones';
 
@@ -74,5 +74,19 @@ describe('a meeting as this machine sees it', () => {
     const plain = meeting({ date: '2026-03-16', time: '08:00', starts_at: '2026-03-16T08:00' });
     expect(localized(plain, VIE)).toBe(plain);
     expect(originalTime(plain)).toBe('');
+  });
+});
+
+describe('the cost of the reckoning', () => {
+  it('makes one formatter per zone, not one per meeting', () => {
+    const made = vi.spyOn(Intl, 'DateTimeFormat');
+    try {
+      for (let i = 0; i < 200; i += 1) {
+        localized(meeting({ id: `a/m${i}`, date: '2026-03-16', time: '08:00', starts_at: '2026-03-16T08:00', ends_at: '2026-03-16T09:00', tz: 'Asia/Kathmandu' }), 'Pacific/Auckland');
+      }
+      expect(made.mock.calls.length).toBeLessThanOrEqual(2);
+    } finally {
+      made.mockRestore();
+    }
   });
 });

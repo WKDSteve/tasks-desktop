@@ -9,6 +9,34 @@ import type { MeetingEntry } from './contract';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
+/**
+ * The formatter of the wall time of a zone, made once per zone (a calendar asks for it for every meeting and every
+ * comparison of a sort), or null for a zone this browser does not know.
+ */
+const formatters = new Map<string, Intl.DateTimeFormat | null>();
+function formatterOf(tz: string): Intl.DateTimeFormat | null {
+  let format = formatters.get(tz);
+  if (format === undefined) {
+    try {
+      format = new Intl.DateTimeFormat('en-CA', {
+        timeZone: tz,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        hourCycle: 'h23',
+      });
+    } catch {
+      format = null;
+    }
+    // a zone typed letter by letter into the form leaves a name per letter: the store stays small
+    if (formatters.size > 200) formatters.clear();
+    formatters.set(tz, format);
+  }
+  return format;
+}
+
 /** `YYYY-MM-DDTHH:MM` in minutes since the epoch (no zone: wall time), or NaN. A day alone is its midnight. */
 export function wallMinutes(at: string): number {
   const m = /^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2}))?$/.exec(at);
@@ -20,22 +48,12 @@ export function wallMinutes(at: string): number {
 /** The wall time `YYYY-MM-DDTHH:MM` of the instant `ms` in the zone `tz` (an IANA name), or in this machine's zone. */
 export function wallTime(ms: number, tz?: string): string {
   const pad = (n: number) => String(n).padStart(2, '0');
-  if (tz) {
-    try {
-      const parts = new Intl.DateTimeFormat('en-CA', {
-        timeZone: tz,
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-        hourCycle: 'h23',
-      }).formatToParts(new Date(ms));
-      const get = (type: string) => parts.find((p) => p.type === type)?.value ?? '';
-      return `${get('year')}-${get('month')}-${get('day')}T${get('hour')}:${get('minute')}`;
-    } catch {
-      // a zone this browser does not know: the machine's time, as for a meeting without one
-    }
+  // a zone this browser does not know: the machine's time, as for a meeting without one
+  const format = tz ? formatterOf(tz) : null;
+  if (format) {
+    const parts = format.formatToParts(new Date(ms));
+    const get = (type: string) => parts.find((p) => p.type === type)?.value ?? '';
+    return `${get('year')}-${get('month')}-${get('day')}T${get('hour')}:${get('minute')}`;
   }
   const d = new Date(ms);
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
@@ -43,13 +61,7 @@ export function wallTime(ms: number, tz?: string): string {
 
 /** Whether this browser knows the zone `tz` (an IANA name). */
 export function knownZone(tz: string | undefined): tz is string {
-  if (!tz) return false;
-  try {
-    new Intl.DateTimeFormat('en', { timeZone: tz });
-    return true;
-  } catch {
-    return false;
-  }
+  return !!tz && formatterOf(tz) !== null;
 }
 
 /** The offset of `tz` (or this machine's zone) at the instant `ms`, in minutes: wall time minus UTC. */
