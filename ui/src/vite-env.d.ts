@@ -1,3 +1,5 @@
+// The types of the Vite client and the constants that `vite build --mode web` defines, for the sources of the page.
+
 /// <reference types="vite/client" />
 
 // Set by `vite build --mode web` (see vite.config.ts); the page of the web variant shows them in "About".

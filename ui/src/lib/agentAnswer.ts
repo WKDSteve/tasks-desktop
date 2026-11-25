@@ -2,6 +2,7 @@
 // through the hub, the page watches it, and the answer comes back taken apart by the engine (`agent_answer`) as the
 // sections to adopt. Nothing is written until the person says so: `adoptOps` writes the sections with `set_section`,
 // `followUpOp` makes the follow-up task a review proposes, each on its own click.
+
 import type { AgentJob, Op } from './api';
 
 /** The kinds whose answer comes back to the page (`handoff`: the summary at the end of a hand-over). */

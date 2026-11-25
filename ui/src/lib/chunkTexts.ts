@@ -1,6 +1,7 @@
 // The words of a view that is a chunk of its own (as lib/pathMapTexts.ts for the competence map): English and German
 // side by side, imported only by the view, so that they come with its chunk and not with the start of the page (the
 // start has a budget, tools/check-bundle-size.py). The menu entry and its hint stay in `i18n`.
+
 import { translate, type Key, type Lang } from './i18n';
 
 export interface ChunkTexts<K extends string> {

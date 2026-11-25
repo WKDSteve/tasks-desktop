@@ -1,6 +1,7 @@
 // What the context menu offers, per kind of target (the kit's `ContextRegistry`): the entries come from the providers of
 // every target around the pointer, the innermost first. The page declares the targets (`use:contextTarget`); what an
 // entry does goes through the same methods of `App` as the buttons and keys do (the engine judges, WEB-13).
+
 import { metricOfFigure, metricOfTile } from './statsHistory';
 import { ContextRegistry, type ContextTarget } from 'appkit-ui/contextmenu';
 import type { MenuItem } from 'appkit-ui/menu';

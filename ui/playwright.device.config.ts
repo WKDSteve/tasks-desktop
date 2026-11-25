@@ -1,3 +1,6 @@
+// Playwright setup of the device suite (`pnpm e2e:device`): the phone page on a real Android phone over adb, skipped
+// without a phone.
+
 import { defineConfig } from '@playwright/test';
 import { e2ePort, lastRunFile, runOutputDir } from './e2e/port';
 

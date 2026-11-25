@@ -1,4 +1,5 @@
 // The words of the badges (`views/BadgesView.svelte`), English and German; they come with its chunk (lib/chunkTexts.ts).
+
 import { chunkTexts } from './chunkTexts';
 
 const EN = {

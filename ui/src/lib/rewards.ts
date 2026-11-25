@@ -2,6 +2,7 @@
 // not granted yet), granted (latest first) and coming (not reached, the nearest first). Reached, granted, missing and the
 // days are the engine's (`tasks.paths` with `levels`, capability `paths_levels`; WEB-13); granting goes through
 // `path_reward` as in the view of the paths. The tiles of lib/badges.ts carry the picture and the share of the way.
+
 import type { PathEntry } from './contract';
 import { badgeTiles, levelProgress, type BadgeTile } from './badges';
 

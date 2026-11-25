@@ -1,5 +1,6 @@
 // The words of the area filter in the views of the tab "Lernpläne" (`views/LearnScopeNote.svelte`), English and German;
 // they come with the chunks of those views (lib/chunkTexts.ts), not with the start of the page.
+
 import { chunkTexts } from './chunkTexts';
 
 const EN = {

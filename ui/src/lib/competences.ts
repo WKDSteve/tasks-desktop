@@ -2,6 +2,7 @@
 // practice, their targets in 12 and 24 months, the learning paths that lead there and the evidence given and open. The
 // stages, the targets, the scale and which path serves which field are the engine's (`tasks.competences`,
 // `tasks.learn_evidence`, `tasks.paths`; WEB-13): this file draws the ladder, filters, groups and orders.
+
 import type { Competences, CompetenceLevel, LearnEvidence, PathEntry } from './contract';
 
 export type Competence = Competences['items'][number];

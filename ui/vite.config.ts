@@ -1,3 +1,6 @@
+// The Vite and Vitest setup of the page: one config per build mode (the page of the hub and the web variant), the list
+// of documents put into the page at build time, and the unit tests.
+
 import { readdirSync, readFileSync } from 'node:fs';
 import { svelte } from '@sveltejs/vite-plugin-svelte';
 import { defineConfig } from 'vitest/config';

@@ -1,5 +1,6 @@
 // The words of the drawing surface (`views/BoardEditor.svelte`), English and German. They live here and not in `i18n`:
 // the surface is a chunk of its own, and its words come with it instead of with the start of the page.
+
 import type { Lang } from './i18n';
 
 const EN = {

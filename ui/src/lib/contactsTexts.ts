@@ -3,6 +3,7 @@
 // them instead of with the start of the page (the start has a budget, tools/check-bundle-size.py). The menu entries
 // and their hints stay in `i18n` and `menuGroupHints`. No word here takes an address or a number as a value: a contact
 // is a person of a third party, and a message of the page never names what is theirs.
+
 import type { Lang } from './i18n';
 
 const EN = {

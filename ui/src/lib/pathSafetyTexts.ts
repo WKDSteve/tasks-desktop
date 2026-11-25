@@ -1,6 +1,7 @@
 // The words of the question the view of the paths asks before it closes a point under `{safety}`, English and German.
 // They come with the chunk of the view (`views/PathsView.svelte`), not with the start of the page (its budget,
 // tools/check-bundle-size.py).
+
 import type { Lang } from './i18n';
 
 const EN = {

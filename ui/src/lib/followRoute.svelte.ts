@@ -1,3 +1,6 @@
+// The address follows the task a window shows alone: `followTaskRoute` keeps the fragment in step with the open task,
+// `taskRouteFollower` is the step it takes.
+
 import { withTaskRoute } from './route';
 
 /** What the address follows of the app. */

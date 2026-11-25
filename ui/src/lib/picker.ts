@@ -2,6 +2,7 @@
 // tasks offers, how a typed word narrows them, and the `set` operations that put chosen tasks into a plan. The lists come
 // from the engine's snapshot as they are; nothing here judges whether a plan may take a task (the engine refuses and
 // says why, and that answer is what the page shows).
+
 import type { Snapshot, TaskEntry } from './contract';
 import type { Project } from './projects';
 

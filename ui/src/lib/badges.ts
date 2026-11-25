@@ -2,6 +2,7 @@
 // earned or open, the next one of each path with how far it is. What is reached, what is missing and the day it was
 // reached are the engine's (`tasks.paths` with `levels`, capability `paths_levels`; WEB-13): this file only orders,
 // filters and groups them, and turns "missing" into a share for the ring of the next one.
+
 import type { Icon, PathEntry, PathEntryLevel } from './contract';
 
 /** One badge: a level of a path. */

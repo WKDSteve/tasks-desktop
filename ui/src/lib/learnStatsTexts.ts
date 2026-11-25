@@ -1,5 +1,6 @@
 // The words of the learning statistics (`views/LearnStatsView.svelte`), English and German; they come with its chunk
 // (lib/chunkTexts.ts). The bars it shares with the overview have theirs in lib/learnOverviewTexts.ts.
+
 import { chunkTexts } from './chunkTexts';
 
 const EN = {

@@ -1,3 +1,5 @@
+// Playwright setup of the tests of the web variant: the single-file page opened from disk, without a hub.
+
 import { defineConfig } from '@playwright/test';
 import { lastRunFile, runOutputDir } from './e2e/port';
 

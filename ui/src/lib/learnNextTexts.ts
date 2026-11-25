@@ -1,6 +1,7 @@
 // The words of the view "Next learning step" (`views/LearnNextView.svelte`), English and German. They live here and not
 // in `i18n`: the view is a chunk of its own, and its words come with it instead of with the start of the page (the start
 // has a budget, tools/check-bundle-size.py). The menu entry and its hint stay in `i18n`.
+
 import type { Lang } from './i18n';
 
 const EN = {

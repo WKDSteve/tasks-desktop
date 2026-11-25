@@ -1,5 +1,6 @@
 // The titles of the project's documents and their order. Plain functions, also read by `vite.config.ts`, which puts the
 // list into the page without the texts (the Help menu names the documents; their text is loaded when one is opened).
+
 import type { DocEntry } from 'appkit-ui/docs';
 
 /** The first level-one heading, else the name of the file: the title of a document in the list. */

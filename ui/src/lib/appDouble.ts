@@ -1,6 +1,7 @@
 // The app with everything around it replaced, for the tests: a hub that answers from memory (`FakeHub`), storages
 // that are maps, a clock that stands still. `make` builds an `App` on them; the tests of the state (app.test.ts) and
 // the tests that mount a component in a DOM (`*.dom.test.ts`) share it, so both test the app as it is, not a copy.
+
 import type { IntentAnswer } from './intent';
 import { ApiError, type AssetAnswer, type BoardRequest, type BoardSaved, type DocmapPlaces, type FinishedQuery, type Hub, type HubArea, type OpsRequest, type SetupInfo, type SetupStep, type VaultList } from './api';
 import { App, type Env } from './app.svelte';

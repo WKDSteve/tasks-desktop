@@ -1,5 +1,6 @@
 // The words of the task float of a learning point (PathExercise.svelte), English and German. They come with the chunk
 // of the float, not with the start of the page (its budget, tools/check-bundle-size.py).
+
 import type { Lang } from '../lib/i18n';
 
 const EN = {

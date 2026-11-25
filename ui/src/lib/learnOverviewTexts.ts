@@ -1,5 +1,6 @@
 // The words of the overview of the tab Learning plans (`views/LearnView.svelte`) and of the bars it shares with the
 // statistics (`views/LearnBars.svelte`), English and German; they come with its chunk (lib/chunkTexts.ts).
+
 import { chunkTexts } from './chunkTexts';
 
 const EN = {

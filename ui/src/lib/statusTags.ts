@@ -1,4 +1,5 @@
 // The status of a task and its state in the plan, as the marks that stand side by side in a row (list, plan, graph).
+
 import { hintOf, labelOf, translate, type Lang } from './i18n';
 
 export interface StatusTag {

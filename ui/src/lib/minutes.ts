@@ -1,6 +1,7 @@
 // The minutes of a meeting (concept 7.7): one field, and every entry one `meeting_capture` of the engine. What is typed
 // is read here into entries (a shortcut names the kind), and what the engine wrote into `## Protokoll` is read back into
 // lines with their time and kind. The page only shows; the engine writes the file (WEB-13).
+
 import type { Op } from './api';
 import { sectionText, withComments } from './meetings';
 

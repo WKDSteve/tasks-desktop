@@ -3,6 +3,7 @@
 // `learn_history`, `competences`) ask with `query`, the engine resolving area groups (WEB-13); the lists of paths
 // (`paths`, `learn_next`, whose methods take one name only) are narrowed by `has`, with the areas the page resolved
 // from the engine's groups (`App.matchAreas`).
+
 import { NO_AREA } from './areaGroups';
 
 /**

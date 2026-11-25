@@ -1,5 +1,6 @@
 // The words of the catalogue of the competences (`views/CompetencesView.svelte`), English and German; they come with its
 // chunk (lib/chunkTexts.ts).
+
 import { chunkTexts } from './chunkTexts';
 
 const EN = {

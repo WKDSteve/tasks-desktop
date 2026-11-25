@@ -1,3 +1,6 @@
+// The entry of the page the hub serves: it takes the pairing code out of the address, builds the state of the app
+// against the hub, loads the language of the page and mounts `App`.
+
 import { mount } from 'svelte';
 import './app.css';
 import App from './App.svelte';

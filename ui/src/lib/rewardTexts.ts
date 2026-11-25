@@ -1,4 +1,5 @@
 // The words of the rewards (`views/RewardsView.svelte`), English and German; they come with its chunk (lib/chunkTexts.ts).
+
 import { chunkTexts } from './chunkTexts';
 
 const EN = {

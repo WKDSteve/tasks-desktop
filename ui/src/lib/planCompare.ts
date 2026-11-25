@@ -1,5 +1,6 @@
 // The comparison of plans (`tasks.plan_compare`): which rows are shown and in which order. Every figure is the
 // engine's (rule WEB-13); this file only chooses and sorts the rows it gave.
+
 import type { PlanCompareRow } from './contract';
 
 /** What the table can be sorted by. */

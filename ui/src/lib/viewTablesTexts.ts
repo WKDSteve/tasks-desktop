@@ -1,6 +1,7 @@
 // The words of the export entries for a view that gives the menu View its own tables (`ViewTables` of lib/export.ts,
 // the learning statistics): "tables" where the page says "tasks". They come with the chunk of such a view, not with the
 // start of the page (its budget, tools/check-bundle-size.py); a view passes `tablesLabel` as `ViewTables.label`.
+
 import type { Lang } from './i18n';
 
 const EN = {

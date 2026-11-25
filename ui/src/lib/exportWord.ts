@@ -1,5 +1,6 @@
 // The word of an export entry of the menu View and the palette. Its own module: the start of the page needs it, and
 // lib/export.ts comes later, with an export.
+
 import type { ViewTables } from './export';
 
 /**

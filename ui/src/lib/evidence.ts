@@ -1,6 +1,7 @@
 // The evidence of all learning paths (concept "Reiter Lernpläne" 10): the rule of the competence matrix made visible,
 // "without evidence the stage below counts". Which point is evidence, its state, the stage it proves and the fields its
 // path serves are the engine's (`tasks.learn_evidence`; WEB-13): this file filters and groups them.
+
 import type { LearnEvidence } from './contract';
 
 export type Evidence = LearnEvidence['items'][number];

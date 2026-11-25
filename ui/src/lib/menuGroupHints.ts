@@ -1,5 +1,6 @@
 // The hints of the tab Office and some of its views, and of the submenus of the tab View and the headings of its submenu Export. They stand here, not in the language files, and the
 // page loads this part after its start (App.svelte), so the start stays within its budget (tools/check-bundle-size.py).
+
 const HINTS = {
   en: {
     'nav.calendar': 'The open tasks on their days: a month or a week, with the bar from start to due. Drag a task onto a day to set its due date.',

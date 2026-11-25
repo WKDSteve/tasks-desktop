@@ -1,3 +1,6 @@
+// Playwright setup of the end-to-end tests: the `*.spec.ts` files of `e2e/` run against the real hub and engine in the
+// system's Chrome.
+
 import { defineConfig } from '@playwright/test';
 import { e2ePort, lastRunFile, runOutputDir } from './e2e/port';
 

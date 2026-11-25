@@ -1,3 +1,6 @@
+// Back and Forward of the browser walk through the views and the open tasks: `trackHistory` makes each change of the
+// view or of the open task an entry of the history of the tab.
+
 import type { NavHistory, NavWindow } from 'appkit-ui/nav';
 import type { App } from './app.svelte';
 import { installAppHistory, placeAddress } from './history';

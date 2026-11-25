@@ -1,5 +1,6 @@
 // The summary at the end of a hand-over (`handoff`): checked once more before it can be written. A module of its own,
 // loaded when the first hand-over runs, so the start of the page does not carry it.
+
 import { watchAnswer, type Answer, type AnswerHub, type AnswerOutcome, type AnswerState } from './agentAnswer';
 
 /** The most a summary weighs once it is written into the task (UTF-8 bytes; the limit of ai-desktop and the hub). */
