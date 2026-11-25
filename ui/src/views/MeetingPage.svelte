@@ -18,6 +18,7 @@
   import type { App } from '../lib/app.svelte';
   import type { MeetingDocument, Result } from '../lib/contract';
   import { floating } from '../lib/floating';
+  import { focusFirstInvalid } from '../lib/formErrors';
   import { translate, type Key } from '../lib/i18n';
   import { joinLink } from '../lib/meetingLink';
   import {
@@ -37,7 +38,7 @@
   import AttachBar from './AttachBar.svelte';
   import Lazy from './Lazy.svelte';
   import MeetingMinutes from './MeetingMinutes.svelte';
-  import { untrack } from 'svelte';
+  import { tick, untrack } from 'svelte';
 
   let { app }: { app: App } = $props();
   const t = (key: Key, params: Record<string, string | number> = {}) => translate(app.lang, key, params);
@@ -172,14 +173,30 @@
     chooseTab(MEETING_TABS[next] ?? 'prep', true);
   }
 
+  // Sent empty, the form of the documents says so at the field and puts the focus there (lib/formErrors.ts); its button is
+  // locked only while a write is on its way. "Save" of the result and of the recording stay locked while nothing changed:
+  // that is no field that is wrong, there is nothing to send.
+  let documentTried = $state(false);
+  const documentMissing = $derived(documentTried && documentText.trim() === '');
+
   async function addDocument(event: SubmitEvent): Promise<void> {
     event.preventDefault();
+    const form = event.currentTarget instanceof HTMLFormElement ? event.currentTarget : null;
     const entry = documentText.trim();
-    if (!doc || !id || entry === '' || doc.body_truncated) return;
+    if (!doc || !id || doc.body_truncated) return;
+    if (entry === '') {
+      documentTried = true;
+      await tick();
+      focusFirstInvalid(form);
+      return;
+    }
     const heading = documentsHeading(doc.body);
     const result = await send({ op: 'set_section', id, heading: `## ${heading}`, text: withDocument(doc.body, heading, entry), ...guard() });
     // What was typed stays when nothing was written (a refusal, a conflict, a write on its way).
-    if (result?.results.every((r) => r.ok)) documentText = '';
+    if (result?.results.every((r) => r.ok)) {
+      documentText = '';
+      documentTried = false;
+    }
   }
 
   async function close(): Promise<void> {
@@ -391,12 +408,20 @@
           {#if canWrite && doc.body_truncated}
             <p class="muted" role="status">{t('meeting.documents.cut')}</p>
           {:else if canWrite}
-            <form class="row" onsubmit={addDocument} data-document-add>
+            <form class="row" novalidate onsubmit={addDocument} data-document-add>
               <label data-hint={t('hint.form.meeting.document')}>
                 <span>{t('meeting.documents.add')}</span>
-                <input spellcheck="false" type="text" bind:value={documentText} maxlength="2000" />
+                <input
+                  spellcheck="false"
+                  type="text"
+                  bind:value={documentText}
+                  maxlength="2000"
+                  aria-invalid={documentMissing ? 'true' : undefined}
+                  aria-describedby={documentMissing ? 'meeting-document-error' : undefined}
+                />
               </label>
-              <button type="submit" disabled={documentText.trim() === '' || busy}>{t('meeting.documents.add_button')}</button>
+              {#if documentMissing}<small class="field-error" id="meeting-document-error">{t('form.document_required')}</small>{/if}
+              <button type="submit" disabled={busy}>{t('meeting.documents.add_button')}</button>
             </form>
           {/if}
         </section>

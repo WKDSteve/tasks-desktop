@@ -4,7 +4,9 @@
   // The vaults the hub can read: which one is read now, choose another, forget one, add a folder. The hub reads one
   // vault at a time; choosing another loads the page again. Adding a folder is the person's decision, so the dialog
   // says what it means before the button, and the request says it was confirmed.
+  import { tick } from 'svelte';
   import type { App } from '../lib/app.svelte';
+  import { focusFirstInvalid } from '../lib/formErrors';
   import { translate, type Key } from '../lib/i18n';
   import { markHidden } from '../lib/text';
   import Info from 'appkit-ui/Info.svelte';
@@ -32,10 +34,25 @@
     if (chosen !== null) path = chosen;
   }
 
+  // Sent without what it needs, the form says so at the field and puts the focus on the first one (lib/formErrors.ts);
+  // the button is locked only while a request is on its way (`vaultBusy`).
+  let tried = $state(false);
+  let addEl: HTMLElement | undefined = $state();
+  const nameMissing = $derived(tried && name.trim() === '');
+  const pathMissing = $derived(tried && path.trim() === '');
+  const areaMissing = $derived(tried && create && area.trim() === '');
+  const attrs = (missing: boolean, id: string) => ({ 'aria-invalid': missing ? ('true' as const) : undefined, 'aria-describedby': missing ? id : undefined });
+
   async function add(): Promise<void> {
-    if (name.trim() === '' || path.trim() === '' || (create && area.trim() === '')) return;
+    if (name.trim() === '' || path.trim() === '' || (create && area.trim() === '')) {
+      tried = true;
+      await tick();
+      focusFirstInvalid(addEl);
+      return;
+    }
     const done = create ? await app.createVault(name, path, area) : await app.addVault(name, path);
     if (done) {
+      tried = false;
       name = '';
       path = '';
       area = '';
@@ -121,15 +138,16 @@
   {/if}
 
   <h3>{t('vaults.add_title')}</h3>
-  <div class="add" role="group" aria-label={t('vaults.add_title')}>
+  <div class="add" role="group" aria-label={t('vaults.add_title')} bind:this={addEl}>
     <label data-hint={t('hint.form.vaults.name')}>
       <span>{t('vaults.name')} <small>({t('vaults.name_hint')})</small></span>
-      <input spellcheck="true" type="text" bind:value={name} maxlength="40" disabled={app.vaultBusy} />
+      <input spellcheck="true" type="text" bind:value={name} maxlength="40" disabled={app.vaultBusy} {...attrs(nameMissing, 'vaults-name-error')} />
     </label>
+    {#if nameMissing}<small class="field-error" id="vaults-name-error">{t('form.name_required')}</small>{/if}
     <label data-hint={t('hint.form.vaults.path')}>
       <span>{t('vaults.path')} <small>({t('vaults.path_hint')})</small></span>
       <span class="path-row">
-        <input spellcheck="false" type="text" bind:value={path} maxlength="1024" disabled={app.vaultBusy} />
+        <input spellcheck="false" type="text" bind:value={path} maxlength="1024" disabled={app.vaultBusy} {...attrs(pathMissing, 'vaults-path-error')} />
         <button
           type="button"
           class="pick"
@@ -139,6 +157,7 @@
         >
       </span>
     </label>
+    {#if pathMissing}<small class="field-error" id="vaults-path-error">{t('form.folder_required')}</small>{/if}
     <label class="check" data-hint={t('hint.form.vaults.create')}>
       <input type="checkbox" bind:checked={create} disabled={app.vaultBusy} />
       <span>{t('vaults.create')} <small>({t('vaults.create_hint')})</small></span>
@@ -146,8 +165,9 @@
     {#if create}
       <label data-hint={t('hint.form.vaults.area')}>
         <span>{t('vaults.area')} <small>({t('vaults.name_hint')})</small></span>
-        <input spellcheck="false" type="text" bind:value={area} maxlength="128" disabled={app.vaultBusy} />
+        <input spellcheck="false" type="text" bind:value={area} maxlength="128" disabled={app.vaultBusy} {...attrs(areaMissing, 'vaults-area-error')} />
       </label>
+      {#if areaMissing}<small class="field-error" id="vaults-area-error">{t('form.area_required')}</small>{/if}
     {/if}
     <p class="warn">{t('vaults.warn')}</p>
   </div>
@@ -156,7 +176,7 @@
     <button
       type="button"
       class="primary"
-      disabled={app.vaultBusy || name.trim() === '' || path.trim() === '' || (create && area.trim() === '')}
+      disabled={app.vaultBusy}
       onclick={() => void add()}>{create ? t('vaults.create_button') : t('vaults.add')}</button
     >
   </div>

@@ -3,8 +3,9 @@
   // never names a path; a tile shows the image of its repo (read with the session, shown from a blob of the page) or
   // the first letter of its name. A click on a tile opens the tasks of its area; its menu copies it into another group,
   // takes it out of one, renames or deletes it, and opens its folder or Neovim in it on the machine of the hub.
-  import { onDestroy } from 'svelte';
+  import { onDestroy, tick } from 'svelte';
   import type { App } from '../lib/app.svelte';
+  import { focusFirstInvalid } from '../lib/formErrors';
   import { translate, type Key } from '../lib/i18n';
   import {
     groupAdded,
@@ -61,21 +62,38 @@
     }
   }
 
+  // A form that is sent without what it needs says so at the field and puts the focus there (lib/formErrors.ts); its
+  // button is locked only while a save is on its way. `tried` names the form that was sent incomplete.
+  type Form = 'group' | 'rename' | 'repo' | 'tile';
+  let tried = $state<Form | null>(null);
+  async function incomplete(form: HTMLFormElement, which: Form): Promise<void> {
+    tried = which;
+    await tick();
+    focusFirstInvalid(form);
+  }
+  const attrs = (missing: boolean, id: string) => ({ 'aria-invalid': missing ? ('true' as const) : undefined, 'aria-describedby': missing ? id : undefined });
+
   // -- groups --
   let newTitle = $state('');
   let renaming = $state<string | null>(null);
   let renameTo = $state('');
   let removing = $state<string | null>(null);
 
-  async function addGroup(): Promise<void> {
-    if (newTitle.trim() === '') return;
+  async function addGroup(form: HTMLFormElement): Promise<void> {
+    if (newTitle.trim() === '') return incomplete(form, 'group');
     const id = newId((n) => crypto.getRandomValues(new Uint8Array(n)), (x) => groups.some((g) => g.id === x));
-    if (await rs.save(groupAdded(groups, newTitle, id))) newTitle = '';
+    if (await rs.save(groupAdded(groups, newTitle, id))) {
+      newTitle = '';
+      tried = null;
+    }
   }
 
-  async function renameGroup(id: string): Promise<void> {
-    if (renameTo.trim() === '') return;
-    if (await rs.save(groupRenamed(groups, id, renameTo))) renaming = null;
+  async function renameGroup(form: HTMLFormElement, id: string): Promise<void> {
+    if (renameTo.trim() === '') return incomplete(form, 'rename');
+    if (await rs.save(groupRenamed(groups, id, renameTo))) {
+      renaming = null;
+      tried = null;
+    }
   }
 
   // -- adding a repo --
@@ -93,11 +111,15 @@
     if (chosen) path = chosen;
   }
 
-  async function addRepo(): Promise<void> {
-    if (path.trim() === '' || into === '') return;
+  async function addRepo(form: HTMLFormElement): Promise<void> {
+    if (path.trim() === '') return incomplete(form, 'repo');
+    if (into === '') return;
     const sent = { path, name };
     // Cleared only when it is still what was sent: what the person typed meanwhile stays.
-    if (await rs.add(path.trim(), into, name) && path === sent.path && name === sent.name) path = name = '';
+    if (await rs.add(path.trim(), into, name) && path === sent.path && name === sent.name) {
+      path = name = '';
+      tried = null;
+    }
   }
 
   // -- the menu of a tile --
@@ -118,8 +140,15 @@
   }
 
   async function act(run: () => Promise<boolean>): Promise<void> {
-    if (await run()) menuOf = null;
+    if (await run()) {
+      menuOf = null;
+      tried = null;
+    }
   }
+  const groupMissing = $derived(tried === 'group' && newTitle.trim() === '');
+  const renameMissing = $derived(tried === 'rename' && renameTo.trim() === '');
+  const pathMissing = $derived(tried === 'repo' && path.trim() === '');
+  const tileMissing = $derived(tried === 'tile' && tileName.trim() === '');
 </script>
 
 <section class="repos" aria-label={t('nav.repos')}>
@@ -138,15 +167,17 @@
     <p class="sr-only" aria-live="polite">{said}</p>
 
     <div class="forms">
-      <form onsubmit={(e) => (e.preventDefault(), void addGroup())}>
-        <label data-hint={t('hint.form.repos.group_new')}><span>{t('repos.group.new')}</span><input spellcheck="true" type="text" bind:value={newTitle} maxlength="80" /></label>
-        <button type="submit" disabled={rs.saving || newTitle.trim() === ''}>{t('repos.group.add')}</button>
+      <form novalidate onsubmit={(e) => (e.preventDefault(), void addGroup(e.currentTarget))}>
+        <label data-hint={t('hint.form.repos.group_new')}><span>{t('repos.group.new')}</span><input spellcheck="true" type="text" bind:value={newTitle} maxlength="80" {...attrs(groupMissing, `${uid}-group-error`)} /></label>
+        {#if groupMissing}<small class="field-error" id="{uid}-group-error">{t('form.name_required')}</small>{/if}
+        <button type="submit" disabled={rs.saving}>{t('repos.group.add')}</button>
       </form>
       {#if groups.length > 0}
-        <form onsubmit={(e) => (e.preventDefault(), void addRepo())}>
+        <form novalidate onsubmit={(e) => (e.preventDefault(), void addRepo(e.currentTarget))}>
           <label data-hint={t('hint.form.repos.path')}
-            ><span>{t('repos.add.path')}</span><input spellcheck="false" type="text" bind:value={path} maxlength="1024" list={rs.suggestions.length > 0 ? suggestId : undefined} autocomplete="off" /></label
+            ><span>{t('repos.add.path')}</span><input spellcheck="false" type="text" bind:value={path} maxlength="1024" list={rs.suggestions.length > 0 ? suggestId : undefined} autocomplete="off" {...attrs(pathMissing, `${uid}-path-error`)} /></label
           >
+          {#if pathMissing}<small class="field-error" id="{uid}-path-error">{t('form.folder_required')}</small>{/if}
           {#if rs.suggestions.length > 0}
             <!-- The folders below REPOS_DIR of the hub, by name: choosing one fills the field, the hub knows the folder. -->
             <datalist id={suggestId}>{#each rs.suggestions as folder (folder)}<option value={folder}></option>{/each}</datalist>
@@ -157,7 +188,7 @@
             <span>{t('repos.add.group')}</span>
             <select bind:value={into}>{#each groups as g (g.id)}<option value={g.id}>{g.title}</option>{/each}</select>
           </label>
-          <button type="submit" disabled={rs.saving || path.trim() === ''}>{t('repos.add.save')}</button>
+          <button type="submit" disabled={rs.saving}>{t('repos.add.save')}</button>
         </form>
       {:else if rs.read === 'ready'}
         <p class="muted">{t('repos.empty')}</p>
@@ -166,8 +197,9 @@
 
     {#snippet head(group: RepoGroup, g: number)}
       {#if renaming === group.id}
-        <form class="inline" onsubmit={(e) => (e.preventDefault(), void renameGroup(group.id))}>
-          <label data-hint={t('hint.form.repos.group_title')}><span class="sr-only">{t('repos.group.title')}</span><input spellcheck="true" type="text" bind:value={renameTo} maxlength="80" /></label>
+        <form class="inline" novalidate onsubmit={(e) => (e.preventDefault(), void renameGroup(e.currentTarget, group.id))}>
+          <label data-hint={t('hint.form.repos.group_title')}><span class="sr-only">{t('repos.group.title')}</span><input spellcheck="true" type="text" bind:value={renameTo} maxlength="80" {...attrs(renameMissing, `${uid}-rename-error`)} /></label>
+          {#if renameMissing}<small class="field-error" id="{uid}-rename-error">{t('form.name_required')}</small>{/if}
           <button type="submit" disabled={rs.saving}>{t('repos.group.rename.save')}</button>
           <button type="button" onclick={() => (renaming = null)}>{t('repos.cancel')}</button>
         </form>
@@ -209,9 +241,18 @@
         <button type="button" class="more" aria-label={t('repos.tile.menu', { name: r?.name ?? id })} onclick={() => openMenu(id, group.id)}>⋯</button>
         {#if menuOf?.id === id && menuOf.group === group.id}
           <div class="menu" role="group" aria-label={t('repos.tile.menu', { name: r?.name ?? id })}>
-            <form class="inline" onsubmit={(e) => (e.preventDefault(), void act(() => rs.save(groups, { [id]: tileName.trim() })))}>
-              <label data-hint={t('hint.form.repos.tile_name')}><span>{t('repos.tile.name')}</span><input spellcheck="true" type="text" bind:value={tileName} maxlength="80" /></label>
-              <button type="submit" disabled={rs.saving || tileName.trim() === ''}>{t('repos.tile.rename')}</button>
+            <form
+              class="inline"
+              novalidate
+              onsubmit={(e) => {
+                e.preventDefault();
+                if (tileName.trim() === '') void incomplete(e.currentTarget, 'tile');
+                else void act(() => rs.save(groups, { [id]: tileName.trim() }));
+              }}
+            >
+              <label data-hint={t('hint.form.repos.tile_name')}><span>{t('repos.tile.name')}</span><input spellcheck="true" type="text" bind:value={tileName} maxlength="80" {...attrs(tileMissing, `${uid}-tile-error`)} /></label>
+              {#if tileMissing}<small class="field-error" id="{uid}-tile-error">{t('form.name_required')}</small>{/if}
+              <button type="submit" disabled={rs.saving}>{t('repos.tile.rename')}</button>
             </form>
             {#if groups.length > 1}
               <form class="inline" onsubmit={(e) => (e.preventDefault(), void act(() => rs.save(tileCopied(groups, id, copyTo))))}>
