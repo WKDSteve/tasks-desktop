@@ -6205,7 +6205,10 @@ test('a new vault is made from an empty folder and added, and the folder of the 
   await dialog.getByLabel(/^Name/).fill('brand-new');
   await dialog.getByLabel(/^Folder/).fill(fresh);
   await dialog.getByRole('checkbox', { name: /Make this folder a new vault/ }).check();
-  await expect(dialog.getByRole('button', { name: 'Make and add' })).toBeDisabled();
+  // Without the name of the first area the button still sends: the field says what is missing and has the focus.
+  await dialog.getByRole('button', { name: 'Make and add' }).click();
+  await expect(dialog.getByLabel(/^First area/)).toHaveAttribute('aria-invalid', 'true');
+  await expect(dialog.getByLabel(/^First area/)).toBeFocused();
   await dialog.getByLabel(/^First area/).fill('first.nvim');
   await expectAccessible(page, 'the vaults dialog with the new vault form');
   await dialog.getByRole('button', { name: 'Make and add' }).click();
