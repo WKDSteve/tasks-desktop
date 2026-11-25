@@ -1,11 +1,11 @@
 // The hour grid of the calendar (concept 7.3, decision F9: week and day alike) and the meetings in the month: only
 // layout. Where a meeting stands, which ones overlap, what a drag makes of it (the `meeting_set` patch). Whether a
-// meeting or a write is valid stays the engine's word: the grid shows the times as the file wrote them (its own zone)
-// and a drag writes them back in the same wall time.
+// meeting or a write is valid stays the engine's word: the grid draws a meeting of another zone in this machine's time
+// (`zones.localized`, the calendar hands it so) and a drag writes the time back in the meeting's own zone.
 
 import { addDays, parseDate } from './calendar';
 import type { MeetingEntry } from './contract';
-import { wallMinutes } from './meetings';
+import { wallMinutes, zoneWall } from './zones';
 
 /** The minutes of a day the grid shows without scrolling: 07:00 to 20:00 (it scrolls over the whole day). */
 export const VISIBLE_FROM = 7 * 60;
@@ -91,12 +91,42 @@ export function layoutColumns(blocks: Block[]): Block[] {
     clusterEnd = Math.max(clusterEnd, block.end);
   }
   close();
-  // A conflict: two meetings that are not cancelled share some time.
-  const live = sorted.filter((b) => b.meeting.status !== 'cancelled');
+  // A conflict: two meetings that are not cancelled share some time, and neither says `overlap: ok`.
+  const live = sorted.filter((b) => countsForConflict(b.meeting));
   for (const block of sorted) {
-    block.conflict = block.meeting.status !== 'cancelled' && live.some((o) => o !== block && o.start < block.end && block.start < o.end);
+    block.conflict = countsForConflict(block.meeting) && live.some((o) => o !== block && o.start < block.end && block.start < o.end);
   }
   return sorted;
+}
+
+/** Whether a meeting takes part in conflicts: not cancelled, and not `overlap: ok` (it may share its time). */
+export function countsForConflict(m: Pick<MeetingEntry, 'status' | 'overlap'>): boolean {
+  return m.status !== 'cancelled' && m.overlap !== 'ok';
+}
+
+/** `45m`, `2h`, `1h30m` in minutes (the words `durationText` writes and the engine takes), or NaN. */
+export function durationMinutes(text: string): number {
+  const m = /^\s*(?:(\d+)\s*h)?\s*(?:(\d+)\s*m)?\s*$/.exec(text);
+  if (!m || (m[1] === undefined && m[2] === undefined)) return Number.NaN;
+  return Number(m[1] ?? 0) * 60 + Number(m[2] ?? 0);
+}
+
+/**
+ * The meetings a new one would share its time with (concept 7.3, `meeting-overlap`): `meetings` as this machine sees
+ * them (`localized`), the new one from `start` to `end` (wall times of this machine, `YYYY-MM-DDTHH:MM`). A cancelled
+ * meeting, one with `overlap: ok`, a series template and an all-day one are no conflict. The engine says the same in
+ * `check` once the file is written; this only shows it before.
+ */
+export function conflictsWith(meetings: readonly MeetingEntry[], start: string, end: string): MeetingEntry[] {
+  const a = wallMinutes(start);
+  const b = wallMinutes(end);
+  if (Number.isNaN(a) || Number.isNaN(b) || b <= a) return [];
+  return meetings.filter((m) => {
+    if (!countsForConflict(m) || m.all_day || m.repeat || !m.starts_at || m.starts_at.length < 16) return false;
+    const s = wallMinutes(m.starts_at);
+    const e = m.ends_at && m.ends_at.length >= 16 ? wallMinutes(m.ends_at) : s + DEFAULT_LENGTH;
+    return s < b && a < e;
+  });
 }
 
 /** The timed blocks of `days`, by day, each day laid out. */
@@ -196,10 +226,13 @@ export function dragged(block: Pick<Block, 'start' | 'end'>, kind: DragKind, del
 
 /**
  * The `meeting_set` patch that puts a meeting on `day` from `start` for `length` minutes: the date, the beginning and
- * the length as `duration` (a patch keeps one of `end` and `duration`, so `end` goes: the engine refuses both).
+ * the length as `duration` (a patch keeps one of `end` and `duration`, so `end` goes: the engine refuses both). `day`
+ * and `start` are this machine's time (the grid draws in it); a meeting of a zone `tz` gets them back in its own zone,
+ * so its file keeps its zone (`local`: this machine's zone, for the tests).
  */
-export function movePatch(day: string, start: number, length: number): Record<string, unknown> {
-  return { date: day, time: hhmm(start), duration: durationText(length), end: null };
+export function movePatch(day: string, start: number, length: number, tz?: string, local?: string): Record<string, unknown> {
+  const at = zoneWall(`${day}T${hhmm(start)}`, tz, local);
+  return { date: at.slice(0, 10), time: at.slice(11, 16), duration: durationText(length), end: null };
 }
 
 /** The range a drag over empty time makes: both ends snapped, at least a half hour, in one day. */

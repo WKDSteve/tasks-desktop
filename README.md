@@ -593,11 +593,21 @@ tasks; on the right participants (a row each: name, e-mail, role), notifications
 becomes the cover when ticked). While you type, a dry run of `meeting_new` names the meeting or says why the engine
 would refuse it; nothing is written before *Create*. A line typed into the palette is offered as *Meeting from the
 line: ...*: the engine reads it (`meeting_parse`) and the form opens filled in, with the words it could not read named
-above it.
+above it. Under the time the form names the meetings the new one would share its time with (compared in this PC's
+time, a meeting of another zone converted; a cancelled one and one marked *Overlapping is fine* are none). *Overlapping
+is fine* writes `overlap: ok`: the meeting gets no conflict sign in the calendar and no `meeting-overlap` from the
+check. *Make a preparation task* has the engine make a task "Vorbereitung: <title>" ("Prepare: " in English) with the
+meeting, due the day before, which the meeting names among its tasks.
+
+A meeting with `tz` is shown in this PC's time with its own time beside it: `14:00–15:00 (08:00 New York)`, in the
+list, the section of a task, the meeting page, and in the calendar (the block stands at this PC's time; a drag writes
+the time back in the meeting's zone). A time the clock skips at a change of summer time is read as the one after the
+gap, a time it shows twice as the first one; a zone the browser does not know is named as written and not converted.
 
 The section *Meetings* of a task lists its coming meetings (the next first) and the past ones (the last first), each
 with its time, the service of its address and its status; a click opens the meeting's page. The page has three tabs,
-*Preparation* (agenda to tick, documents: a link or a path added as a line of `## Unterlagen`, the tasks, the
+*Preparation* (agenda to tick, and *Take from the tasks*: the engine's proposals from the open tasks of the meeting and
+their open questions, each ticked until you untick it, added to `## Agenda` with one click; documents: a link or a path added as a line of `## Unterlagen`, the tasks, the
 participants, the buttons to attach as a task has, *Use as cover* for each image of its folder), *In the meeting*
 (*Join*, who is there to tick, the agenda) and *Result* (decisions, follow-ups, the result, the recording, *Mark as
 done*). All of them can be reached at any time (arrow keys, `Home`, `End`); the clock picks the one the page opens on:

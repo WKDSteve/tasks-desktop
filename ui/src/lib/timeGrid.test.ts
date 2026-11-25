@@ -7,8 +7,10 @@ import {
   allDayDays,
   blocksByDay,
   conflictCount,
+  conflictsWith,
   createRange,
   dragged,
+  durationMinutes,
   durationText,
   filterMeetings,
   hhmm,
@@ -87,6 +89,43 @@ describe('layoutColumns', () => {
     expect(conflictCount(blocks)).toBe(0);
     expect(blocks.map((b) => b.cols)).toEqual([2, 2]);
   });
+  it('does not count a meeting that says overlap: ok, on either side', () => {
+    const blocks = layoutColumns([
+      { meeting: meeting('a', '2026-11-24T10:00', '2026-11-24T11:00'), day: 'd', start: 600, end: 660, clipped: false, col: 0, cols: 1, conflict: false },
+      { meeting: meeting('b', '2026-11-24T10:30', '2026-11-24T11:30', { overlap: 'ok' }), day: 'd', start: 630, end: 690, clipped: false, col: 0, cols: 1, conflict: false },
+    ]);
+    expect(conflictCount(blocks)).toBe(0);
+    expect(blocks.map((b) => b.cols)).toEqual([2, 2]);
+  });
+});
+
+describe('the conflicts of a new meeting', () => {
+  const day = [
+    meeting('a', '2026-11-24T10:00', '2026-11-24T11:00'),
+    meeting('ok', '2026-11-24T10:00', '2026-11-24T11:00', { overlap: 'ok' }),
+    meeting('gone', '2026-11-24T10:00', '2026-11-24T11:00', { status: 'cancelled' }),
+    meeting('series', '2026-11-24T10:00', '2026-11-24T11:00', { repeat: '1w' }),
+    meeting('short', '2026-11-24T12:00', undefined),
+    meeting('allday', '2026-11-24', '2026-11-24', { all_day: true }),
+  ];
+  it('names the meetings that share its time', () => {
+    expect(conflictsWith(day, '2026-11-24T10:30', '2026-11-24T11:30').map((m) => m.id)).toEqual(['a']);
+    // a meeting without an end lasts half an hour
+    expect(conflictsWith(day, '2026-11-24T12:15', '2026-11-24T13:00').map((m) => m.id)).toEqual(['short']);
+  });
+  it('is no conflict when they only touch, or for an empty span', () => {
+    expect(conflictsWith(day, '2026-11-24T11:00', '2026-11-24T12:00')).toEqual([]);
+    expect(conflictsWith(day, '2026-11-24T11:00', '2026-11-24T11:00')).toEqual([]);
+    expect(conflictsWith(day, 'x', 'y')).toEqual([]);
+  });
+  it('reads a duration', () => {
+    expect(durationMinutes('45m')).toBe(45);
+    expect(durationMinutes('2h')).toBe(120);
+    expect(durationMinutes('1h30m')).toBe(90);
+    expect(durationMinutes('soon')).toBeNaN();
+    expect(durationMinutes('')).toBeNaN();
+    for (const n of [15, 60, 90, 150]) expect(durationMinutes(durationText(n))).toBe(n);
+  });
 });
 
 describe('the meetings of the days', () => {
@@ -132,6 +171,12 @@ describe('a drag', () => {
   });
   it('writes the date, the beginning and the length, and drops the end (the engine takes one of them)', () => {
     expect(movePatch('2026-11-25', 570, 90)).toEqual({ date: '2026-11-25', time: '09:30', duration: '1h30m', end: null });
+    // a meeting of New York dragged to 15:00 here (Vienna, winter) is written as 09:00 in New York
+    expect(movePatch('2026-11-25', 900, 60, 'America/New_York', 'Europe/Vienna')).toEqual({ date: '2026-11-25', time: '09:00', duration: '1h', end: null });
+    // between the changes of summer time the distance is five hours
+    expect(movePatch('2026-03-16', 900, 60, 'America/New_York', 'Europe/Vienna')).toMatchObject({ date: '2026-03-16', time: '10:00' });
+    // past midnight there: the day of the zone
+    expect(movePatch('2026-11-25', 60, 60, 'America/New_York', 'Europe/Vienna')).toMatchObject({ date: '2026-11-24', time: '19:00' });
   });
   it('snaps and names the length as the engine reads it', () => {
     expect(snap(7)).toBe(0);

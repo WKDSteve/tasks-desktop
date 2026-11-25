@@ -3,6 +3,7 @@ import {
   coverChoices,
   emptyMeetingForm,
   formOfProposal,
+  formSpan,
   meetingFields,
   meetingNewOp,
   participantLine,
@@ -20,6 +21,35 @@ import {
 
 /** The instant of a wall time of this machine (the tests run in its zone). */
 const at = (wall: string): number => new Date(`${wall}:00`).getTime();
+
+describe('the extras of the form (concept 4.4, 7.3)', () => {
+  const base = { ...emptyMeetingForm('a', '2026-11-24T09:10'), title: 'Sync' };
+  it('asks the engine for a preparation task and writes overlap: ok', () => {
+    expect(meetingNewOp(base, 'de')).not.toHaveProperty('prep');
+    expect(meetingFields(base)).not.toHaveProperty('overlap');
+    expect(meetingNewOp({ ...base, prep: true }, 'de')).toMatchObject({ op: 'meeting_new', prep: true });
+    expect(meetingFields({ ...base, overlapOk: true })).toMatchObject({ overlap: 'ok' });
+  });
+  it('takes the time of the form into this machine', () => {
+    // 10:00 for an hour, in the machine's own zone
+    expect(formSpan({ ...base, time: '10:00', duration: '60m' }, 'Europe/Vienna')).toEqual({ start: '2026-11-24T10:00', end: '2026-11-24T11:00' });
+    // an end time instead of a duration
+    expect(formSpan({ ...base, time: '10:00', endMode: 'end', end: '10:45' }, 'Europe/Vienna')).toEqual({ start: '2026-11-24T10:00', end: '2026-11-24T10:45' });
+    // in New York: six hours later here
+    expect(formSpan({ ...base, time: '08:00', duration: '30m', tz: 'America/New_York' }, 'Europe/Vienna')).toEqual({
+      start: '2026-11-24T14:00',
+      end: '2026-11-24T14:30',
+    });
+    // without a length: half an hour
+    expect(formSpan({ ...base, time: '10:00', duration: '' }, 'Europe/Vienna')).toEqual({ start: '2026-11-24T10:00', end: '2026-11-24T10:30' });
+  });
+  it('has no span all day, without a time or with an end before the beginning', () => {
+    expect(formSpan({ ...base, allDay: true }, 'Europe/Vienna')).toBeNull();
+    expect(formSpan({ ...base, time: '' }, 'Europe/Vienna')).toBeNull();
+    expect(formSpan({ ...base, time: '10:00', endMode: 'end', end: '09:00' }, 'Europe/Vienna')).toBeNull();
+    expect(formSpan({ ...base, time: '10:00', duration: 'soon' }, 'Europe/Vienna')).toBeNull();
+  });
+});
 
 describe('the form of a meeting', () => {
   it('starts at the next full hour, an hour long, for the tasks it was opened for', () => {
@@ -156,9 +186,18 @@ describe('the meetings of a task', () => {
 describe('the words of a meeting', () => {
   it('say its time', () => {
     expect(whenText({ date: '2026-11-24', time: '14:00', ends_at: '2026-11-24T15:00' }, 'all day')).toBe('2026-11-24 14:00–15:00');
-    expect(whenText({ date: '2026-11-24', time: '23:00', ends_at: '2026-11-25T01:00', tz: 'Europe/Vienna' }, 'all day')).toBe(
-      '2026-11-24 23:00–2026-11-25 01:00 (Europe/Vienna)',
-    );
+    // the own zone: nothing beside it
+    const vienna = { date: '2026-11-24', time: '23:00', starts_at: '2026-11-24T23:00', ends_at: '2026-11-25T01:00', tz: 'Europe/Vienna' };
+    expect(whenText(vienna, 'all day', 'Europe/Vienna')).toBe('2026-11-24 23:00–2026-11-25 01:00');
+    // another zone: this machine's time, the original beside it
+    const ny = { date: '2026-11-24', time: '08:00', starts_at: '2026-11-24T08:00', ends_at: '2026-11-24T09:00', tz: 'America/New_York' };
+    expect(whenText(ny, 'all day', 'Europe/Vienna')).toBe('2026-11-24 14:00–15:00 (08:00 New York)');
+    // the evening in New York is the next day here: the original day is named
+    const late = { date: '2026-11-24', time: '20:00', starts_at: '2026-11-24T20:00', ends_at: '2026-11-24T21:00', tz: 'America/New_York' };
+    expect(whenText(late, 'all day', 'Europe/Vienna')).toBe('2026-11-25 02:00–03:00 (2026-11-24 20:00 New York)');
+    // a zone this browser does not know: named as written, the time as written
+    const mars = { date: '2026-11-24', time: '08:00', starts_at: '2026-11-24T08:00', tz: 'Mars/Base' };
+    expect(whenText(mars, 'all day', 'Europe/Vienna')).toBe('2026-11-24 08:00 (Mars/Base)');
     expect(whenText({ date: '2026-11-24', all_day: true, ends_at: '2026-11-24' }, 'all day')).toBe('2026-11-24 all day');
     expect(whenText({}, 'all day')).toBe('');
   });

@@ -20,7 +20,11 @@
   import { joinLink } from '../lib/meetingLink';
   import type { ContactEntry } from '../lib/contract';
   import { fillFromContact, nameOptions } from '../lib/participantContacts';
-  import { MAX_NOTIFY, MAX_PARTICIPANTS, NOTIFY_PRESETS, type MeetingForm, type MeetingPreview } from '../lib/meetings';
+  import { formSpan, MAX_NOTIFY, MAX_PARTICIPANTS, NOTIFY_PRESETS, whenText, type MeetingForm, type MeetingPreview } from '../lib/meetings';
+  import { addDays } from '../lib/calendar';
+  import type { MeetingEntry } from '../lib/contract';
+  import { conflictsWith } from '../lib/timeGrid';
+  import { localized } from '../lib/zones';
   import { exceptDays, REPEATS, repeatLabel, seriesWord, type SeriesWord } from '../lib/series';
   import { markHidden } from '../lib/text';
   import PendingAttachments from './PendingAttachments.svelte';
@@ -94,6 +98,41 @@
     const timer = setTimeout(async () => {
       const value = await app.previewMeeting(snapshot, abort.signal);
       if (!abort.signal.aborted) answer = { key, value };
+    }, 250);
+    return () => {
+      clearTimeout(timer);
+      abort.abort();
+    };
+  });
+
+  // The meetings the new one would share its time with (concept 7.3): the days around it read, compared in this
+  // machine's time (a meeting of another zone converted). Not when it says `overlap: ok`. `check` says the same once
+  // the file is written (`meeting-overlap`).
+  let conflicts = $state<MeetingEntry[]>([]);
+  // only the time of the form decides (a key typed into the title asks the hub nothing)
+  const spanKey = $derived.by(() => {
+    if (form === null || form.overlapOk) return '';
+    const span = formSpan(form);
+    return span ? `${span.start}|${span.end}` : '';
+  });
+  $effect(() => {
+    const key = spanKey;
+    if (app.meetingDraft === null || key === '' || !app.can('meetings')) {
+      conflicts = [];
+      return;
+    }
+    const [start = '', end = ''] = key.split('|');
+    const span = { start, end };
+    const abort = new AbortController();
+    const timer = setTimeout(async () => {
+      try {
+        const day = span.start.slice(0, 10);
+        const read = await app.meetingsIn(addDays(day, -1), addDays(day, 1), abort.signal);
+        const hits = new Set(conflictsWith(read.items.map((m) => localized(m)), span.start, span.end).map((m) => m.id));
+        if (!abort.signal.aborted) conflicts = read.items.filter((m) => hits.has(m.id));
+      } catch {
+        if (!abort.signal.aborted) conflicts = [];
+      }
     }, 250);
     return () => {
       clearTimeout(timer);
@@ -259,6 +298,22 @@
                 </label>
               {/if}
             </div>
+            {#if conflicts.length > 0}
+              <div class="conflicts" role="status" data-meeting-conflicts>
+                <span class="warn">⚠ {t('meeting.conflict.title', { n: conflicts.length })}</span>
+                <ul>
+                  {#each conflicts as c (c.id)}
+                    <li data-conflict-id={c.id}>{whenText(c, t('meeting.all_day'))} · {markHidden(c.title)}</li>
+                  {/each}
+                </ul>
+              </div>
+            {/if}
+            {#if app.can('meeting_overlap_ok')}
+              <label class="check" data-hint={t('hint.form.meeting.overlap_ok')}>
+                <input type="checkbox" bind:checked={form.overlapOk} data-meeting-overlap-ok />
+                <span>{t('meeting.field.overlap_ok')}</span>
+              </label>
+            {/if}
           {/if}
           <details class="tz" open={form.tz !== ''}>
             <summary>{t('meeting.field.tz')}{form.tz !== '' ? `: ${form.tz}` : ''}</summary>
@@ -342,6 +397,12 @@
               searchLabel={t('multi.search')}
             />
           </div>
+          {#if app.can('meeting_prep')}
+            <label class="check" data-hint={t('hint.form.meeting.prep')}>
+              <input type="checkbox" bind:checked={form.prep} data-meeting-prep />
+              <span>{t('meeting.field.prep')}</span>
+            </label>
+          {/if}
         </fieldset>
 
         <fieldset class="column">
@@ -592,6 +653,16 @@
   }
   .muted {
     color: var(--muted);
+  }
+  .conflicts {
+    display: grid;
+    gap: 0.2rem;
+    font-size: 0.85rem;
+  }
+  .conflicts ul {
+    margin: 0;
+    padding-inline-start: 1.2rem;
+    overflow-wrap: anywhere;
   }
   .preview {
     min-height: 1.4rem;

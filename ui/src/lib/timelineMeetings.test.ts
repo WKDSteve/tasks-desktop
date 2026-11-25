@@ -37,6 +37,11 @@ describe('the diamonds of the tasks', () => {
     expect(by.has('gone/x')).toBe(false);
     expect(dayOfMeeting(bad)).toBeNull();
   });
+  it('stands on the day of this machine: the evening in New York is the next morning in Vienna', () => {
+    const late = meeting('late', '2026-11-12', { time: '20:00', starts_at: '2026-11-12T20:00', ends_at: '2026-11-12T21:00', tz: 'America/New_York' });
+    expect(dayOfMeeting(late, 'Europe/Vienna')).toBe('2026-11-13');
+    expect(dayOfMeeting(late, 'America/New_York')).toBe('2026-11-12');
+  });
 });
 
 describe('the row "Meetings"', () => {

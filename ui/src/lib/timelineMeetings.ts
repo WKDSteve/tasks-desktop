@@ -4,6 +4,7 @@
 import { parseDate } from './calendar';
 import type { MeetingEntry } from './contract';
 import { phaseOf } from './meetings';
+import { localized } from './zones';
 import type { BaseRow, Bar, Row, TimelineGrouping } from './timeline';
 
 /** How a diamond is filled: planned hollow, over but still planned half, done full, cancelled struck through. */
@@ -15,9 +16,13 @@ export function fillOf(m: Pick<MeetingEntry, 'status' | 'starts_at' | 'ends_at' 
   return phaseOf(m, nowMs) === 'result' ? 'half' : 'hollow';
 }
 
-/** The day of a meeting (`YYYY-MM-DD`), or null for one without a valid day. */
-export function dayOfMeeting(m: Pick<MeetingEntry, 'starts_at' | 'date'>): string | null {
-  const day = (m.starts_at ?? String(m.date ?? '')).slice(0, 10);
+/**
+ * The day of a meeting (`YYYY-MM-DD`) on this machine (`local`, for the tests): a meeting of another zone stands on the
+ * day its beginning falls on here. Null for one without a valid day.
+ */
+export function dayOfMeeting(m: Pick<MeetingEntry, 'starts_at' | 'date' | 'ends_at' | 'all_day' | 'tz'>, local?: string): string | null {
+  const here = localized(m as MeetingEntry, local);
+  const day = (here.starts_at ?? String(m.date ?? '')).slice(0, 10);
   return parseDate(day) ? day : null;
 }
 

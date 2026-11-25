@@ -7,6 +7,10 @@
 import type { Op } from './api';
 import { addDays } from './calendar';
 import type { MeetingEntry, MeetingParse } from './contract';
+import { DEFAULT_LENGTH, durationMinutes } from './timeGrid';
+import { instantOf, knownZone, localized, originalTime, wallMinutes, wallTime } from './zones';
+
+export { wallMinutes, wallTime };
 
 /** What a dry run of `meeting_new` said: the id the meeting would get, the engine's refusal, or nothing yet. */
 export type MeetingPreview = { kind: 'ok'; id: string } | { kind: 'refused'; message: string } | { kind: 'unknown' };
@@ -42,6 +46,10 @@ export interface MeetingForm {
   repeat?: string;
   repeatUntil?: string;
   except?: string[];
+  /** A preparation task due the day before, made with the meeting (capability `meeting_prep`; the engine makes it). */
+  prep?: boolean;
+  /** `overlap: ok`: the meeting may share its time with another one (capability `meeting_overlap_ok`). */
+  overlapOk?: boolean;
 }
 
 /** The notifications offered as chips (concept 4.7); any other is typed. */
@@ -148,12 +156,40 @@ export function meetingFields(form: MeetingForm): Record<string, unknown> {
     if (form.repeatUntil) fields.repeat_until = form.repeatUntil;
     if (form.except?.length) fields.except = [...form.except];
   }
+  if (form.overlapOk) fields.overlap = 'ok';
   return fields;
 }
 
-/** The operation that makes the meeting of the form. */
+/**
+ * The time the meeting of the form takes, as wall times of this machine (`local`, for the tests): its beginning in its
+ * zone (`tz`, the machine's without one) turned into the machine's time, and its end after the duration or at the end
+ * time (a meeting without either lasts `DEFAULT_LENGTH`). Null for an all-day meeting or one without a valid time: it
+ * conflicts with nothing. Only for showing conflicts before it is saved; the engine judges the times.
+ */
+export function formSpan(form: MeetingForm, local?: string): { start: string; end: string } | null {
+  if (form.allDay || !/^\d{4}-\d{2}-\d{2}$/.test(form.date) || !/^\d{2}:\d{2}$/.test(form.time)) return null;
+  const at = `${form.date}T${form.time}`;
+  let minutes = DEFAULT_LENGTH;
+  if (form.endMode === 'end' && form.end !== '') minutes = wallMinutes(`${form.date}T${form.end}`) - wallMinutes(at);
+  else if (form.endMode === 'duration' && form.duration.trim() !== '') minutes = durationMinutes(form.duration);
+  // an end before the beginning or a duration that is none: the engine refuses it, there is nothing to compare
+  if (!(minutes > 0)) return null;
+  const tz = form.tz.trim();
+  const ms = instantOf(at, knownZone(tz) ? tz : local);
+  if (Number.isNaN(ms)) return null;
+  return { start: wallTime(ms, local), end: wallTime(ms + minutes * 60000, local) };
+}
+
+/** The operation that makes the meeting of the form (with `prep`: and its preparation task, the engine's work). */
 export function meetingNewOp(form: MeetingForm, lang: 'de' | 'en'): Op {
-  return { op: 'meeting_new', area: form.area, title: form.title.trim(), fields: meetingFields(form), lang };
+  return {
+    op: 'meeting_new',
+    area: form.area,
+    title: form.title.trim(),
+    fields: meetingFields(form),
+    lang,
+    ...(form.prep ? { prep: true } : {}),
+  };
 }
 
 /** One line of `## Teilnehmer` (`Name <email> (Rolle)`), or null for a row without a name. Breaks become blanks. */
@@ -225,38 +261,6 @@ export function withDocument(body: string, heading: string, entry: string): stri
   return withComments(body, heading, before === '' ? `- ${line}` : `${before}\n- ${line}`);
 }
 
-/** `YYYY-MM-DDTHH:MM` in minutes since the epoch (no zone: wall time), or NaN. A day alone is its midnight. */
-export function wallMinutes(at: string): number {
-  const m = /^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2}))?$/.exec(at);
-  if (!m) return Number.NaN;
-  const ms = Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]), Number(m[4] ?? 0), Number(m[5] ?? 0));
-  return ms / 60000;
-}
-
-/** The wall time `YYYY-MM-DDTHH:MM` of the instant `ms` in the zone `tz` (an IANA name), or in this machine's zone. */
-export function wallTime(ms: number, tz?: string): string {
-  const pad = (n: number) => String(n).padStart(2, '0');
-  if (tz) {
-    try {
-      const parts = new Intl.DateTimeFormat('en-CA', {
-        timeZone: tz,
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-        hourCycle: 'h23',
-      }).formatToParts(new Date(ms));
-      const get = (type: string) => parts.find((p) => p.type === type)?.value ?? '';
-      return `${get('year')}-${get('month')}-${get('day')}T${get('hour')}:${get('minute')}`;
-    } catch {
-      // a zone this browser does not know: the machine's time, as for a meeting without one
-    }
-  }
-  const d = new Date(ms);
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
-
 export type MeetingTab = 'prep' | 'during' | 'result';
 export const MEETING_TABS: readonly MeetingTab[] = ['prep', 'during', 'result'];
 
@@ -318,16 +322,29 @@ export function toReview<
     .slice(0, REVIEW_MAX);
 }
 
-/** The time of a meeting as a line: `2026-11-24 14:00–15:00`, `2026-11-24` (all day), the zone named when there is one. */
-export function whenText(m: Pick<MeetingEntry, 'date' | 'time' | 'ends_at' | 'all_day' | 'tz' | 'starts_at'>, allDay: string): string {
-  if (!m.date) return '';
-  if (m.all_day || !m.time) {
-    const last = m.ends_at && m.ends_at.slice(0, 10) !== m.date ? `–${m.ends_at.slice(0, 10)}` : '';
-    return `${m.date}${last} ${allDay}`;
+/**
+ * The time of a meeting as a line: `2026-11-24 14:00–15:00`, `2026-11-24` (all day). A meeting of another zone (`tz`)
+ * shows this machine's time (`local`, for the tests) and its own beside it: `2026-11-24 14:00–15:00 (08:00 New York)`;
+ * a zone that shows the same wall time adds nothing, one this browser does not know is named as written.
+ */
+export function whenText(
+  entry: Pick<MeetingEntry, 'date' | 'time' | 'ends_at' | 'all_day' | 'tz' | 'starts_at'>,
+  allDay: string,
+  local?: string,
+): string {
+  if (!entry.date) return '';
+  if (entry.all_day || !entry.time) {
+    const last = entry.ends_at && entry.ends_at.slice(0, 10) !== entry.date ? `–${entry.ends_at.slice(0, 10)}` : '';
+    return `${entry.date}${last} ${allDay}`;
   }
+  const m = localized(entry as MeetingEntry, local);
+  const date = m.starts_at?.slice(0, 10) ?? m.date;
+  const time = m.starts_at && m.starts_at.length >= 16 ? m.starts_at.slice(11, 16) : m.time;
   const endDay = m.ends_at?.slice(0, 10);
-  const end = m.ends_at ? (endDay === m.date ? m.ends_at.slice(11, 16) : m.ends_at.replace('T', ' ')) : '';
-  return `${m.date} ${m.time}${end !== '' ? `–${end}` : ''}${m.tz ? ` (${m.tz})` : ''}`;
+  const end = m.ends_at ? (endDay === date ? m.ends_at.slice(11, 16) : m.ends_at.replace('T', ' ')) : '';
+  const original = originalTime(m);
+  const note = original !== '' ? ` (${original})` : entry.tz && !knownZone(entry.tz) ? ` (${entry.tz})` : '';
+  return `${date} ${time}${end !== '' ? `–${end}` : ''}${note}`;
 }
 
 /**

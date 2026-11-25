@@ -119,10 +119,12 @@
       .then((read) => {
         if (abort.signal.aborted) return;
         reading = false;
-        // Another meeting: what was typed into the result or the link of the one before is not this one's.
+        // Another meeting: what was typed into the result or the link of the one before is not this one's, nor the
+        // proposals of the agenda left out there.
         if (tabFor !== which) {
           resultDirty = false;
           recordingDirty = false;
+          leftOut = [];
         }
         doc = read;
         failed = null;
@@ -154,6 +156,17 @@
 
   function guard(): { if_match?: string } {
     return etag ? { if_match: etag } : {};
+  }
+
+  // What the agenda could take from the open tasks of the meeting and their open questions (the engine's
+  // `agenda_proposals`); all are chosen until the person leaves one out, then the chosen go into `## Agenda`.
+  const proposals = $derived(doc?.agenda_proposals ?? []);
+  let leftOut = $state<string[]>([]);
+  const chosen = $derived(proposals.filter((p) => !leftOut.includes(p.text)).map((p) => p.text));
+  async function adoptAgenda(): Promise<void> {
+    if (!id || chosen.length === 0) return;
+    const result = await send({ op: 'add_steps', id, steps: chosen, ...guard() });
+    if (result?.results.every((r) => r.ok)) leftOut = [];
   }
 
   function chooseTab(next: MeetingTab, focus = false): void {
@@ -324,6 +337,36 @@
           </ul>
         {:else}
           <p class="muted">{t('meeting.empty')}</p>
+        {/if}
+        {#if tab === 'prep' && canWrite && proposals.length > 0}
+          <details class="proposals" data-agenda-proposals>
+            <summary>{t('meeting.agenda.proposals', { n: proposals.length })}</summary>
+            <fieldset>
+              <legend class="sr-only">{t('meeting.agenda.proposals_legend')}</legend>
+              <ul class="checks">
+                {#each proposals as p (p.text)}
+                  <li>
+                    <label data-hint={t('hint.form.meeting.proposal')}>
+                      <input
+                        type="checkbox"
+                        checked={!leftOut.includes(p.text)}
+                        data-proposal={p.task}
+                        data-proposal-kind={p.kind}
+                        onchange={(e) => {
+                          const on = (e.currentTarget as HTMLInputElement).checked;
+                          leftOut = on ? leftOut.filter((x) => x !== p.text) : [...leftOut, p.text];
+                        }}
+                      />
+                      <span>{markHidden(p.text)}</span>
+                    </label>
+                  </li>
+                {/each}
+              </ul>
+            </fieldset>
+            <button type="button" disabled={chosen.length === 0} aria-disabled={busy ? 'true' : undefined} onclick={() => void adoptAgenda()} data-adopt-agenda>
+              {t('meeting.agenda.adopt', { n: chosen.length })}
+            </button>
+          </details>
         {/if}
       </section>
     {/snippet}
@@ -624,6 +667,14 @@
   ul.checks {
     list-style: none;
     padding-left: 0;
+  }
+  .proposals {
+    margin-block-start: 0.5rem;
+  }
+  .proposals fieldset {
+    border: 0;
+    margin: 0;
+    padding: 0;
   }
   ul.checks label {
     display: flex;

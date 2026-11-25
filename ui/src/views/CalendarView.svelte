@@ -35,6 +35,7 @@
   import type { MeetingEntry } from '../lib/contract';
   import { filterMeetings, meetingsByDay, NO_FILTER, placeSign, type MeetingFilter } from '../lib/timeGrid';
   import { seriesNote } from '../lib/series';
+  import { localized, originalTime } from '../lib/zones';
 
   let { app }: { app: App } = $props();
   const t = (key: Key, params: Record<string, string | number> = {}) => translate(app.lang, key, params);
@@ -84,7 +85,8 @@
       });
     return () => abort.abort();
   });
-  const shownMeetings = $derived(filterMeetings(found, filter));
+  // a meeting of another zone in this machine's time (its own time is named beside it)
+  const shownMeetings = $derived(filterMeetings(found, filter).map((m) => localized(m)));
   const meetingDays = $derived(meetingsByDay(shownMeetings, days));
   const hourly = $derived(mode !== 'month');
   const canNew = $derived(app.canMakeMeetings && !app.locked);
@@ -494,13 +496,13 @@
                           class:virtual={m.virtual === true}
                           data-meeting={m.id}
                           data-series={m.series}
-                          title={m.title}
+                          title={originalTime(m) !== '' ? `${m.title} (${originalTime(m)})` : m.title}
                           onclick={() => app.openMeeting(m.id)}
                         >
                           <span class="sr-only">{t('calendar.kind.meeting')}: </span>
                           <span aria-hidden="true">◷</span>
                           {#if m.series}<span title={seriesNote(app.lang, m)}>↻<span class="sr-only">{seriesNote(app.lang, m)}</span></span>{/if}
-                          {#if !m.all_day && m.time}<span class="at">{m.time}</span>{/if}
+                          {#if !m.all_day && m.time}<span class="at">{m.time}</span>{#if originalTime(m) !== ''}<span class="sr-only"> ({originalTime(m)})</span>{/if}{/if}
                           {#if placeSign(m) !== ''}<span aria-hidden="true">{placeSign(m)}</span>{/if}
                           <MeetingThumb {app} meeting={m} size={16} />
                           <span class="chip-title">{markHidden(m.title)}</span>

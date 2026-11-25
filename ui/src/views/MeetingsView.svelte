@@ -21,6 +21,7 @@
   } from '../lib/meetingList';
   import { isMeetingsKey, meetingsText, type MeetingsKey } from '../lib/meetingsTexts';
   import { placeSign } from '../lib/timeGrid';
+  import { localized, originalTime, type LocalMeeting } from '../lib/zones';
   import Info from 'appkit-ui/Info.svelte';
   import { markHidden } from '../lib/text';
 
@@ -50,7 +51,8 @@
     ])
       .then(([back, ahead]) => {
         if (abort.signal.aborted) return;
-        found = [...back.items, ...ahead.items];
+        // a meeting of another zone on the day and at the time of this machine (its own time beside it)
+        found = [...back.items, ...ahead.items].map((m) => localized(m));
         total = back.total + ahead.total;
         phase = 'ready';
       })
@@ -67,7 +69,10 @@
 
   const dayFormat = $derived(new Intl.DateTimeFormat(app.lang, { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' }));
   const say = (day: string): string => dayFormat.format(new Date(`${day}T00:00:00Z`));
-  const when = (m: MeetingEntry): string => `${say(dayOf(m))}, ${m.all_day || m.time === undefined ? t('meetings.all_day') : m.time}`;
+  const when = (m: LocalMeeting): string => {
+    const original = originalTime(m);
+    return `${say(dayOf(m))}, ${m.all_day || m.time === undefined ? t('meetings.all_day') : m.time}${original !== '' ? ` (${original})` : ''}`;
+  };
 
   const canNew = $derived(app.canMakeMeetings && !app.locked);
   const ofChord = chordWatch();

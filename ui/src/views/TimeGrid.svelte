@@ -31,6 +31,7 @@
     type DragKind,
   } from '../lib/timeGrid';
   import { addDays } from '../lib/calendar';
+  import { originalTime, type LocalMeeting } from '../lib/zones';
   import MeetingThumb from './MeetingThumb.svelte';
   import { seriesNote } from '../lib/series';
 
@@ -128,7 +129,8 @@
     await put(b.meeting, now.day, now.start, now.end - now.start);
   }
   async function put(m: MeetingEntry, day: string, start: number, length: number): Promise<void> {
-    const ok = await app.moveMeeting(m, movePatch(day, start, length));
+    // the grid draws this machine's time; a meeting of a zone gets the time back in its own zone
+    const ok = await app.moveMeeting(m, movePatch(day, start, length, m.tz));
     if (ok) {
       await tick();
       root?.querySelector<HTMLElement>(`[data-meeting="${m.id}"] .open`)?.focus();
@@ -196,7 +198,8 @@
     const to = hhmm(b.end);
     const text = place !== '' ? t('calendar.block_place', { title: b.meeting.title, from, to, place }) : t('calendar.block', { title: b.meeting.title, from, to });
     const series = seriesNote(app.lang, b.meeting);
-    return `${text}${series !== '' ? `, ${series}` : ''}${b.conflict ? `, ${t('calendar.conflict')}` : ''}${b.meeting.status === 'cancelled' ? `, ${t('calendar.cancelled')}` : ''}`;
+    const original = originalTime(b.meeting as LocalMeeting);
+    return `${text}${original !== '' ? ` (${original})` : ''}${series !== '' ? `, ${series}` : ''}${b.conflict ? `, ${t('calendar.conflict')}` : ''}${b.meeting.status === 'cancelled' ? `, ${t('calendar.cancelled')}` : ''}`;
   }
   const columns = $derived(`3rem repeat(${days.length}, minmax(0, 1fr))`);
 </script>
@@ -295,6 +298,7 @@
                   <span class="title" aria-hidden="true"><MeetingThumb {app} meeting={b.meeting} size={14} /> {markHidden(b.meeting.title)}</span>
                   {#if single}
                     <span class="more" aria-hidden="true">
+                      {#if originalTime(b.meeting as LocalMeeting) !== ''}<span data-original-time>({originalTime(b.meeting as LocalMeeting)})</span>{/if}
                       {#if b.meeting.location}<span>⌖ {b.meeting.location}</span>{/if}
                       {#if b.meeting.online}<span>⧉ {b.meeting.online_service ? t(`meeting.service.${b.meeting.online_service}` as Key) : ''}</span>{/if}
                       {#if (b.meeting.participants?.total ?? 0) > 0}<span>{t('calendar.people', { n: b.meeting.participants.total })}</span>{/if}

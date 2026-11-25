@@ -145,8 +145,21 @@ export type Op =
   /** A learning point of a path (or of a task's `## Lernpunkte`) made a task of its own, and taken back. */
   | { op: 'promote'; container: string; point: string; if_match?: string }
   | { op: 'unpromote'; container: string; point: string; id?: string; if_match?: string }
-  /** A meeting file `<area>/MEETINGS/<slug>.md` (capability `meeting_ops`); `fields` are its frontmatter keys. */
-  | { op: 'meeting_new'; area: string; title: string; fields?: Record<string, unknown>; body?: string; slug?: string; lang?: 'de' | 'en' }
+  /**
+   * A meeting file `<area>/MEETINGS/<slug>.md` (capability `meeting_ops`); `fields` are its frontmatter keys. `prep`
+   * (capability `meeting_prep`): a preparation task due the day before, which the meeting names in `tasks:`.
+   */
+  | {
+      op: 'meeting_new';
+      area: string;
+      title: string;
+      fields?: Record<string, unknown>;
+      body?: string;
+      slug?: string;
+      lang?: 'de' | 'en';
+      prep?: boolean;
+      prep_title?: string;
+    }
   /** The frontmatter of a meeting (`null` removes a key); `status` between `planned` and `cancelled`, `done` back. */
   | { op: 'meeting_set'; id: string; patch: Record<string, unknown>; if_match?: string }
   /** Mark a meeting done, with or without a result (`## Ergebnis`). */

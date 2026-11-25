@@ -193,6 +193,59 @@ describe('the page of a meeting', () => {
     await vi.waitFor(() => expect(m.hub.sent).toHaveLength(2));
     expect(m.hub.sent[1]?.ops[0]).toEqual({ op: 'meeting_set', id: 'pub/prep', patch: { cover: 'assets/images/a.png' }, if_match: 'sha256:pub/prep' });
   });
+
+  it('takes the chosen proposals of its tasks into the agenda (concept 4.4)', async () => {
+    const m = await ready();
+    m.hub.meetingItems.push(meeting('pub/plan', '2026-11-24T14:00', '2026-11-24T15:00'));
+    m.hub.meetingBodies.set('pub/plan', {
+      agenda_proposals: [
+        { text: 'Install Tosca', task: 'pub/a', kind: 'task' },
+        { text: 'Which version? (Install Tosca)', task: 'pub/a', kind: 'question', key: 'q1' },
+        { text: 'Licence', task: 'pub/b', kind: 'task' },
+      ],
+    } as never);
+    const target = showPage(m.app);
+    m.app.openMeeting('pub/plan');
+    await vi.waitFor(() => expect(target.querySelector('[data-agenda-proposals]')).not.toBeNull());
+    const boxes = [...target.querySelectorAll<HTMLInputElement>('[data-proposal]')];
+    expect(boxes.map((b) => b.checked)).toEqual([true, true, true]);
+    // the person leaves the question out: only the chosen go into the agenda, on the version read
+    boxes[1]?.click();
+    flushSync();
+    const adopt = target.querySelector('[data-adopt-agenda]') as HTMLButtonElement;
+    expect(adopt.textContent?.trim()).toBe('2 in die Agenda übernehmen');
+    adopt.click();
+    await vi.waitFor(() => expect(m.hub.sent).toHaveLength(1));
+    expect(m.hub.sent[0]?.ops[0]).toEqual({ op: 'add_steps', id: 'pub/plan', steps: ['Install Tosca', 'Licence'], if_match: 'sha256:pub/plan' });
+  });
+
+  it('chooses all proposals again on another meeting', async () => {
+    const m = await ready();
+    const proposals = { agenda_proposals: [{ text: 'Same line', task: 'pub/a', kind: 'task' }] } as never;
+    m.hub.meetingItems.push(meeting('pub/one', '2026-11-24T14:00', '2026-11-24T15:00'), meeting('pub/two', '2026-11-25T14:00', '2026-11-25T15:00'));
+    m.hub.meetingBodies.set('pub/one', proposals);
+    m.hub.meetingBodies.set('pub/two', proposals);
+    const target = showPage(m.app);
+    m.app.openMeeting('pub/one');
+    await vi.waitFor(() => expect(target.querySelector('[data-proposal]')).not.toBeNull());
+    (target.querySelector('[data-proposal]') as HTMLInputElement).click();
+    flushSync();
+    expect((target.querySelector('[data-proposal]') as HTMLInputElement).checked).toBe(false);
+    m.app.openMeeting('pub/two');
+    await vi.waitFor(() => expect(m.hub.meetingReads).toContain('pub/two'));
+    await settle();
+    expect((target.querySelector('[data-proposal]') as HTMLInputElement).checked).toBe(true);
+  });
+
+  it('offers no proposals when the engine has none', async () => {
+    const m = await ready();
+    m.hub.meetingItems.push(meeting('pub/none', '2026-11-24T14:00', '2026-11-24T15:00'));
+    const target = showPage(m.app);
+    m.app.openMeeting('pub/none');
+    await vi.waitFor(() => expect(target.querySelector('[data-agenda]') ?? target.querySelector('h3')).not.toBeNull());
+    await settle();
+    expect(target.querySelector('[data-agenda-proposals]')).toBeNull();
+  });
 });
 
 describe('the documents of a meeting', () => {
