@@ -182,7 +182,7 @@ export type Op =
   | { op: 'checklist_set'; id: string; title: string; if_match?: string }
   | { op: 'checklist_delete'; id: string }
   | { op: 'entry_add'; list?: string; id?: string; title: string; tags?: string[]; body?: string; fields?: { created?: string; done?: string } }
-  | { op: 'entry_set'; id: string; title?: string; done?: boolean; tags?: string[]; body?: string; if_match?: string }
+  | { op: 'entry_set'; id: string; title?: string; done?: boolean; done_on?: string; tags?: string[]; body?: string; if_match?: string }
   | { op: 'entry_delete'; id: string; if_match?: string }
   /** The entry made a task of `area`, with its title, text, tags and attachments; the entry is gone (no inverse). */
   | { op: 'entry_promote'; id: string; area: string; if_match?: string; lang?: 'de' | 'en' };

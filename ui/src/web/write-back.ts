@@ -283,9 +283,13 @@ async function run(input: WriteBackInput): Promise<WriteBackResult> {
     }
   }
   for (const path of added) {
-    const from = placeholderPath(files.get(path) as Uint8Array);
-    if (from === null) continue;
-    if (!removed.includes(from) || !baseline.get(from)?.placeholder) {
+    const bytes = files.get(path) as Uint8Array;
+    if (placeholderPath(bytes) === null) continue;
+    // The file it stands for: a removed placeholder with the same bytes. Not the path written in it: an attachment moved
+    // once in this session lies under its new name, while its placeholder still names the place it was read from.
+    const digest = await hash(bytes);
+    const from = removed.find((r) => baseline.get(r)?.placeholder && baseline.get(r)?.digest === digest);
+    if (from === undefined) {
       return { status: 'refused', message: `${path} is an attachment the page does not hold: it is not written`, internal: true };
     }
     placeholders.set(path, from);
@@ -316,9 +320,15 @@ async function run(input: WriteBackInput): Promise<WriteBackResult> {
       conflicts.push({ path, reason: 'removed' });
       continue;
     }
+    // An attachment held as a placeholder is judged by its stamp: its bytes were never read to compare with, and they
+    // are not read now (a video of a gigabyte): its way back is a move, not a write.
+    if (entry.placeholder) {
+      const file = await there.getFile();
+      if (!sameStamp({ size: file.size, lastModified: file.lastModified }, entry)) conflicts.push({ path, reason: 'changed' });
+      continue;
+    }
     const now = await readBytes(there);
-    // An attachment held as a placeholder is judged by its stamp: its bytes were never read to compare with.
-    if (!sameStamp(now.stamp, entry) || (!entry.placeholder && (await hash(now.bytes)) !== entry.digest)) {
+    if (!sameStamp(now.stamp, entry) || (await hash(now.bytes)) !== entry.digest) {
       conflicts.push({ path, reason: 'changed' });
       continue;
     }
@@ -457,10 +467,19 @@ async function run(input: WriteBackInput): Promise<WriteBackResult> {
         }
         if (done) {
           moved.add(from);
-          const oldBytes = old.get(from) as Uint8Array;
+          const oldBytes = old.get(from);
           steps.push({
             path,
             async undo() {
+              if (oldBytes === undefined) {
+                // an attachment: moved back, as it was moved (its bytes are not in the page)
+                const back = await fileAt(root, path);
+                const segments = from.split('/');
+                const home = (await dirAt(root, segments.slice(0, -1), true)) as WritableDirHandle;
+                if (!back?.move) throw new Error('cannot be moved back');
+                await back.move(home, segments[segments.length - 1] as string);
+                return;
+              }
               await writeFile(await createAt(root, from), oldBytes);
               await parent.removeEntry(name);
             },
@@ -509,7 +528,7 @@ async function run(input: WriteBackInput): Promise<WriteBackResult> {
       }
       at = path;
       await stillThere(path);
-      const oldBytes = old.get(path) as Uint8Array;
+      const oldBytes = old.get(path);
       const segments = path.split('/');
       const parent = (await dirAt(root, segments.slice(0, -1), false)) as WritableDirHandle;
       await parent.removeEntry(segments[segments.length - 1] as string);
@@ -517,6 +536,9 @@ async function run(input: WriteBackInput): Promise<WriteBackResult> {
       steps.push({
         path,
         async undo() {
+          // A removed attachment is not given back: the page never held its bytes (the removals come last, after every
+          // write, so that only a removal after it can fail).
+          if (oldBytes === undefined) throw new Error('an attachment the page does not hold cannot be given back');
           await writeFile(await createAt(root, path), oldBytes);
         },
       });

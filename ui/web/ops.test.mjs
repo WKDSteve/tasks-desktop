@@ -495,6 +495,16 @@ test('a checklist in the page: a list and an entry, a picture and a board attach
   assert.equal(files[`lib.nvim/ROADMAP/tasks/${taskSlug}/assets/boards/skizze.ink.json`], '{"strokes":[]}');
   assert.equal(Object.keys(files).filter((f) => f.startsWith(`_list-support/${slug}`)).length, 0, 'the entry is gone');
   assert.ok(!Object.values(files).some((text) => text.includes('tasks-web-asset')), 'no placeholder on the disk');
+
+  // the task finished in the same session: the picture moves a second time (its placeholder still names where it was read)
+  const preview = await p.get(`done_preview?id=${task}`);
+  const done = await p.send(ops({ op: 'done', id: task, confirm: preview.confirm }));
+  assert.equal(done.status, 200, JSON.stringify(done.body));
+  const finished = p.disk.files();
+  assert.ok(
+    Object.entries(finished).some(([f, text]) => /^lib\.nvim\/Backlog\/[A-Z]+\/[^/]+\/assets\/images\/Bild-1\.png$/.test(f) && text === new TextDecoder().decode(picture)),
+    Object.keys(finished).filter((f) => f.includes('Bild')).join(', '),
+  );
 });
 
 test('a file of the page is judged before the engine sees it: kind, name, ending', async () => {

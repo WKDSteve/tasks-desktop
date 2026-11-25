@@ -2211,25 +2211,25 @@ test('the page loads only the language it shows, and the other one when the pers
   });
   await pair(page);
   const bar = page.getByRole('menubar').getByRole('menuitem');
-  await expect(bar).toHaveText(['Work', 'Project', /^\W*View$/, 'Office', 'Learning plans', 'Options', 'Help']);
+  await expect(bar).toHaveText(['Work', 'Project', /^\W*View$/, 'Office', 'Lists', 'Learning plans', 'Options', 'Help']);
   expect(words).toEqual(['i18n-en']);
   await page.getByRole('menuitem', { name: 'Options' }).click();
   await page.getByRole('menuitemradio', { name: 'Deutsch' }).click();
   await expect.poll(() => words).toEqual(['i18n-en', 'i18n-de']);
   // While German loads, the page stays English: never a key in place of a word.
-  await expect(bar).toHaveText(['Work', 'Project', /^\W*View$/, 'Office', 'Learning plans', 'Options', 'Help']);
+  await expect(bar).toHaveText(['Work', 'Project', /^\W*View$/, 'Office', 'Lists', 'Learning plans', 'Options', 'Help']);
   release();
-  await expect(bar).toHaveText(['Arbeit', 'Projekt', /^\W*Ansicht$/, 'Office', 'Lernpläne', 'Optionen', 'Hilfe']);
+  await expect(bar).toHaveText(['Arbeit', 'Projekt', /^\W*Ansicht$/, 'Office', 'Listen', 'Lernpläne', 'Optionen', 'Hilfe']);
   // A reload starts in German, with the German words alone.
   await page.unroute(/\/assets\/i18n-de-[^/]+\.js$/);
   words.length = 0;
   await page.reload();
-  await expect(bar).toHaveText(['Arbeit', 'Projekt', /^\W*Ansicht$/, 'Office', 'Lernpläne', 'Optionen', 'Hilfe']);
+  await expect(bar).toHaveText(['Arbeit', 'Projekt', /^\W*Ansicht$/, 'Office', 'Listen', 'Lernpläne', 'Optionen', 'Hilfe']);
   expect(words).toEqual(['i18n-de']);
   // Back to English for the tests after this one in the same profile.
   await page.getByRole('menuitem', { name: 'Optionen' }).click();
   await page.getByRole('menuitemradio', { name: 'English' }).click();
-  await expect(bar).toHaveText(['Work', 'Project', /^\W*View$/, 'Office', 'Learning plans', 'Options', 'Help']);
+  await expect(bar).toHaveText(['Work', 'Project', /^\W*View$/, 'Office', 'Lists', 'Learning plans', 'Options', 'Help']);
 });
 
 test('the German page has no violations either', async ({ page }) => {
@@ -2246,7 +2246,7 @@ test('the German page has no violations either', async ({ page }) => {
   // Its icon is really drawn: the policy of the page lets it through.
   await expect.poll(() => page.locator('.kit-brand img').evaluate((i: HTMLImageElement) => i.naturalWidth)).toBeGreaterThan(0);
   const bar = page.getByRole('menubar').getByRole('menuitem');
-  await expect(bar).toHaveText(['Arbeit', 'Projekt', /^\W*Ansicht$/, 'Office', 'Lernpläne', 'Optionen', 'Hilfe']);
+  await expect(bar).toHaveText(['Arbeit', 'Projekt', /^\W*Ansicht$/, 'Office', 'Listen', 'Lernpläne', 'Optionen', 'Hilfe']);
   await showListDe(page);
   const result = await new AxeBuilder({ page }).analyze();
   expect(result.violations, JSON.stringify(result.violations, null, 1)).toEqual([]);
@@ -3044,7 +3044,7 @@ test('the tile does not show the finished figure of one period under the days of
   await expect(finished).toHaveText('0');
 });
 
-test('every entry of the header explains itself on hover: the six menus and the connection', async ({ page }) => {
+test('every entry of the header explains itself on hover: the seven menus and the connection', async ({ page }) => {
   await pair(page);
   const tip = page.locator('#hint-tip');
   const entries = [
@@ -3052,6 +3052,7 @@ test('every entry of the header explains itself on hover: the six menus and the 
     [page.getByRole('menuitem', { name: 'Project', exact: true }), /vault, the plan and the export/],
     [page.getByRole('menuitem', { name: /^View(,|$)/ }), /Switch the view/],
     [page.getByRole('menuitem', { name: /^Office(,|$)/ }), /Appointments, reminders and people/],
+    [page.getByRole('menuitem', { name: 'Lists', exact: true }), /Quick lists of short entries/],
     [page.getByRole('menuitem', { name: 'Learning plans', exact: true }), /views of the learning plans/],
     [page.getByRole('menuitem', { name: 'Options', exact: true }), /the look and how the page behaves/],
     [page.getByRole('menuitem', { name: 'Help', exact: true }), /About this app/],
@@ -3065,7 +3066,7 @@ test('every entry of the header explains itself on hover: the six menus and the 
     await expect(tip).toBeHidden();
   }
   // Every entry of the bar is on the list above: a menu added without a hint fails here.
-  await expect(page.getByRole('menubar').getByRole('menuitem')).toHaveCount(7);
+  await expect(page.getByRole('menubar').getByRole('menuitem')).toHaveCount(8);
 });
 
 test('the controls of the list and the headings of the tiles explain themselves on hover', async ({ page }) => {
@@ -3100,7 +3101,7 @@ test('the menus are Tasks, Project, View, Options and Help, with sections and th
   await pair(page);
   await showList(page);
   const bar = page.getByRole('menubar').getByRole('menuitem');
-  await expect(bar).toHaveText(['Work', 'Project', /^\W*View$/, 'Office', 'Learning plans', 'Options', 'Help']);
+  await expect(bar).toHaveText(['Work', 'Project', /^\W*View$/, 'Office', 'Lists', 'Learning plans', 'Options', 'Help']);
   // The name of the app is no name of a menu too: one word must not stand twice in the bar.
   const brandName = (await page.locator('.kit-brand').getAttribute('aria-label')) ?? '';
   expect(await bar.allTextContents()).not.toContain(brandName);
@@ -3175,6 +3176,8 @@ test('the menu bar opens with the keyboard, switches views, language and theme',
   // Left and Right walk the menus.
   await page.keyboard.press('ArrowRight');
   await expect(page.getByRole('menuitem', { name: 'Office' })).toBeFocused();
+  await page.keyboard.press('ArrowRight');
+  await expect(page.getByRole('menuitem', { name: 'Lists' })).toBeFocused();
   await page.keyboard.press('ArrowRight');
   await expect(page.getByRole('menuitem', { name: 'Learning plans' })).toBeFocused();
   await page.keyboard.press('ArrowRight');

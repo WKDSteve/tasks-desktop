@@ -123,6 +123,15 @@ export function isAssetPath(path: string): boolean {
   return segments.slice(1, -1).includes('assets');
 }
 
+/**
+ * Whether a folder of the reader holds attachments: an `assets/` folder whose parent is an item in its folder form
+ * (`<slug>/<slug>.md` beside it). An `assets/` of anything else (the pictures of a documentation folder) is not read:
+ * its files would count against the budget and cost a look each.
+ */
+export function itemAssets(name: string, parent: string, siblings: readonly { kind: string; name: string }[]): boolean {
+  return name === 'assets' && parent !== '' && siblings.some((e) => e.kind === 'file' && e.name === `${parent}.md`);
+}
+
 /** Whether the reader takes the file at `path`: a task file or a root file (`wantedFile`), or an attachment. */
 export function wantedPath(path: string): boolean {
   const segments = path.split('/');
@@ -205,7 +214,8 @@ export async function readVaultFolder(root: DirHandleLike, limits: Partial<LoadL
   const lim = { ...DEFAULT_LIMITS, ...limits };
   const out: LoadedVault = { files: new Map(), stamps: new Map(), skipped: [], totalBytes: 0 };
 
-  async function walk(dir: DirHandleLike, prefix: string, depth: number): Promise<void> {
+  // `assets`: the walk is below the `assets/` folder of an item, where every file is an attachment.
+  async function walk(dir: DirHandleLike, prefix: string, depth: number, assets = false): Promise<void> {
     if (depth > lim.maxDepth) {
       throw new VaultLimitError('maxDepth', `the folder is nested deeper than ${lim.maxDepth} levels (at ${prefix})`);
     }
@@ -220,23 +230,34 @@ export async function readVaultFolder(root: DirHandleLike, limits: Partial<LoadL
         continue;
       }
       if (entry.kind === 'directory') {
-        if (wantedDir(entry.name)) await walk(entry, `${path}/`, depth + 1);
-      } else if (entry.kind === 'file' && wantedPath(path)) {
-        await take(entry, path);
+        if (wantedDir(entry.name)) await walk(entry, `${path}/`, depth + 1, assets || itemAssets(entry.name, depth === 0 ? '' : dir.name, entries));
+      } else if (entry.kind === 'file' && (wantedFile(entry.name, depth === 0) || assets)) {
+        await take(entry, path, assets);
       }
     }
   }
 
-  async function take(handle: FileHandleLike, path: string): Promise<void> {
+  async function take(handle: FileHandleLike, path: string, asset: boolean): Promise<void> {
     if (out.files.size >= lim.maxFiles) {
       throw new VaultLimitError('maxFiles', `the folder holds more than ${lim.maxFiles} files to read`);
     }
     let bytes: Uint8Array;
     let lastModified: number | undefined;
-    // An attachment is a placeholder with the stamp of the real file (its size and time): the content is not read.
-    if (isAssetPath(path) && !wantedFile(path.slice(path.lastIndexOf('/') + 1), false) && !loadsWhole(path)) {
+    // An attachment is a placeholder with the stamp of the real file (its size and time): the content is not read. A
+    // board is read whole (its version is compared), unless it is larger than a text: then it is a placeholder too.
+    const name = path.slice(path.lastIndexOf('/') + 1);
+    if (asset && !wantedFile(name, false)) {
       try {
         const file = await handle.getFile();
+        if (loadsWhole(path) && file.size <= lim.maxFileBytes) {
+          bytes = new Uint8Array(await file.arrayBuffer());
+          if (bytes.byteLength <= lim.maxFileBytes) {
+            out.totalBytes += bytes.byteLength;
+            out.files.set(path, bytes);
+            out.stamps.set(path, { size: bytes.byteLength, lastModified: file.lastModified });
+            return;
+          }
+        }
         bytes = placeholderOf(path);
         out.totalBytes += bytes.byteLength;
         out.files.set(path, bytes);
@@ -383,14 +404,16 @@ export async function vaultStamps(root: DirHandleLike, limits: Partial<LoadLimit
   const lim = { ...DEFAULT_LIMITS, ...limits };
   const stamps: VaultStamps = new Map();
 
-  async function walk(dir: DirHandleLike, prefix: string, depth: number): Promise<void> {
+  async function walk(dir: DirHandleLike, prefix: string, depth: number, assets = false): Promise<void> {
     if (depth > lim.maxDepth || stamps.size > lim.maxFiles) return;
-    for await (const entry of dir.values()) {
+    const entries: Array<FileHandleLike | DirHandleLike> = [];
+    for await (const entry of dir.values()) entries.push(entry);
+    for (const entry of entries) {
       if (!safeName(entry.name)) continue;
       const path = prefix + entry.name;
       if (entry.kind === 'directory') {
-        if (wantedDir(entry.name)) await walk(entry, `${path}/`, depth + 1);
-      } else if (entry.kind === 'file' && wantedPath(path)) {
+        if (wantedDir(entry.name)) await walk(entry, `${path}/`, depth + 1, assets || itemAssets(entry.name, depth === 0 ? '' : dir.name, entries));
+      } else if (entry.kind === 'file' && (wantedFile(entry.name, depth === 0) || assets)) {
         try {
           const file = await entry.getFile();
           stamps.set(path, stampText(file.size, file.lastModified));

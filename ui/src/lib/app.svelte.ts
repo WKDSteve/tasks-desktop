@@ -2072,6 +2072,9 @@ export class App {
   /** The contact whose page is open. */
   contactOpen = $state<string | null>(null);
 
+  /** A change on disk the snapshot does not hold (the checklists): the tab Lists reads its list again. */
+  outsideTick = $state(0);
+
   /** The engine keeps checklists: the tab Lists is offered. */
   get canChecklists(): boolean {
     return this.can('checklists') && this.can('checklist');
@@ -6530,11 +6533,15 @@ export class App {
 
   private onMessage(message: SseMessage): void {
     if (message.event === 'tasks' || message.event === 'resync') {
+      // A resync (the web page read its folder again) may be a change the snapshot does not hold: a checklist.
+      if (message.event === 'resync') this.outsideTick++;
       void this.refresh();
       return;
     }
     if (message.event === 'finished') {
+      // The finished tasks, and the checklists: what the snapshot does not hold changed on disk.
       this.finishedTick++;
+      this.outsideTick++;
       return;
     }
     if (message.event === 'classes') {

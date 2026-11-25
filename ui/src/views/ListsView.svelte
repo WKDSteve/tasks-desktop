@@ -53,10 +53,11 @@
   const currentList = $derived(lists.find((l) => l.id === current) ?? null);
   const canWrite = $derived(!app.readOnly && !app.locked);
 
-  // The lists, read again when a write or a new snapshot came.
+  // The lists, read again when a write, a new snapshot or a change on disk of a list came.
   $effect(() => {
     void app.writes;
     void app.snapshot?.rev;
+    void app.outsideTick;
     const abort = new AbortController();
     app.env.hub
       .checklists(abort.signal)
@@ -78,12 +79,18 @@
     return () => clearTimeout(timer);
   });
 
-  // The entries of the list shown through the filter, read again after a write.
+  // The entries of the list shown through the filter, read again after a write or a change on disk. The words of the
+  // search are read as `asked` only (a pause in typing), never as `filter.q`: each key would read the list again.
+  let generation = 0;
   $effect(() => {
     void app.writes;
     void app.snapshot?.rev;
+    void app.outsideTick;
     const id = current;
-    const query = { ...filter, q: asked };
+    const { tag, since, until, state } = filter;
+    const query: ChecklistFilter = { q: asked, tag, since, until, state };
+    const mine = ++generation;
+    loadingMore = false;
     if (id === null) {
       doc = null;
       entries = [];
@@ -94,10 +101,11 @@
     app.env.hub
       .checklist(checklistQuery(id, query), abort.signal)
       .then((answer) => {
-        if (abort.signal.aborted) return;
+        if (abort.signal.aborted || mine !== generation) return;
         doc = answer;
         entries = answer.items;
         nextOffset = answer.next_offset;
+        shownQuery = query;
       })
       .catch(() => {
         if (!abort.signal.aborted) {
@@ -117,11 +125,27 @@
     });
   });
 
+  /** The query the entries shown were read with: "Show more" reads the next page of that one, not of the filter now. */
+  let shownQuery = $state<ChecklistFilter | null>(null);
+  let loadingMore = $state(false);
+
+  /** The next page of what is shown. An answer that comes after the list or the filter changed is dropped. */
   async function more(): Promise<void> {
-    if (current === null || nextOffset === undefined) return;
-    const answer = await app.env.hub.checklist(checklistQuery(current, { ...filter, q: asked }, { offset: nextOffset }));
-    entries = [...entries, ...answer.items];
-    nextOffset = answer.next_offset;
+    if (current === null || nextOffset === undefined || shownQuery === null || loadingMore) return;
+    const mine = generation;
+    const id = current;
+    loadingMore = true;
+    try {
+      const answer = await app.env.hub.checklist(checklistQuery(id, shownQuery, { offset: nextOffset }));
+      if (mine !== generation) return;
+      const seen = new Set(entries.map((e) => e.id));
+      entries = [...entries, ...answer.items.filter((e) => !seen.has(e.id))];
+      nextOffset = answer.next_offset;
+    } catch {
+      if (mine === generation) note = t('lists.failed');
+    } finally {
+      if (mine === generation) loadingMore = false;
+    }
   }
 
   function choose(id: string): void {
@@ -379,7 +403,7 @@
             {/each}
           </ul>
           {#if nextOffset !== undefined}
-            <button type="button" onclick={() => void more()} data-lists-more>{t('lists.more')}</button>
+            <button type="button" disabled={loadingMore} onclick={() => void more()} data-lists-more>{t('lists.more')}</button>
           {/if}
         {/if}
       {/if}

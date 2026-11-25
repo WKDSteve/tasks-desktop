@@ -634,6 +634,10 @@ export class FakeHub {
   checklistLists: { id: string; title: string; created: string; total: number; open: number; etag: string }[] = [];
   checklistEntries = new Map<string, ChecklistEntry[]>();
   checklistQueries: ChecklistQuery[] = [];
+  /** How many entries one answer of `checklist` holds (`next_offset` beyond); none: all of them. */
+  checklistPageSize: number | null = null;
+  /** Holds the answers of `checklist` back until it is settled (a read on its way). */
+  holdChecklist: Promise<void> | null = null;
   /** The files sent through `upload` (a picture pasted, a file chosen), and the answer: the asset in the folder of its kind. */
   uploads: { id: string; name: string; kind?: string }[] = [];
   async upload(id: string, file: File, kind?: string): Promise<Result> {
@@ -651,19 +655,25 @@ export class FakeHub {
   }
   async checklist(query: ChecklistQuery): Promise<ChecklistDocument> {
     this.checklistQueries.push({ ...query });
+    if (this.holdChecklist) await this.holdChecklist;
     const list = this.checklistLists.find((l) => l.id === query.id);
     if (!list) throw new ApiError(404, 'not_found', 'no such list');
-    const items = this.checklistEntries.get(query.id) ?? [];
+    const all = this.checklistEntries.get(query.id) ?? [];
+    const offset = query.offset ?? 0;
+    const size = this.checklistPageSize ?? 100;
+    const items = all.slice(offset, offset + size);
+    const next = offset + size < all.length ? offset + size : undefined;
     const counts = new Map<string, number>();
-    for (const e of items) for (const tag of e.tags) counts.set(tag, (counts.get(tag) ?? 0) + 1);
+    for (const e of all) for (const tag of e.tags) counts.set(tag, (counts.get(tag) ?? 0) + 1);
     return {
       kind: 'tasks.checklist',
       list: { id: list.id, title: list.title, created: list.created, etag: list.etag },
       state: query.state ?? 'all',
-      total: items.length,
-      matching: items.length,
-      offset: query.offset ?? 0,
-      limit: query.limit ?? 100,
+      total: all.length,
+      matching: all.length,
+      offset,
+      limit: size,
+      ...(next === undefined ? {} : { next_offset: next }),
       tags: [...counts].map(([tag, count]) => ({ tag, count })).toSorted((a, b) => (a.tag < b.tag ? -1 : 1)),
       items,
       incomplete: [],

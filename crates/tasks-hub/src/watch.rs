@@ -144,9 +144,32 @@ pub fn backlog(relative: &Path, entry: impl FnOnce() -> Entry) -> bool {
         && relevant(relative, entry)
 }
 
-/// [`backlog`] as the kit's filter.
+/// Is a change at this path one of the checklists (`_list-<slug>/...`, a Markdown file of a list or of an entry in
+/// its folder form)? The snapshot does not hold them either: the hub tells it with the finished tasks, and the tab
+/// Lists reads its list again.
+#[must_use]
+pub fn checklist(relative: &Path) -> bool {
+    let Some(parts) = relative
+        .components()
+        .map(|c| c.as_os_str().to_str())
+        .collect::<Option<Vec<&str>>>()
+    else {
+        return false;
+    };
+    match parts.as_slice() {
+        [list, .., last] if parts.len() >= 2 => {
+            list.starts_with("_list-")
+                && is_markdown(last)
+                && !ignored_name(last)
+                && !last.starts_with('.')
+        }
+        _ => false,
+    }
+}
+
+/// [`backlog`] and [`checklist`] as the kit's filter: the changes the snapshot does not hold.
 fn backlog_filter(relative: &Path, entry: &dyn Fn() -> Entry) -> bool {
-    backlog(relative, entry)
+    backlog(relative, entry) || checklist(relative)
 }
 
 /// Does an event of the watcher touch the finished tasks? A lost event may have, so it counts.
@@ -547,6 +570,26 @@ mod tests {
     }
 
     #[test]
+    fn the_files_of_a_checklist_are_told_as_changes_outside_the_snapshot() {
+        for yes in [
+            "_list-support/list.md",
+            "_list-support/20261125-090000-a.md",
+            "_list-support/20261125-090000-a/20261125-090000-a.md",
+        ] {
+            assert!(checklist(Path::new(yes)), "{yes}");
+        }
+        for no in [
+            "_list-support",
+            "_list-support/e/assets/images/a.png",
+            "_list-support/.e.md.lock",
+            "lib.nvim/ROADMAP/tasks/a.md",
+            "list-x/a.md",
+        ] {
+            assert!(!checklist(Path::new(no)), "{no}");
+        }
+    }
+
+    #[test]
     fn only_the_finished_tasks_touch_the_backlog() {
         for yes in [
             "lib.nvim/Backlog/TASKS/2026-11-21_x.md",
@@ -589,6 +632,12 @@ mod tests {
             "lib.nvim/ROADMAP/tasks/alpha.md",
         );
         assert!(!touches_backlog(&open, base));
+        // a checklist changed on disk (Neovim, another device): told like the finished tasks
+        let list = event(
+            EventKind::Modify(ModifyKind::Data(notify::event::DataChange::Any)),
+            "_list-support/20261125-090000-a.md",
+        );
+        assert!(touches_backlog(&list, base));
         let read = event(
             EventKind::Access(notify::event::AccessKind::Any),
             "lib.nvim/Backlog/TASKS/2026-11-21_x.md",

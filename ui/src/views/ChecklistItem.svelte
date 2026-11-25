@@ -34,17 +34,27 @@
   let text = $state('');
   let area = $state('');
   let asking = $state(false);
-  // The fields take the entry as it is each time it is opened or written anew (another device, a write of this page).
+  // The fields take the entry as it is each time it is opened, and when it is written anew (another device, a write of
+  // this page) while nothing was typed into them: what was typed is kept, and Save sends it on the new version.
+  let typed = false;
+  let wasOpen = false;
   $effect(() => {
     void entry.etag;
+    const opening = open && !wasOpen;
+    wasOpen = open;
     if (!open) return;
     untrack(() => {
+      if (opening) typed = false;
+      if (typed) return;
       title = entry.title;
       tags = entry.tags.join(' ');
       text = entry.text;
       asking = false;
     });
   });
+  const touched = (): void => {
+    typed = true;
+  };
   const changed = $derived(
     title.trim() !== entry.title || tagsOfInput(tags).join(' ') !== entry.tags.join(' ') || text.trim() !== entry.text,
   );
@@ -82,6 +92,7 @@
   function save(event: SubmitEvent): void {
     event.preventDefault();
     if (!changed) return;
+    typed = false;
     const next = tagsOfInput(tags);
     void app.write([
       {
@@ -150,15 +161,24 @@
       <form class="edit" onsubmit={save}>
         <label class="field" data-hint={t('entry.title.hint')}>
           <span>{t('entry.title')}</span>
-          <input bind:value={title} maxlength="300" required spellcheck="true" disabled={!canWrite} data-entry-title />
+          <input bind:value={title} oninput={touched} maxlength="300" required spellcheck="true" disabled={!canWrite} data-entry-title />
         </label>
         <label class="field" data-hint={t('entry.tags.hint')}>
           <span>{t('entry.tags')}</span>
-          <input bind:value={tags} spellcheck="false" disabled={!canWrite} data-entry-tags />
+          <input bind:value={tags} oninput={touched} spellcheck="false" disabled={!canWrite} data-entry-tags />
         </label>
         <label class="field wide" data-hint={t('entry.text.hint')}>
           <span>{t('entry.text')}</span>
-          <textarea bind:value={text} rows="6" maxlength="20000" spellcheck="true" disabled={!canWrite} onpaste={pasteText} data-entry-body></textarea>
+          <textarea
+            bind:value={text}
+            oninput={touched}
+            rows="6"
+            maxlength="20000"
+            spellcheck="true"
+            disabled={!canWrite}
+            onpaste={pasteText}
+            data-entry-body
+          ></textarea>
         </label>
         <p class="actions">
           <button type="submit" disabled={!canWrite || !changed} data-entry-save>{t('entry.save')}</button>

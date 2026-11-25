@@ -188,4 +188,67 @@ describe('the tab Lists', () => {
     expect(m.app.view).toBe('lists');
     expect(root.querySelector('[data-lists-form="new"]')).not.toBeNull();
   });
+
+  it('keeps what was typed into an open entry when a new version of it comes', async () => {
+    const { m, root } = await boot();
+    root.querySelector<HTMLButtonElement>('[data-entry="_list-support/a"] [data-entry-open]')!.click();
+    await settle();
+    const body = root.querySelector<HTMLTextAreaElement>('[data-entry-body]')!;
+    type(body, 'Noch nicht gespeichert');
+    // another device (or a tick of this page) wrote the entry: a new version is read
+    m.hub.checklistEntries.set('_list-support', [entry('a', { tags: ['sap'], etag: 'sha256:a2', text: 'Von anderswo' }), entry('b')]);
+    m.app.writes += 1;
+    await settle();
+    expect(root.querySelector<HTMLTextAreaElement>('[data-entry-body]')!.value).toBe('Noch nicht gespeichert');
+    root.querySelector<HTMLFormElement>('[data-entry-detail] form')!.requestSubmit();
+    await settle();
+    expect(sent(m)).toEqual([{ op: 'entry_set', id: '_list-support/a', if_match: 'sha256:a2', body: 'Noch nicht gespeichert' }]);
+  });
+
+  it('reads the next page once, and drops one that comes after the filter changed', async () => {
+    const { m, root } = await boot(undefined, [entry('a'), entry('b'), entry('c')]);
+    m.hub.checklistPageSize = 1;
+    m.app.writes += 1;
+    await settle();
+    expect(root.querySelectorAll('[data-entry]')).toHaveLength(1);
+    const more = root.querySelector<HTMLButtonElement>('[data-lists-more]')!;
+    more.click();
+    more.click();
+    await settle();
+    expect([...root.querySelectorAll('[data-entry]')].map((e) => e.getAttribute('data-entry'))).toEqual(['_list-support/a', '_list-support/b']);
+    // a page on its way while the filter changes is not put under the new filter's entries
+    let release: () => void = () => undefined;
+    m.hub.holdChecklist = new Promise((r) => (release = r));
+    root.querySelector<HTMLButtonElement>('[data-lists-more]')!.click();
+    const state = root.querySelector<HTMLSelectElement>('[data-lists-state]')!;
+    state.value = 'open';
+    state.dispatchEvent(new Event('change', { bubbles: true }));
+    m.hub.holdChecklist = null;
+    release();
+    await settle();
+    expect([...root.querySelectorAll('[data-entry]')].map((e) => e.getAttribute('data-entry'))).toEqual(['_list-support/a']);
+  });
+
+  it('asks for the words of the search after a pause in typing, not at each key', async () => {
+    const { m, root } = await boot();
+    const asked = m.hub.checklistQueries.length;
+    const search = root.querySelector<HTMLInputElement>('[data-lists-search]')!;
+    type(search, 's');
+    type(search, 'sa');
+    type(search, 'sap');
+    await settle();
+    expect(m.hub.checklistQueries.length).toBe(asked);
+    await new Promise((r) => setTimeout(r, 300));
+    await settle();
+    expect(m.hub.checklistQueries.slice(asked)).toEqual([{ id: '_list-support', q: 'sap' }]);
+  });
+
+  it('reads the list again when a change on disk the snapshot does not hold is told', async () => {
+    const { m } = await boot();
+    const asked = m.hub.checklistQueries.length;
+    (m.app as unknown as { onMessage(message: { event: string; data: string }): void }).onMessage({ event: 'finished', data: '{}' });
+    await settle();
+    expect(m.app.outsideTick).toBe(1);
+    expect(m.hub.checklistQueries.length).toBe(asked + 1);
+  });
 });

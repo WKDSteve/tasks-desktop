@@ -157,17 +157,17 @@ test('a hint goes where it covers no other control: the one of Help in a wide wi
 });
 
 test('a hint that lies on the next control lets the pointer through, so the first press reaches the control', async ({ page }) => {
-  // At a narrow width the popup of Help finds no free place (no room above the menu bar, none beside it) and stays
-  // below Help, over the upper edge of the filter Areas. Which width that is depends on the menus of the bar (448 px
-  // with five menus, less with six): the test looks for it. Raw mouse events, as a person moves (Playwright's click
+  // At a narrow width the popup of Help finds no free place (no room above the menu bar, none beside it) and lies on a
+  // control below it. Which width and which control that is depends on the menus of the bar (with five menus the filter
+  // Areas at 448 px; with eight the bar wraps and the popup meets the controls of the list at about 570 px): the test
+  // looks for the first width where the popup covers a control. Raw mouse events, as a person moves (Playwright's click
   // would scroll and wait until the target is free); the pointer rests on Help first, as a person reading it does.
   await pair(page);
   await showList(page);
   await page.keyboard.press('Escape');
   const tip = page.locator('#hint-tip');
-  let cover: { left: number; right: number; top: number; bottom: number } | null = null;
-  // The dot of the tab View (the view shown) and the Sign out button make the bar wider: the widths go on beyond the first ones.
-  for (const width of [448, 430, 470, 410, 490, 400, 520, 540, 560, 580, 600, 620, 640, 660, 680, 700, 720, 740, 760, 780]) {
+  let cover: { x: number; y: number } | null = null;
+  for (const width of [570, 580, 590, 448, 430, 470, 410, 490, 560, 600, 520, 540]) {
     await page.setViewportSize({ width, height: 800 });
     await page.mouse.move(0, 700);
     await expect(tip).toBeHidden();
@@ -175,25 +175,46 @@ test('a hint that lies on the next control lets the pointer through, so the firs
     await page.mouse.move(help.x + help.width / 2, help.y + help.height / 2);
     await page.waitForTimeout(600);
     await expect(tip).toBeVisible();
-    const areas = (await page.getByRole('button', { name: 'Areas', exact: true }).boundingBox())!;
-    const over = (await tip.boundingBox())!;
-    const box = {
-      left: Math.max(areas.x, over.x),
-      right: Math.min(areas.x + areas.width, over.x + over.width),
-      top: Math.max(areas.y, over.y),
-      bottom: Math.min(areas.y + areas.height, over.y + over.height),
-    };
-    if (box.right > box.left && box.bottom > box.top) {
-      cover = box;
-      break;
-    }
+    // A control of the page (not of the menu bar) that the popup lies on, there in the middle of the overlap: it is
+    // marked, and the middle is where the pointer goes.
+    cover = await page.evaluate((controls) => {
+      const over = document.getElementById('hint-tip')!.getBoundingClientRect();
+      for (const control of document.querySelectorAll<HTMLElement>(controls)) {
+        if (control.closest('[role="menubar"], #hint-tip')) continue;
+        const r = control.getBoundingClientRect();
+        const left = Math.max(r.left, over.left);
+        const right = Math.min(r.right, over.right);
+        const top = Math.max(r.top, over.top);
+        const bottom = Math.min(r.bottom, over.bottom);
+        if (right - left < 4 || bottom - top < 4) continue;
+        const x = (left + right) / 2;
+        const y = (top + bottom) / 2;
+        if (document.elementFromPoint(x, y)?.closest(controls) !== control) continue;
+        control.setAttribute('data-covered', '');
+        return { x, y };
+      }
+      return null;
+    }, CONTROL);
+    if (cover) break;
   }
-  // The case of the test: the popup lies on the control (without this the test would pass when the layout simply put
-  // the popup elsewhere). The pointer goes to the middle of the part of the control the popup covers.
-  expect(cover, 'at one of the widths the popup of Help covers a part of the filter Areas').not.toBeNull();
-  const { left, right, top, bottom } = cover!;
-  const x = (left + right) / 2;
-  const y = (top + bottom) / 2;
+  // The case of the test: the popup lies on a control (without this the test would pass when the layout simply put the
+  // popup elsewhere).
+  expect(cover, 'at one of the widths the popup of Help covers a control of the page').not.toBeNull();
+  const { x, y } = cover!;
+  // Which element the press reaches is noted; what the control would do is held back (whichever control the layout puts
+  // there, a later test of the group must find the page as it was).
+  await page.evaluate(() => {
+    const w = window as unknown as { pressed?: boolean };
+    const hold = (e: Event): void => {
+      const reached = !!(e.target as Element).closest('[data-covered]');
+      if (e.type === 'pointerdown') w.pressed = reached;
+      if (reached) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+      }
+    };
+    for (const type of ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click']) document.addEventListener(type, hold, { capture: true });
+  });
   await page.mouse.move(x, y, { steps: 4 });
   const under = () => page.evaluate(([px, py]) => document.elementFromPoint(px!, py!)?.id ?? '', [x, y]);
   // Still there with the pointer on it, and it lets the pointer through.
@@ -204,8 +225,9 @@ test('a hint that lies on the next control lets the pointer through, so the firs
   expect(await under()).not.toBe('hint-tip');
   await page.mouse.down();
   await page.mouse.up();
-  await expect(page.getByRole('group', { name: 'Areas' })).toBeVisible();
-  await expectAccessible(page, 'the choice of areas opened past the hint of Help');
+  // The first press reached the control the popup lay on.
+  expect(await page.evaluate(() => (window as unknown as { pressed?: boolean }).pressed)).toBe(true);
+  await expectAccessible(page, 'the control pressed past the hint of Help');
 });
 
 test('an explanation stays open when it is pressed in (its text can be copied) until a press outside', async ({ page }) => {

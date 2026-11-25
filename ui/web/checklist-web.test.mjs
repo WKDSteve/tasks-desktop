@@ -132,3 +132,17 @@ test('every module the worker imports is in the script of the worker (it is buil
   const local = [...source.matchAll(/from '\.\/([\w-]+\.ts)'/g)].map((m) => m[1]);
   for (const file of local) assert.ok(WORKER_MODULES.includes(file), `worker.ts imports ${file}, which the worker script does not hold`);
 });
+
+test('only the assets/ of an item is read (a folder with its <name>.md beside it), and a large board is a placeholder', async () => {
+  const disk = fakeDisk({
+    'docs/assets/logo.png': 'PNG',
+    'A/ROADMAP/tasks/t/t.md': 'task',
+    'A/ROADMAP/tasks/t/assets/boards/b.ink.json': `{"s":"${'x'.repeat(200)}"}`,
+  });
+  const vault = await readVaultFolder(disk.root, { maxFileBytes: 100 });
+  assert.equal(vault.files.has('docs/assets/logo.png'), false, 'not an attachment of an item');
+  assert.deepEqual(vault.skipped, [], 'a board larger than a text file does not keep the page from writing');
+  assert.equal(placeholderPath(vault.files.get('A/ROADMAP/tasks/t/assets/boards/b.ink.json')), 'A/ROADMAP/tasks/t/assets/boards/b.ink.json');
+  const stamps = await vaultStamps(disk.root);
+  assert.equal(stamps.has('docs/assets/logo.png'), false);
+});
