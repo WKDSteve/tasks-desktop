@@ -89,4 +89,12 @@ ever being served after an update, and keeps the page (which holds the session) 
 Long cache lifetimes (`public, max-age=31536000, immutable` under `assets/`) are for a server that is reached over a
 network; where this page is served so (the phone page, `/m/`, over a tunnel) they are the rule of that server. The test
 `ui_files.rs` pins the answer for the page and for an asset.
-Compression is not used for the same reason: on loopback it costs time and saves nothing.
+
+The text files of the phone page (`/m/`: HTML, scripts, styles, the manifest, the worker) have a gzip version, made
+when the hub is built (`crates/tasks-hub/build.rs`, `src/precompress.rs`), not per request. The hub sends it to a
+request that accepts gzip, with `Content-Encoding: gzip` and `Vary: Accept-Encoding`; every other request gets the
+plain file, and `no-store` stays on both. The phone page crosses a network (the tailnet): its script goes from 229 kB
+to 69 kB on the first start, and the versions add 77 kB to the binary. The desktop page has none: it is answered on
+loopback only, where gzip saves nothing that can be measured, and its versions would add 0.8 MB. Brotli would save a
+few kB more but needs an encoder the workspace does not have; gzip comes with `flate2`, which the hub already uses.
+The tests `ui_files.rs` (through a real hub) pin the answers.

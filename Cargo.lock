@@ -737,6 +737,7 @@ dependencies = [
  "appkit-hub",
  "appkit-mobile",
  "appkit-testkit",
+ "flate2",
  "hkdf",
  "image",
  "jiff",

@@ -43,3 +43,5 @@ aes-gcm = { version = "0.11", default-features = false, features = ["aes", "allo
 # The cover of a meeting (tests/real_meetings.rs) and the zone its invitation is told in: the versions tasks-hub brings.
 image = { version = "0.25", default-features = false, features = ["png"] }
 jiff = { version = "0.2", default-features = false, features = ["std", "tzdb-bundle-always"] }
+# A gzip version of a page file is unpacked as a browser does (tests/ui_files.rs): the flate2 tasks-hub brings.
+flate2 = { version = "1", default-features = false, features = ["rust_backend"] }

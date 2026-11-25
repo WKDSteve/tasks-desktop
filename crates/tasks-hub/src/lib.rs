@@ -26,6 +26,7 @@ pub mod mail;
 pub mod meetings;
 pub mod newvault;
 pub mod notices;
+pub mod precompress;
 pub mod repos;
 pub mod schedule;
 pub mod search;

@@ -37,6 +37,9 @@ the strict policy with Trusted Types arrives with the user interface.
 
 `no-store` is on the files of the page too, hashed ones included: the hub is a local program, so a cache saves a
 millisecond and an old page could outlive an update (`docs/PERFORMANCE.md`, "Caching of the page's files").
+A text file of the phone page may be sent as its gzip version, made when the hub was built: only to a request that accepts
+gzip, with `Content-Encoding` and `Vary: Accept-Encoding`, the same `Content-Type`, `nosniff` and `no-store`. The page's
+files hold no secret, and nothing the person or the hub sends is ever compressed with them.
 
 Routes are classified by their raw path. Everything under `/api/` needs a
 session unless it is on the short list below, so a route that is added later

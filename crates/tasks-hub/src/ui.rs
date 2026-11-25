@@ -6,6 +6,12 @@
 //! asks for. A request is answered from the table or not at all: no path is
 //! ever joined and opened per request, so there is nothing to traverse, and
 //! there is no search for a folder that scripts could be planted in.
+//!
+//! A text file of the phone page (`m/`) has a gzip version beside it, made when the binary is built (`build.rs`,
+//! `src/precompress.rs`): the hub sends it to a request that accepts gzip, with `Content-Encoding` and
+//! `Vary: Accept-Encoding` (`appkit_hub::Pages::encoded`). Nothing is compressed per request, and no file becomes
+//! cacheable for it (`no-store` stays). The desktop page has none: it is answered on loopback only, where gzip saves
+//! nothing that can be measured and its versions would make the binary 0.8 MB larger.
 
 use std::collections::HashMap;
 use std::path::Path;
@@ -22,6 +28,8 @@ include!(concat!(env!("OUT_DIR"), "/ui_embedded.rs"));
 pub struct UiFile {
     pub bytes: Bytes,
     pub content_type: &'static str,
+    /// The same file compressed with gzip, when it is text of the phone page and that makes it smaller.
+    pub gzip: Option<Bytes>,
 }
 
 #[derive(Clone, Default)]
@@ -40,7 +48,26 @@ impl UiFiles {
     /// built without `ui/dist`).
     #[must_use]
     pub fn embedded() -> Self {
-        Self::from_static(EMBEDDED)
+        Self::from_static(EMBEDDED).with_gzip(
+            EMBEDDED_GZIP
+                .iter()
+                .map(|(key, packed)| (*key, Bytes::from_static(packed))),
+        )
+    }
+
+    /// The gzip versions of files of the table, by key (as `build.rs` made them); a key that is not in the table is
+    /// left out.
+    #[must_use]
+    pub fn with_gzip<'a, B: Into<Bytes>>(
+        mut self,
+        versions: impl IntoIterator<Item = (&'a str, B)>,
+    ) -> Self {
+        for (key, packed) in versions {
+            if let Some(file) = self.files.get_mut(key) {
+                file.gzip = Some(packed.into());
+            }
+        }
+        self
     }
 
     /// Files given as (key, content type, bytes), keyed like the embedded table (`index.html`,
@@ -55,6 +82,7 @@ impl UiFiles {
                     UiFile {
                         bytes: Bytes::from_static(bytes),
                         content_type,
+                        gzip: None,
                     },
                 )
             })
@@ -114,6 +142,7 @@ impl UiFiles {
                 UiFile {
                     bytes: Bytes::from(std::fs::read(path)?),
                     content_type,
+                    gzip: None,
                 },
             );
             Ok(())
@@ -149,6 +178,13 @@ impl appkit_hub::Pages for UiFiles {
 
     fn has_index(&self) -> bool {
         UiFiles::has_index(self)
+    }
+
+    fn encoded(&self, request_path: &str, encoding: &str) -> Option<Bytes> {
+        match encoding {
+            "gzip" => self.get(request_path)?.gzip.clone(),
+            _ => None,
+        }
     }
 }
 
@@ -241,6 +277,74 @@ mod tests {
             assert!(ui.get(no).is_none(), "{no}");
         }
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    fn gunzip(bytes: &[u8]) -> Vec<u8> {
+        use std::io::Read as _;
+        let mut plain = Vec::new();
+        flate2::read::GzDecoder::new(bytes)
+            .read_to_end(&mut plain)
+            .unwrap();
+        plain
+    }
+
+    #[test]
+    fn every_embedded_text_file_of_the_phone_page_has_a_gzip_version_of_the_same_bytes() {
+        let ui = UiFiles::embedded();
+        let mut texts = 0;
+        for (key, file) in &ui.files {
+            let phone = key.starts_with("m/");
+            if !phone
+                || !crate::precompress::compressible(file.content_type)
+                || file.bytes.len() < 1024
+            {
+                // The desktop page (loopback only), pictures and fonts: no version.
+                assert!(file.gzip.is_none() || phone, "{key}");
+                continue;
+            }
+            texts += 1;
+            let packed = file
+                .gzip
+                .as_ref()
+                .unwrap_or_else(|| panic!("{key} has no gzip version"));
+            assert!(packed.len() < file.bytes.len(), "{key}");
+            assert_eq!(gunzip(packed), file.bytes, "{key}");
+        }
+        if ui.get("/m/").is_some() {
+            assert!(texts > 0, "a build with a phone page has scripts");
+        }
+        assert!(ui
+            .files
+            .values()
+            .filter(|f| !crate::precompress::compressible(f.content_type))
+            .all(|f| f.gzip.is_none()));
+    }
+
+    #[test]
+    fn a_gzip_version_is_given_only_for_its_file_and_only_as_gzip() {
+        use appkit_hub::Pages as _;
+        let js = "console.log('the same line');\n".repeat(100);
+        let packed = Bytes::from(crate::precompress::gzip(js.as_bytes()).unwrap());
+        assert_eq!(gunzip(&packed), js.as_bytes());
+        let ui = UiFiles::from_static(&[
+            ("index.html", "text/html; charset=utf-8", b"desk"),
+            ("m/index.html", "text/html; charset=utf-8", b"phone"),
+        ])
+        .with_gzip([
+            ("m/index.html", packed.clone()),
+            ("m/gone.js", packed.clone()),
+        ]);
+        assert_eq!(ui.encoded("/m/", "gzip"), Some(packed.clone()));
+        assert_eq!(ui.encoded("/m/index.html", "gzip"), Some(packed));
+        assert_eq!(ui.encoded("/m/", "br"), None);
+        assert_eq!(ui.encoded("/", "gzip"), None);
+        assert_eq!(ui.encoded("/m/gone.js", "gzip"), None);
+        // Gzip that would make a file larger is not made.
+        assert_eq!(crate::precompress::gzip(b"a{}"), None);
+        assert!(!crate::precompress::compressible("image/png"));
+        assert!(crate::precompress::compressible(
+            "application/manifest+json"
+        ));
     }
 
     #[test]

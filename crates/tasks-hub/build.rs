@@ -16,6 +16,10 @@
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
+// The gzip versions of the phone page; the tests of `src/ui.rs` check them with the same code.
+#[path = "src/precompress.rs"]
+mod precompress;
+
 const MAX_FILE: u64 = 4 * 1024 * 1024;
 
 fn content_type(path: &Path) -> Option<&'static str> {
@@ -139,6 +143,12 @@ fn main() {
 
     let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
     let mut body = String::new();
+    // The gzip versions of the phone page (src/precompress.rs), written beside the table and embedded with it. The
+    // phone page crosses a network (the tailnet); the desktop page is answered on loopback only, where its versions
+    // would add 0.8 MB to the binary and save nothing that can be measured.
+    let packed_dir = out.with_file_name("ui_gzip");
+    std::fs::create_dir_all(&packed_dir).expect("make the folder of the gzip versions");
+    let mut packed_body = String::new();
     for (key, path) in &entries {
         let bytes = std::fs::read(path).expect("read an interface file");
         assert!(
@@ -157,6 +167,23 @@ fn main() {
             canonical.display().to_string()
         )
         .expect("write to a string");
+        if let Some(packed) = (key.starts_with("m/") && precompress::compressible(kind))
+            .then(|| precompress::gzip(&bytes))
+            .flatten()
+        {
+            let file = packed_dir.join(format!("{}.gz", key.replace('/', "_")));
+            // Written only when it differs, as the table below.
+            if std::fs::read(&file).ok().as_deref() != Some(packed.as_slice()) {
+                std::fs::write(&file, &packed).expect("write a gzip version");
+            }
+            let canonical = file.canonicalize().unwrap_or(file);
+            writeln!(
+                packed_body,
+                "    ({key:?}, include_bytes!({:?})),",
+                canonical.display().to_string()
+            )
+            .expect("write to a string");
+        }
     }
 
     let mut code = String::new();
@@ -167,6 +194,9 @@ fn main() {
     .expect("string");
     code.push_str("pub static EMBEDDED: &[(&str, &str, &[u8])] = &[\n");
     code.push_str(&body);
+    code.push_str("];\n");
+    code.push_str("pub static EMBEDDED_GZIP: &[(&str, &[u8])] = &[\n");
+    code.push_str(&packed_body);
     code.push_str("];\n");
 
     // Written only when it differs: an unchanged file does not make the
