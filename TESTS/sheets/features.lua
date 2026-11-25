@@ -9,6 +9,11 @@ return {
     docs = "README.md",
   },
   {
+    id = "tasks.lists",
+    title = "The tab Lists: quick lists of short entries, the first line making the first list, a #word a tag, newest on top, ticked, filtered by the engine, an entry made a task, the done ones deleted in one step",
+    docs = "README.md",
+  },
+  {
     id = "tasks.meetings-make",
     title = "A meeting from a quick line of the palette: nothing written before Create, its cover, a recording, a document; a meeting that is over opens on its result, is ticked and done",
     docs = "README.md",

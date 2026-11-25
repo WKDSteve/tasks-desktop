@@ -174,6 +174,45 @@
     form = null;
   }
 
+  /** The entries of the list shown that are ticked, when "Delete the done ones" asked about attachments first. */
+  let clearing = $state<{ ids: string[]; withFiles: number } | null>(null);
+  /** The most operations in one request (the engine's limit). */
+  const OPS_PER_REQUEST = 100;
+
+  /**
+   * Delete every ticked entry of the list shown, all pages of them, in one step. When one of them has attachments the
+   * view asks first: those cannot be brought back with Undo (the others can).
+   */
+  async function clearDone(confirmed = false): Promise<void> {
+    if (current === null || !canWrite) return;
+    note = '';
+    let ids: string[];
+    let withFiles: number;
+    if (confirmed && clearing) {
+      ({ ids, withFiles } = clearing);
+    } else {
+      try {
+        const { items } = await checklistAll(app, current, { ...NO_CHECKLIST_FILTER, state: 'done' });
+        ids = items.map((e) => e.id);
+        withFiles = items.filter((e) => (e.assets ?? []).length > 0).length;
+        if (ids.length === 0) return;
+        if (withFiles > 0) {
+          clearing = { ids, withFiles };
+          return;
+        }
+      } catch {
+        note = t('lists.failed');
+        return;
+      }
+    }
+    clearing = null;
+    for (let at = 0; at < ids.length; at += OPS_PER_REQUEST) {
+      const ops = ids.slice(at, at + OPS_PER_REQUEST).map((id) => ({ op: 'entry_delete' as const, id }));
+      const result = await app.write(ops, { undoable: withFiles === 0 && ids.length <= OPS_PER_REQUEST });
+      if (!result) return;
+    }
+  }
+
   async function deleteList(): Promise<void> {
     if (current === null || (currentList?.total ?? 0) > 0) return;
     const result = await app.write([{ op: 'checklist_delete', id: current }]);
@@ -294,6 +333,13 @@
         >
         <button
           type="button"
+          data-lists-clear-done
+          data-hint={t('lists.clear_done.hint')}
+          disabled={!canWrite || currentList.total - currentList.open === 0}
+          onclick={() => void clearDone()}>{t('lists.clear_done')}</button
+        >
+        <button
+          type="button"
           data-lists-delete
           data-hint={t('lists.delete.hint')}
           disabled={!canWrite || currentList.total > 0}
@@ -325,6 +371,13 @@
     </form>
   {/if}
 
+  {#if clearing}
+    <p class="ask" role="alert" data-lists-clear-ask>
+      {t('lists.clear_done.ask', { n: clearing.ids.length, m: clearing.withFiles })}
+      <button type="button" class="bad" onclick={() => void clearDone(true)} data-lists-clear-yes>{t('lists.clear_done.yes')}</button>
+      <button type="button" onclick={() => (clearing = null)}>{t('lists.clear_done.no')}</button>
+    </p>
+  {/if}
   {#if note !== ''}<p class="note" role="status" data-lists-note>{note}</p>{/if}
 
   {#if phase === 'loading'}
@@ -489,6 +542,16 @@
     display: flex;
     flex-direction: column;
     gap: 0.25rem;
+  }
+  .ask {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.4rem;
+    margin: 0;
+  }
+  .bad {
+    border-color: var(--bad);
   }
   .note,
   .none {

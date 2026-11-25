@@ -1087,7 +1087,8 @@ focus back. The numbers of the overview on the Today page (ready, doing, blocked
   and text (Markdown: lists, tables, code, with the pictures of its folder drawn), to attach a file, a picture (also
   pasted), a video, a board of the drawing surface or a recording (a file, or recorded with the microphone), to make it
   a task of an area (the task gets its title, text, tags and attachments; the entry is gone) or to delete it (an entry
-  without attachments comes back with Undo; one with attachments asks first). The filter above the entries (words of the
+  without attachments comes back with Undo; one with attachments asks first). *Delete the done ones* clears every
+  ticked entry of the list in one step (asked first when one of them has attachments). The filter above the entries (words of the
   title, text or tags; a tag with its count; a span of days; open, done or all) is the engine's; *Export* gives what the
   filter shows as a Markdown file (an entry per block, the blocks apart by `---`), a CSV file, the printer or a PDF, and,
   in the web variant, a PNG picture. It works the same in the web variant.

@@ -243,6 +243,30 @@ describe('the tab Lists', () => {
     expect(m.hub.checklistQueries.slice(asked)).toEqual([{ id: '_list-support', q: 'sap' }]);
   });
 
+  it('deletes the done entries in one step, and asks first when one of them has attachments', async () => {
+    const { m, root } = await boot();
+    root.querySelector<HTMLButtonElement>('[data-lists-clear-done]')!.click();
+    await settle();
+    expect(m.hub.checklistQueries).toContainEqual(expect.objectContaining({ id: '_list-support', state: 'done' }));
+    // the double answers every entry: both go (the engine's filter would give only b)
+    expect(sent(m)).toEqual([
+      { op: 'entry_delete', id: '_list-support/a' },
+      { op: 'entry_delete', id: '_list-support/b' },
+    ]);
+
+    m.hub.sent.length = 0;
+    m.hub.checklistEntries.set('_list-support', [entry('c', { done: '2026-11-21', folder: true, assets: ['assets/x.png'] })]);
+    m.app.writes += 1;
+    await settle();
+    root.querySelector<HTMLButtonElement>('[data-lists-clear-done]')!.click();
+    await settle();
+    expect(sent(m)).toEqual([]);
+    expect(root.querySelector('[data-lists-clear-ask]')?.textContent).toContain('1 davon haben Anhänge');
+    root.querySelector<HTMLButtonElement>('[data-lists-clear-yes]')!.click();
+    await settle();
+    expect(sent(m)).toEqual([{ op: 'entry_delete', id: '_list-support/c' }]);
+  });
+
   it('reads the list again when a change on disk the snapshot does not hold is told', async () => {
     const { m } = await boot();
     const asked = m.hub.checklistQueries.length;

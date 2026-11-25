@@ -26,8 +26,8 @@ return {
     },
     {
       expect = "[...document.querySelectorAll('button.mb-trigger')].map((b) => b.dataset.for).join(',')"
-        .. " === 'tasks,project,view,learn,options,help'",
-      note = "its place: after View, before Options",
+        .. " === 'tasks,project,view,office,lists,learn,options,help'",
+      note = "its place: after Lists, before Options",
     },
     {
       expect = "document.querySelector('"
