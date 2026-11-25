@@ -63,7 +63,10 @@ test('what an asset path and its query may be', () => {
   assert.equal(assetContentType('a.mp4'), null);
   const q = (text) => assetRequest(parseQuery(text, ['kind', 'id', 'file']));
   assert.deepEqual(q('kind=task&id=a/t&file=assets/x.png'), { kind: 'task', id: 'a/t', file: 'assets/x.png' });
-  assert.equal(q('kind=board&id=a/t&file=assets/x.png'), 'kind is task, plan, project, path or meeting');
+  assert.equal(q('kind=board&id=a/t&file=assets/x.png'), 'kind is task, plan, project, path, meeting or checklist');
+  assert.deepEqual(q('kind=checklist&id=_list-a/e&file=assets/x.png'), { kind: 'checklist', id: '_list-a/e', file: 'assets/x.png' });
+  assert.equal(assetContentType('assets/boards/b.ink.json'), 'application/json', 'the strokes of a board, read back to draw on');
+  assert.equal(assetContentType('assets/b.ink.json'), null, 'only below assets/boards/');
   assert.equal(q('kind=task&id=../x&file=assets/x.png'), 'id must be <area>/<slug>');
   assert.equal(q('kind=task&id=a/t&file=x.png'), 'file is an image below assets/');
 });

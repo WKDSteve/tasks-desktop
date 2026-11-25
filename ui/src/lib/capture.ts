@@ -2,8 +2,8 @@
 // does the taking (`getUserMedia`, `getDisplayMedia`, `MediaRecorder`) and asks the person itself; this file says
 // beforehand whether the page may ask at all, names the file, and turns a stream into a picture.
 
-/** What is taken: a video or a photo with the camera, or a picture of a screen or a window. */
-export type Capture = 'video' | 'photo' | 'screenshot';
+/** What is taken: a video or a photo with the camera, a picture of a screen or a window, or a recording of the microphone. */
+export type Capture = 'video' | 'photo' | 'screenshot' | 'audio';
 
 /** The folder of the task an attached file goes to (the engine's `attach` with `kind`); none: `assets/` itself. */
 export type AssetKind = 'video' | 'image' | 'screenshot' | 'audio';
@@ -31,8 +31,8 @@ export function captureBlocked(kind: Capture, env: MediaEnv): Blocked | null {
     return env.allows('display-capture') ? null : 'policy';
   }
   if (typeof env.devices?.getUserMedia !== 'function') return 'unsupported';
-  if (kind === 'video' && !env.recorder) return 'unsupported';
-  return env.allows('camera') ? null : 'policy';
+  if ((kind === 'video' || kind === 'audio') && !env.recorder) return 'unsupported';
+  return env.allows(kind === 'audio' ? 'microphone' : 'camera') ? null : 'policy';
 }
 
 /** The policy of a document: Chrome's `featurePolicy`, or the newer name of it. */
@@ -71,6 +71,25 @@ export function videoFormat(supported: (type: string) => boolean): { type: strin
   return { type, ext: type.startsWith('video/mp4') ? 'mp4' : 'webm' };
 }
 
+/** The formats a recording of the microphone is made in, best first; the browser takes the first it can. */
+export const AUDIO_TYPES = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/mp4'] as const;
+
+/** The format to record sound in and the ending of its file; an empty type leaves the choice to the browser (`webm`). */
+export function audioFormat(supported: (type: string) => boolean): { type: string; ext: string } {
+  const type = AUDIO_TYPES.find((candidate) => supported(candidate)) ?? '';
+  return { type, ext: audioExt(type) };
+}
+
+/** The ending of a recorded sound by the type the recorder made (it may differ from the one asked for). */
+export function audioExt(type: string): string {
+  return type.startsWith('audio/mp4') ? 'm4a' : type.startsWith('audio/ogg') ? 'ogg' : 'webm';
+}
+
+/** The microphone alone, for a recording of sound. */
+export function openMicrophone(devices: Pick<MediaDevices, 'getUserMedia'>): Promise<MediaStream> {
+  return devices.getUserMedia({ audio: true, video: false });
+}
+
 const two = (n: number): string => String(n).padStart(2, '0');
 
 /** The name of a file that was taken at `at` (the time of this computer): `video-20261114-153012.webm`. */
@@ -89,8 +108,8 @@ export function kindOfFile(file: { type: string }): AssetKind | undefined {
   return undefined;
 }
 
-/** The folder a taken file goes to: a photo is an image. */
-export function kindOf(kind: Capture): Exclude<AssetKind, 'audio'> {
+/** The folder a taken file goes to: a photo is an image, a recording of the microphone a sound (`assets/audio/`). */
+export function kindOf(kind: Capture): AssetKind {
   return kind === 'photo' ? 'image' : kind;
 }
 

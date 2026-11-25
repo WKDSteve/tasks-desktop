@@ -682,12 +682,34 @@ local function readdir(path)
   return entries
 end
 
-function fs.dir(path)
-  local entries = readdir(fs.normalize(path)) or {}
+-- As Neovim's `vim.fs.dir`: with `opts.depth` the folders below are walked too, breadth first, each name relative to
+-- `path` (`assets/images/x.png`); `opts.skip(name)` returning false keeps a folder from being entered. The engine lists
+-- the attachments of a folder this way (`plans.assets`, depth 4).
+function fs.dir(path, opts)
+  opts = opts or {}
+  local root = fs.normalize(path)
+  local out = {}
+  local queue = { { "", 1 } }
+  while #queue > 0 do
+    local rel, level = queue[1][1], queue[1][2]
+    table.remove(queue, 1)
+    for _, e in ipairs(readdir(rel == "" and root or (root .. "/" .. rel)) or {}) do
+      local name = rel == "" and e.name or (rel .. "/" .. e.name)
+      out[#out + 1] = { name = name, type = e.type }
+      if
+        opts.depth
+        and level < opts.depth
+        and e.type == "directory"
+        and (not opts.skip or opts.skip(name) ~= false)
+      then
+        queue[#queue + 1] = { name, level + 1 }
+      end
+    end
+  end
   local i = 0
   return function()
     i = i + 1
-    local e = entries[i]
+    local e = out[i]
     if e then
       return e.name, e.type
     end
@@ -953,6 +975,13 @@ function uv.fs_copyfile(from, to, flags, callback)
     return uv_error("EIO", tostring(werr), to)
   end
   return true
+end
+
+-- The file system of the VM has no hard links: answered as libuv answers on a file system without them, so the engine
+-- takes its other way (`fsio.copy_whole` renames the copy into place; an attachment is copied that way).
+function uv.fs_link(_, to, callback)
+  assert(callback == nil, "uv.fs_link: callbacks are not available in the browser")
+  return uv_error("ENOTSUP", "operation not supported on socket", to)
 end
 
 -- There is no process of the machine: a fixed number stands for it (the engine puts it into its lock files).

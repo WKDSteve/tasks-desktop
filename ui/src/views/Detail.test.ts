@@ -9,6 +9,7 @@ import { App, type Env } from '../lib/app.svelte';
 import { task } from '../lib/fixtures';
 import Capture from './Capture.svelte';
 import PendingAttachments from './PendingAttachments.svelte';
+import AttachBar from './AttachBar.svelte';
 import Detail from './Detail.svelte';
 import DoneDialog from './DoneDialog.svelte';
 import TaskDialog from './TaskDialog.svelte';
@@ -283,11 +284,22 @@ describe('the file of a task in the detail', () => {
 
 describe('a screenshot to attach', () => {
   it('is offered in the detail and the capture where a hub runs and the engine can attach', () => {
-    const out = detail(page(false, ['attach']));
-    // Three buttons: a file at once, a choice for a video, a choice for an image (with the clipboard of the hub in it).
+    // The detail loads the buttons as a chunk of their own (`attachLoader.ts`): drawn on the server it has not come yet.
+    expect(detail(page(false, ['attach']))).not.toContain('Attach file');
+    const out = strip(render(AttachBar, { props: { app: page(false, ['attach']), id: 'pub/a' } }).body);
+    // A file at once, a choice for a video, for an image (with the clipboard of the hub in it) and for a sound.
     expect(out).toContain('Attach to this task');
     expect(out).toContain('Attach file');
-    for (const entry of ['Upload a video', 'Record a video', 'Upload an image', 'Take a photo', 'Take a screenshot', 'From the clipboard of the hub']) {
+    for (const entry of [
+      'Upload a video',
+      'Record a video',
+      'Upload an image',
+      'Take a photo',
+      'Take a screenshot',
+      'From the clipboard of the hub',
+      'Audio file',
+      'Record with the microphone',
+    ]) {
       expect(out).toContain(entry);
     }
     // Drawn outside a browser nothing can be taken: the entries say so instead of being left out.

@@ -1,7 +1,7 @@
 <script lang="ts">
   // The buttons of a task's detail that attach something to it: a file from this computer, a video (a file, or
   // recorded with the camera), an image (a file, a photo with the camera, a picture of the screen, or the image on
-  // the clipboard of the hub's machine), a recording (a file: `assets/audio/`). Whatever is taken here goes the way of every file from the page: through the
+  // the clipboard of the hub's machine), a recording (a file, or recorded with the microphone: `assets/audio/`). Whatever is taken here goes the way of every file from the page: through the
   // hub's upload to the engine, which puts it into the folder of its kind (`assets/videos/`, `assets/images/`,
   // `assets/screenshots/`). An entry the page may not start (no camera for it, a browser that cannot) says why.
   // A board is drawn on the page's own surface (`BoardEditor`, a chunk of its own) and saved with `board_save` below
@@ -9,6 +9,8 @@
   import { onDestroy, tick, untrack } from 'svelte';
   import type { App } from '../lib/app.svelte';
   import {
+    audioExt,
+    audioFormat,
     captureBlocked,
     captureFailure,
     captureName,
@@ -18,6 +20,7 @@
     kindOfFile,
     mediaEnv,
     openCamera,
+    openMicrophone,
     playing,
     stopStream,
     videoFormat,
@@ -32,7 +35,7 @@
   import Lazy from './Lazy.svelte';
   import type { BoardSaved } from '../lib/api';
 
-  let { app, id, owner = 'task' }: { app: App; id: string; owner?: 'task' | 'plan' | 'project' | 'meeting' } = $props();
+  let { app, id, owner = 'task' }: { app: App; id: string; owner?: 'task' | 'plan' | 'project' | 'meeting' | 'checklist' } = $props();
   /** The drawing surface is open for a new board of this item. */
   let drawing = $state(false);
 
@@ -50,8 +53,9 @@
     if (file) void app.attachFile(id, file, kind ?? kindOfFile(file));
   }
 
-  // What is being taken now: the camera shown for a photo, or a video being recorded. A screenshot needs no panel.
-  let taking = $state<{ kind: 'video' | 'photo'; ready: boolean } | null>(null);
+  // What is being taken now: the camera shown for a photo, a video or a sound being recorded. A screenshot needs no
+  // panel.
+  let taking = $state<{ kind: 'video' | 'photo' | 'audio'; ready: boolean } | null>(null);
   let preview: HTMLVideoElement | undefined = $state();
   let stream: MediaStream | null = null;
   let recorder: MediaRecorder | null = null;
@@ -66,11 +70,13 @@
     video: captureBlocked('video', env),
     photo: captureBlocked('photo', env),
     screenshot: captureBlocked('screenshot', env),
+    audio: captureBlocked('audio', env),
   };
 
   /** An entry that cannot be chosen was pressed: its reason is told where every message of the page is. */
   function toldWhy(choice: Choice): void {
-    const kind = choice.id === 'video-record' ? 'video' : choice.id === 'image-photo' ? 'photo' : 'screenshot';
+    const kind =
+      choice.id === 'video-record' ? 'video' : choice.id === 'image-photo' ? 'photo' : choice.id === 'audio-record' ? 'audio' : 'screenshot';
     const why = blocked[kind];
     if (why !== null) app.tell('error', `attach.capture.${why}` as Key);
   }
@@ -99,7 +105,9 @@
   function failed(kind: Capture, error: unknown): void {
     end();
     const why = captureFailure(kind, error);
-    if (why !== 'cancelled') app.tell('error', `attach.capture.${why}` as Key);
+    // the microphone has words of its own where the camera's would name the camera
+    const mic = kind === 'audio' && (why === 'denied' || why === 'no_device');
+    if (why !== 'cancelled') app.tell('error', (mic ? `attach.capture.mic_${why}` : `attach.capture.${why}`) as Key);
   }
 
   // What was taken for this task and is not attached (another upload ran, the upload failed): kept by the page
@@ -177,6 +185,52 @@
     }
   }
 
+  /** The microphone, with a recorder that runs from now on: the sound becomes a file of the task when it stops. */
+  async function startMicrophone(): Promise<void> {
+    if (taking !== null || busy) return;
+    taking = { kind: 'audio', ready: false };
+    session += 1;
+    const mine = session;
+    const task = id;
+    let got: MediaStream | null = null;
+    try {
+      got = await openMicrophone(env.devices as MediaDevices);
+      if (mine !== session) {
+        stopStream(got);
+        return;
+      }
+      stream = got;
+      const format = audioFormat((type) => MediaRecorder.isTypeSupported(type));
+      const parts: Blob[] = [];
+      const running = new MediaRecorder(got, format.type === '' ? undefined : { mimeType: format.type });
+      recorder = running;
+      running.ondataavailable = (event) => {
+        if (event.data.size > 0) parts.push(event.data);
+      };
+      // As with a video: what was recorded becomes the file, asked for or not (the microphone was unplugged).
+      running.onstop = () => {
+        if (mine !== session) return;
+        const type = running.mimeType;
+        end();
+        if (parts.length === 0) {
+          app.tell('error', 'attach.capture.failed');
+          return;
+        }
+        void attach(task, new File(parts, captureName('audio', audioExt(type), new Date()), { type: type || 'audio/webm' }), 'audio');
+      };
+      running.onerror = () => {
+        if (mine === session) failed('audio', new Error('recorder'));
+      };
+      running.start();
+      taking = { kind: 'audio', ready: true };
+      await tick();
+      action?.focus();
+    } catch (error) {
+      if (mine !== session) stopStream(got);
+      else failed('audio', error);
+    }
+  }
+
   /** The recording ends and becomes a file of the task (`onstop` of the recorder does the rest). */
   function stopVideo(): void {
     if (recorder && recorder.state !== 'inactive') recorder.stop();
@@ -234,8 +288,14 @@
       reason: reasonOf(blocked.screenshot),
       onselect: () => void takeScreenshot(),
     },
-    // The image on the clipboard of the machine the hub runs on, else its newest screenshot (the engine reads both).
-    { id: 'image-clipboard', label: t('attach.image.clipboard'), onselect: () => void app.attachScreenshot(id) },
+    // The image on the clipboard of the machine the hub runs on, else its newest screenshot (the engine reads both). The
+    // page without a hub has no such machine: a picture on this computer's clipboard is pasted (Ctrl+V) where the page
+    // takes one (the tab Lists).
+    ...(app.machineActions ? [{ id: 'image-clipboard', label: t('attach.image.clipboard'), onselect: () => void app.attachScreenshot(id) }] : []),
+  ]);
+  const audioChoices = $derived<Choice[]>([
+    { id: 'audio-upload', label: t('attach.audio.upload'), onselect: () => audioPicker?.click() },
+    { id: 'audio-record', label: t('attach.audio.record'), reason: reasonOf(blocked.audio), onselect: () => void startMicrophone() },
   ]);
 
   // Another task in the same detail, or the detail gone: the camera goes off, nothing is attached.
@@ -271,14 +331,14 @@
     disabled={busy || taking !== null}
     onblocked={toldWhy}
   />
-  <button
-    type="button"
-    class="attach"
-    data-attach="audio"
-    data-hint={t('hint.ui.detail.attach_audio')}
+  <ChoiceMenu
+    name="audio"
+    label={t('attach.audio')}
+    hint={t('hint.ui.detail.attach_audio')}
+    choices={audioChoices}
     disabled={busy || taking !== null}
-    onclick={() => audioPicker?.click()}>{t('attach.audio')}</button
-  >
+    onblocked={toldWhy}
+  />
   <!-- Not disabled while the board is open: the dialog gives the focus back to this button when it closes. -->
   <button
     type="button"
@@ -361,21 +421,28 @@
   {/each}
 {/if}
 {#if taking}
-  <div class="taking" role="group" aria-label={t(taking.kind === 'video' ? 'attach.video.record' : 'attach.image.photo')} data-taking={taking.kind}>
-    <!-- The camera's own picture, without sound: nothing to caption. -->
-    <!-- svelte-ignore a11y_media_has_caption -->
-    <video bind:this={preview} playsinline muted aria-label={t('attach.capture.preview')}></video>
+  <div
+    class="taking"
+    role="group"
+    aria-label={t(taking.kind === 'video' ? 'attach.video.record' : taking.kind === 'audio' ? 'attach.audio.record' : 'attach.image.photo')}
+    data-taking={taking.kind}
+  >
+    {#if taking.kind !== 'audio'}
+      <!-- The camera's own picture, without sound: nothing to caption. -->
+      <!-- svelte-ignore a11y_media_has_caption -->
+      <video bind:this={preview} playsinline muted aria-label={t('attach.capture.preview')}></video>
+    {/if}
     <p class="state" role="status">
       {#if !taking.ready}
-        {t('attach.capture.starting')}
-      {:else if taking.kind === 'video'}
+        {t(taking.kind === 'audio' ? 'attach.capture.mic_starting' : 'attach.capture.starting')}
+      {:else if taking.kind === 'video' || taking.kind === 'audio'}
         <span class="dot" aria-hidden="true">●</span> {t('attach.capture.recording')}
       {:else}
         {t('attach.capture.ready')}
       {/if}
     </p>
     <p class="actions">
-      {#if taking.kind === 'video'}
+      {#if taking.kind === 'video' || taking.kind === 'audio'}
         <button type="button" class="attach go" bind:this={action} disabled={!taking.ready || app.uploading !== null} onclick={stopVideo}
           >{t('attach.capture.stop')}</button
         >

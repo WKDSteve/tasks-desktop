@@ -22,6 +22,8 @@ pub enum Owner {
     Project,
     Path,
     Meeting,
+    /// An entry of a checklist (`_list-<list>/<slug>`, capability `checklists`).
+    Checklist,
 }
 
 impl Owner {
@@ -34,17 +36,23 @@ impl Owner {
             "project" => Self::Project,
             "path" => Self::Path,
             "meeting" => Self::Meeting,
+            "checklist" => Self::Checklist,
             _ => return None,
         })
     }
 
-    /// The file of a plan or a project in its folder form, relative to the vault (the engine's layout:
-    /// `<area>/ROADMAP/plans/<slug>/<slug>.md`). Tasks, paths and meetings are named by the engine.
+    /// The file of a plan, a project or an entry of a checklist in its folder form, relative to the vault (the
+    /// engine's layout: `<area>/ROADMAP/plans/<slug>/<slug>.md`, `_list-<list>/<slug>/<slug>.md`). Tasks, paths and
+    /// meetings are named by the engine.
     #[must_use]
     pub fn folder_file(self, area: &str, slug: &str) -> Option<String> {
         let dir = match self {
             Self::Plan => "plans",
             Self::Project => "projects",
+            // the list is a folder of the vault root whose name starts with `_list-` (no area)
+            Self::Checklist if area.starts_with("_list-") => {
+                return Some(format!("{area}/{slug}/{slug}.md"))
+            }
             _ => return None,
         };
         Some(format!("{area}/ROADMAP/{dir}/{slug}/{slug}.md"))
@@ -262,6 +270,16 @@ mod tests {
             Some("a/ROADMAP/projects/p/p.md")
         );
         assert_eq!(Owner::Task.folder_file("a", "p"), None);
+        assert_eq!(Owner::from_word("checklist"), Some(Owner::Checklist));
+        assert_eq!(
+            Owner::Checklist.folder_file("_list-a", "e").as_deref(),
+            Some("_list-a/e/e.md")
+        );
+        assert_eq!(
+            Owner::Checklist.folder_file("area", "e"),
+            None,
+            "an entry is only in a list"
+        );
         for (file, kind) in [
             ("a.png", Some("image/png")),
             ("a.JPG", Some("image/jpeg")),

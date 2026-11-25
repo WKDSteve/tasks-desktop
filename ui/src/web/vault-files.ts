@@ -36,6 +36,13 @@ export const DEFAULT_LIMITS: Readonly<LoadLimits> = {
   maxDepth: 32,
 };
 
+/**
+ * The folder of the VM where a file the page sends (an attachment, a board) waits for the engine (`upload_dir` of
+ * `ops`): outside the vault, so it is never taken for a file of the vault; emptied after every request. Here and not in
+ * `uploads.ts`: the worker is built of this module (web/worker-source.mjs), not of that one.
+ */
+export const UPLOAD_DIR = '/home/web/upload';
+
 /** The marker file of a vault (tasks.nvim `vault_marker.lua`): layout version, extra areas, defaults. */
 export const MARKER_FILE = 'tasks-vault.json';
 
@@ -108,6 +115,51 @@ export function wantedFile(name: string, atRoot: boolean): boolean {
 }
 
 /**
+ * Whether `path` (relative to the vault) is an attachment: a file below an `assets/` folder of an item (a folder task,
+ * a meeting, an entry of a checklist), never the vault's own root.
+ */
+export function isAssetPath(path: string): boolean {
+  const segments = path.split('/');
+  return segments.slice(1, -1).includes('assets');
+}
+
+/** Whether the reader takes the file at `path`: a task file or a root file (`wantedFile`), or an attachment. */
+export function wantedPath(path: string): boolean {
+  const segments = path.split('/');
+  const name = segments[segments.length - 1] as string;
+  return wantedFile(name, segments.length === 1) || isAssetPath(path);
+}
+
+/**
+ * An attachment whose bytes the VM holds whole: the boards of the drawing surface (`assets/boards/`, the strokes and
+ * their SVG), whose version the engine compares when one is saved again (`board_save` with `if_match`). Every other
+ * attachment is a placeholder (`placeholderOf`): the VM needs its name, never its bytes.
+ */
+export function loadsWhole(path: string): boolean {
+  return /(^|\/)assets\/boards\/[^/]+\.(?:ink\.json|svg)$/i.test(path) && !path.toLowerCase().endsWith('.md');
+}
+
+/** The first bytes of a placeholder: a NUL, so no text file of a vault is ever taken for one. */
+const PLACEHOLDER_HEAD = '\u0000tasks-web-asset/1\n';
+
+/**
+ * What the VM holds in place of the attachment at `path`: a few bytes that name it. The engine lists, moves and removes
+ * attachments by name only; the write-back turns a placeholder the engine moved or removed into a move or a removal of
+ * the real file, and never writes a placeholder's bytes into the folder.
+ */
+export function placeholderOf(path: string): Uint8Array {
+  return new TextEncoder().encode(`${PLACEHOLDER_HEAD}${path}\n`);
+}
+
+/** The path a placeholder stands for; null for any other bytes. */
+export function placeholderPath(bytes: Uint8Array): string | null {
+  const head = new TextEncoder().encode(PLACEHOLDER_HEAD);
+  if (bytes.byteLength <= head.byteLength + 1 || bytes[bytes.byteLength - 1] !== 0x0a) return null;
+  for (let i = 0; i < head.byteLength; i++) if (bytes[i] !== head[i]) return null;
+  return new TextDecoder().decode(bytes.subarray(head.byteLength, bytes.byteLength - 1));
+}
+
+/**
  * The bytes of the file at `path` (relative to `root`, `/` separated) as the folder holds it now: each part is looked
  * up by its exact name among the entries of its folder, a folder for every part but the last, a file for that one.
  * `missing` when a part is not there or not of its kind (or a name is not one a path may hold), `too_large` over
@@ -169,7 +221,7 @@ export async function readVaultFolder(root: DirHandleLike, limits: Partial<LoadL
       }
       if (entry.kind === 'directory') {
         if (wantedDir(entry.name)) await walk(entry, `${path}/`, depth + 1);
-      } else if (entry.kind === 'file' && wantedFile(entry.name, depth === 0)) {
+      } else if (entry.kind === 'file' && wantedPath(path)) {
         await take(entry, path);
       }
     }
@@ -181,6 +233,19 @@ export async function readVaultFolder(root: DirHandleLike, limits: Partial<LoadL
     }
     let bytes: Uint8Array;
     let lastModified: number | undefined;
+    // An attachment is a placeholder with the stamp of the real file (its size and time): the content is not read.
+    if (isAssetPath(path) && !wantedFile(path.slice(path.lastIndexOf('/') + 1), false) && !loadsWhole(path)) {
+      try {
+        const file = await handle.getFile();
+        bytes = placeholderOf(path);
+        out.totalBytes += bytes.byteLength;
+        out.files.set(path, bytes);
+        out.stamps.set(path, { size: file.size, lastModified: file.lastModified });
+      } catch {
+        out.skipped.push({ path, reason: 'unreadable' });
+      }
+      return;
+    }
     try {
       const file = await handle.getFile();
       if (file.size > lim.maxFileBytes) {
@@ -325,7 +390,7 @@ export async function vaultStamps(root: DirHandleLike, limits: Partial<LoadLimit
       const path = prefix + entry.name;
       if (entry.kind === 'directory') {
         if (wantedDir(entry.name)) await walk(entry, `${path}/`, depth + 1);
-      } else if (entry.kind === 'file' && wantedFile(entry.name, depth === 0)) {
+      } else if (entry.kind === 'file' && wantedPath(path)) {
         try {
           const file = await entry.getFile();
           stamps.set(path, stampText(file.size, file.lastModified));

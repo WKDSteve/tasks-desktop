@@ -85,6 +85,12 @@ templates carry them), the info buttons in the heads of six dialogs with their t
 with typed text is left (`leaveGuard`, `LeaveAsk`), the errors at the fields of three forms, and `numbers.ts`. All of it is
 what the first screen draws or what a dialog needs when it opens, and the dialogs are in the start. Raised by 8 kB to 958.
 
+On 2026-11-25 the tab Lists (checklists; tasks-desktop/reiter-checklist-mehrere-listen-mit-filter-und-export) and the
+recording with the microphone took the start to 962 kB: the tab in the menu bar, its route, two reads of the hub, the
+words of the tab and of the recording, and the recording in `AttachBar`. The view, its entry and their words are chunks
+of their own. `AttachBar` (the buttons of the detail that attach a file: camera, screen, microphone, board) loads on
+demand since (`ui/src/views/attachLoader.ts`), fetched when the page is idle like the board: the start is 949 kB.
+
 usage: check-bundle-size.py [--dist ui/dist] [--budget-kb 958]
 """
 import argparse

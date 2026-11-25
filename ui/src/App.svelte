@@ -43,6 +43,7 @@
   import Toast from './views/Toast.svelte';
   import Lazy from './views/Lazy.svelte';
   import { loader, preload } from './views/loader';
+  import { loadAttachBar } from './views/attachLoader';
 
   let { app, code }: { app: App; code: string | null } = $props();
 
@@ -73,7 +74,7 @@
   $effect(() => {
     if (app.phase !== 'ready' || preloaded) return;
     preloaded = true;
-    preload([loadViews, loadBoard, loadInbox]);
+    preload([loadViews, loadBoard, loadInbox, loadAttachBar]);
   });
   let chordTimer: ReturnType<typeof setTimeout> | undefined;
   let searchBox = $state<HTMLInputElement | null>(null);
@@ -540,6 +541,34 @@
             },
           ]
         : []),
+      // The tab Lists, after Office: the quick lists of short entries (checklists of the engine), the view and a new list.
+      ...(app.canChecklists
+        ? [
+            {
+              id: 'lists',
+              label: t('menu.lists'),
+              hint: t('hint.ui.menu.lists'),
+              current: app.view === 'lists' ? t('nav.lists') : null,
+              items: [
+                {
+                  kind: 'radio' as const,
+                  label: t('nav.lists'),
+                  hint: t('hint.item.nav.lists'),
+                  checked: app.view === 'lists',
+                  onselect: () => app.setView('lists'),
+                  ...apart('lists'),
+                },
+                {
+                  kind: 'action' as const,
+                  label: t('menu.list_new'),
+                  hint: t('hint.item.menu.list_new'),
+                  disabled: app.phase !== 'ready' || app.readOnly,
+                  onselect: () => app.askNewChecklist(),
+                },
+              ],
+            },
+          ]
+        : []),
       // The tab of the learning plans, after Office: only with the learning paths of the engine, and only the views the
       // page has and the engine serves (learnViews.ts); the export and the print of the view shown stay in View.
       ...(learnSections.length > 0
@@ -921,6 +950,8 @@
                     ? t('nav.meetings')
                   : app.view === 'contacts'
                     ? t('nav.contacts')
+                  : app.view === 'lists'
+                    ? t('nav.lists')
                   : app.view === 'calendar'
                     ? t('nav.calendar')
                   : app.view === 'timeline'
@@ -961,6 +992,8 @@
           <Lazy {app} load={() => import('./views/MeetingsView.svelte')} />
         {:else if app.view === 'contacts'}
           <Lazy {app} load={() => import('./views/ContactsView.svelte')} />
+        {:else if app.view === 'lists'}
+          <Lazy {app} load={() => import('./views/ListsView.svelte')} />
         {:else if app.view === 'calendar'}
           <Lazy {app} load={() => import('./views/CalendarView.svelte')} />
         {:else if app.view === 'timeline'}

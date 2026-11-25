@@ -219,7 +219,7 @@ const RUN_HIDDEN_MS = 30_000;
 
 export type Phase = 'starting' | 'needs_pairing' | 'offline' | 'unavailable' | 'ready';
 export type Connection = 'live' | 'reconnecting' | 'offline';
-export type View = 'today' | 'list' | 'board' | 'plan' | 'inbox' | 'abnahme' | 'cross' | 'meetings' | 'contacts' | 'calendar' | 'timeline' | 'reminders' | 'stats' | 'done' | 'views' | 'repos' | 'repostatus' | 'paths' | 'pathmap' | 'competences' | 'badges' | 'rewards' | 'evidence' | 'learn' | 'learnnext' | 'learnstats' | 'learntime' | 'learnnotes';
+export type View = 'today' | 'list' | 'board' | 'plan' | 'inbox' | 'abnahme' | 'cross' | 'meetings' | 'contacts' | 'lists' | 'calendar' | 'timeline' | 'reminders' | 'stats' | 'done' | 'views' | 'repos' | 'repostatus' | 'paths' | 'pathmap' | 'competences' | 'badges' | 'rewards' | 'evidence' | 'learn' | 'learnnext' | 'learnstats' | 'learntime' | 'learnnotes';
 export type Theme = 'auto' | 'light' | 'dark';
 /** The blocks of the Today view that a person may hide. */
 export { ORDERED_TILES, TILES, type OrderedTile, type Tile } from './tiles-list';
@@ -2071,6 +2071,22 @@ export class App {
   contactDraft = $state<ContactForm | null>(null);
   /** The contact whose page is open. */
   contactOpen = $state<string | null>(null);
+
+  /** The engine keeps checklists: the tab Lists is offered. */
+  get canChecklists(): boolean {
+    return this.can('checklists') && this.can('checklist');
+  }
+  /** The checklist the tab Lists shows (`_list-<slug>`); null: the first of the vault. Kept for the session of the tab. */
+  checklistOpen = $state<string | null>(null);
+  /** The tab Lists is asked to open its form of a new list (the menu's "New list"); the view clears it. */
+  checklistAsk = $state(false);
+
+  /** Show the tab Lists with its form of a new list open. */
+  askNewChecklist(): void {
+    if (this.phase !== 'ready' || !this.canChecklists || this.readOnly) return;
+    this.checklistAsk = true;
+    this.setView('lists');
+  }
 
   /** The engine reads contacts: the view, the page and the form are offered. */
   get canContacts(): boolean {

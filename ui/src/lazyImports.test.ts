@@ -15,6 +15,7 @@ const ON_DEMAND = [
   'Matrix',
   'AbnahmeView',
   'CrossView',
+  'ListsView',
   'CalendarView',
   'StatsView',
   'FinishedView',

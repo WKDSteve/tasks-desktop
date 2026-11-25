@@ -77,6 +77,7 @@ async function page(extra = {}, options = {}) {
     pinned: { engine: lock.commit, lib: lock.lib_commit },
     ops: (request) => session.ops(request),
     idle: () => session.idle(),
+    upload: (files, request) => session.upload(files, request),
   });
   const send = async (request) => {
     const response = await hub.fetch('/api/tasks/ops', { method: 'POST', body: JSON.stringify(request) });
@@ -175,19 +176,30 @@ test('a folder task is finished: the folder moves into the Backlog and the old o
   assert.deepEqual(p.disk.folders().filter((f) => f.startsWith('lib.nvim/ROADMAP/tasks/fold')), [], 'the emptied folder is gone');
 });
 
-test('a folder task with an asset is not moved by halves: refused, nothing written, the page reads the disk again', async () => {
+test('a folder task with an asset is finished whole: the asset moves with it, its bytes untouched', async () => {
   const body = '---\ntitle: Folder task\nstatus: open\nkind: feature\ncreated: 2026-01-01\nupdated: 2026-01-01\n---\n\n![shot](assets/shot.png)\n';
-  const p = await page({ 'lib.nvim/ROADMAP/tasks/fold/fold.md': body, 'lib.nvim/ROADMAP/tasks/fold/assets/shot.png': 'PNG' });
+  const p = await page({ 'lib.nvim/ROADMAP/tasks/fold/fold.md': body, 'lib.nvim/ROADMAP/tasks/fold/assets/shot.png': 'PNG-BYTES' });
+  const preview = await p.get('done_preview?id=lib.nvim/fold');
+  const done = await p.send(ops({ op: 'done', id: 'lib.nvim/fold', confirm: preview.confirm }));
+  assert.equal(done.status, 200, JSON.stringify(done.body));
+  const files = p.disk.files();
+  assert.equal(files['lib.nvim/Backlog/FEATURES/2026-10-29_fold/assets/shot.png'], 'PNG-BYTES', 'the real file moved, not its placeholder');
+  assert.equal(files['lib.nvim/ROADMAP/tasks/fold/assets/shot.png'], undefined);
+  assert.deepEqual(p.disk.folders().filter((f) => f.startsWith('lib.nvim/ROADMAP/tasks/fold')), [], 'the emptied folder is gone');
+  assert.ok(p.disk.log.some((entry) => entry.startsWith('move lib.nvim/ROADMAP/tasks/fold/assets/shot.png')), 'moved by the browser');
+});
+
+test('an asset the browser cannot move: nothing written, its placeholder never reaches the disk', async () => {
+  const body = '---\ntitle: Folder task\nstatus: open\nkind: feature\ncreated: 2026-01-01\nupdated: 2026-01-01\n---\n\nText\n';
+  const p = await page({ 'lib.nvim/ROADMAP/tasks/fold/fold.md': body, 'lib.nvim/ROADMAP/tasks/fold/assets/shot.png': 'PNG-BYTES' });
+  p.disk.failOn = (op) => op === 'move';
   const before = p.disk.snapshot();
   const preview = await p.get('done_preview?id=lib.nvim/fold');
   const done = await p.send(ops({ op: 'done', id: 'lib.nvim/fold', confirm: preview.confirm }));
-  assert.equal(done.status, 403, JSON.stringify(done.body));
-  assert.equal(done.body.error.code, 'forbidden');
-  assert.match(done.body.error.message, /assets\/shot\.png/);
-  assert.equal(p.disk.snapshot(), before, 'nothing was written');
-  const snapshot = await p.get('snapshot');
-  const task = snapshot.tasks.find((t) => t.id === 'lib.nvim/fold');
-  assert.equal(task?.status, 'open', 'the page shows the disk again: the task is still open');
+  assert.notEqual(done.status, 200, JSON.stringify(done.body));
+  assert.equal(p.disk.snapshot(), before, 'everything was taken back');
+  assert.equal(p.disk.read('lib.nvim/ROADMAP/tasks/fold/assets/shot.png'), 'PNG-BYTES');
+  assert.ok(!Object.values(p.disk.files()).some((text) => text.includes('tasks-web-asset')), 'no placeholder on the disk');
 });
 
 test('a file changed on disk since it was read is a conflict: 409, nothing written, the page shows the disk, a retry works', async () => {
@@ -422,4 +434,77 @@ test('an attach and requests that are plainly not requests are refused before th
   assert.equal((await p.send({ ops: [{ op: 'set', id: 'x/y', patch: {} }], extra: 1 })).status, 400);
   assert.equal(p.disk.snapshot(), before);
   assert.equal(p.disk.log.length, logged, 'the folder was not even looked at');
+});
+
+test('a checklist in the page: a list and an entry, a picture and a board attached, the entry made a task with them', async () => {
+  const p = await page();
+  const made = await p.send(
+    ops({ op: 'checklist_new', title: 'Support', id: '_list-support' }, { op: 'entry_add', list: '_list-support', title: 'Ticket #sap anlegen' }),
+  );
+  assert.equal(made.status, 200, JSON.stringify(made.body));
+  const id = made.body.results[1].id;
+  const slug = id.split('/')[1];
+  assert.match(p.disk.read('_list-support/list.md'), /title: Support/);
+  assert.match(p.disk.read(`_list-support/${slug}.md`), /title: Ticket anlegen/);
+
+  const list = await p.get('checklist?id=_list-support&tag=sap');
+  assert.deepEqual(
+    list.items.map((e) => [e.title, e.tags]),
+    [['Ticket anlegen', ['sap']]],
+  );
+
+  // a picture of the page: into the folder form of the entry, below assets/images/
+  const picture = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);
+  const up = await p.hub.fetch(`/api/tasks/upload?id=${id}&kind=image`, {
+    method: 'POST',
+    headers: { 'X-Upload-Name': encodeURIComponent('Bild 1.png') },
+    body: new Blob([picture]),
+  });
+  const upBody = await up.json();
+  assert.equal(up.status, 200, JSON.stringify(upBody));
+  assert.equal(upBody.results[0].asset, 'assets/images/Bild-1.png', JSON.stringify(upBody));
+  assert.equal(p.disk.read(`_list-support/${slug}/assets/images/Bild-1.png`), new TextDecoder().decode(picture));
+  assert.equal(p.disk.read(`_list-support/${slug}.md`), undefined, 'the entry is in its folder form');
+  assert.equal(p.disk.files()['_list-support/ROADMAP/TASKS.md'], undefined, 'no index for a list');
+  // the engine lists it (`vim.fs.dir` with `depth` in the shim), as it lists the attachments of a folder task
+  assert.deepEqual((await p.get('checklist?id=_list-support')).items[0].assets, ['assets/images/Bild-1.png']);
+  // and a vault read again holds it as a placeholder, still listed
+  await p.session.load();
+  assert.deepEqual((await p.get('checklist?id=_list-support')).items[0].assets, ['assets/images/Bild-1.png']);
+
+  // a board of the drawing surface
+  const board = await p.hub.fetch('/api/tasks/board', {
+    method: 'POST',
+    body: JSON.stringify({ id, name: 'skizze', ink: '{"strokes":[]}', svg: '<svg xmlns="http://www.w3.org/2000/svg"/>' }),
+  });
+  assert.equal(board.status, 200, await board.clone().text());
+  assert.equal(p.disk.read(`_list-support/${slug}/assets/boards/skizze.ink.json`), '{"strokes":[]}');
+
+  // the tags of the entry changed (the engine's shim has no vim.deep_equal: compared as text)
+  const tagged = await p.send(ops({ op: 'entry_set', id, tags: ['sap', 'hiva'] }));
+  assert.equal(tagged.status, 200, JSON.stringify(tagged.body));
+  assert.match(p.disk.read(`_list-support/${slug}/${slug}.md`), /tags: \[sap, hiva\]/);
+
+  // made a task: the picture and the board move along as they are, the entry is gone
+  const promoted = await p.send(ops({ op: 'entry_promote', id, area: 'lib.nvim' }));
+  assert.equal(promoted.status, 200, JSON.stringify(promoted.body));
+  const task = promoted.body.results[0].id;
+  const taskSlug = task.split('/')[1];
+  const files = p.disk.files();
+  assert.equal(files[`lib.nvim/ROADMAP/tasks/${taskSlug}/assets/images/Bild-1.png`], new TextDecoder().decode(picture));
+  assert.equal(files[`lib.nvim/ROADMAP/tasks/${taskSlug}/assets/boards/skizze.ink.json`], '{"strokes":[]}');
+  assert.equal(Object.keys(files).filter((f) => f.startsWith(`_list-support/${slug}`)).length, 0, 'the entry is gone');
+  assert.ok(!Object.values(files).some((text) => text.includes('tasks-web-asset')), 'no placeholder on the disk');
+});
+
+test('a file of the page is judged before the engine sees it: kind, name, ending', async () => {
+  const p = await page();
+  const send = (query, name) =>
+    p.hub.fetch(`/api/tasks/upload?${query}`, { method: 'POST', headers: name === null ? {} : { 'X-Upload-Name': name }, body: new Blob([new Uint8Array([1])]) });
+  assert.equal((await send('id=lib.nvim/alpha&kind=sound', 'a.mp3')).status, 400);
+  assert.equal((await send('id=../x', 'a.pdf')).status, 400);
+  assert.equal((await send('id=lib.nvim/alpha', null)).status, 400);
+  assert.equal((await send('id=lib.nvim/alpha', encodeURIComponent('a\u0007.pdf'))).status, 400);
+  assert.equal((await send('id=lib.nvim/alpha&kind=image', 'a.pdf')).status, 415);
+  assert.equal((await send('id=lib.nvim/alpha', 'run.exe')).status, 415);
 });

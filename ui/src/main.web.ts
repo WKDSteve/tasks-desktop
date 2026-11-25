@@ -176,6 +176,8 @@ async function begin(folder: string | null, name: string, readOnly: boolean): Pr
     idle: () => session.idle(),
     // The images of a container are read from the folder, one at a time (the VM holds only the text files).
     asset: (path, maxBytes) => session.asset(path, maxBytes),
+    // A file of the page (an attachment, a board): into the engine's upload folder, through the engine into the folder.
+    upload: readOnly ? undefined : (files, request) => session.upload(files, request),
   });
   hub = web;
   // A static copy of the files cannot be looked at again; to see changes the person chooses the folder again.

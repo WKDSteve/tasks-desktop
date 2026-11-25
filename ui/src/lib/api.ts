@@ -16,6 +16,8 @@ import type {
   LearnNotes,
   LevelsSpec,
   Links,
+  ChecklistDocument,
+  Checklists,
   ContactDocument,
   Contacts,
   MeetingDocument,
@@ -170,7 +172,20 @@ export type Op =
   | { op: 'contact_new'; area?: string; id?: string; name: string; fields?: Record<string, unknown>; body?: string; slug?: string; lang?: 'de' | 'en' }
   /** The frontmatter of a contact (`null` removes a key, not `name`). */
   | { op: 'contact_set'; id: string; patch: Record<string, unknown>; if_match?: string }
-  | { op: 'contact_delete'; id: string; if_match?: string };
+  | { op: 'contact_delete'; id: string; if_match?: string }
+  /**
+   * The checklists (capability `checklists`): a list is a folder `_list-<slug>/` of the vault, an entry a file in it
+   * (`_list-<list>/<slug>`). A `#word` of an entry's title is a tag (the engine takes it out of the title). The inverses
+   * of the deletes name the list or entry by `id` and bring `created` (and `done`) back in `fields`.
+   */
+  | { op: 'checklist_new'; title: string; id?: string; fields?: { created?: string } }
+  | { op: 'checklist_set'; id: string; title: string; if_match?: string }
+  | { op: 'checklist_delete'; id: string }
+  | { op: 'entry_add'; list?: string; id?: string; title: string; tags?: string[]; body?: string; fields?: { created?: string; done?: string } }
+  | { op: 'entry_set'; id: string; title?: string; done?: boolean; tags?: string[]; body?: string; if_match?: string }
+  | { op: 'entry_delete'; id: string; if_match?: string }
+  /** The entry made a task of `area`, with its title, text, tags and attachments; the entry is gone (no inverse). */
+  | { op: 'entry_promote'; id: string; area: string; if_match?: string; lang?: 'de' | 'en' };
 
 /** The vaults the hub can read, and the one it reads. A folder is shown by its last part only. */
 export interface VaultList {
@@ -373,7 +388,19 @@ export interface SetupStep {
  */
 export type AssetAnswer = { blob: Blob; tag: string | null } | 'same' | null;
 
-export type AssetOwner = 'task' | 'plan' | 'project' | 'path' | 'meeting';
+export type AssetOwner = 'task' | 'plan' | 'project' | 'path' | 'meeting' | 'checklist';
+
+/** The question of `checklist`: the list, the engine's filter (days of `created`, a tag, words, the state) and a page. */
+export interface ChecklistQuery {
+  id: string;
+  since?: string;
+  until?: string;
+  tag?: string;
+  q?: string;
+  state?: 'open' | 'done' | 'all';
+  limit?: number;
+  offset?: number;
+}
 
 export class Hub extends HubClient<Snapshot> {
   constructor(fetchFn: typeof fetch, base: string = '') {
@@ -777,6 +804,16 @@ export class Hub extends HubClient<Snapshot> {
     signal?: AbortSignal,
   ): Promise<Meetings> {
     return this.json<Meetings>(this.listPath('meetings', query), signal ? { signal } : undefined);
+  }
+
+  /** The checklists of the vault by title, with how many entries each holds and how many are open (`tasks.checklists`). */
+  checklists(signal?: AbortSignal): Promise<Checklists> {
+    return this.json<Checklists>('/api/tasks/checklists', signal ? { signal } : undefined);
+  }
+
+  /** The entries of one checklist the engine's filter lets through, newest first, one page (`tasks.checklist`). */
+  checklist(query: ChecklistQuery, signal?: AbortSignal): Promise<ChecklistDocument> {
+    return this.json<ChecklistDocument>(this.listPath('checklist', query), signal ? { signal } : undefined);
   }
 
   /** The contacts by name, one page (`tasks.contacts`); the tag and the organisation are filtered by the page. */

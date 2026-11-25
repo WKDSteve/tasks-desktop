@@ -117,6 +117,18 @@ export class WorkerClient {
     return { changes: reply.changes, files: new Map(Object.entries(reply.files)) };
   }
 
+  /** Put files (name -> bytes) into the upload folder of the VM, for the engine's `upload_dir`. */
+  async stage(files: Map<string, Uint8Array>): Promise<void> {
+    const reply = await this.ask((id) => ({ type: 'stage', id, files: filesRecord(files) }));
+    if (reply.type !== 'staged') throw new Error(`unexpected reply ${reply.type}`);
+  }
+
+  /** Take files out of the upload folder of the VM again. */
+  async unstage(names: string[]): Promise<void> {
+    const reply = await this.ask((id) => ({ type: 'unstage', id, names }));
+    if (reply.type !== 'staged') throw new Error(`unexpected reply ${reply.type}`);
+  }
+
   /** These changes are in the folder now: they are the loaded state of the VM's vault, other changes stay pending. */
   async accept(changes: VaultChanges): Promise<void> {
     const reply = await this.ask((id) => ({ type: 'accept', id, changes }));
@@ -149,6 +161,8 @@ export interface BrowserHubOptions {
   idle?: HubDeps['idle'];
   /** The image files of the folder (`VaultSession.asset`). Without it every asset is missing. */
   asset?: HubDeps['asset'];
+  /** A request that takes files of the page (`VaultSession.upload`). Without it the page takes no files. */
+  upload?: HubDeps['upload'];
 }
 
 /** The hub of the page: the routes of the Rust hub over the engine in the worker. */
@@ -163,5 +177,6 @@ export function createBrowserHub(client: WorkerClient, opts: BrowserHubOptions):
     ops: opts.ops,
     idle: opts.idle,
     asset: opts.asset,
+    upload: opts.upload,
   });
 }

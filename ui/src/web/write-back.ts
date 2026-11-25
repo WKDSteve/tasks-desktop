@@ -12,7 +12,9 @@
 //   2. Write. New files and changed files first, removals last (a failure before the removals leaves the old files).
 //      A file is written through `createWritable`, which the browser commits atomically on `close`. Right before each
 //      write or removal the file is looked at once more (time and size), and before a new file is made it is looked at
-//      that nothing is there; a change found by one of these looks is a CONFLICT too, found late. Any other failure in
+//      that nothing is there; a change found by one of these looks is a CONFLICT too, found late. An attachment the VM
+//      holds as a placeholder (`placeholderOf`: its name, not its bytes) is moved or removed on disk, never written: a
+//      placeholder the browser cannot move stops the write. Any other failure in
 //      the middle undoes what was done (files written are removed or given their old bytes back, unless an editor saved
 //      them since; removed files are written again); what cannot be undone is told.
 //   3. Read back. Every file written is read once more, its bytes compared with what was meant to be written, and its
@@ -25,9 +27,10 @@
 
 import type { WritableDirHandle, WritableFileHandle } from 'appkit-web/folder';
 import {
+  placeholderPath,
   safeName,
   wantedDir,
-  wantedFile,
+  wantedPath,
   type FileStamp,
   type VaultChanges,
 } from './vault-files.ts';
@@ -35,9 +38,14 @@ import {
 /** The stream, file and folder handles of the File System Access API, as far as the write-back uses them. */
 export type { WritableDirHandle, WritableFileHandle, WritableStreamLike } from 'appkit-web/folder';
 
-/** What the page knows of a file on disk: what it looked like when it was read, and a digest of its bytes. */
+/**
+ * What the page knows of a file on disk: what it looked like when it was read, and a digest of its bytes. For an
+ * attachment the VM holds as a placeholder the digest is the placeholder's (the real bytes were never read): the file
+ * on disk is judged by its stamp alone.
+ */
 export interface BaselineEntry extends FileStamp {
   digest: string;
+  placeholder?: boolean;
 }
 
 /** Path relative to the vault -> the state of the file on disk as the page last knew it. */
@@ -61,7 +69,13 @@ export async function makeBaseline(
   const out: Baseline = new Map();
   for (const [path, bytes] of vault.files) {
     const stamp = vault.stamps.get(path);
-    out.set(path, { size: stamp?.size ?? bytes.byteLength, lastModified: stamp?.lastModified, digest: await hash(bytes) });
+    const placeholder = placeholderPath(bytes) !== null;
+    out.set(path, {
+      size: stamp?.size ?? bytes.byteLength,
+      lastModified: stamp?.lastModified,
+      digest: await hash(bytes),
+      ...(placeholder ? { placeholder } : {}),
+    });
   }
   return out;
 }
@@ -126,8 +140,7 @@ export function refusalOfPath(path: string): string | null {
     return `${JSON.stringify(path.slice(0, 80))} is not a plain path inside the vault`;
   }
   const dirs = segments.slice(0, -1);
-  const name = segments[segments.length - 1] as string;
-  if (!dirs.every((d) => wantedDir(d)) || !wantedFile(name, dirs.length === 0)) {
+  if (!dirs.every((d) => wantedDir(d)) || !wantedPath(path)) {
     return `${path} is not a place this page reads or writes`;
   }
   return null;
@@ -261,6 +274,22 @@ async function run(input: WriteBackInput): Promise<WriteBackResult> {
   for (const path of [...modified, ...removed]) {
     if (!baseline.has(path)) return { status: 'refused', message: `${path} was never read from the folder`, internal: true };
   }
+  // A placeholder is written nowhere: a new one is an attachment the engine moved (its old place is among the removed
+  // files), a changed one is no change the engine makes.
+  const placeholders = new Map<string, string>(); // new path -> the path of the real file it stands for
+  for (const path of modified) {
+    if (placeholderPath(files.get(path) as Uint8Array) !== null) {
+      return { status: 'refused', message: `${path} is an attachment the page does not hold: it is not written`, internal: true };
+    }
+  }
+  for (const path of added) {
+    const from = placeholderPath(files.get(path) as Uint8Array);
+    if (from === null) continue;
+    if (!removed.includes(from) || !baseline.get(from)?.placeholder) {
+      return { status: 'refused', message: `${path} is an attachment the page does not hold: it is not written`, internal: true };
+    }
+    placeholders.set(path, from);
+  }
 
   const conflicts: Conflict[] = [];
   const old = new Map<string, Uint8Array>();
@@ -288,7 +317,8 @@ async function run(input: WriteBackInput): Promise<WriteBackResult> {
       continue;
     }
     const now = await readBytes(there);
-    if (!sameStamp(now.stamp, entry) || (await hash(now.bytes)) !== entry.digest) {
+    // An attachment held as a placeholder is judged by its stamp: its bytes were never read to compare with.
+    if (!sameStamp(now.stamp, entry) || (!entry.placeholder && (await hash(now.bytes)) !== entry.digest)) {
       conflicts.push({ path, reason: 'changed' });
       continue;
     }
@@ -439,6 +469,8 @@ async function run(input: WriteBackInput): Promise<WriteBackResult> {
           continue;
         }
       }
+      // A placeholder that could not be moved: its bytes are a name, not the attachment. Nothing of it is written.
+      if (placeholders.has(path)) throw new Error(`the attachment ${placeholders.get(path) as string} could not be moved (this browser cannot move files)`);
       await stillAbsent(parent, name, path);
       const handle = await parent.getFileHandle(name, { create: true });
       steps.push({
@@ -520,6 +552,14 @@ async function run(input: WriteBackInput): Promise<WriteBackResult> {
     try {
       const handle = await fileAt(root, path);
       if (!handle) throw new Error('is not there');
+      const from = placeholders.get(path);
+      if (from !== undefined) {
+        // A moved attachment: the same file under its new name, judged by its size as before (not read).
+        const file = await handle.getFile();
+        if (file.size !== (baseline.get(from) as BaselineEntry).size) throw new Error('is not the file that was moved');
+        next.set(path, { size: file.size, lastModified: file.lastModified, digest, placeholder: true });
+        continue;
+      }
       const now = await readBytes(handle);
       if ((await hash(now.bytes)) !== digest) throw new Error('does not hold what was written');
       next.set(path, { size: now.stamp.size, lastModified: now.stamp.lastModified, digest });

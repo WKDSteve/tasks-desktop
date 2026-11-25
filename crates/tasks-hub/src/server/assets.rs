@@ -79,7 +79,7 @@ pub(super) fn asset_request(query: Option<&str>) -> Result<(Owner, String, Strin
     let owner = params
         .get("kind")
         .and_then(|k| Owner::from_word(k))
-        .ok_or("kind is task, plan, project, path or meeting")?;
+        .ok_or("kind is task, plan, project, path, meeting or checklist")?;
     let id = params
         .get("id")
         .filter(|id| valid_task_id(id))
@@ -125,7 +125,7 @@ async fn container_file(st: &Shared, owner: Owner, id: &str) -> Result<Option<St
             Err(response) if response.status() == StatusCode::NOT_FOUND => Ok(None),
             Err(response) => Err(response),
         },
-        Owner::Plan | Owner::Project => {
+        Owner::Plan | Owner::Project | Owner::Checklist => {
             let (area, slug) = id.split_once('/').unwrap_or_default();
             Ok(owner.folder_file(area, slug))
         }

@@ -17,7 +17,7 @@
   import { classChange as classChangeOf } from '../lib/bulk';
   import { copyText } from '../lib/exportDom';
   import { kindOfFile } from '../lib/capture';
-  import AttachBar from './AttachBar.svelte';
+  import { loadAttachBar } from './attachLoader';
   import Lazy from './Lazy.svelte';
   import PickField from './PickField.svelte';
   import { phaseOptions, planOptions, projectOptions } from '../lib/picker';
@@ -1355,7 +1355,7 @@
         </span>
       {/if}
       {#if app.canAttach}
-        <AttachBar {app} id={task.id} />
+        <Lazy {app} load={loadAttachBar} extra={{ id: task.id }} />
       {/if}
     </p>
     {#if app.attached && app.attached.id === task.id}

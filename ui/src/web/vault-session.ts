@@ -47,6 +47,9 @@ export interface SessionClient {
   call(method: string, request: string | null, opts: { root: string; today?: string }): Promise<CallResult>;
   pendingFiles(): Promise<{ changes: VaultChanges; files: Map<string, Uint8Array> }>;
   accept(changes: VaultChanges): Promise<void>;
+  /** Files for the engine's `upload_dir` (an attachment, a board); `unstage` takes them away. Without them: no uploads. */
+  stage?(files: Map<string, Uint8Array>): Promise<void>;
+  unstage?(names: string[]): Promise<void>;
 }
 
 export interface SessionDeps {
@@ -286,6 +289,36 @@ export class VaultSession {
     this.writing += 1;
     try {
       return await this.exclusive(() => this.write(request));
+    } finally {
+      this.writing -= 1;
+    }
+  }
+
+  /**
+   * A request of `ops` that takes files the page sent (`attach` of an upload, `board_save`): the files go into the
+   * upload folder of the VM (`UPLOAD_DIR`, named in the request as `upload_dir` by the hub, never by the page), the
+   * engine copies them into the vault, the write-back writes them to the folder, and the upload folder is emptied
+   * whatever came of it.
+   */
+  async upload(files: Map<string, Uint8Array>, request: string): Promise<OpsOutcome> {
+    const { client } = this.deps;
+    if (!client.stage || !client.unstage) {
+      return { kind: 'failed', code: 'forbidden', message: 'this page takes no files' };
+    }
+    this.writing += 1;
+    try {
+      return await this.exclusive(async () => {
+        try {
+          await client.stage?.(files);
+        } catch (error) {
+          return { kind: 'failed', code: 'io', message: `the file could not be handed to the engine: ${describe(error)}` };
+        }
+        try {
+          return await this.write(request);
+        } finally {
+          await client.unstage?.([...files.keys()]).catch(() => undefined);
+        }
+      });
     } finally {
       this.writing -= 1;
     }

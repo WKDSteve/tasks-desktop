@@ -13,6 +13,18 @@ import { INTENT_MAX_BYTES } from '../lib/intent.ts';
 import type { CallResult } from './engine.ts';
 import { parseQuery as parseSearchQuery, parseRequest, readCorpus, search as searchCorpus, type Corpus } from './search.ts';
 import { learnRequest, type LearnRead } from './learnQuery.ts';
+import {
+  attachOp,
+  boardRequest,
+  cleanName,
+  extensionAllowed,
+  LARGE_FOR_GIT,
+  percentDecoded,
+  refusedName,
+  uploadKind,
+  WEB_UPLOAD_MAX_BYTES,
+} from './uploads.ts';
+import { UPLOAD_DIR } from './vault-files.ts';
 
 /** How a request of `ops` ended (`VaultSession.ops`). */
 export type OpsOutcome =
@@ -49,6 +61,12 @@ export interface HubDeps {
    * `maxBytes`. Without it every asset is missing.
    */
   asset?(path: string, maxBytes: number): Promise<AssetRead>;
+  /**
+   * The write path for a request that takes files the page sent (`attach` of an upload, `board_save`): the files (name
+   * -> bytes) go to the engine's upload folder, `request` is the JSON of `ops` with `upload_dir` set by this hub.
+   * Without it the page takes no files (`upload` and `board` answer `not_available`).
+   */
+  upload?(files: Map<string, Uint8Array>, request: string): Promise<OpsOutcome>;
 }
 
 /** What reading an asset gave (`HubDeps.asset`). */
@@ -69,6 +87,8 @@ const ASSET_TYPES: Readonly<Record<string, string>> = {
 
 /** The media type of an image asset by its kind (`assets::content_type`), or null. */
 export function assetContentType(file: string): string | null {
+  // The strokes of a board of the drawing surface (`board_save`, format `ink`): read back to draw on. Only there.
+  if (file.startsWith('assets/boards/') && file.toLowerCase().endsWith('.ink.json')) return 'application/json';
   const dot = file.lastIndexOf('.');
   if (dot < 0) return null;
   return ASSET_TYPES[file.slice(dot + 1).toLowerCase()] ?? null;
@@ -84,13 +104,13 @@ export function validAssetPath(file: string): boolean {
 }
 
 /** The kinds of container whose assets the hub hands on (`assets::Owner`). */
-export const ASSET_OWNERS = ['task', 'plan', 'project', 'path', 'meeting'] as const;
+export const ASSET_OWNERS = ['task', 'plan', 'project', 'path', 'meeting', 'checklist'] as const;
 export type AssetOwner = (typeof ASSET_OWNERS)[number];
 
 /** The query of `asset`, as the hub reads it (`asset_request`), or why it is refused. */
 export function assetRequest(q: Map<string, string>): { kind: AssetOwner; id: string; file: string } | string {
   const kind = q.get('kind');
-  if (!ASSET_OWNERS.includes(kind as AssetOwner)) return 'kind is task, plan, project, path or meeting';
+  if (!ASSET_OWNERS.includes(kind as AssetOwner)) return 'kind is task, plan, project, path, meeting or checklist';
   const id = q.get('id');
   if (!validTaskId(id)) return 'id must be <area>/<slug>';
   const file = q.get('file');
@@ -256,6 +276,92 @@ export function contactsParams(q: Map<string, string>): Record<string, unknown> 
   if (area !== undefined) {
     if (!validAreaName(area)) return 'area is not a name';
     out['area'] = area;
+  }
+  const limit = q.get('limit');
+  if (limit !== undefined) {
+    if (!/^[0-9]+$/.test(limit) || Number(limit) < 1 || Number(limit) > 100) return 'limit is 1 to 100';
+    out['limit'] = Number(limit);
+  }
+  const offset = q.get('offset');
+  if (offset !== undefined) {
+    if (!/^[0-9]+$/.test(offset) || Number(offset) > 100000) return 'offset is a number from 0';
+    out['offset'] = Number(offset);
+  }
+  return out;
+}
+
+/** Whether `id` names a checklist: `_list-` and a slug (`valid_list_id` of the hub). */
+export function validListId(id: unknown): id is string {
+  return typeof id === 'string' && /^_list-[a-z0-9]+(?:-[a-z0-9]+)*$/.test(id) && id.length <= 126;
+}
+
+/**
+ * A percent-encoded text of the query (`encodeURIComponent`, `/` left as it is), decoded strictly (`decoded_text` of
+ * the hub): the plain bytes of that encoding and `%XX`, UTF-8, no control character, not blank, at most `max` bytes.
+ */
+export function decodedText(raw: string, max: number): string | null {
+  if (!/^(?:[A-Za-z0-9\-_.!~*'()/]|%[0-9A-Fa-f]{2})*$/.test(raw)) return null;
+  let text: string;
+  try {
+    const bytes = new Uint8Array(raw.length);
+    let n = 0;
+    for (let i = 0; i < raw.length; i += 1) {
+      if (raw[i] === '%') {
+        bytes[n++] = parseInt(raw.slice(i + 1, i + 3), 16);
+        i += 2;
+      } else {
+        bytes[n++] = raw.charCodeAt(i);
+      }
+    }
+    text = new TextDecoder('utf-8', { fatal: true }).decode(bytes.subarray(0, n));
+  } catch {
+    return null;
+  }
+  // eslint-disable-next-line no-control-regex
+  if (text.trim() === '' || new TextEncoder().encode(text).length > max || /[\u0000-\u001f\u007f-\u009f]/.test(text)) return null;
+  return text;
+}
+
+/** The question of `checklist` from its query, as the hub asks it (`checklist_request`), or why it is refused. */
+export function checklistParams(query: string): Record<string, unknown> | string {
+  const texts = new Map<string, string>();
+  const rest: string[] = [];
+  for (const pair of query === '' ? [] : query.split('&')) {
+    const cut = pair.indexOf('=');
+    const key = cut < 0 ? pair : pair.slice(0, cut);
+    if (cut >= 0 && (key === 'tag' || key === 'q')) {
+      if (texts.has(key)) return 'a query parameter is given twice';
+      texts.set(key, pair.slice(cut + 1));
+    } else {
+      rest.push(pair);
+    }
+  }
+  const q = parseQuery(rest.join('&'), ['id', 'since', 'until', 'tag', 'q', 'state', 'limit', 'offset']);
+  if (typeof q === 'string') return q;
+  const id = q.get('id');
+  if (!validListId(id)) return 'id must be _list-<slug>';
+  const out: Record<string, unknown> = { id };
+  const since = q.get('since');
+  const until = q.get('until');
+  if ((since !== undefined && !isDay(since)) || (until !== undefined && !isDay(until))) return 'since and until are days, YYYY-MM-DD';
+  if (since !== undefined) out['since'] = since;
+  if (until !== undefined) out['until'] = until;
+  const tagRaw = texts.get('tag');
+  if (tagRaw !== undefined) {
+    const tag = decodedText(tagRaw, 40);
+    if (tag === null) return 'tag is a word of at most 40 bytes';
+    out['tag'] = tag;
+  }
+  const qRaw = texts.get('q');
+  if (qRaw !== undefined) {
+    const words = decodedText(qRaw, 200);
+    if (words === null) return 'q is a text of at most 200 bytes';
+    out['q'] = words;
+  }
+  const state = q.get('state');
+  if (state !== undefined) {
+    if (state !== 'open' && state !== 'done' && state !== 'all') return 'state is open, done or all';
+    out['state'] = state;
   }
   const limit = q.get('limit');
   if (limit !== undefined) {
@@ -449,6 +555,8 @@ export function createWebHub(deps: HubDeps): WebHub {
     const [area, slug] = id.split('/') as [string, string];
     if (kind === 'plan') return `${area}/ROADMAP/plans/${slug}/${slug}.md`;
     if (kind === 'project') return `${area}/ROADMAP/projects/${slug}/${slug}.md`;
+    // an entry of a checklist: the list is a folder of the vault root (`_list-<slug>/`), the layout names its folder
+    if (kind === 'checklist') return area.startsWith('_list-') ? `${area}/${slug}/${slug}.md` : null;
     const r = await engine(kind, { id });
     if (r instanceof Response) return r.status === 404 ? null : r;
     let entry: Record<string, unknown> | undefined;
@@ -522,6 +630,15 @@ export function createWebHub(deps: HubDeps): WebHub {
         if (typeof q === 'string') return errorBody(400, 'bad_query', q);
         const params = contactsParams(q);
         return typeof params === 'string' ? errorBody(400, 'bad_query', params) : passOn('contacts', params);
+      }
+      case 'checklists': {
+        const refused = noQuery(query);
+        return refused ?? passOn('checklists', undefined);
+      }
+      case 'checklist': {
+        // One list through its filter (`GET /api/tasks/checklist`), judged as the hub judges the query.
+        const params = checklistParams(query);
+        return typeof params === 'string' ? errorBody(400, 'bad_query', params) : passOn('checklist', params);
       }
       case 'contact': {
         const q = parseQuery(query, ['id']);
@@ -867,6 +984,93 @@ export function createWebHub(deps: HubDeps): WebHub {
     }
   }
 
+  /** The answer of a request that took files, told as `ops` tells it (`upload` and `board` of the hub). */
+  function staged(outcome: OpsOutcome, extra?: (doc: Record<string, unknown>) => void): Response {
+    switch (outcome.kind) {
+      case 'done': {
+        if (wrote(outcome.text)) changed();
+        if (!extra) return respond(200, outcome.text);
+        const doc = JSON.parse(outcome.text) as Record<string, unknown>;
+        extra(doc);
+        return respond(200, JSON.stringify(doc));
+      }
+      case 'refused':
+        return failureResponse(outcome.result);
+      case 'conflict':
+        changed();
+        return respond(409, JSON.stringify({ error: { code: 'conflict', message: clipMessage(outcome.message), retryable: true } }));
+      case 'failed': {
+        changed();
+        const code = plainCode(outcome.code);
+        return respond(STATUS_OF_CODE[code] ?? 502, JSON.stringify({ error: { code, message: clipMessage(outcome.message), retryable: false } }));
+      }
+    }
+  }
+
+  /** A fresh name for a file in the engine's upload folder: nothing of the page's name comes into a path. */
+  let stagedCount = 0;
+  const stagedName = (ext: string): string => `upload-${Date.now().toString(36)}-${++stagedCount}.${ext}`;
+
+  /** `POST upload?id=&kind=&exact=`: a file of the page becomes an asset of an item (`upload` of the hub). */
+  async function upload(query: string, headers: Headers, body: unknown): Promise<Response> {
+    if (!deps.upload) return errorBody(404, 'not_available', 'this page takes no files: open the folder with write access');
+    const q = parseQuery(query, ['id', 'exact', 'kind']);
+    if (typeof q === 'string') return errorBody(400, 'bad_query', q);
+    const exactText = q.get('exact');
+    if (exactText !== undefined && exactText !== '0' && exactText !== '1') return errorBody(400, 'bad_query', 'exact is 0 or 1');
+    const kind = uploadKind(q.get('kind'));
+    if (kind === null) return errorBody(400, 'bad_query', 'kind is video, image, screenshot or audio');
+    const id = q.get('id');
+    if (!validTaskId(id)) return errorBody(400, 'bad_id', 'id must be <area>/<slug>');
+    const raw = headers.get('X-Upload-Name');
+    if (raw === null || raw === '') return errorBody(400, 'bad_name', 'X-Upload-Name names the file');
+    const decoded = percentDecoded(raw);
+    if (refusedName(decoded)) return errorBody(400, 'bad_name', 'the name has a control character or a .. part');
+    const fileName = cleanName(decoded);
+    if (!extensionAllowed(fileName, kind)) return errorBody(415, 'unsupported_type', 'the hub takes no file of this type here');
+    let bytes: Uint8Array;
+    try {
+      if (body instanceof Blob) {
+        if (body.size > WEB_UPLOAD_MAX_BYTES) return errorBody(413, 'too_large', 'the file is too large for this page');
+        bytes = new Uint8Array(await body.arrayBuffer());
+      } else if (body instanceof ArrayBuffer) {
+        bytes = new Uint8Array(body);
+      } else if (body instanceof Uint8Array) {
+        bytes = body;
+      } else {
+        return errorBody(400, 'bad_request', 'the body is the file');
+      }
+    } catch {
+      return errorBody(400, 'bad_request', 'the file could not be read');
+    }
+    if (bytes.byteLength > WEB_UPLOAD_MAX_BYTES) return errorBody(413, 'too_large', 'the file is too large for this page');
+    const ext = (fileName.split('.').at(-1) ?? 'bin').toLowerCase().replace(/[^a-z0-9]/g, '') || 'bin';
+    const upload = stagedName(ext);
+    const request = JSON.stringify({ ops: [attachOp(id, upload, fileName, exactText === '1', kind)], upload_dir: UPLOAD_DIR });
+    const outcome = await deps.upload(new Map([[upload, bytes]]), request);
+    return staged(outcome, bytes.byteLength >= LARGE_FOR_GIT ? (doc) => (doc['large_for_git'] = true) : undefined);
+  }
+
+  /** `POST board`: a whiteboard of the drawing surface saved into `assets/boards/` (`board` of the hub). */
+  async function board(body: string): Promise<Response> {
+    if (!deps.upload) return errorBody(404, 'not_available', 'this page takes no files: open the folder with write access');
+    const asked = boardRequest(body, validTaskId);
+    if ('code' in asked) return errorBody(400, asked.code, asked.message);
+    const enc = new TextEncoder();
+    const ink = stagedName('json');
+    const svg = stagedName('svg');
+    const op: Record<string, unknown> = { op: 'board_save', id: asked.id, name: asked.name, format: 'ink', upload: ink, preview: svg };
+    if (asked.ifMatch !== undefined) op['if_match'] = asked.ifMatch;
+    const outcome = await deps.upload(
+      new Map([
+        [ink, enc.encode(asked.ink)],
+        [svg, enc.encode(asked.svg)],
+      ]),
+      JSON.stringify({ ops: [op], upload_dir: UPLOAD_DIR }),
+    );
+    return staged(outcome);
+  }
+
   /** The vault is not what the texts of the search and the page's list were read from. */
   function changed(): void {
     forgetTexts();
@@ -976,7 +1180,10 @@ export function createWebHub(deps: HubDeps): WebHub {
     const headers = new Headers(init?.headers);
     if (method === 'GET') return get(name, query, headers, init?.signal);
     if (method === 'POST') {
+      // A file of the page comes as bytes (`api.upload` sends the File itself); every other request is JSON text.
+      if (name === 'upload') return upload(query, headers, init?.body);
       const body = typeof init?.body === 'string' ? init.body : '';
+      if (name === 'board') return board(body);
       return post(name, body);
     }
     return errorBody(405, 'method_not_allowed', 'GET or POST');
@@ -1084,6 +1291,14 @@ export const OPS_ALLOWED = [
   'contact_new',
   'contact_set',
   'contact_delete',
+  // the checklists: lists and their entries (the attachments go through `upload` and `board`)
+  'checklist_new',
+  'checklist_set',
+  'checklist_delete',
+  'entry_add',
+  'entry_set',
+  'entry_delete',
+  'entry_promote',
   'history_record',
 ];
 const OPS_FIELDS = ['schema', 'client_op_id', 'dry_run', 'ops'];

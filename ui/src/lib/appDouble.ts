@@ -3,10 +3,13 @@
 // the tests that mount a component in a DOM (`*.dom.test.ts`) share it, so both test the app as it is, not a copy.
 
 import type { IntentAnswer } from './intent';
-import { ApiError, type AssetAnswer, type BoardRequest, type BoardSaved, type DocmapPlaces, type FinishedQuery, type Hub, type HubArea, type OpsRequest, type SetupInfo, type SetupStep, type VaultList } from './api';
+import { ApiError, type AssetAnswer, type BoardRequest, type BoardSaved, type ChecklistQuery, type DocmapPlaces, type FinishedQuery, type Hub, type HubArea, type OpsRequest, type SetupInfo, type SetupStep, type VaultList } from './api';
 import { App, type Env } from './app.svelte';
 import type { CachedList, ListStore } from './cache';
 import type {
+  ChecklistDocument,
+  ChecklistEntry,
+  Checklists,
   ContactDocument,
   ContactEntry,
   Contacts, DonePreview, Groupings, MeetingDocument, MeetingEntry, MeetingParse, Meetings, Next, Result, Snapshot, TaskDocument, TaskEntry, View, Views } from './contract';
@@ -623,6 +626,49 @@ export class FakeHub {
       ...this.parseAnswer,
     } as MeetingParse;
   }
+  /**
+   * The checklists the hub knows (`checklists`) and the entries of each (`checklist`, by list id), with every question
+   * asked of `checklist`. The filter is the engine's: the double answers every entry of the list and the test reads the
+   * question it was asked.
+   */
+  checklistLists: { id: string; title: string; created: string; total: number; open: number; etag: string }[] = [];
+  checklistEntries = new Map<string, ChecklistEntry[]>();
+  checklistQueries: ChecklistQuery[] = [];
+  /** The files sent through `upload` (a picture pasted, a file chosen), and the answer: the asset in the folder of its kind. */
+  uploads: { id: string; name: string; kind?: string }[] = [];
+  async upload(id: string, file: File, kind?: string): Promise<Result> {
+    this.uploads.push({ id, name: file.name, ...(kind ? { kind } : {}) });
+    const asset = `assets/${kind ? `${kind === 'image' ? 'images' : kind}/` : ''}${file.name}`;
+    return {
+      kind: 'tasks.result',
+      ok: true,
+      dry_run: false,
+      results: [{ n: 1, op: 'attach', id, ok: true, outcome: 'changed', changed_ids: [id], asset, link: `![${file.name}](${asset})` }],
+    } as unknown as Result;
+  }
+  async checklists(): Promise<Checklists> {
+    return { kind: 'tasks.checklists', items: this.checklistLists } as unknown as Checklists;
+  }
+  async checklist(query: ChecklistQuery): Promise<ChecklistDocument> {
+    this.checklistQueries.push({ ...query });
+    const list = this.checklistLists.find((l) => l.id === query.id);
+    if (!list) throw new ApiError(404, 'not_found', 'no such list');
+    const items = this.checklistEntries.get(query.id) ?? [];
+    const counts = new Map<string, number>();
+    for (const e of items) for (const tag of e.tags) counts.set(tag, (counts.get(tag) ?? 0) + 1);
+    return {
+      kind: 'tasks.checklist',
+      list: { id: list.id, title: list.title, created: list.created, etag: list.etag },
+      state: query.state ?? 'all',
+      total: items.length,
+      matching: items.length,
+      offset: query.offset ?? 0,
+      limit: query.limit ?? 100,
+      tags: [...counts].map(([tag, count]) => ({ tag, count })).toSorted((a, b) => (a.tag < b.tag ? -1 : 1)),
+      items,
+      incomplete: [],
+    } as unknown as ChecklistDocument;
+  }
   /** The contacts the hub knows (`contacts`, `contact`), what was asked of them, and the pages they come in. */
   contactItems: ContactEntry[] = [];
   contactReads: string[] = [];
@@ -777,6 +823,12 @@ export class FakeHub {
             ? `${op.area}/made-meeting`
             : op.op === 'contact_new'
               ? (op.id ?? `${op.area}/made-contact`)
+            : op.op === 'checklist_new'
+              ? (op.id ?? '_list-made')
+            : op.op === 'entry_add'
+              ? (op.id ?? `${op.list}/made-entry`)
+            : op.op === 'entry_promote'
+              ? `${op.area}/made-task`
             : op.op === 'new'
             ? 'pub/created'
             : op.op === 'plan_new' || op.op === 'project_new'

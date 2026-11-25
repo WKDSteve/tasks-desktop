@@ -9,7 +9,7 @@
 
 import { LuaFactory } from 'wasmoon';
 import { WebEngine, type EngineBundle } from './engine.ts';
-import { filesRecord, safeName, VaultMount, type VaultChanges } from './vault-files.ts';
+import { filesRecord, safeName, UPLOAD_DIR, VaultMount, type VaultChanges } from './vault-files.ts';
 
 export const WASM_URL = 'embedded:glue.wasm';
 
@@ -23,7 +23,10 @@ export type WorkerRequest =
   | { type: 'pending'; id: number }
   /** The page wrote exactly these changes to the folder: they are the loaded state now, others stay pending. */
   | { type: 'accept'; id: number; changes: VaultChanges }
-  | { type: 'call'; id: number; method: string; request: string | null; root: string; today?: string };
+  | { type: 'call'; id: number; method: string; request: string | null; root: string; today?: string }
+  /** Files for the engine to take (`UPLOAD_DIR`, name -> bytes); `unstage` takes them away again. */
+  | { type: 'stage'; id: number; files: Record<string, Uint8Array> }
+  | { type: 'unstage'; id: number; names: string[] };
 
 export type WorkerReply =
   | { type: 'ready'; ms: number }
@@ -32,6 +35,7 @@ export type WorkerReply =
   | { type: 'changes'; id: number; changes: VaultChanges }
   | { type: 'pending'; id: number; changes: VaultChanges; files: Record<string, Uint8Array> }
   | { type: 'accepted'; id: number }
+  | { type: 'staged'; id: number }
   | { type: 'log'; level: number; message: string }
   | { type: 'error'; id?: number; message: string };
 
@@ -135,6 +139,34 @@ export function startWorker(scope: Scope, options: WorkerOptions = {}): void {
           vault.accept(msg.changes);
           post({ type: 'accepted', id: msg.id });
         }
+      } catch (err) {
+        post({ type: 'error', id: msg.id, message: String(err) });
+      }
+      return;
+    }
+    if (msg.type === 'stage' || msg.type === 'unstage') {
+      if (!engine) {
+        post({ type: 'error', id: msg.id, message: 'the engine is not started (init first)' });
+        return;
+      }
+      try {
+        const e = await engine;
+        const names = msg.type === 'stage' ? Object.keys(msg.files) : msg.names;
+        // One plain name each: nothing the page sends lands anywhere but in the upload folder.
+        const bad = names.find((name) => !safeName(name));
+        if (bad !== undefined) throw new Error(`not a plain file name: ${JSON.stringify(bad)}`);
+        if (msg.type === 'stage') {
+          for (const [name, bytes] of Object.entries(msg.files)) e.mount({ [`${UPLOAD_DIR}/${name}`]: bytes });
+        } else {
+          for (const name of names) {
+            try {
+              e.fs.unlink(`${UPLOAD_DIR}/${name}`);
+            } catch {
+              // gone already
+            }
+          }
+        }
+        post({ type: 'staged', id: msg.id });
       } catch (err) {
         post({ type: 'error', id: msg.id, message: String(err) });
       }

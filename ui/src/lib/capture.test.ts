@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { captureBlocked, captureFailure, captureName, handOver, keepAfter, kindOf, kindOfFile, openCamera, stopStream, videoFormat, type MediaEnv } from './capture';
+import { audioExt, audioFormat, captureBlocked, captureFailure, captureName, handOver, keepAfter, kindOf, kindOfFile, openCamera, openMicrophone, stopStream, videoFormat, type MediaEnv } from './capture';
 
 const env = (over: Partial<MediaEnv> = {}): MediaEnv => ({
   devices: { getUserMedia: async () => ({}) as MediaStream, getDisplayMedia: async () => ({}) as MediaStream },
@@ -61,6 +61,33 @@ describe('captureName', () => {
 describe('kindOf', () => {
   it('puts a photo with the images', () => {
     expect([kindOf('video'), kindOf('photo'), kindOf('screenshot')]).toEqual(['video', 'image', 'screenshot']);
+  });
+  it('puts a recording of the microphone with the sounds', () => {
+    expect(kindOf('audio')).toBe('audio');
+  });
+});
+
+describe('a recording of the microphone', () => {
+  it('may start where the browser records and the policy lets the page use the microphone', () => {
+    expect(captureBlocked('audio', env())).toBeNull();
+    expect(captureBlocked('audio', env({ allows: (f) => f !== 'microphone' }))).toBe('policy');
+    expect(captureBlocked('audio', env({ allows: (f) => f !== 'camera' }))).toBeNull();
+    expect(captureBlocked('audio', env({ recorder: false }))).toBe('unsupported');
+    expect(captureBlocked('audio', env({ devices: undefined }))).toBe('unsupported');
+  });
+
+  it('takes the first format the browser can record and names its ending', () => {
+    expect(audioFormat(() => true)).toEqual({ type: 'audio/webm;codecs=opus', ext: 'webm' });
+    expect(audioFormat((t) => t === 'audio/mp4')).toEqual({ type: 'audio/mp4', ext: 'm4a' });
+    expect(audioFormat(() => false)).toEqual({ type: '', ext: 'webm' });
+    expect(audioExt('audio/ogg;codecs=opus')).toBe('ogg');
+    expect(captureName('audio', 'webm', new Date(2026, 10, 25, 9, 5, 7))).toBe('audio-20261125-090507.webm');
+  });
+
+  it('asks for the microphone alone', async () => {
+    const asked: MediaStreamConstraints[] = [];
+    await openMicrophone({ getUserMedia: async (c) => (asked.push(c ?? {}), {} as MediaStream) });
+    expect(asked).toEqual([{ audio: true, video: false }]);
   });
 });
 

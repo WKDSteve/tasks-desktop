@@ -60,6 +60,7 @@ mod answer;
 mod assets;
 mod boards;
 mod check;
+mod checklists;
 mod contacts;
 pub(crate) mod device_cut;
 mod events;
@@ -382,6 +383,10 @@ fn app_routes(core: &Arc<Shared>) -> Router<Arc<Shared>> {
         // The contacts (Office concept, wave 3): the list and one contact; the writes are `ops`. Not for a phone.
         .route(&r("contacts"), get(self::contacts::contacts))
         .route(&r("contact"), get(self::contacts::contact))
+        // The checklists (tab "Lists"): the lists with their counts and one list through its filter; the writes are
+        // `ops`, the attachments `upload` and `board`. Not for a phone.
+        .route(&r("checklists"), get(self::checklists::checklists))
+        .route(&r("checklist"), get(self::checklists::checklist))
         // The image files below `assets/` of a task, plan, project, path or meeting (concept "Lernplan" 11.3, E12).
         .route(&r("asset"), get(self::assets::asset))
         // The learning paths (concept "Lernplan" 11.3): the open paths, one path with its tree; the writes are `ops`.
