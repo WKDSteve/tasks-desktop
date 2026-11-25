@@ -1,8 +1,9 @@
 <script lang="ts">
+  import FieldError from 'appkit-ui/FieldError.svelte';
   import { tick } from 'svelte';
-  import { focusFirstInvalid } from '../lib/formErrors';
-  import { leaveGuard } from '../lib/leaveGuard';
-  import LeaveAsk from './LeaveAsk.svelte';
+  import { focusFirstInvalid } from 'appkit-ui/formErrors';
+  import { leaveGuard } from 'appkit-ui/leaveGuard';
+  import LeaveAsk from 'appkit-ui/LeaveAsk.svelte';
   import Info from 'appkit-ui/Info.svelte';
   // The form of a new meeting (concept 7.1): one dialog, two columns. On the left the time and the place (title, area,
   // date, beginning, end or duration, all day, the time zone folded away, place, the address to join with the service
@@ -200,7 +201,7 @@
         <h2 id="meeting-form-title">{t('meeting.new.title')}</h2>
         <Info hint={t('hint.dialog.meeting')} label={t('hint.about', { what: t('meeting.new.title') })} />
       </div>
-    {#if leaving}<LeaveAsk {app} ondiscard={() => { leaving = false; dialog?.close(); }} onkeep={() => (leaving = false)} />{/if}
+    {#if leaving}<LeaveAsk confirm={t('leave.confirm')} discard={t('leave.discard')} keep={t('leave.keep')} ondiscard={() => { leaving = false; dialog?.close(); }} onkeep={() => (leaving = false)} />{/if}
       {#if app.meetingNotes.problems.length > 0 || app.meetingNotes.assumedDay}
         <div class="notes" role="status">
           {#if app.meetingNotes.problems.length > 0}<p class="warn">{t('meeting.quick.problems', { words: app.meetingNotes.problems.join(' ') })}</p>{/if}
@@ -215,7 +216,7 @@
             <!-- svelte-ignore a11y_autofocus -->
             <input spellcheck="true" type="text" bind:value={form.title} maxlength="300" required autofocus aria-invalid={titleMissing ? 'true' : undefined} aria-describedby={titleMissing ? 'meeting-title-error' : undefined} data-meeting-title />
           </label>
-          {#if titleMissing}<small class="field-error" id="meeting-title-error">{t('form.title_required')}</small>{/if}
+          <FieldError id="meeting-title-error" text={titleMissing ? t('form.title_required') : null} />
           <label data-hint={t('hint.form.meeting.area')}>
             <span>{t('meeting.field.area')}</span>
             <select bind:value={form.area} required>
@@ -227,7 +228,7 @@
               <span>{t('meeting.field.date')}</span>
               <input type="date" bind:value={form.date} required aria-invalid={dateMissing ? 'true' : undefined} aria-describedby={dateMissing ? 'meeting-date-error' : undefined} />
             </label>
-            {#if dateMissing}<small class="field-error" id="meeting-date-error">{t('form.date_required')}</small>{/if}
+            <FieldError id="meeting-date-error" text={dateMissing ? t('form.date_required') : null} />
             <label class="check" data-hint={t('hint.form.meeting.all_day')}>
               <input type="checkbox" bind:checked={form.allDay} />
               <span>{t('meeting.field.all_day')}</span>

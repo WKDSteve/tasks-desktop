@@ -1,6 +1,7 @@
 // The state of the page and what keeps it true: pairing, the held list, the
 // event stream and the detail of the selected task.
 
+import { signOut } from 'appkit-ui/signout';
 import {
   MOVE_MAX,
   type MoveCheck,
@@ -5801,12 +5802,10 @@ export class App {
   async signOut(): Promise<void> {
     if (this.env.mode === 'web') return;
     this.#sessionGen += 1;
-    try {
-      await this.env.hub.logout();
-    } catch {
-      // The hub is down or has forgotten the session already: the page forgets it either way.
-    }
-    this.dropSession();
+    await signOut(
+      () => this.env.hub.logout(),
+      () => this.dropSession(),
+    );
   }
 
   private dropSession(): void {

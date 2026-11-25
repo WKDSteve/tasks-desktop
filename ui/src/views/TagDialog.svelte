@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { leaveGuard } from '../lib/leaveGuard';
-  import LeaveAsk from './LeaveAsk.svelte';
+  import { leaveGuard } from 'appkit-ui/leaveGuard';
+  import LeaveAsk from 'appkit-ui/LeaveAsk.svelte';
   // Give tags to a task, or to all the marked ones at once, or take tags away: a searchable choice of several
   // (`PickList`) of the tags the open tasks carry; a typed word that is no tag yet can be added as a new one. One write
   // for all the tasks (`App.editTags`); what the engine refuses is listed task by task with its words, the rest stays
@@ -100,7 +100,7 @@
   }}
 >
   <h2 id="tag-dialog-title">{markHidden(heading)}</h2>
-  {#if leaving}<LeaveAsk {app} ondiscard={() => { leaving = false; dialog?.close(); }} onkeep={() => (leaving = false)} />{/if}
+  {#if leaving}<LeaveAsk confirm={t('leave.confirm')} discard={t('leave.discard')} keep={t('leave.keep')} ondiscard={() => { leaving = false; dialog?.close(); }} onkeep={() => (leaving = false)} />{/if}
   {#if asked}
     <PickList
       {options}

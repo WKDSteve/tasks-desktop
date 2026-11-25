@@ -44,6 +44,7 @@
   import { loader, preload } from './views/loader';
   import { loadAttachBar } from './views/attachLoader';
   import { loadMarkdown } from './views/markdownLoader';
+  import { warnBeforeUnload } from 'appkit-ui/unsaved';
 
   let { app, code }: { app: App; code: string | null } = $props();
 
@@ -841,6 +842,11 @@
   // The documentation window: opened at a document from the Help menu, or at its search box.
   let docsOpen = $state(false);
   let docsAt = $state<string | null>(null);
+  // Unsaved fields (the option to save them with a button): the browser asks before the page is closed or reloaded, and
+  // only while there are some, so a page without them leaves without a question.
+  $effect(() => {
+    if (app.hasDrafts) return warnBeforeUnload();
+  });
   let docTexts = $state.raw<readonly DocEntry[]>([]);
   // The window of the kit reads the documents with its Markdown reader: it comes with the documents, when Help is first
   // opened, so that the reader is not in the start of the page (tools/check-bundle-size.py).
@@ -859,15 +865,7 @@
   }
 </script>
 
-<!-- Unsaved fields (the option to save them with a button): the browser asks before the page is closed or reloaded. -->
-<svelte:window
-  onkeydown={onKey}
-  onbeforeunload={(e) => {
-    if (!app.hasDrafts) return;
-    e.preventDefault();
-    e.returnValue = '';
-  }}
-/>
+<svelte:window onkeydown={onKey} />
 
 <div class="shell">
   <header class="bar">

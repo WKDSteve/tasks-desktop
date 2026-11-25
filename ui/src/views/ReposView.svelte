@@ -1,11 +1,12 @@
 <script lang="ts">
+  import FieldError from 'appkit-ui/FieldError.svelte';
   // The repo tiles of this device: repos as tiles in groups under titles of one's own. The hub keeps the file and
   // never names a path; a tile shows the image of its repo (read with the session, shown from a blob of the page) or
   // the first letter of its name. A click on a tile opens the tasks of its area; its menu copies it into another group,
   // takes it out of one, renames or deletes it, and opens its folder or Neovim in it on the machine of the hub.
   import { onDestroy, tick } from 'svelte';
   import type { App } from '../lib/app.svelte';
-  import { focusFirstInvalid } from '../lib/formErrors';
+  import { focusFirstInvalid } from 'appkit-ui/formErrors';
   import { translate, type Key } from '../lib/i18n';
   import {
     groupAdded,
@@ -169,7 +170,7 @@
     <div class="forms">
       <form novalidate onsubmit={(e) => (e.preventDefault(), void addGroup(e.currentTarget))}>
         <label data-hint={t('hint.form.repos.group_new')}><span>{t('repos.group.new')}</span><input spellcheck="true" type="text" bind:value={newTitle} maxlength="80" {...attrs(groupMissing, `${uid}-group-error`)} /></label>
-        {#if groupMissing}<small class="field-error" id="{uid}-group-error">{t('form.name_required')}</small>{/if}
+        <FieldError id="{uid}-group-error" text={groupMissing ? t('form.name_required') : null} />
         <button type="submit" disabled={rs.saving}>{t('repos.group.add')}</button>
       </form>
       {#if groups.length > 0}
@@ -177,7 +178,7 @@
           <label data-hint={t('hint.form.repos.path')}
             ><span>{t('repos.add.path')}</span><input spellcheck="false" type="text" bind:value={path} maxlength="1024" list={rs.suggestions.length > 0 ? suggestId : undefined} autocomplete="off" {...attrs(pathMissing, `${uid}-path-error`)} /></label
           >
-          {#if pathMissing}<small class="field-error" id="{uid}-path-error">{t('form.folder_required')}</small>{/if}
+          <FieldError id="{uid}-path-error" text={pathMissing ? t('form.folder_required') : null} />
           {#if rs.suggestions.length > 0}
             <!-- The folders below REPOS_DIR of the hub, by name: choosing one fills the field, the hub knows the folder. -->
             <datalist id={suggestId}>{#each rs.suggestions as folder (folder)}<option value={folder}></option>{/each}</datalist>
@@ -199,7 +200,7 @@
       {#if renaming === group.id}
         <form class="inline" novalidate onsubmit={(e) => (e.preventDefault(), void renameGroup(e.currentTarget, group.id))}>
           <label data-hint={t('hint.form.repos.group_title')}><span class="sr-only">{t('repos.group.title')}</span><input spellcheck="true" type="text" bind:value={renameTo} maxlength="80" {...attrs(renameMissing, `${uid}-rename-error`)} /></label>
-          {#if renameMissing}<small class="field-error" id="{uid}-rename-error">{t('form.name_required')}</small>{/if}
+          <FieldError id="{uid}-rename-error" text={renameMissing ? t('form.name_required') : null} />
           <button type="submit" disabled={rs.saving}>{t('repos.group.rename.save')}</button>
           <button type="button" onclick={() => (renaming = null)}>{t('repos.cancel')}</button>
         </form>
@@ -251,7 +252,7 @@
               }}
             >
               <label data-hint={t('hint.form.repos.tile_name')}><span>{t('repos.tile.name')}</span><input spellcheck="true" type="text" bind:value={tileName} maxlength="80" {...attrs(tileMissing, `${uid}-tile-error`)} /></label>
-              {#if tileMissing}<small class="field-error" id="{uid}-tile-error">{t('form.name_required')}</small>{/if}
+              <FieldError id="{uid}-tile-error" text={tileMissing ? t('form.name_required') : null} />
               <button type="submit" disabled={rs.saving}>{t('repos.tile.rename')}</button>
             </form>
             {#if groups.length > 1}

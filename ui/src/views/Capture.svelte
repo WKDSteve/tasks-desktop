@@ -1,8 +1,9 @@
 <script lang="ts">
+  import FieldError from 'appkit-ui/FieldError.svelte';
   import { tick } from 'svelte';
-  import { focusFirstInvalid } from '../lib/formErrors';
-  import { leaveGuard } from '../lib/leaveGuard';
-  import LeaveAsk from './LeaveAsk.svelte';
+  import { focusFirstInvalid } from 'appkit-ui/formErrors';
+  import { leaveGuard } from 'appkit-ui/leaveGuard';
+  import LeaveAsk from 'appkit-ui/LeaveAsk.svelte';
   import Info from 'appkit-ui/Info.svelte';
   import { untrack } from 'svelte';
   import { closeOnBackdrop } from 'appkit-ui/backdrop';
@@ -294,7 +295,7 @@
       <h2 id="capture-title">{t('capture.title')}</h2>
       <Info hint={t('hint.dialog.capture')} label={t('hint.about', { what: t('capture.title') })} />
     </div>
-    {#if leaving}<LeaveAsk {app} ondiscard={() => { leaving = false; dialog?.close(); }} onkeep={() => (leaving = false)} />{/if}
+    {#if leaving}<LeaveAsk confirm={t('leave.confirm')} discard={t('leave.discard')} keep={t('leave.keep')} ondiscard={() => { leaving = false; dialog?.close(); }} onkeep={() => (leaving = false)} />{/if}
     {#if app.aiFeatures}
       <div class="draft">
         {#if !draftOpen}
@@ -327,7 +328,7 @@
       <!-- svelte-ignore a11y_autofocus -->
       <input spellcheck="true" type="text" bind:value={title} maxlength="300" required autofocus aria-invalid={titleMissing ? 'true' : undefined} aria-describedby={titleMissing ? 'capture-title-error' : undefined} />
     </label>
-    {#if titleMissing}<small class="field-error" id="capture-title-error">{t('form.title_required')}</small>{/if}
+    <FieldError id="capture-title-error" text={titleMissing ? t('form.title_required') : null} />
     <label data-hint={t('hint.form.task.area')}>
       <span>{t('capture.area')}</span>
       <select bind:value={area} required>

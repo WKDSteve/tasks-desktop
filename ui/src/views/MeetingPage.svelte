@@ -1,4 +1,5 @@
 <script lang="ts">
+  import FieldError from 'appkit-ui/FieldError.svelte';
   // The page of one meeting (concept 7.2): its head (time, place, the service with "Join", status, tasks) and three
   // tabs, Preparation, In the meeting and Result, every one reachable at any time; the clock only picks the tab it
   // opens on. Preparation: the agenda to tick, the documents (a link or a path becomes a line of `## Unterlagen`), the
@@ -18,7 +19,7 @@
   import type { App } from '../lib/app.svelte';
   import type { MeetingDocument, Result } from '../lib/contract';
   import { floating } from '../lib/floating';
-  import { focusFirstInvalid } from '../lib/formErrors';
+  import { focusFirstInvalid } from 'appkit-ui/formErrors';
   import { translate, type Key } from '../lib/i18n';
   import { joinLink } from '../lib/meetingLink';
   import {
@@ -420,7 +421,7 @@
                   aria-describedby={documentMissing ? 'meeting-document-error' : undefined}
                 />
               </label>
-              {#if documentMissing}<small class="field-error" id="meeting-document-error">{t('form.document_required')}</small>{/if}
+              <FieldError id="meeting-document-error" text={documentMissing ? t('form.document_required') : null} />
               <button type="submit" disabled={busy}>{t('meeting.documents.add_button')}</button>
             </form>
           {/if}

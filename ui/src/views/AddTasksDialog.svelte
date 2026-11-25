@@ -1,7 +1,7 @@
 <script lang="ts">
   import { tick } from 'svelte';
-  import { leaveGuard } from '../lib/leaveGuard';
-  import LeaveAsk from './LeaveAsk.svelte';
+  import { leaveGuard } from 'appkit-ui/leaveGuard';
+  import LeaveAsk from 'appkit-ui/LeaveAsk.svelte';
   // Add tasks to a plan (or one of its phases) or to a project: a searchable choice of several open tasks (`PickList`),
   // narrowed to the areas of the target at first. A task that belongs to another plan or project is marked and is moved
   // only after a question. One write for all of them (`App.addTasksTo`); what the engine refuses is listed task by task
@@ -147,7 +147,7 @@
   }}
 >
   <h2 id="add-tasks-title">{markHidden(heading)}</h2>
-  {#if leaving}<LeaveAsk {app} ondiscard={() => { leaving = false; dialog?.close(); }} onkeep={() => (leaving = false)} />{/if}
+  {#if leaving}<LeaveAsk confirm={t('leave.confirm')} discard={t('leave.discard')} keep={t('leave.keep')} ondiscard={() => { leaving = false; dialog?.close(); }} onkeep={() => (leaving = false)} />{/if}
   {#if target && target.areas.length > 0}
     <label class="check" data-hint={t('hint.ui.add.only_areas')}>
       <input type="checkbox" bind:checked={onlyAreas} />

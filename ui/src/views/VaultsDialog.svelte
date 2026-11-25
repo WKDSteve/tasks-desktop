@@ -1,4 +1,5 @@
 <script lang="ts">
+  import FieldError from 'appkit-ui/FieldError.svelte';
   import { closeOnBackdrop } from 'appkit-ui/backdrop';
   import { floating } from '../lib/floating';
   // The vaults the hub can read: which one is read now, choose another, forget one, add a folder. The hub reads one
@@ -6,7 +7,7 @@
   // says what it means before the button, and the request says it was confirmed.
   import { tick } from 'svelte';
   import type { App } from '../lib/app.svelte';
-  import { focusFirstInvalid } from '../lib/formErrors';
+  import { focusFirstInvalid } from 'appkit-ui/formErrors';
   import { translate, type Key } from '../lib/i18n';
   import { markHidden } from '../lib/text';
   import Info from 'appkit-ui/Info.svelte';
@@ -143,7 +144,7 @@
       <span>{t('vaults.name')} <small>({t('vaults.name_hint')})</small></span>
       <input spellcheck="true" type="text" bind:value={name} maxlength="40" disabled={app.vaultBusy} {...attrs(nameMissing, 'vaults-name-error')} />
     </label>
-    {#if nameMissing}<small class="field-error" id="vaults-name-error">{t('form.name_required')}</small>{/if}
+    <FieldError id="vaults-name-error" text={nameMissing ? t('form.name_required') : null} />
     <label data-hint={t('hint.form.vaults.path')}>
       <span>{t('vaults.path')} <small>({t('vaults.path_hint')})</small></span>
       <span class="path-row">
@@ -157,7 +158,7 @@
         >
       </span>
     </label>
-    {#if pathMissing}<small class="field-error" id="vaults-path-error">{t('form.folder_required')}</small>{/if}
+    <FieldError id="vaults-path-error" text={pathMissing ? t('form.folder_required') : null} />
     <label class="check" data-hint={t('hint.form.vaults.create')}>
       <input type="checkbox" bind:checked={create} disabled={app.vaultBusy} />
       <span>{t('vaults.create')} <small>({t('vaults.create_hint')})</small></span>
@@ -167,7 +168,7 @@
         <span>{t('vaults.area')} <small>({t('vaults.name_hint')})</small></span>
         <input spellcheck="false" type="text" bind:value={area} maxlength="128" disabled={app.vaultBusy} {...attrs(areaMissing, 'vaults-area-error')} />
       </label>
-      {#if areaMissing}<small class="field-error" id="vaults-area-error">{t('form.area_required')}</small>{/if}
+      <FieldError id="vaults-area-error" text={areaMissing ? t('form.area_required') : null} />
     {/if}
     <p class="warn">{t('vaults.warn')}</p>
   </div>

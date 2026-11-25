@@ -1,8 +1,9 @@
 <script lang="ts">
+  import FieldError from 'appkit-ui/FieldError.svelte';
   import { tick } from 'svelte';
-  import { focusFirstInvalid } from '../lib/formErrors';
-  import { leaveGuard } from '../lib/leaveGuard';
-  import LeaveAsk from './LeaveAsk.svelte';
+  import { focusFirstInvalid } from 'appkit-ui/formErrors';
+  import { leaveGuard } from 'appkit-ui/leaveGuard';
+  import LeaveAsk from 'appkit-ui/LeaveAsk.svelte';
   import Info from 'appkit-ui/Info.svelte';
   import { closeOnBackdrop } from 'appkit-ui/backdrop';
   import { floating } from '../lib/floating';
@@ -127,7 +128,7 @@
       <h2 id="plan-title">{t(form.kind === 'project' ? 'plan.new.project_title' : 'plan.new.title')}</h2>
       <Info hint={t('hint.dialog.plan')} label={t('hint.about', { what: t(form.kind === 'project' ? 'plan.new.project_title' : 'plan.new.title') })} />
     </div>
-    {#if leaving}<LeaveAsk {app} ondiscard={() => { leaving = false; dialog?.close(); }} onkeep={() => (leaving = false)} />{/if}
+    {#if leaving}<LeaveAsk confirm={t('leave.confirm')} discard={t('leave.discard')} keep={t('leave.keep')} ondiscard={() => { leaving = false; dialog?.close(); }} onkeep={() => (leaving = false)} />{/if}
     {#if app.can('project_new')}
       <div class="kind" role="radiogroup" aria-label={t('plan.new.kind')}>
         {#each ['plan', 'project'] as const as kind (kind)}
@@ -156,7 +157,7 @@
       <!-- svelte-ignore a11y_autofocus -->
       <input spellcheck="true" type="text" bind:value={form.title} maxlength="300" required autofocus aria-invalid={titleMissing ? 'true' : undefined} aria-describedby={titleMissing ? 'plan-title-error' : undefined} />
     </label>
-    {#if titleMissing}<small class="field-error" id="plan-title-error">{t('form.title_required')}</small>{/if}
+    <FieldError id="plan-title-error" text={titleMissing ? t('form.title_required') : null} />
     <label data-hint={t('hint.form.plan.area')}>
       <span>{t('plan.new.area')}</span>
       <select

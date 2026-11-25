@@ -64,9 +64,3 @@ input[type='radio'] {
     block-size: 44px;
   }
 }
-
-/* What a form that was sent incomplete says beside the field (the field carries `aria-invalid`). */
-.field-error {
-  display: block;
-  color: var(--bad);
-}
