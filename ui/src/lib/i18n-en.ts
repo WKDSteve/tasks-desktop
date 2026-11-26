@@ -2562,6 +2562,8 @@ const en = {
   // Meetings (lib/meetings.ts, views/MeetingForm.svelte, views/MeetingPage.svelte).
   'menu.meeting': 'New meeting ...',
   'menu.contact': 'New contact ...',
+  'menu.contacts_import': 'Import contacts ...',
+  'menu.contacts_export': 'Export contacts ...',
   'hint.item.menu.meeting': 'A meeting of its own (a file in MEETINGS/ of the area): date, time, place or address to join, participants, notification; it can belong to several tasks.',
   'hint.item.nav.lists': 'The quick lists: type a line and press Enter, tick, delete, filter by day, tag or words, export what the filter shows.',
   'meeting.new.title': 'New meeting',

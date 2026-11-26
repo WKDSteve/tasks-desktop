@@ -323,6 +323,63 @@ export function decodedText(raw: string, max: number): string | null {
 }
 
 /** The question of `checklist` from its query, as the hub asks it (`checklist_request`), or why it is refused. */
+/**
+ * The question of `contacts_export` from its query, as the hub asks it (`contacts_export_request`), or why it is
+ * refused: `format`, the options of that format (`delimiter` a word, `bom` and `raw` `1` or absent), the filters
+ * (`tag` and `org` percent-decoded).
+ */
+export function contactsExportParams(query: string): Record<string, unknown> | string {
+  const texts = new Map<string, string>();
+  const rest: string[] = [];
+  for (const pair of query === '' ? [] : query.split('&')) {
+    const cut = pair.indexOf('=');
+    const key = cut < 0 ? pair : pair.slice(0, cut);
+    if (cut >= 0 && (key === 'tag' || key === 'org')) {
+      if (texts.has(key)) return 'a query parameter is given twice';
+      texts.set(key, pair.slice(cut + 1));
+    } else {
+      rest.push(pair);
+    }
+  }
+  const q = parseQuery(rest.join('&'), ['format', 'area', 'version', 'delimiter', 'bom', 'raw']);
+  if (typeof q === 'string') return q;
+  const format = q.get('format');
+  if (format !== 'vcf' && format !== 'csv') return 'format is vcf or csv';
+  const out: Record<string, unknown> = { format };
+  const area = q.get('area');
+  if (area !== undefined) {
+    if (!validAreaName(area)) return 'area is not a name';
+    out['area'] = area;
+  }
+  const version = q.get('version');
+  if (version !== undefined) {
+    if (format !== 'vcf' || (version !== '3' && version !== '4')) return 'version is 3 or 4, for vcf';
+    out['version'] = version;
+  }
+  const delimiter = q.get('delimiter');
+  if (delimiter !== undefined) {
+    const d = delimiter === 'comma' ? ',' : delimiter === 'semicolon' ? ';' : delimiter === 'tab' ? 'tab' : undefined;
+    if (d === undefined) return 'delimiter is comma, semicolon or tab';
+    if (format !== 'csv') return 'delimiter is for csv';
+    out['delimiter'] = d;
+  }
+  const bom = q.get('bom');
+  const raw = q.get('raw');
+  for (const value of [bom, raw]) {
+    if (value !== undefined && (value !== '1' || format !== 'csv')) return 'bom and raw are 1 or absent, for csv';
+  }
+  if (bom !== undefined) out['bom'] = true;
+  if (raw !== undefined) out['raw'] = true;
+  const tagRaw = texts.get('tag');
+  const orgRaw = texts.get('org');
+  const tag = tagRaw === undefined ? undefined : decodedText(tagRaw, 300);
+  const org = orgRaw === undefined ? undefined : decodedText(orgRaw, 300);
+  if (tag === null || org === null) return 'tag and org are texts of at most 300 bytes';
+  if (tag !== undefined) out['tag'] = tag;
+  if (org !== undefined) out['org'] = org;
+  return out;
+}
+
 export function checklistParams(query: string): Record<string, unknown> | string {
   const texts = new Map<string, string>();
   const rest: string[] = [];
@@ -639,6 +696,11 @@ export function createWebHub(deps: HubDeps): WebHub {
         // One list through its filter (`GET /api/tasks/checklist`), judged as the hub judges the query.
         const params = checklistParams(query);
         return typeof params === 'string' ? errorBody(400, 'bad_query', params) : passOn('checklist', params);
+      }
+      case 'contacts_export': {
+        // The contacts as one vCard or CSV text (`GET /api/tasks/contacts_export`), judged as the hub judges the query.
+        const params = contactsExportParams(query);
+        return typeof params === 'string' ? errorBody(400, 'bad_query', params) : passOn('contacts_export', params);
       }
       case 'contact': {
         const q = parseQuery(query, ['id']);
@@ -1291,6 +1353,8 @@ export const OPS_ALLOWED = [
   'contact_new',
   'contact_set',
   'contact_delete',
+  // a vCard or CSV text the person picked made into contacts; a dry run is the preview
+  'contacts_import',
   // the checklists: lists and their entries (the attachments go through `upload` and `board`)
   'checklist_new',
   'checklist_set',

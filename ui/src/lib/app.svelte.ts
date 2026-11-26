@@ -2070,6 +2070,8 @@ export class App {
 
   /** The form of a contact while it is open (a new one has no `id`). */
   contactDraft = $state<ContactForm | null>(null);
+  /** The dialog that reads contacts from a vCard or CSV file, or writes them to one (ContactsIoDialog.svelte). */
+  contactsIo = $state<'import' | 'export' | null>(null);
   /** The contact whose page is open. */
   contactOpen = $state<string | null>(null);
 
@@ -2114,6 +2116,31 @@ export class App {
 
   closeContactForm(): void {
     this.contactDraft = null;
+  }
+
+  /** The engine reads a vCard or CSV text into contacts (`contacts_import`); a read-only hub makes none. */
+  get canImportContacts(): boolean {
+    return this.canMakeContacts && this.can('contacts_import');
+  }
+  /** The engine writes the contacts as a vCard or CSV text (`contacts_export`). */
+  get canExportContacts(): boolean {
+    return this.canContacts && this.can('contacts_export');
+  }
+
+  /** Open the dialog of the import or the export of contacts. */
+  openContactsIo(kind: 'import' | 'export'): void {
+    if (this.phase !== 'ready') return;
+    if (kind === 'import' ? !this.canImportContacts : !this.canExportContacts) return;
+    this.contactsIo = kind;
+  }
+
+  closeContactsIo(): void {
+    this.contactsIo = null;
+  }
+
+  /** The area a new contact goes to first: the one of a new contact or meeting (the filter's, else the first). */
+  get contactArea(): string {
+    return this.meetingArea([]);
   }
 
   openContact(id: string): void {

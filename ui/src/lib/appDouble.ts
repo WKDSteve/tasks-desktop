@@ -3,7 +3,7 @@
 // the tests that mount a component in a DOM (`*.dom.test.ts`) share it, so both test the app as it is, not a copy.
 
 import type { IntentAnswer } from './intent';
-import { ApiError, type AssetAnswer, type BoardRequest, type BoardSaved, type ChecklistQuery, type DocmapPlaces, type FinishedQuery, type Hub, type HubArea, type OpsRequest, type SetupInfo, type SetupStep, type VaultList } from './api';
+import { ApiError, type AssetAnswer, type BoardRequest, type BoardSaved, type ChecklistQuery, type ContactsExportQuery, type DocmapPlaces, type FinishedQuery, type Hub, type HubArea, type OpsRequest, type SetupInfo, type SetupStep, type VaultList } from './api';
 import { App, type Env } from './app.svelte';
 import type { CachedList, ListStore } from './cache';
 import type {
@@ -11,6 +11,7 @@ import type {
   ChecklistEntry,
   Checklists,
   ContactDocument,
+  ContactsExport,
   ContactEntry,
   Contacts, DonePreview, Groupings, MeetingDocument, MeetingEntry, MeetingParse, Meetings, Next, Result, Snapshot, TaskDocument, TaskEntry, View, Views } from './contract';
 import { task } from './fixtures';
@@ -705,6 +706,13 @@ export class FakeHub {
     return { kind: 'tasks.contact', contact, body: '', body_truncated: false, notes: '', ...this.contactBodies.get(id) } as unknown as ContactDocument;
   }
   contactBodies = new Map<string, Partial<ContactDocument>>();
+  /** What `contacts_export` was asked and what it answers (the text of the file and how many contacts it holds). */
+  exportQueries: ContactsExportQuery[] = [];
+  exportAnswer: { text: string; count: number } = { text: 'BEGIN:VCARD\r\nEND:VCARD\r\n', count: 1 };
+  async contactsExport(query: ContactsExportQuery): Promise<ContactsExport> {
+    this.exportQueries.push({ ...query });
+    return { kind: 'tasks.contacts_export', format: query.format, incomplete: [], ...this.exportAnswer } as unknown as ContactsExport;
+  }
   searches: string[] = [];
   searchStatus: 'ready' | 'building' = 'ready';
   async search(query: string) {

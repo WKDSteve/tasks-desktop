@@ -535,7 +535,7 @@ pub(super) async fn search_route(
 /// the path below the task and its link, never the image. `project_new`, `plan_set` and `project_set` make a project file
 /// and change the frontmatter of an open plan or project file (the project level); the engine judges the relation.
 /// `plan_close` and `project_close` finish a plan or a project by hand; the engine refuses while something holds it open.
-pub(super) const OPS_ALLOWED: [&str; 43] = [
+pub(super) const OPS_ALLOWED: [&str; 44] = [
     "set",
     "new",
     "reorder",
@@ -569,6 +569,9 @@ pub(super) const OPS_ALLOWED: [&str; 43] = [
     "contact_new",
     "contact_set",
     "contact_delete",
+    // a vCard or CSV text the person picked made into contacts (capability `contacts_import`); a dry run is the preview,
+    // a duplicate is reported and never overwritten. Not for devices.
+    "contacts_import",
     // the checklists (capability `checklists`): lists and their entries; not for devices. The attachments of an entry
     // go through `upload` and `board` as those of a task.
     "checklist_new",

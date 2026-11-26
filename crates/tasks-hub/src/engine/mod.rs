@@ -67,7 +67,7 @@ pub fn cli_config_from_setup(setup: &Setup, env: Env) -> CliEngineConfig {
 
 /// The calls of the contract `tasks-export/1` and `tasks-ops/1`: the table of this app. The seam
 /// reads the flags of each entry; it knows no call by name.
-static SPECS: [MethodSpec; 37] = [
+static SPECS: [MethodSpec; 38] = [
     MethodSpec::bare("hello", "tasks.hello"),
     MethodSpec::bare("snapshot", "tasks.snapshot"),
     MethodSpec::read("list", "tasks.list"),
@@ -116,6 +116,9 @@ static SPECS: [MethodSpec; 37] = [
     // `checklists`).
     MethodSpec::read("checklists", "tasks.checklists"),
     MethodSpec::read("checklist", "tasks.checklist"),
+    // The contacts as one vCard or CSV text to save (capability `contacts_export`); the import is the operation
+    // `contacts_import` of `ops`.
+    MethodSpec::read("contacts_export", "tasks.contacts_export"),
 ];
 
 /// The calls of the tasks engine, by name.
@@ -160,9 +163,10 @@ impl Calls {
     pub const Contact: Method = Method::new(&SPECS[34]);
     pub const Checklists: Method = Method::new(&SPECS[35]);
     pub const Checklist: Method = Method::new(&SPECS[36]);
+    pub const ContactsExport: Method = Method::new(&SPECS[37]);
 
     /// Every call of the table.
-    pub const ALL: [Method; 37] = [
+    pub const ALL: [Method; 38] = [
         Self::Hello,
         Self::Snapshot,
         Self::List,
@@ -200,6 +204,7 @@ impl Calls {
         Self::Contact,
         Self::Checklists,
         Self::Checklist,
+        Self::ContactsExport,
     ];
 
     /// Parse the name of a route or a request. Nothing else is accepted.
@@ -252,6 +257,6 @@ mod table_tests {
             assert_eq!(Calls::parse(m.as_str()), Some(m));
             assert!(m.reply_kind().starts_with("tasks."), "{}", m.as_str());
         }
-        assert_eq!(Calls::ALL.len(), 37);
+        assert_eq!(Calls::ALL.len(), 38);
     }
 }

@@ -20,6 +20,7 @@ import type {
   Checklists,
   ContactDocument,
   Contacts,
+  ContactsExport,
   MeetingDocument,
   MeetingParse,
   Meetings,
@@ -187,6 +188,12 @@ export type Op =
   | { op: 'contact_set'; id: string; patch: Record<string, unknown>; if_match?: string }
   | { op: 'contact_delete'; id: string; if_match?: string }
   /**
+   * Contacts made of the text of a vCard or CSV file the person picked (capability `contacts_import`): the entry carries
+   * the `report` (made, duplicates with the holder's id, refused, problems, messages); a dry run is the preview. A
+   * duplicate is never imported and never overwrites. No inverse.
+   */
+  | { op: 'contacts_import'; area: string; text: string; as: 'vcf' | 'csv'; delimiter?: ',' | ';' | 'tab'; lang?: 'de' | 'en' }
+  /**
    * The checklists (capability `checklists`): a list is a folder `_list-<slug>/` of the vault, an entry a file in it
    * (`_list-<list>/<slug>`). A `#word` of an entry's title is a tag (the engine takes it out of the title). The inverses
    * of the deletes name the list or entry by `id` and bring `created` (and `done`) back in `fields`.
@@ -269,6 +276,18 @@ export interface AgentTab {
 
 export type { DraftChoices, DraftJob, DraftState } from './suggestFields';
 import type { SplitJob, SplitState } from './split';
+
+/** The question of `contacts_export` (the route's query): `bom` and `raw` are `1` or absent, the delimiter a word. */
+export interface ContactsExportQuery {
+  format: 'vcf' | 'csv';
+  area?: string;
+  tag?: string;
+  org?: string;
+  version?: '3' | '4';
+  delimiter?: 'comma' | 'semicolon' | 'tab';
+  bom?: 1;
+  raw?: 1;
+}
 import type { DraftJob, DraftState } from './suggestFields';
 import type { AnswerKind, AnswerState } from './agentAnswer';
 
@@ -832,6 +851,14 @@ export class Hub extends HubClient<Snapshot> {
   /** The contacts by name, one page (`tasks.contacts`); the tag and the organisation are filtered by the page. */
   contacts(query: { area?: string; limit?: number; offset?: number } = {}, signal?: AbortSignal): Promise<Contacts> {
     return this.json<Contacts>(this.listPath('contacts', query), signal ? { signal } : undefined);
+  }
+
+  /**
+   * The contacts as one vCard or CSV text to save (`tasks.contacts_export`). The text holds mail addresses and numbers:
+   * it goes to the person's file and nowhere else.
+   */
+  contactsExport(query: ContactsExportQuery, signal?: AbortSignal): Promise<ContactsExport> {
+    return this.json<ContactsExport>(this.listPath('contacts_export', query), signal ? { signal } : undefined);
   }
 
   /**

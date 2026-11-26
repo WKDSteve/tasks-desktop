@@ -11,6 +11,10 @@ const EN = {
   'contacts.intro':
     'The people you work with, one file each in CONTACTS/ of an area. Choose a row to open the contact; n makes a new one. A search finds a word in the name, the organisation, the role, the tags, the addresses and the numbers.',
   'contacts.new': 'New contact',
+  'contacts.import': 'Import ...',
+  'contacts.import.hint': 'Contacts from a vCard or CSV file: a trial run first, duplicates are never overwritten.',
+  'contacts.export': 'Export ...',
+  'contacts.export.hint': 'The contacts as a vCard or CSV file to save.',
   'contacts.search': 'Search',
   'contacts.search.hint': 'Words of the name, the organisation, the role, a tag, an address or a number; all of them must be in a contact.',
   'contacts.org': 'Organisation',
@@ -100,6 +104,10 @@ const DE: Record<ContactsKey, string> = {
   'contacts.intro':
     'Die Leute, mit denen du arbeitest, eine Datei je Person in CONTACTS/ eines Bereichs. Eine Zeile öffnet den Kontakt; n legt einen neuen an. Die Suche findet ein Wort in Name, Organisation, Rolle, Tags, Adressen und Nummern.',
   'contacts.new': 'Neuer Kontakt',
+  'contacts.import': 'Importieren ...',
+  'contacts.import.hint': 'Kontakte aus einer vCard- oder CSV-Datei: erst ein Probelauf, Dubletten werden nie überschrieben.',
+  'contacts.export': 'Exportieren ...',
+  'contacts.export.hint': 'Die Kontakte als vCard- oder CSV-Datei zum Speichern.',
   'contacts.search': 'Suche',
   'contacts.search.hint': 'Wörter aus Name, Organisation, Rolle, einem Tag, einer Adresse oder einer Nummer; alle müssen im Kontakt vorkommen.',
   'contacts.org': 'Organisation',

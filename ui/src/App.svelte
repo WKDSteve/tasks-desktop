@@ -535,6 +535,28 @@
                               disabled: app.phase !== 'ready' || !app.canMakeContacts,
                               onselect: () => app.openContactForm(),
                             },
+                            ...(app.canImportContacts
+                              ? [
+                                  {
+                                    kind: 'action',
+                                    label: t('menu.contacts_import'),
+                                    hint: groupHint(app.lang, 'menu.contacts_import'),
+                                    disabled: app.phase !== 'ready',
+                                    onselect: () => app.openContactsIo('import'),
+                                  },
+                                ]
+                              : []),
+                            ...(app.canExportContacts
+                              ? [
+                                  {
+                                    kind: 'action',
+                                    label: t('menu.contacts_export'),
+                                    hint: groupHint(app.lang, 'menu.contacts_export'),
+                                    disabled: app.phase !== 'ready',
+                                    onselect: () => app.openContactsIo('export'),
+                                  },
+                                ]
+                              : []),
                           ]
                         : []),
                     ] as MenuItem[])
@@ -1065,6 +1087,7 @@
     <Lazy {app} when={app.meetingDraft !== null} load={() => import('./views/MeetingForm.svelte')} onfailed={() => app.closeMeetingForm()} />
     <Lazy {app} when={app.meetingOpen !== null} load={() => import('./views/MeetingPage.svelte')} onfailed={() => app.closeMeeting()} />
     <Lazy {app} when={app.contactDraft !== null} load={() => import('./views/ContactForm.svelte')} onfailed={() => app.closeContactForm()} />
+    <Lazy {app} when={app.contactsIo !== null} load={() => import('./views/ContactsIoDialog.svelte')} onfailed={() => app.closeContactsIo()} />
     <Lazy {app} when={app.contactOpen !== null} load={() => import('./views/ContactPage.svelte')} onfailed={() => app.closeContact()} />
     <DoneDialog {app} />
     <PrioDialog {app} />

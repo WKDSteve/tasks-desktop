@@ -2563,6 +2563,8 @@ const de: Record<PageKey, string> = {
   // Meetings (lib/meetings.ts, views/MeetingForm.svelte, views/MeetingPage.svelte).
   'menu.meeting': 'Neues Meeting ...',
   'menu.contact': 'Neuer Kontakt ...',
+  'menu.contacts_import': 'Kontakte importieren ...',
+  'menu.contacts_export': 'Kontakte exportieren ...',
   'hint.item.menu.meeting': 'Ein eigenes Meeting (eine Datei in MEETINGS/ der Area): Datum, Uhrzeit, Ort oder Online-Link, Teilnehmer, Benachrichtigung; es kann zu mehreren Tasks gehören.',
   'hint.item.nav.lists': 'Die schnellen Listen: Zeile tippen und Enter, abhaken, löschen, nach Tag, Zeitraum oder Wörtern filtern, exportieren, was der Filter zeigt.',
   'meeting.new.title': 'Neues Meeting',

@@ -383,6 +383,7 @@ fn app_routes(core: &Arc<Shared>) -> Router<Arc<Shared>> {
         // The contacts (Office concept, wave 3): the list and one contact; the writes are `ops`. Not for a phone.
         .route(&r("contacts"), get(self::contacts::contacts))
         .route(&r("contact"), get(self::contacts::contact))
+        .route(&r("contacts_export"), get(self::contacts::contacts_export))
         // The checklists (tab "Lists"): the lists with their counts and one list through its filter; the writes are
         // `ops`, the attachments `upload` and `board`. Not for a phone.
         .route(&r("checklists"), get(self::checklists::checklists))

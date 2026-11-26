@@ -76,6 +76,16 @@
         {t('contacts.new')}
       </button>
     {/if}
+    {#if app.canImportContacts && !app.locked}
+      <button type="button" data-contacts-import data-hint={t('contacts.import.hint')} onclick={() => app.openContactsIo('import')}>
+        {t('contacts.import')}
+      </button>
+    {/if}
+    {#if app.canExportContacts}
+      <button type="button" data-contacts-export data-hint={t('contacts.export.hint')} onclick={() => app.openContactsIo('export')}>
+        {t('contacts.export')}
+      </button>
+    {/if}
   </header>
 
   <div class="bar" role="group" aria-label={t('contacts.filters')}>

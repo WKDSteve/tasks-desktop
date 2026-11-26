@@ -89,6 +89,27 @@ it('offers the contacts under People and "New contact ..." under Create when the
   for (const item of office.querySelectorAll('.mb-item')) expect((item.getAttribute('data-hint') ?? item.getAttribute('title') ?? '').length, item.textContent ?? '').toBeGreaterThan(10);
 });
 
+it('offers the import and the export of contacts under Create, each with a hint, only where the engine has them', async () => {
+  await start(['meetings', 'meeting', 'meeting_ops', 'contacts', 'contact', 'contacts_import', 'contacts_export']);
+  const office = open('office');
+  expect(labels(office)).toEqual([
+    'Meetings',
+    'Kalender',
+    'Zeitleiste',
+    'Erinnerungen',
+    'Kontakte',
+    'Neues Meeting ...',
+    'Neuer Kontakt ...',
+    'Kontakte importieren ...',
+    'Kontakte exportieren ...',
+  ]);
+  for (const item of office.querySelectorAll('.mb-item')) expect((item.getAttribute('data-hint') ?? item.getAttribute('title') ?? '').length, item.textContent ?? '').toBeGreaterThan(10);
+  const importItem = [...office.querySelectorAll<HTMLElement>('.mb-item')].find((x) => x.textContent?.includes('Kontakte importieren'));
+  importItem!.click();
+  flushSync();
+  expect(made!.app.contactsIo).toBe('import');
+});
+
 it('has no contacts without the capability', async () => {
   await start(['meetings', 'meeting', 'meeting_ops']);
   const office = open('office');
