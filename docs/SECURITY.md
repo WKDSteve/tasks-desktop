@@ -970,7 +970,8 @@ without the other areas a path names (`areas`, `target`, `project`), its file an
 (`problems`, `tree_problems`; the list says only `partial`); a point's `link` only as `http://` or `https://`, the task a
 point was promoted to only when its area is released. The writes are `node_set`, `promote` and `unpromote` of `ops`; a
 phone may only tick a point (`node_set` with `state`, `reason` and the `ack` of a point under `{safety}` it confirmed,
-at the level `change`; no note, no XP,
+and the `result` of an exercise point as text, which the engine writes as the `Ergebnis` of the point's block and
+nothing else of its note, at the level `change`; no note, no XP,
 `device_op_level`, `device_op_fields`), the others are refused to it. The page draws a label, a reason and a note as text, never as markup; it opens a link of a point
 only when it is `http://` or `https://`, in a new tab without a referrer (`rel="noopener noreferrer"`,
 `referrerpolicy="no-referrer"`).

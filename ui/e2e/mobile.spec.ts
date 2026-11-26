@@ -245,6 +245,60 @@ test('the phone page shows a learning path cut by the hub and ticks a point thro
   }
 });
 
+const EXERCISE_PATH = `---
+title: Phone exercise m001
+status: doing
+---
+
+## Lernpunkte
+
+- [ ] Stage m001 {#stage}
+  - [ ] Üben: Verzeichnis m001 {#ls}
+    > **Aufgabe:** Zeige den Übungsordner mit \`ls -l\` an.
+    > **Fertig, wenn:** Du nennst die Spalten.
+    > **Nachweis:** Die Ausgabe von \`ls -lh\`.
+    > **Ergebnis:**
+`;
+
+test('the phone page learns an exercise point with its result, which the engine writes into the note first', async ({ page }) => {
+  const problems = watchConsole(page);
+  const { vault, config } = state();
+  const dir = join(vault, 'lib.nvim', 'ROADMAP', 'paths');
+  mkdirSync(dir, { recursive: true });
+  const file = join(dir, 'phone-exercise-m001.md');
+  writeFileSync(file, EXERCISE_PATH);
+  try {
+    await page.goto(pairingLink(config).replace('/#pair=', '/m/#pair='));
+    await expect(page.getByTestId('connection')).toHaveAttribute('data-state', 'live');
+    await page.getByRole('button', { name: 'Learn', exact: true }).click();
+    await page.getByTestId('learn-all-paths').click();
+    await page.getByTestId('paths').getByRole('button', { name: /Phone exercise m001/ }).click();
+    const point = page.locator('li[data-point="ls"]');
+    // The block under the point (as the engine read it, cut by the hub) is not shown raw.
+    await expect(point).toContainText('Üben: Verzeichnis m001');
+    await expect(point).not.toContainText('**');
+
+    // The engine of this hub writes results (`node_result` in hello): "Learned" asks for the proof in the sheet.
+    await point.getByRole('button', { name: 'Learned' }).click();
+    const sheet = page.getByTestId('exercise');
+    await expect(sheet.locator('[data-part="aufgabe"] code')).toHaveText('ls -l');
+    await expect(sheet.locator('[data-part="nachweis"] code')).toHaveText('ls -lh');
+    await sheet.getByRole('button', { name: 'Save with the result as learned' }).click();
+    await expect(sheet.getByRole('alert')).toHaveText('The proof is missing: enter your result first.');
+    expect(readFileSync(file, 'utf8')).toBe(EXERCISE_PATH);
+
+    await sheet.getByTestId('exercise-result').fill('total 0 m001');
+    await sheet.getByRole('button', { name: 'Save with the result as learned' }).click();
+    await expect(point).toHaveAttribute('data-state', 'learned');
+    const written = readFileSync(file, 'utf8');
+    expect(written).toContain('- [x] Üben: Verzeichnis m001 {#ls}');
+    expect(written).toContain('> **Ergebnis:** total 0 m001');
+    expect(problems).toEqual([]);
+  } finally {
+    rmSync(file, { force: true });
+  }
+});
+
 test('the phone page shows the round of a ladder, a routine that waits for a finish, and the routine a finish started', async ({ page }) => {
   const problems = watchConsole(page);
   const { vault, config } = state();

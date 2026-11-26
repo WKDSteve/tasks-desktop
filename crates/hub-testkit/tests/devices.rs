@@ -1084,7 +1084,17 @@ async fn a_phone_reads_the_paths_of_released_areas_and_ticks_a_point() {
     acked["ack"] = json!(true);
     let (status, doc) = r.op(&phone, &acked).await;
     assert_eq!(status, 200, "{doc}");
-    for extra in [json!({ "note": "x" }), json!({ "xp": 5 })] {
+    // The proof of an exercise point goes with its state in one call (capability `node_result`), as text only.
+    let proved = json!({ "op": "node_set", "id": "alpha.nvim/p1", "point": "a", "state": "learned",
+                         "result": "https://example.org/commit/1" });
+    let (status, doc) = r.op(&phone, &proved).await;
+    assert_eq!(status, 200, "{doc}");
+    for extra in [
+        json!({ "note": "x" }),
+        json!({ "xp": 5 }),
+        json!({ "result": 5 }),
+        json!({ "result": { "x": 1 } }),
+    ] {
         let mut op = tick.clone();
         op.as_object_mut()
             .unwrap()

@@ -2787,8 +2787,12 @@ pub(super) fn device_op_fields(op: &str) -> &'static [&'static str] {
         "answer" => &["op", "id", "question", "option", "if_match"],
         "done" => &["op", "id", "confirm"],
         // A learning point ticked: its state and the reason of `seen` or `dropped`, and `ack` once the person confirmed
-        // closing a point under `{safety}` on the phone (the engine refuses such a point without it); no note, no XP.
-        "node_set" => &["op", "id", "point", "state", "reason", "ack", "if_match"],
+        // closing a point under `{safety}` on the phone (the engine refuses such a point without it); the `result` of an
+        // exercise point, its proof, which the engine writes as the `Ergebnis` of the block before the state (capability
+        // `node_result`; the engine refuses it for a point without a block); no note, no XP.
+        "node_set" => &[
+            "op", "id", "point", "state", "reason", "ack", "result", "if_match",
+        ],
         // A line of the minutes written on the phone: text, a task, a decision or a question, or a photo or a voice note
         // the phone uploaded to the meeting before (`device_op_shape`).
         "meeting_capture" => &["op", "id", "entry"],
@@ -2818,6 +2822,10 @@ pub(super) fn device_op_shape(op: &serde_json::Value) -> bool {
         .unwrap_or("");
     let fields = device_op_fields(name);
     if !map.keys().all(|k| fields.contains(&k.as_str())) {
+        return false;
+    }
+    // The result of an exercise point is text: the proof the person typed, nothing else.
+    if name == "node_set" && map.get("result").is_some_and(|r| !r.is_string()) {
         return false;
     }
     // A contact: the name and the fields of the form, nothing else (no `type`, no id by hand).

@@ -249,6 +249,53 @@ test('the page Lernen: the next step of a path is ticked learned on the way, the
   }
 });
 
+test('an exercise point: its task as a sheet, its result typed without a zoom and written by the engine', async () => {
+  const file = join(state().vault, 'lib.nvim', 'ROADMAP', 'paths', 'device-exercise-d001.md');
+  mkdirSync(dirname(file), { recursive: true });
+  writeFileSync(
+    file,
+    [
+      '---',
+      'title: Device exercise d001',
+      'status: doing',
+      '---',
+      '',
+      '## Lernpunkte',
+      '',
+      '- [ ] Stage d001 {#s}',
+      '  - [ ] Üben: Ordner d001 {#ls}',
+      '    > **Aufgabe:** Zeige den Ordner mit `ls -l` an.',
+      '    > **Fertig, wenn:** Du nennst die Spalten.',
+      '    > **Nachweis:** Die Ausgabe von `ls -lh`.',
+      '    > **Ergebnis:**',
+      '',
+    ].join('\n'),
+  );
+  try {
+    await page.getByRole('button', { name: 'Learn', exact: true }).click();
+    await page.getByTestId('learn-all-paths').click();
+    await page.getByTestId('paths').getByRole('button', { name: /Device exercise d001/ }).click();
+    const point = page.locator('li[data-point="ls"]');
+    await point.getByRole('button', { name: 'Task', exact: true }).click();
+    const sheet = page.getByTestId('exercise');
+    await expect(sheet.locator('[data-part="aufgabe"] code')).toHaveText('ls -l');
+    // The sheet fits the screen of the phone, and its field has a font of 16 px or more: Chrome does not zoom in.
+    const box = await sheet.boundingBox();
+    const width = await page.evaluate(() => window.innerWidth);
+    expect(box!.x).toBeGreaterThanOrEqual(0);
+    expect(box!.x + box!.width).toBeLessThanOrEqual(width);
+    const field = sheet.getByTestId('exercise-result');
+    expect(parseFloat(await field.evaluate((el) => getComputedStyle(el).fontSize))).toBeGreaterThanOrEqual(16);
+    await field.fill('total 0 d001');
+    await sheet.getByRole('button', { name: 'Save with the result as learned' }).click();
+    await expect(point).toHaveAttribute('data-state', 'learned');
+    await expect.poll(() => readFileSync(file, 'utf8')).toContain('> **Ergebnis:** total 0 d001');
+    expect(readFileSync(file, 'utf8')).toMatch(/- \[x\] Üben: Ordner d001/);
+  } finally {
+    rmSync(file, { force: true });
+  }
+});
+
 test('offline, a new task waits and is sent when the PC is back', async () => {
   await reachable(false);
   await create('Device offline d004');
