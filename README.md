@@ -161,11 +161,10 @@ writing, data classes and limits: the web variant section under "Layout" and `do
 There are two channels, and both carry an install script that installs exactly their build:
 
 - **A release** (a tag `vX.Y.Z`, published by hand after a draft was tried) holds the program for
-  Windows. CI and the builds run on the maintainer's self-hosted Windows runner (see
-  [docs/RELEASING.md](docs/RELEASING.md)); there is no Linux or macOS archive and no `install.sh` any more. The code still has the Linux and macOS paths (autostart entry, launch agent) and
-  builds there from source, but nothing builds or tests them in CI.
+  Windows, Linux (x86-64) and macOS (Apple silicon, experimental). Windows builds on the maintainer's self-hosted
+  runner, Linux and macOS on GitHub-hosted runners (see [docs/RELEASING.md](docs/RELEASING.md)).
 - **The rolling build** (the pre-release `latest`) is the newest green commit of `main`, rebuilt
-  after every CI run: for trying what is new, not for anything that matters.
+  after every CI run, for the same three systems: for trying what is new, not for anything that matters.
 
 The scripts need no administrator rights and install for one user, so they also work where a signed
 Setup is not allowed or SmartScreen stops a downloaded program. Run them in your own terminal (not
@@ -181,7 +180,24 @@ irm https://github.com/WKDSteve/tasks-desktop/releases/download/latest/install.p
 
 Type the line into the PowerShell session as it is. Wrapped in a new `powershell -ExecutionPolicy Bypass -c "..."`, Microsoft Defender reports the command line as a trojan (`Trojan:Win32/Commando.B!ml`) and nothing is installed.
 
-They download the program of that build, check it against its `SHA256SUMS` (a wrong or missing
+On **Linux and macOS**, for the current user, without root:
+
+```
+# the rolling build
+curl -fsSL https://github.com/WKDSteve/tasks-desktop/releases/download/latest/install.sh | sh
+
+# a release: the same with the tag in place of latest, e.g. .../releases/download/v0.1.0/install.sh
+```
+
+The script takes the archive of your system (`tasks-hub-x86_64-unknown-linux-gnu.tar.gz` or
+`tasks-hub-aarch64-apple-darwin.tar.gz`, with `X.Y.Z-` after `tasks-hub-` in a release), checks it against
+`SHA256SUMS` and runs `tasks-hub install`; `uninstall.sh` of the same page removes it again. Linux is built on
+x86-64 (ubuntu 22.04); the macOS build is experimental: the CI builds, installs and uninstalls it, but it has not
+been started on a real Mac. Unlike the Windows program, these carry no engine: the hub needs **Neovim 0.12 or newer**
+on `PATH` and checkouts of `tasks.nvim` and `lib.nvim` (`TASKS_ENGINE_DIR` and `LIB_NVIM_DIR`, `REPOS_DIR`, or the
+settings file); without them the page says what is missing.
+
+On Windows they download the program of that build, check it against its `SHA256SUMS` (a wrong or missing
 checksum installs nothing), and hand over to `tasks-hub install`, which replaces the program in one
 step and brings a running hub back. It ends with the whole call that starts it (`start it: "...\bin\tasks-hub.exe"
 start --open`) and says whether that folder is on `PATH` (install does not add it there; the Start menu entry starts it too). The installation that is there is found and replaced, never a
@@ -208,7 +224,7 @@ of the lock files, and a file built on the machine carries no mark for SmartScre
 
 ```
 .\scripts\uninstall.ps1 [-PurgeSettings]
-sh scripts/uninstall.sh [--purge-settings]        # Linux/macOS, from source; not run by CI any more
+sh scripts/uninstall.sh [--purge-settings]        # Linux/macOS (also on every release page)
 ```
 
 Uninstalling stops the hub, takes away the login entry and the link, and removes the program. Your
@@ -647,16 +663,19 @@ written.
 
 ## The rolling build (the newest `main`, one click)
 
-After every green CI run on `main`, the workflow `rolling` builds the program of that commit for Windows
-and puts it on the pre-release [`latest`](https://github.com/WKDSteve/tasks-desktop/releases/tag/latest) (public,
+After every green CI run on `main`, the workflow `rolling` builds the program of that commit for Windows, Linux and
+macOS and puts it on the pre-release [`latest`](https://github.com/WKDSteve/tasks-desktop/releases/tag/latest) (public,
 no login needed);
 the files are replaced each time. It is not a release (see `release.yml` for that): not signed, not tried by hand.
 
 | File | Use |
 | --- | --- |
 | `tasks-hub-windows-x86_64.exe` | double click (SmartScreen warns about an unsigned program: "More info", "Run anyway") |
-| `install.ps1` | installs exactly this build (see above) |
-| `SHA256SUMS` | the checksums of both |
+| `tasks-hub-x86_64-unknown-linux-gnu.tar.gz` | the program for Linux (x86-64) |
+| `tasks-hub-aarch64-apple-darwin.tar.gz` | the program for macOS on Apple silicon (experimental: there when its build was green) |
+| `install.ps1`, `install.sh` | install exactly this build (see above) |
+| `uninstall.ps1`, `uninstall.sh` | remove it again |
+| `SHA256SUMS` | the checksums of all of them |
 
 Started **without an argument**, the program starts the hub in the background if it is not running and opens
 the browser with a one-time pairing link (a second double click finds the running hub and opens a new link). The
@@ -680,7 +699,7 @@ settings folder, so it is not offered again. No console window opens for any of 
 In a terminal, `tasks-hub setup` asks the same questions there (where your vault is, whether to install; an empty
 line skips the vault) and then starts the hub; a build of your own started from a terminal (a console program)
 asks them on its first start too. Without a person at the console (a pipe, a script) nothing is asked;
-`TASKS_DESKTOP_NO_SETUP=1` switches the questions off. The program of a rolling build or a release carries its engine (Neovim 0.12, cut down, with tasks.nvim and lib.nvim, see `tools/nvim.lock`): what is set by hand goes first, then that, then what is found on the machine. A build of your own without `TASKS_HUB_ENGINE_BUNDLE` needs Neovim 0.12+ and checkouts of `tasks.nvim` and `lib.nvim` (the engine), found through
+`TASKS_DESKTOP_NO_SETUP=1` switches the questions off. The Windows program of a rolling build or a release carries its engine (Neovim 0.12, cut down, with tasks.nvim and lib.nvim, see `tools/nvim.lock`): what is set by hand goes first, then that, then what is found on the machine. A build of your own without `TASKS_HUB_ENGINE_BUNDLE` needs Neovim 0.12+ and checkouts of `tasks.nvim` and `lib.nvim` (the engine), found through
 `TASKS_ENGINE_DIR` and `LIB_NVIM_DIR`, `REPOS_DIR` or the settings file; the vault is `TASKS_VAULT`.
 `tasks-hub --version` names the commit of the build; `tasks-hub stop` ends the hub.
 

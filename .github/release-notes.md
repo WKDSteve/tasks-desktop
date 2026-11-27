@@ -35,8 +35,15 @@ script comes from the release-kit of appkit, the uninstall script from `scripts/
 | System | Archive |
 | ------ | ------- |
 | Windows (x86-64) | `tasks-hub-<version>-x86_64-pc-windows-msvc.zip` |
+| Linux (x86-64) | `tasks-hub-<version>-x86_64-unknown-linux-gnu.tar.gz` |
+| macOS (Apple silicon, experimental: only there when its build was green) | `tasks-hub-<version>-aarch64-apple-darwin.tar.gz` |
 
-There is no Linux or macOS build any more: the release is made on the author's Windows machine.
+On Linux and macOS, install for the current user without root (the script picks the archive of your system, checks
+it against `SHA256SUMS` and runs `tasks-hub install`); `uninstall.sh` removes it again:
+
+```
+curl -fsSL https://github.com/WKDSteve/tasks-desktop/releases/download/{tag}/install.sh | sh
+```
 
 `SHA256SUMS` lists the checksum of every file (archive and scripts):
 
@@ -46,4 +53,6 @@ sha256sum -c SHA256SUMS --ignore-missing
 
 The program is not signed yet: Windows may show SmartScreen. The script does not need that.
 
-The tasks engine (`tasks.nvim`, Neovim 0.12 or newer) is not part of the archive.
+The Windows program carries the tasks engine. The Linux and macOS archives do not: there the hub needs Neovim 0.12 or
+newer on `PATH` and checkouts of `tasks.nvim` and `lib.nvim` (`TASKS_ENGINE_DIR` and `LIB_NVIM_DIR`, `REPOS_DIR`, or
+the settings file).
