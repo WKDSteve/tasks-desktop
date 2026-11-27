@@ -2521,7 +2521,7 @@ test('the tile Today counts only the tasks the filter of the list keeps: finishe
     await expect(card.locator('[data-filtered]')).toHaveCount(0);
     await expect.poll(async () => Number((await figure('finished').textContent())?.trim())).toBeGreaterThanOrEqual(2);
   } finally {
-    for (const [path] of files) rmSync(path, { force: true });
+    for (const [path] of files) removeFile(path);
   }
 });
 
@@ -2581,7 +2581,7 @@ test('a number of the tile Today opens the tasks it counts in a float; the title
     await expect(float).toBeHidden();
     await expect(page.locator('button.row')).toHaveText([/Dailylist o001/]);
   } finally {
-    for (const [path] of files) rmSync(path, { force: true });
+    for (const [path] of files) removeFile(path);
   }
 });
 
@@ -2614,7 +2614,7 @@ test('the float of the tile Today lists a task finished twice once per file, and
     await expect(float).toBeHidden();
     expect(errors).toEqual([]);
   } finally {
-    for (const [path] of files) rmSync(path, { force: true });
+    for (const [path] of files) removeFile(path);
   }
 });
 
@@ -10012,7 +10012,7 @@ test('a project: its page with goal, rollup, own tasks and the plans by stage, t
     expect(await violations(page)).toEqual([]);
     expect(consoleProblems.get(page) ?? []).toEqual([]);
   } finally {
-    for (const [path] of files) rmSync(path, { force: true });
+    for (const [path] of files) removeFile(path);
     if (existsSync(finishedDir)) {
       for (const name of readdirSync(finishedDir)) {
         if (name.endsWith('_e2e-projplan-b001.md')) rmSync(join(finishedDir, name), { force: true });
@@ -10074,7 +10074,7 @@ test('the plan view finishes the chosen plan by hand, also one in no project; an
     expect(readdirSync(finishedDir).some((name) => name.endsWith('_e2e-loneplan-e001.md'))).toBe(true);
     expect(consoleProblems.get(page) ?? []).toEqual([]);
   } finally {
-    for (const [path] of files) rmSync(path, { force: true });
+    for (const [path] of files) removeFile(path);
     if (existsSync(finishedDir)) {
       for (const name of readdirSync(finishedDir)) {
         if (name.endsWith('_e2e-loneplan-e001.md')) rmSync(join(finishedDir, name), { force: true });
@@ -10203,7 +10203,7 @@ test('the plan view compares the open plans: the engine\'s figures, sorted by a 
     await expect(page.getByRole('group', { name: 'Show the plan as' }).getByRole('button', { name: 'Stages' })).toHaveAttribute('aria-pressed', 'true');
     expect(consoleProblems.get(page) ?? []).toEqual([]);
   } finally {
-    for (const [path] of files) rmSync(path, { force: true });
+    for (const [path] of files) removeFile(path);
     await page.evaluate(() => {
       localStorage.removeItem('tasks-desktop.plan-display');
       localStorage.removeItem('tasks-desktop.compare-sort');
@@ -10265,7 +10265,7 @@ test('a claimed task carries a mark in the list, the board and the detail, and t
     await expect(page.getByTestId('detail-claim')).toContainText('cdx:e2eother until 2099-01-01T00:00:00Z');
     expect(consoleProblems.get(page) ?? []).toEqual([]);
   } finally {
-    for (const [path] of files) rmSync(path, { force: true });
+    for (const [path] of files) removeFile(path);
     await page.evaluate(() => {
       localStorage.removeItem('tasks-desktop.claim-name');
       localStorage.removeItem('tasks-desktop.filter');
@@ -10307,7 +10307,7 @@ test('a view grouped by project: a task stands in the project of its plan or in 
     await expect(group).toContainText('Projown o002');
     await expectAccessible(page, 'a view grouped by project');
   } finally {
-    for (const [path] of files) rmSync(path, { force: true });
+    for (const [path] of files) removeFile(path);
   }
 });
 
