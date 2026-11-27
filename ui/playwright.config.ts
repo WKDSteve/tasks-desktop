@@ -3,6 +3,7 @@
 
 import { defineConfig } from '@playwright/test';
 import { e2ePort, lastRunFile, runOutputDir } from './e2e/port';
+import { shardOf } from './e2e/shard';
 
 // `--last-failed` reads the last run from one file of this suite (the outputDir is a new one for every run).
 lastRunFile(process.env, 'hub');
@@ -16,6 +17,11 @@ lastRunFile(process.env, 'hub');
 // Not on a developer's machine: there a test that needs more than 30 s has a fault worth seeing.
 const onRunner = Boolean(process.env['CI']);
 
+// CI runs the tests in parallel jobs, a part each (e2e/shard.ts). Playwright splits by file unless the tests of a file
+// may be split too; app.spec.ts holds more than half of the time, so a split part needs `fullyParallel`. With one
+// worker it changes no order inside a part, and a `serial` group stays together. Without E2E_SHARD it stays off.
+const shard = shardOf(process.env);
+
 // The system's Chrome is used (`channel`), so nothing is downloaded. One
 // worker: the tests share one hub and pair it one after the other.
 export default defineConfig({
@@ -23,7 +29,8 @@ export default defineConfig({
   testMatch: /.*\.spec\.ts/,
   globalSetup: './e2e/global.ts',
   workers: 1,
-  fullyParallel: false,
+  fullyParallel: shard !== null,
+  shard,
   timeout: onRunner ? 60_000 : 30_000,
   expect: { timeout: onRunner ? 15_000 : 5_000 },
   // One more attempt, but only for a test that failed while the machine broke its connections (a change of the network
