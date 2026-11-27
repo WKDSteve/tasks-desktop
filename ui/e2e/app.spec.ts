@@ -11539,6 +11539,10 @@ test('the minutes of a meeting: every kind of entry, a line turned into a decisi
     ];
     for (const [typed, written] of lines) {
       await field.fill(typed);
+      // As a person does: Enter once the page takes a line again. After each line it reads the meeting again, and a line
+      // sent meanwhile is refused ("still reading") and stays in the field; under load that read is slow (CI run
+      // 46052490671 lost "B: Beschluss" so). The kind buttons are disabled exactly while the page refuses.
+      await expect(meetingPage.getByRole('button', { name: '✓ Decision' })).toBeEnabled();
       await field.press('Enter');
       await expect.poll(text, { timeout: 15_000 }).toMatch(written);
       await expect(field).toHaveValue('');
