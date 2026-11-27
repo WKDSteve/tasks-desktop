@@ -198,10 +198,15 @@ jobs:
       - name: Build the phone page
         run: python tools/build-mobile.py
       - run: cargo build --locked -p tasks-hub
+      # The two pages go along: the browser tests compare what the hub serves with ui/dist and ui/dist-mobile of the
+      # checkout (ui/e2e/fresh.ts). The common root of the three paths is the checkout, so they unpack in place.
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: tasks-hub-debug
-          path: target/debug/tasks-hub.exe
+          path: |
+            target/debug/tasks-hub.exe
+            ui/dist
+            ui/dist-mobile
           if-no-files-found: error
           retention-days: 1
 
@@ -250,7 +255,7 @@ jobs:
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: tasks-hub-debug
-          path: target/debug
+          path: .
       - working-directory: ui
         run: pnpm install --frozen-lockfile
       - name: Browser tests (Playwright, axe, XSS corpus)
