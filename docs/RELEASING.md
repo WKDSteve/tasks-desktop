@@ -76,7 +76,7 @@ fork too, must never run its own workflow on that machine.
   `release.yml` build on GitHub-hosted throw-away VMs, which cost nothing for a public repository; each runs
   `scripts/test-install.sh` on the program it built. The macOS leg is experimental (`continue-on-error`): a red one
   leaves its archive out and holds nothing back. `tools/check-rolling-workflow.py` (CI job `hygiene`) keeps the
-  guards of these legs in `rolling.yml`. The CI of a commit (`ci.yml`) still builds and tests only Windows.
+  guards of these legs in `rolling.yml` and `release.yml`. The CI of a commit (`ci.yml`) still builds and tests only Windows.
 - The other sources (the engine at the pinned commit of `engine.lock`, appkit through Cargo and pnpm) are public
   and read without credentials. There is no token secret.
 - `release-kit` of appkit runs on the runner from v0.23.1 on (Git Bash by its full path); the apps pin it by the
