@@ -43,9 +43,18 @@ async function settle(): Promise<void> {
 async function asking(): Promise<Made> {
   const m = make({ token: 't' });
   made = m;
+  // ai-desktop is found by the hub itself, so every read of the page says so. Set on the page instead, a read the start
+  // began would overwrite it when it answers late (under load in the full suite): the AI functions went, the question
+  // with them, and nobody said no. The answer comes a moment late here on purpose.
+  m.hub.aiDesktopFound = { installed: true, running: true };
+  const found = m.hub.aiDesktop;
+  m.hub.aiDesktop = async () => {
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    return found();
+  };
   await m.app.start(null);
   m.app.stop();
-  m.app.aiDesktop = { installed: true, running: true } as never;
+  await vi.waitFor(() => expect(m.app.aiFeatures).toBe(true));
   const target = document.createElement('div');
   document.body.append(target);
   mounted = mount(Capture, { target, props: { app: m.app } });
