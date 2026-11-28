@@ -30,7 +30,7 @@ function storage() {
 }
 
 /** Two folders used before; `perm` per name is what the browser says now, `grant` what asking again gives. */
-function setup({ perm = {}, grant = {}, active = 'a' } = {}) {
+function setup({ perm = {}, grant = {}, active = 'a', list, waitMs } = {}) {
   const log = [];
   const handles = { a: { kind: 'directory', name: 'tasks-vault' }, b: { kind: 'directory', name: 'tricentis-vault' } };
   const recent = {
@@ -39,6 +39,7 @@ function setup({ perm = {}, grant = {}, active = 'a' } = {}) {
       { id: 'b', name: 'tricentis-vault', handle: handles.b, lastUsed: 1 },
     ],
   };
+  if (list) recent.list = list;
   const tab = storage();
   const nameOf = (h) => (h === handles.a ? 'a' : 'b');
   const vaults = new FolderVaults({
@@ -46,9 +47,11 @@ function setup({ perm = {}, grant = {}, active = 'a' } = {}) {
     active,
     tab,
     reload: () => log.push('reload'),
+    waitMs,
     permissionOf: async (h) => {
       log.push(`query ${nameOf(h)}`);
       const p = perm[nameOf(h)] ?? 'granted';
+      if (p === 'hang') return new Promise(() => {});
       if (p instanceof Error) throw p;
       return p;
     },
@@ -69,6 +72,21 @@ test('the list names every folder used before, marks the one read now and says t
   // A folder whose permission cannot be read is listed as one without access, not dropped and not thrown.
   const broken = setup({ perm: { b: new Error('boom') } });
   assert.equal((await broken.vaults.list())[1].access, 'denied');
+});
+
+test('a permission the browser never says is listed as one to ask for, and a click asks for it', async () => {
+  const { vaults, log } = setup({ perm: { b: 'hang' }, waitMs: 20 });
+  assert.deepEqual((await vaults.list()).map((v) => v.access), ['granted', 'prompt']);
+  log.length = 0;
+  assert.equal(await vaults.select('b'), 'switched');
+  assert.deepEqual(log, ['query b', 'grant b', 'reload']);
+});
+
+test('a list of folders the browser never hands out shows none, and a click on a vault finds it gone', async () => {
+  const { vaults, log } = setup({ list: () => new Promise(() => {}), waitMs: 20 });
+  assert.deepEqual(await vaults.list(), []);
+  assert.equal(await vaults.select('b'), 'gone');
+  assert.deepEqual(log, []);
 });
 
 test('a click on a folder with access loads the page again with it, and only its id goes into the tab', async () => {

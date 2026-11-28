@@ -11,7 +11,7 @@
 // (`vaultPrefs`), so that a vault opens with the filter and the view it was left with. The id is the one the folders
 // used before give each folder; it says nothing of the vault.
 
-import { grantAccess, permissionOf, type DirHandle, type RecentFolders } from './folder.ts';
+import { grantAccess, LOOK_WAIT_MS, permissionOf, within, type DirHandle, type Recent, type RecentFolders } from './folder.ts';
 
 /** The key in the tab's session storage under which the next page finds the folder to open. */
 export const SWITCH_KEY = 'tasks-web.switch-to';
@@ -47,6 +47,11 @@ export interface FolderVaultsDeps {
   grantAccess?(handle: DirHandle): Promise<Access>;
   /** A change is being written to the folder now (asked again right before the page loads again). */
   writing?(): boolean;
+  /**
+   * How long the list of folders and the permission of one may take (`LOOK_WAIT_MS` when not given): a list the
+   * browser does not hand out counts as empty, a permission it does not say as `prompt`.
+   */
+  waitMs?: number;
 }
 
 export class FolderVaults {
@@ -56,20 +61,36 @@ export class FolderVaults {
     this.deps = deps;
   }
 
-  /** The folders used before, the one used last first, with the access each has now. */
+  /** The folders used before, the one used last first, with the access each has now (asked side by side). */
   async list(): Promise<FolderVault[]> {
+    const entries = await this.entries();
+    return Promise.all(
+      entries.map(async (entry) => ({
+        id: entry.id,
+        name: entry.name,
+        active: entry.id === this.deps.active,
+        access: await this.accessOf(entry.handle),
+      })),
+    );
+  }
+
+  private get wait(): number {
+    return this.deps.waitMs ?? LOOK_WAIT_MS;
+  }
+
+  /** The stored folders; none when the browser does not hand them out in time. A failure to read still throws. */
+  private async entries(): Promise<Recent[]> {
+    return within<Recent[]>(this.deps.recent.list(), this.wait, []);
+  }
+
+  /** The permission now, within the limit (`prompt` without an answer); a failure is no permission. */
+  private async accessOf(handle: DirHandle): Promise<Access> {
     const of = this.deps.permissionOf ?? permissionOf;
-    const out: FolderVault[] = [];
-    for (const entry of await this.deps.recent.list()) {
-      let access: Access;
-      try {
-        access = await of(entry.handle);
-      } catch {
-        access = 'denied';
-      }
-      out.push({ id: entry.id, name: entry.name, active: entry.id === this.deps.active, access });
+    try {
+      return await within(of(handle), this.wait, 'prompt');
+    } catch {
+      return 'denied';
     }
-    return out;
   }
 
   /**
@@ -79,13 +100,12 @@ export class FolderVaults {
    */
   async select(id: string): Promise<SwitchResult> {
     if (id === this.deps.active) return 'same';
-    const entry = (await this.deps.recent.list()).find((e) => e.id === id);
+    const entry = (await this.entries()).find((e) => e.id === id);
     if (!entry) return 'gone';
-    const of = this.deps.permissionOf ?? permissionOf;
     const grant = this.deps.grantAccess ?? grantAccess;
-    let access: Access;
+    // Asking again is not limited: it waits for the person's answer in the browser's dialog.
+    let access = await this.accessOf(entry.handle);
     try {
-      access = await of(entry.handle);
       if (access === 'prompt') access = await grant(entry.handle);
     } catch {
       access = 'denied';

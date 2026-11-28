@@ -50,9 +50,40 @@ export function pickReadOnlyFolder(win: PickerWindow): Promise<PickResult> {
   return kitPickFolder(win, { id: 'tasks-checkouts', mode: 'read' });
 }
 
-/** The permission a stored handle has now; `gone` when the folder does not exist any more. */
-export function permissionOf(handle: DirHandle): Promise<PermissionState | 'gone'> {
-  return kitPermissionOf(handle, MODE);
+/**
+ * How long the browser gets to answer a look that should be quick: the permission of a stored folder, the list of the
+ * folders used before. Chrome was seen to leave `queryPermission` of a stored handle unanswered for good (2026-11-19);
+ * without a limit the way in stayed on "starting" with nothing to click.
+ */
+export const LOOK_WAIT_MS = 2000;
+
+/**
+ * `promise`, or `fallback` once `ms` have passed without an answer. A promise that rejects still rejects (inside the
+ * limit). The timer is cleared when the answer comes first.
+ */
+export function within<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => resolve(fallback), ms);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (error: unknown) => {
+        clearTimeout(timer);
+        reject(error);
+      },
+    );
+  });
+}
+
+/**
+ * The permission a stored handle has now; `gone` when the folder does not exist any more. A browser that does not
+ * answer within `waitMs` is taken to want to be asked (`prompt`): the folder's row then offers "Allow access", whose
+ * click asks with `requestPermission`.
+ */
+export function permissionOf(handle: DirHandle, waitMs: number = LOOK_WAIT_MS): Promise<PermissionState | 'gone'> {
+  return within(kitPermissionOf(handle, MODE), waitMs, 'prompt');
 }
 
 /** Ask for the permission again. Must run inside a click (the first thing the click handler does). */

@@ -1421,6 +1421,7 @@ const de: Record<PageKey, string> = {
   'web.entry.state.denied': 'nicht erlaubt',
   'web.entry.state.gone': 'nicht gefunden',
   'web.entry.opening': 'Lese {name} ...',
+  'web.entry.starting': 'Lese die zuletzt genutzten Ordner ...',
   'web.entry.skipped': '{count} Dateien wurden ausgelassen (zu groß oder nicht lesbar).',
   'web.entry.readonly':
     'Dieser Browser kann nicht in einen Ordner schreiben. Hier lässt sich der Vault lesen und durchsuchen; zum Ändern von Tasks Chrome oder Edge, Neovim oder die App nehmen. Den Ordner neu wählen, um neuere Dateien zu sehen.',
@@ -1441,6 +1442,8 @@ const de: Record<PageKey, string> = {
   'web.entry.notice.denied': 'Der Zugriff wurde nicht erlaubt. Erlaube ihn oder wähle den Ordner neu.',
   'web.entry.notice.gone': 'Der Ordner ist nicht mehr da. Wähle ihn neu.',
   'web.entry.notice.switch_allow': 'Der Browser fragt für „{detail}“ erneut. Ein Klick auf „Zugriff erlauben“ in seiner Zeile öffnet ihn.',
+  'web.entry.notice.recent_failed':
+    'Die zuletzt genutzten Ordner ließen sich nicht lesen (der Browser hat nicht geantwortet). Wähle den Ordner neu.',
   'web.entry.notice.limit': 'Der Ordner ist zu groß zum Lesen: {detail}',
   'web.entry.notice.no_areas':
     'Dieser Ordner enthält keinen Bereich (einen Ordner mit ROADMAP oder Backlog darin), es gäbe also nichts anzuzeigen. Wähle den Vault-Ordner selbst, den, der die Bereiche enthält.',

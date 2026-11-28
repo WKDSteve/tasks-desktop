@@ -4,12 +4,15 @@
 
 import {
   grantAccess,
+  LOOK_WAIT_MS,
   permissionOf,
   pickFolder,
   pickerSupport,
   oneLine,
+  within,
   type DirHandle,
   type PickerWindow,
+  type Recent,
   type RecentFolders,
 } from './folder.ts';
 import { inputFolderSupport, pickFolderByInput, type InputDocument } from 'appkit-web/folder-input';
@@ -41,7 +44,9 @@ export interface Notice {
     | 'no_areas'
     | 'no_areas_below'
     /** A switch in the menu asked for this folder, and the browser wants to be asked again; `detail` is its name. */
-    | 'switch_allow';
+    | 'switch_allow'
+    /** The list of the folders used before could not be read, or the browser did not hand it out in time. */
+    | 'recent_failed';
   detail?: string;
 }
 
@@ -82,6 +87,11 @@ export interface EntryDeps {
    * is opened without a click when the browser still grants the access; otherwise the start page shows it as usual.
    */
   pending?(): string | null;
+  /**
+   * How long a look that should be quick may take (the list of folders used before, the permission of each); then the
+   * list counts as unreadable and a folder as one to ask for. `LOOK_WAIT_MS` when not given; tests pass a short one.
+   */
+  waitMs?: number;
 }
 
 /** Read a folder and mount it at `root` of the engine's file system. */
@@ -140,11 +150,22 @@ export class Entry {
       return;
     }
     const pending = this.deps.pending?.() ?? null;
-    const recent: RecentView[] = [];
-    const entries = await this.deps.recent.list();
-    for (const entry of entries) {
-      recent.push({ id: entry.id, name: entry.name, access: await permissionOf(entry.handle) });
+    const wait = this.deps.waitMs ?? LOOK_WAIT_MS;
+    // The list of folders used before is a convenience: one that cannot be read, or that the browser does not hand out
+    // (IndexedDB unanswered), leaves the start page with the picker and a line that says so, never on "starting".
+    let entries: Recent[];
+    try {
+      const listed = await within<Recent[] | null>(this.deps.recent.list(), wait, null);
+      if (listed === null) throw new Error('timeout');
+      entries = listed;
+    } catch {
+      entries = [];
+      notice ??= { code: 'recent_failed' };
     }
+    // Asked side by side: each look has its own limit, so the start page waits for one limit, not one per folder.
+    const recent: RecentView[] = await Promise.all(
+      entries.map(async (entry) => ({ id: entry.id, name: entry.name, access: await permissionOf(entry.handle, wait) })),
+    );
     const chosen = pending === null ? undefined : entries.find((e) => e.id === pending);
     // The switch asked for the access inside its click; a folder that lost it meanwhile (or is gone) waits on the start
     // page, with its state, for a click of its own.
@@ -190,10 +211,14 @@ export class Entry {
 
   /** From the click on a folder used before. Asks for the permission first when the browser dropped it. */
   async openRecent(id: string): Promise<void> {
-    const entry = (await this.deps.recent.list()).find((e) => e.id === id);
+    const wait = this.deps.waitMs ?? LOOK_WAIT_MS;
+    const listed = await within<Recent[] | null>(this.deps.recent.list(), wait, null).catch(() => null);
+    if (listed === null) return this.start({ code: 'recent_failed' });
+    const entry = listed.find((e) => e.id === id);
     if (!entry) return this.start();
-    // The click is the user gesture `requestPermission` needs: nothing that waits comes before it.
-    let access = await permissionOf(entry.handle);
+    // The click is the user gesture `requestPermission` needs: nothing that waits comes before it but these two looks,
+    // each within its limit (Chrome keeps the gesture for some seconds).
+    let access = await permissionOf(entry.handle, wait);
     if (access === 'prompt') access = await grantAccess(entry.handle);
     if (access === 'gone') return this.start({ code: 'gone' });
     if (access !== 'granted') return this.start({ code: 'denied' });

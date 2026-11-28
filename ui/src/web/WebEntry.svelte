@@ -33,7 +33,9 @@
       </p>
     {/if}
 
-    {#if view.step === 'opening'}
+    {#if view.step === 'starting'}
+      <p role="status">{t('web.entry.starting')}</p>
+    {:else if view.step === 'opening'}
       <p role="status">{t('web.entry.opening', { name: view.name })}</p>
     {:else if view.step === 'open'}
       <p role="status">{t('web.entry.opening', { name: view.name })}</p>

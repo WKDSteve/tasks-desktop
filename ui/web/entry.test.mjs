@@ -25,7 +25,13 @@ function domError(name, message = name) {
   return Object.assign(new Error(message), { name });
 }
 
-/** A folder handle. `perm` is what queryPermission says, `onRequest` what requestPermission does. */
+/** A promise that never settles: a browser that does not answer. */
+const NEVER = () => new Promise(() => {});
+
+/**
+ * A folder handle. `perm` is what queryPermission says (`'hang'`: it never answers), `onRequest` what
+ * requestPermission does.
+ */
 function handle(name, { perm = 'granted', tree = {}, onRequest, same = [], log = [] } = {}) {
   const h = {
     kind: 'directory',
@@ -33,6 +39,7 @@ function handle(name, { perm = 'granted', tree = {}, onRequest, same = [], log =
     perm,
     async queryPermission() {
       log.push(`query ${name}`);
+      if (h.perm === 'hang') return NEVER();
       if (h.perm instanceof Error) throw h.perm;
       return h.perm;
     },
@@ -94,9 +101,9 @@ test('the permission of a stored folder, and asking for it again', async () => {
   assert.equal(await grantAccess(handle('v', { onRequest: () => { throw domError('NotFoundError'); } })), 'gone');
 });
 
-function entryOver({ win, recent = new RecentFolders(memoryKv()), open, now = () => 7, forgotten, pending } = {}) {
+function entryOver({ win, recent = new RecentFolders(memoryKv()), open, now = () => 7, forgotten, pending, waitMs } = {}) {
   const states = [];
-  const entry = new Entry({ win, recent, open: open ?? (async () => ({ files: 3, skipped: [] })), now, forgotten, pending });
+  const entry = new Entry({ win, recent, open: open ?? (async () => ({ files: 3, skipped: [] })), now, forgotten, pending, waitMs });
   entry.subscribe((s) => states.push(s.step));
   return { entry, states, recent };
 }
@@ -120,6 +127,50 @@ test('the start page lists the folders used before with the access each has now'
   assert.equal(entry.state.step, 'choose');
   assert.deepEqual(entry.state.recent.map((r) => [r.name, r.access]), [['kept', 'granted'], ['asks', 'prompt'], ['moved', 'gone']]);
   assert.equal(entry.state.notice, null);
+});
+
+test('a permission the browser never says counts as one to ask for, and the start page comes all the same', async () => {
+  // Chrome 158 left queryPermission of both stored folders unanswered (2026-11-19): the page stayed on "starting".
+  assert.equal(await permissionOf(handle('v', { perm: 'hang' }), 20), 'prompt');
+  const recent = new RecentFolders(memoryKv());
+  await recent.remember(handle('kept', { perm: 'granted' }), 3);
+  await recent.remember(handle('silent', { perm: 'hang' }), 2);
+  await recent.remember(handle('also', { perm: 'hang' }), 1);
+  const { entry } = entryOver({ win: SECURE(async () => handle('x')), recent, waitMs: 40 });
+  const began = Date.now();
+  await entry.start();
+  assert.equal(entry.state.step, 'choose');
+  assert.deepEqual(entry.state.recent.map((r) => [r.name, r.access]), [['kept', 'granted'], ['silent', 'prompt'], ['also', 'prompt']]);
+  assert.equal(entry.state.notice, null);
+  // the folders are asked side by side: one limit, not one per folder
+  assert.ok(Date.now() - began < 40 * 2 + 200, `took ${Date.now() - began} ms`);
+});
+
+test('a list of folders that never comes, or that cannot be read, leads to the start page with the picker and a line', async () => {
+  for (const list of [NEVER, async () => { throw domError('UnknownError', 'IndexedDB is broken'); }]) {
+    const { entry, states } = entryOver({ win: SECURE(async () => handle('x')), recent: { list, remember: async () => ({ id: 'r' }), forget: async () => {} }, waitMs: 20 });
+    await entry.start();
+    assert.deepEqual(entry.state, { step: 'choose', recent: [], notice: { code: 'recent_failed' }, readOnly: false });
+    assert.deepEqual(states, ['choose']);
+    // a click on a row (still on the page) ends the same way, not in a wait
+    await entry.openRecent('r');
+    assert.equal(entry.state.notice.code, 'recent_failed');
+  }
+  // a notice of its own (the picker was closed) is kept
+  const { entry } = entryOver({ win: SECURE(async () => handle('x')), recent: { list: NEVER }, waitMs: 20 });
+  await entry.start({ code: 'cancelled' });
+  assert.deepEqual(entry.state.notice, { code: 'cancelled' });
+});
+
+test('a click on a folder whose permission the browser never says asks for it, inside the click', async () => {
+  const log = [];
+  const silent = handle('silent', { perm: 'hang', log });
+  const recent = new RecentFolders(memoryKv());
+  const { id } = await recent.remember(silent, 1);
+  const { entry } = entryOver({ win: SECURE(async () => handle('x')), recent, waitMs: 20 });
+  await entry.openRecent(id);
+  assert.deepEqual(log, ['query silent', 'request silent']);
+  assert.equal(entry.state.step, 'open');
 });
 
 test('choosing a folder opens it and remembers it', async () => {

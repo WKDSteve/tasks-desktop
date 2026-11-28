@@ -80,6 +80,19 @@ describe('the way in', () => {
     expect(html({ step: 'choose', notice: null, recent: [], readOnly: false })).not.toContain('cannot write into a folder');
   });
 
+  it('says that it reads the folders used before while it starts, so that a wait is seen', () => {
+    const out = html({ step: 'starting' });
+    expect(out).toContain('role="status"');
+    expect(out).toContain('Reading the folders used before ...');
+    expect(html({ step: 'starting' }, 'de')).toContain('Lese die zuletzt genutzten Ordner ...');
+  });
+
+  it('says that the folders used before could not be read, and still offers the picker', () => {
+    const out = html({ step: 'choose', recent: [], notice: { code: 'recent_failed' }, readOnly: false });
+    expect(out).toContain('folders used before could not be read');
+    expect(out).toContain('Choose folder ...');
+  });
+
   it('shows the reading, and the files that were left out', () => {
     expect(html({ step: 'opening', name: 'work' })).toContain('Reading work ...');
     const done = html({ step: 'open', name: 'work', files: 9, skipped: [{ path: 'a', reason: 'too-large' }, { path: 'b', reason: 'unreadable' }], folder: null, readOnly: false });

@@ -1417,6 +1417,7 @@ const en = {
   'web.entry.state.denied': 'not allowed',
   'web.entry.state.gone': 'not found',
   'web.entry.opening': 'Reading {name} ...',
+  'web.entry.starting': 'Reading the folders used before ...',
   'web.entry.skipped': '{count} files were left out (too large or not readable).',
   'web.entry.readonly':
     'This browser cannot write into a folder. You can read and search the vault here; to change tasks use Chrome or Edge, Neovim or the app. Choose the folder again whenever you want to see newer files.',
@@ -1437,6 +1438,8 @@ const en = {
   'web.entry.notice.denied': 'Access was not allowed. Allow it, or choose the folder again.',
   'web.entry.notice.gone': 'The folder is not there any more. Choose it again.',
   'web.entry.notice.switch_allow': 'The browser asks again for "{detail}". One click on "Allow access" in its row opens it.',
+  'web.entry.notice.recent_failed':
+    'The folders used before could not be read (the browser did not answer). Choose the folder again.',
   'web.entry.notice.limit': 'The folder is too large to read: {detail}',
   'web.entry.notice.no_areas':
     'This folder holds no area (a folder with ROADMAP or Backlog in it), so there would be nothing to show. Choose the vault folder itself, the one that holds the areas.',
