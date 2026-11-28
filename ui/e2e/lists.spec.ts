@@ -4,6 +4,7 @@ import type { Page } from '@playwright/test';
 import { expect, isMachineFault, test } from './fixtures';
 import { expectAccessible, watchViolations } from './a11y';
 import { STATE } from './global';
+import { WRITE_BUDGET } from './camera';
 import { menuTab } from './menu';
 import { removeFile } from './hub';
 
@@ -108,18 +109,30 @@ test('Lists: a line with a #tag, the filter, a tick and the export', async ({ pa
 });
 
 test('Lists: a picture pasted into the line is an entry with it, and the entry becomes a task with its picture', async ({ page }) => {
+  test.slow();
   writeList();
   const problems = await pair(page, '/#view=lists');
   await page.locator('[data-lists-choose]').selectOption(LIST);
   const line = page.locator('[data-lists-line]');
   await line.fill('E2e Lists picture');
+  // A paste is two writes in a row (the entry, then its picture with the move to the folder form), each read again
+  // after; the picture shows only after the second. On a busy machine that took more than the 5 s of an `expect` (seen
+  // with four workers): the upload comes late here on purpose, and the wait is the one of a write.
+  await page.route(
+    (url) => url.pathname === '/api/tasks/upload',
+    async (route) => {
+      await new Promise((resolve) => setTimeout(resolve, 6_000));
+      await route.continue().catch(() => undefined);
+    },
+    { times: 1 },
+  );
   await line.evaluate((input, bytes) => {
     const data = new DataTransfer();
     data.items.add(new File([new Uint8Array(bytes)], 'image.png', { type: 'image/png' }));
     input.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }));
   }, [...PNG]);
   const entry = page.locator('[data-entry]').filter({ hasText: 'E2e Lists picture' });
-  await expect(entry.locator('[data-entry-files]')).toBeVisible();
+  await expect(entry.locator('[data-entry-files]')).toBeVisible({ timeout: WRITE_BUDGET });
   const folder = onDisk().find((n) => !n.endsWith('.md'));
   expect(folder, onDisk().join(', ')).toBeDefined();
   const images = join(state().vault, LIST, folder as string, 'assets', 'images');
