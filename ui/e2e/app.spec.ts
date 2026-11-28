@@ -11538,16 +11538,36 @@ test('the minutes of a meeting: every kind of entry, a line turned into a decisi
       ['[] Raum e2e m003; Beamer e2e m003', /- \[ \] Raum e2e m003\r?\n- \[ \] Beamer e2e m003/],
       ['! Wichtig e2e m003', /- \d\d:\d\d ! Wichtig e2e m003/],
     ];
+    // After each line the page reads the meeting again (and once more when the hub tells of the changed file); a line sent
+    // meanwhile is refused ("still being read") and stays in the field, as a person would see. On a busy runner that read
+    // is slow (CI runs 45053613177, 46052490671 lost a line so, once at 23:57 locally): here every read of the meeting
+    // comes late, so a line sent without waiting is refused each time.
+    const isRead = (url: URL) => url.pathname === '/api/tasks/meeting';
+    const lateRead = async (route: Route) => {
+      await new Promise((resolve) => setTimeout(resolve, 1_500));
+      await route.continue().catch(() => undefined);
+    };
+    await page.route(isRead, lateRead);
+    const decision = meetingPage.getByRole('button', { name: '✓ Decision' });
     for (const [typed, written] of lines) {
       await field.fill(typed);
-      await field.press('Enter');
-      await expect.poll(text, { timeout: 15_000 }).toMatch(written);
-      await expect(field).toHaveValue('');
+      // As a person does: Enter once the page takes a line (the kind buttons are disabled exactly while it refuses one),
+      // and again if a read began in between and the line is still in the field. A line taken empties the field.
+      await expect(async () => {
+        if ((await field.inputValue()) !== '') {
+          await expect(decision).toBeEnabled({ timeout: 1_000 });
+          await field.press('Enter');
+        }
+        await expect(field).toHaveValue('', { timeout: 1_000 });
+      }).toPass({ timeout: WRITE_BUDGET });
+      await expect.poll(text, { timeout: WRITE_BUDGET }).toMatch(written);
     }
+    await page.unroute(isRead, lateRead);
     await expect(meetingPage.locator('.lines li.marked')).toContainText('Wichtig e2e m003');
 
     // A photo and a recording: attached to the meeting (it takes the folder form), then a line of the minutes each.
     const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
+    await expect(meetingPage.getByRole('button', { name: '▣ Photo' })).toBeEnabled();
     await meetingPage.locator('input[type="file"][accept="image/*"]').setInputFiles({ name: 'tafel-e2e.png', mimeType: 'image/png', buffer: png });
     await expect.poll(text, { timeout: 15_000 }).toMatch(/!\[[^\]]*\]\(assets\/images\/tafel-e2e\.png\)/);
     // As a person does: the next recording once the button takes one again (the page reads the meeting after each
