@@ -1,10 +1,11 @@
-import { existsSync, readdirSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Page } from '@playwright/test';
 import { expect, isMachineFault, test } from './fixtures';
 import { expectAccessible, watchViolations } from './a11y';
 import { STATE } from './global';
 import { menuTab } from './menu';
+import { removeFile } from './hub';
 
 // The import and the export of contacts against the real hub and engine, with the example files of the engine
 // (tasks.nvim/TESTS/fixtures/contacts): the menu entry opens the dialog, a picked vCard is a trial run first (nothing
@@ -32,7 +33,7 @@ function made(): string[] {
 }
 
 test.afterEach(() => {
-  for (const f of made()) rmSync(join(dir(), f), { force: true, recursive: true });
+  for (const f of made()) removeFile(join(dir(), f));
 });
 
 async function pair(page: Page, path: string): Promise<string[]> {

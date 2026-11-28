@@ -1,9 +1,10 @@
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import type { Page } from '@playwright/test';
 import { expect, isMachineFault, test } from './fixtures';
 import { expectAccessible, watchViolations } from './a11y';
 import { STATE } from './global';
+import { removeFile } from './hub';
 
 // Three views of the tab Lernpläne against the real hub and the real engine (capabilities learn_next, path_hours,
 // learn_notes): the next learning step (a card per running path, a {safety} point that asks first, the keys of a card),
@@ -106,7 +107,7 @@ test('next learning step: a card per running path, the safety question, the keys
     await expect.poll(() => page.evaluate(() => document.activeElement?.closest('li[data-point]')?.getAttribute('data-point'))).toBe('exec');
     expect(problems).toEqual([]);
   } finally {
-    for (const file of made) rmSync(file, { force: true });
+    for (const file of made) removeFile(file);
   }
 });
 
@@ -135,7 +136,7 @@ test('learning time: planned against done hours, an overrun in words, the sessio
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
     expect(problems).toEqual([]);
   } finally {
-    for (const file of made) rmSync(file, { force: true });
+    for (const file of made) removeFile(file);
   }
 });
 
@@ -165,6 +166,6 @@ test('notes and sources: the engine searches, the hits are marked, Enter opens t
     await expect.poll(() => page.evaluate(() => document.activeElement?.closest('li[data-point]')?.getAttribute('data-point'))).toBe('fork');
     expect(problems).toEqual([]);
   } finally {
-    for (const file of made) rmSync(file, { force: true });
+    for (const file of made) removeFile(file);
   }
 });

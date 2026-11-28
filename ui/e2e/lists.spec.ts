@@ -1,10 +1,11 @@
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Page } from '@playwright/test';
 import { expect, isMachineFault, test } from './fixtures';
 import { expectAccessible, watchViolations } from './a11y';
 import { STATE } from './global';
 import { menuTab } from './menu';
+import { removeFile } from './hub';
 
 // The tab Lists against the real hub and engine: a list made from the tab, a line typed with a #tag, the filter, a
 // tick, a picture pasted into the line (an entry with that picture in its folder), the entry made a task with its
@@ -23,11 +24,11 @@ const PNG = Buffer.from(
 test.afterEach(() => {
   const vault = state().vault;
   for (const name of readdirSync(vault)) {
-    if (name.startsWith('_list-e2e')) rmSync(join(vault, name), { force: true, recursive: true });
+    if (name.startsWith('_list-e2e')) removeFile(join(vault, name));
   }
   const tasks = join(vault, 'lib.nvim', 'ROADMAP', 'tasks');
   for (const name of existsSync(tasks) ? readdirSync(tasks) : []) {
-    if (name.startsWith('e2e-lists-')) rmSync(join(tasks, name), { force: true, recursive: true });
+    if (name.startsWith('e2e-lists-')) removeFile(join(tasks, name));
   }
 });
 

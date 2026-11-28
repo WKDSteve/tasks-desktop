@@ -1,10 +1,11 @@
-import { existsSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Locator, Page } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { violations, watchViolations } from './a11y';
 import { STATE } from './global';
 import { chooseFromMenu } from './menu';
+import { removeFile } from './hub';
 
 // The searchable choices (`PickList`): the plan of a task chosen from the engine's plans, a new plan made from that
 // choice and given to the task; tasks put into a phase of a plan from the plan view, and a new task made in the plan.
@@ -119,7 +120,7 @@ test('the plan of a task is chosen from the plans, and a plan made from that cho
     expect(await violations(page)).toEqual([]);
     expect(problems).toEqual([]);
   } finally {
-    rmSync(planFile(plan), { force: true });
+    removeFile(planFile(plan));
   }
 });
 
@@ -183,7 +184,7 @@ test('tasks are put into a phase of a plan from the plan view, and a new task is
     expect(await violations(page)).toEqual([]);
     expect(problems).toEqual([]);
   } finally {
-    rmSync(planFile(plan), { force: true });
+    removeFile(planFile(plan));
   }
 });
 
@@ -236,7 +237,7 @@ test.describe('on a touchscreen', () => {
       expect(await violations(page)).toEqual([]);
       expect(problems).toEqual([]);
     } finally {
-      rmSync(projectFile, { force: true });
+      removeFile(projectFile);
     }
   });
 });

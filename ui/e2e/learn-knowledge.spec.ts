@@ -1,9 +1,10 @@
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import type { Page } from '@playwright/test';
 import { expect, isMachineFault, test } from './fixtures';
 import { expectAccessible, violations, watchViolations } from './a11y';
 import { STATE } from './global';
+import { removeFile } from './hub';
 
 // The catalogue of the competences and the evidence of all learning paths (`CompetencesView`, `EvidenceView`) against the
 // real hub and the real engine (`tasks.competences`, `tasks.learn_evidence`): a field of knowledge in its own file with
@@ -89,7 +90,7 @@ test('the competence catalogue: ladders, targets, paths and evidence from the en
     expect(problems).toEqual([]);
     expect(await violations(page)).toEqual([]);
   } finally {
-    for (const file of made) rmSync(file, { force: true });
+    for (const file of made) removeFile(file);
   }
 });
 
@@ -123,6 +124,6 @@ test('the evidence: by field, given and open, the stage it proves, a point opens
     expect(problems).toEqual([]);
     expect(await violations(page)).toEqual([]);
   } finally {
-    for (const file of made) rmSync(file, { force: true });
+    for (const file of made) removeFile(file);
   }
 });

@@ -1,9 +1,10 @@
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Page } from '@playwright/test';
 import { expect, isMachineFault, test } from './fixtures';
 import { expectAccessible, watchViolations } from './a11y';
 import { STATE } from './global';
+import { removeFile } from './hub';
 
 // The task float of a learning point against the real hub and the real engine: a click on the title opens the exercise
 // block under the point (task, "done when", proof) over the list; ticking needs the result, which the engine writes as
@@ -103,6 +104,6 @@ test('a click on the title opens the task float; the point is learned only with 
     await expect(point('read')).toHaveAttribute('data-state', 'learned');
     expect(problems).toEqual([]);
   } finally {
-    rmSync(file, { force: true });
+    removeFile(file);
   }
 });

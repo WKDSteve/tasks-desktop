@@ -1,10 +1,11 @@
-import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import type { Page } from '@playwright/test';
 import { expect, isMachineFault, test } from './fixtures';
 import { expectAccessible, watchViolations } from './a11y';
 import { STATE } from './global';
 import { openExportMenu } from './menu';
+import { removeFile } from './hub';
 
 // The figures of the tab Lernpläne against the real hub and the real engine (capability learn_history): the overview
 // with its period (kept on the device), the figures of a period against the one before in words and a mark, the bars
@@ -66,13 +67,13 @@ function write(): () => void {
     months.add(month);
   }
   return () => {
-    rmSync(file, { force: true });
+    removeFile(file);
     for (const month of months) {
       if (!existsSync(month)) continue;
       const kept = readFileSync(month, 'utf8')
         .split('\n')
         .filter((line) => line !== '' && !line.includes(`"path":"${ID}"`));
-      if (kept.length === 0) rmSync(month, { force: true });
+      if (kept.length === 0) removeFile(month);
       else writeFileSync(month, `${kept.join('\n')}\n`);
     }
   };

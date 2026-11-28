@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Locator, Page } from '@playwright/test';
 import { expect, test } from './fixtures';
@@ -6,6 +6,7 @@ import { violations, watchViolations } from './a11y';
 import { aiDesktopDoubleIn } from './ai-desktop';
 import { STATE } from './global';
 import { chooseFromMenu } from './menu';
+import { removeFile } from './hub';
 
 // The rest of the dialogs of the raster (`dialog-focus.spec.ts`): the ones that need files of their own in the vault or a
 // double of ai-desktop. Each case: the focus goes into the dialog, Escape closes it (an open hint takes the first one),
@@ -67,7 +68,7 @@ test('the page of a contact: the focus goes in, Escape closes it, the focus is b
     await expect(contact).toBeVisible();
     await dialogCase(page, 'Focus E2e Contact', () => contact.click(), contact);
   } finally {
-    rmSync(file, { force: true });
+    removeFile(file);
   }
 });
 
@@ -86,8 +87,8 @@ async function withMeeting(slug: string, title: string, run: () => Promise<void>
   try {
     await run();
   } finally {
-    rmSync(file, { force: true });
-    rmSync(join(meetings, slug), { force: true, recursive: true });
+    removeFile(file);
+    removeFile(join(meetings, slug));
   }
 }
 
@@ -122,7 +123,7 @@ test('an image shown larger: the focus goes in, Escape closes it, the focus is b
     await expect(image).toBeVisible();
     await dialogCase(page, 'Image: A dot', () => image.click(), image);
   } finally {
-    rmSync(folder, { force: true, recursive: true });
+    removeFile(folder);
   }
 });
 
@@ -142,7 +143,7 @@ test('the exercise of a learning point: the focus goes in, Escape closes it, the
     const title = tree.locator('li[data-point="ls"]').getByRole('button', { name: 'Üben: Verzeichnis anzeigen foc2e', exact: true });
     await dialogCase(page, /Task: Üben: Verzeichnis anzeigen foc2e/, () => title.click(), title);
   } finally {
-    rmSync(file, { force: true });
+    removeFile(file);
   }
 });
 
@@ -156,8 +157,8 @@ async function withPlan(slug: string, run: () => Promise<void>): Promise<void> {
   try {
     await run();
   } finally {
-    rmSync(plan, { force: true });
-    rmSync(member, { force: true });
+    removeFile(plan);
+    removeFile(member);
   }
 }
 
@@ -240,7 +241,7 @@ async function withBoardTasks(run: (page: Page) => Promise<void>, page: Page): P
     await expect(page.getByRole('group', { name: 'Board' })).toBeVisible();
     await run(page);
   } finally {
-    for (const [file] of files) rmSync(file, { force: true });
+    for (const [file] of files) removeFile(file);
   }
 }
 

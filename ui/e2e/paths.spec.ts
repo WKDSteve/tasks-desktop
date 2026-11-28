@@ -1,9 +1,10 @@
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Page } from '@playwright/test';
 import { expect, isMachineFault, test } from './fixtures';
 import { expectAccessible, violations, watchViolations } from './a11y';
 import { STATE } from './global';
+import { removeFile } from './hub';
 
 // The view of the learning paths (`PathsView`) against the real hub and the real engine: the tree with its folding by
 // keyboard, a point ticked by a finger, seen with its reason from the menu, a note, and a point promoted to a task the
@@ -132,11 +133,11 @@ test('a learning path: fold by keyboard, tick by finger, seen with a reason, a n
     expect(problems).toEqual([]);
     expect(await violations(page)).toEqual([]);
   } finally {
-    rmSync(file, { force: true });
+    removeFile(file);
     // The promoted task: the fixture clears ROADMAP/tasks as well, this is for a run that stops here.
     if (made) {
       const task = join(state().vault, made.split('/')[0]!, 'ROADMAP', 'tasks', `${made.split('/')[1]}.md`);
-      if (existsSync(task)) rmSync(task, { force: true });
+      if (existsSync(task)) removeFile(task);
     }
   }
 });
@@ -195,7 +196,7 @@ test('ticking down a list by keyboard: the mark keeps the focus, no tick runs in
     expect(problems).toEqual([]);
     expect(await violations(page)).toEqual([]);
   } finally {
-    rmSync(file, { force: true });
+    removeFile(file);
   }
 });
 
@@ -216,7 +217,7 @@ test('a path whose text starts with its learning points has no summary line (no 
     await expect(page.locator('.path p.summary')).toHaveCount(0);
     expect(problems).toEqual([]);
   } finally {
-    rmSync(file, { force: true });
+    removeFile(file);
   }
 });
 
@@ -279,7 +280,7 @@ test('XP and levels: a level reached is said once with its reward, granted on di
     expect(problems).toEqual([]);
     expect(await violations(page)).toEqual([]);
   } finally {
-    rmSync(file, { force: true });
+    removeFile(file);
   }
 });
 
@@ -365,7 +366,7 @@ test('levels set in a form: written into ## Level with a badge, refused when the
     expect(problems).toEqual([]);
     expect(await violations(page)).toEqual([]);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
-    rmSync(taskFile, { force: true });
+    removeFile(dir);
+    removeFile(taskFile);
   }
 });

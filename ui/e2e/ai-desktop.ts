@@ -1,8 +1,9 @@
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import type { IncomingHttpHeaders } from 'node:http';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { join } from 'node:path';
+import { removeTree } from '../web/tmp.mjs';
 
 /**
  * ai-desktop as a double for the hub of the run: its `hub.json` and `control.secret` in the config folder the hub is
@@ -35,7 +36,7 @@ export async function aiDesktopDoubleIn(config: string, jobs: (body: Record<stri
     secret,
     seen,
     close: async () => {
-      rmSync(dir, { recursive: true, force: true });
+      removeTree(dir);
       await new Promise<void>((done) => server.close(() => done()));
     },
   };

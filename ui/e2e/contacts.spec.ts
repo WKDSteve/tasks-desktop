@@ -1,10 +1,11 @@
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Page } from '@playwright/test';
 import { expect, isMachineFault, test } from './fixtures';
 import { expectAccessible, watchViolations } from './a11y';
 import { STATE } from './global';
 import { menuTab } from './menu';
+import { removeFile } from './hub';
 
 // The contacts against the real hub and engine: the view in the tab Office with its search and filters, the page with
 // its links, the form (a dry run, Esc that does not throw a changed form away), the change and the delete with their way
@@ -21,8 +22,8 @@ const PHONE = '+43 1 5550199';
 
 test.afterEach(() => {
   for (const slug of ['e2e-rick', 'e2e-anna', 'e2e-made', 'e2e-conflict']) {
-    rmSync(join(dir(), `${slug}.md`), { force: true });
-    rmSync(join(dir(), slug), { force: true, recursive: true });
+    removeFile(join(dir(), `${slug}.md`));
+    removeFile(join(dir(), slug));
   }
 });
 

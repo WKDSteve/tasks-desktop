@@ -1,9 +1,10 @@
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import type { Page } from '@playwright/test';
 import { expect, isMachineFault, test } from './fixtures';
 import { expectAccessible, violations, watchViolations } from './a11y';
 import { STATE } from './global';
+import { removeFile } from './hub';
 
 // The competence map of the learning paths (`PathMapView`) against the real hub and the real engine (capability
 // `requires`): a finished path in the Backlog as the root of a chain, two projects where one needs the other (hard),
@@ -144,6 +145,6 @@ test('the competence map: stages, frames, a chain, a circle and a ghost from the
     expect(problems).toEqual([]);
     expect(await violations(page)).toEqual([]);
   } finally {
-    for (const file of made) rmSync(file, { force: true });
+    for (const file of made) removeFile(file);
   }
 });

@@ -1,9 +1,10 @@
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Page } from '@playwright/test';
 import { expect, isMachineFault, test } from './fixtures';
 import { expectAccessible, violations, watchViolations } from './a11y';
 import { STATE } from './global';
+import { removeFile } from './hub';
 
 // The meetings in the calendar against the real hub and the real engine: the month shows a meeting as a chip, the
 // week is the hour grid (a block, the line of now, the bar above), the keys move a meeting and change its length, the
@@ -90,7 +91,7 @@ test('a meeting in the calendar: a chip in the month, a block in the week, moved
     expect(await violations(page)).toEqual([]);
     expect(problems).toEqual([]);
   } finally {
-    if (existsSync(file)) rmSync(file, { force: true });
+    if (existsSync(file)) removeFile(file);
   }
 });
 
@@ -125,6 +126,6 @@ test('a meeting moved in the hour grid comes back with Undo on the toast: its be
     await expect(grid.locator(`.block[data-meeting="${id}"]`)).toHaveCSS('top', `${780 * 0.8}px`, { timeout: WRITE_BUDGET });
     expect(problems).toEqual([]);
   } finally {
-    if (existsSync(file)) rmSync(file, { force: true });
+    if (existsSync(file)) removeFile(file);
   }
 });

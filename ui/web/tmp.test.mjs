@@ -313,3 +313,17 @@ test('no test or helper of ui/ makes a temp folder of its own', () => {
   assert.deepEqual(found, [], 'get temp folders from web/tmp.mjs (testDir, tempDir, tempRoot)');
   assert.ok(files.length > 10, 'the walk found the sources');
 });
+
+// A file of the vault a browser test made is held for a moment by the hub's watcher, the engine or a virus scanner;
+// on Windows `rmSync` then fails with EPERM/EBUSY and the cleanup in `finally` turns the test red (CI runs 44206088634,
+// 44871035300). The browser tests remove with `removeFile` (e2e/hub.ts) or `removeTree`, which try again.
+test('no browser test removes a file with a bare rmSync', () => {
+  const e2e = resolve(here, '..', 'e2e');
+  const names = readdirSync(e2e).filter((name) => name.endsWith('.ts'));
+  // vault-share.ts: files of its own registry outside the vault, which nobody watches; port.ts: old result folders,
+  // where one that cannot go now stays for the next run on purpose.
+  const ALLOWED = new Set(['vault-share.ts', 'port.ts']);
+  const found = names.filter((name) => !ALLOWED.has(name) && /\brmSync\(/.test(readFileSync(join(e2e, name), 'utf8')));
+  assert.deepEqual(found, [], 'remove with removeFile (e2e/hub.ts) or removeTree (web/tmp.mjs): they try again while the file is held');
+  assert.ok(names.length > 10, 'the walk found the browser tests');
+});

@@ -2,12 +2,13 @@
 // says what is missing at the field (`aria-invalid`, `aria-describedby`, a text beside it) and puts the focus on the first
 // field that is wrong. The button is not locked for an empty field. The first form of the kind is in `form-errors.spec.ts`.
 
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Locator, Page } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { STATE } from './global';
 import { chooseFromMenu, menuTab } from './menu';
+import { removeFile } from './hub';
 
 test.use({ locale: 'en-US', viewport: { width: 1100, height: 800 } });
 
@@ -120,7 +121,7 @@ test('A meeting: a document sent without text says so at the field, with the foc
     await text.fill('https://example.org/doc');
     await expect(text).not.toHaveAttribute('aria-invalid', 'true');
   } finally {
-    rmSync(file, { force: true });
-    rmSync(join(meetings, slug), { force: true, recursive: true });
+    removeFile(file);
+    removeFile(join(meetings, slug));
   }
 });

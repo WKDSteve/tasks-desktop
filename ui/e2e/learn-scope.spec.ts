@@ -1,9 +1,10 @@
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import type { Page } from '@playwright/test';
 import { expect, isMachineFault, test } from './fixtures';
 import { expectAccessible, watchViolations } from './a11y';
 import { STATE } from './global';
+import { removeFile } from './hub';
 
 // The views of the tab Lernpläne follow the area filter of the page (lib/learnScope.ts) against the real hub and the
 // real engine: the notes are asked for the area of the filter (`area`), an area without notes leaves the view a note
@@ -82,6 +83,6 @@ test('notes and sources follow the area filter: asked for its area, an empty one
     expect(await page.evaluate(() => JSON.parse(localStorage.getItem('tasks-desktop.filter') ?? '{}').areas)).toEqual([]);
     expect(problems).toEqual([]);
   } finally {
-    rmSync(file, { force: true });
+    removeFile(file);
   }
 });

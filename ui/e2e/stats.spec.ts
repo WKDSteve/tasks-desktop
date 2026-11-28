@@ -1,9 +1,10 @@
-import { readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Locator, Page } from '@playwright/test';
 import { expect, isMachineFault, test } from './fixtures';
 import { expectAccessible, violations, watchViolations } from './a11y';
 import { STATE } from './global';
+import { removeFile } from './hub';
 
 // The statistics view (`StatsView`): what the pointer and the keyboard do in it. The counting itself and the way from a
 // number into the list are in app.spec.ts ("the statistics count the open tasks per area ...").
@@ -166,7 +167,7 @@ Counted in both of its tags.
   expect(problems).toEqual([]);
   // Take the task away and wait until the hub no longer lists it: the next test would otherwise get a snapshot with a
   // task that is gone, and the page would ask the engine about it (400).
-  rmSync(file);
+  removeFile(file);
   await expect
     .poll(
       async () => {

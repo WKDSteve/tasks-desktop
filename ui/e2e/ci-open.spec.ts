@@ -1,9 +1,10 @@
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Page } from '@playwright/test';
 import { expect, isMachineFault, test } from './fixtures';
 import { expectAccessible, watchViolations } from './a11y';
 import { STATE } from './global';
+import { removeFile } from './hub';
 
 // Finished, but the CI of the commits is open or red (`ci: pending|red`): the overview names how many (the engine
 // counts them, capability `finished_ci`), jumps to them in Done, and the details show the state beside the commits.
@@ -80,7 +81,7 @@ test('finished tasks whose CI is open or red: counted in the overview, listed in
       expect(problems).toEqual([]);
     }
   } finally {
-    for (const [path] of files) rmSync(path, { force: true });
+    for (const [path] of files) removeFile(path);
   }
 });
 
@@ -106,7 +107,7 @@ test('a CI state set in the Backlog beside the hub lowers the count of the overv
     await expect(open).toHaveText('Finished, CI open or red: 1');
     expect(problems).toEqual([]);
   } finally {
-    rmSync(pending, { force: true });
-    rmSync(red, { force: true });
+    removeFile(pending);
+    removeFile(red);
   }
 });

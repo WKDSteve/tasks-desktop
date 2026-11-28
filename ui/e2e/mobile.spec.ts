@@ -1,9 +1,9 @@
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { devices } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { STATE } from './global';
-import { devicesCommand, origin, pairingLink } from './hub';
+import { devicesCommand, origin, pairingLink, removeFile } from './hub';
 
 // The phone page (tasks-mobile, mobile.lock) as this hub serves it under /m/: the real binary, the real engine, the
 // vault of the tests, with the screen and touch of a phone. The page itself is tested in tasks-mobile on a synthetic
@@ -202,10 +202,10 @@ test('the phone page names a coming meeting of an internal area without its addr
     await expect(page.getByTestId('queue')).toHaveCount(0);
     expect(problems).toEqual([]);
   } finally {
-    rmSync(join(dir, slug), { recursive: true, force: true });
-    rmSync(file, { force: true });
-    rmSync(join(pubDir, pubSlug), { recursive: true, force: true });
-    rmSync(pubFile, { force: true });
+    removeFile(join(dir, slug));
+    removeFile(file);
+    removeFile(join(pubDir, pubSlug));
+    removeFile(pubFile);
   }
 });
 
@@ -295,7 +295,7 @@ test('the phone page learns an exercise point with its result, which the engine 
     expect(written).toContain('> **Ergebnis:** total 0 m001');
     expect(problems).toEqual([]);
   } finally {
-    rmSync(file, { force: true });
+    removeFile(file);
   }
 });
 
@@ -370,10 +370,10 @@ repeat_after: lib.nvim/${stem}-cause
     expect(readFileSync(waiting, 'utf8')).toMatch(new RegExp(`^due: ${day(14)}$`, 'm'));
     expect(problems).toEqual([]);
   } finally {
-    for (const f of [cause, last, waiting]) rmSync(f, { force: true });
+    for (const f of [cause, last, waiting]) removeFile(f);
     // The finished cause lies in the Backlog under a dated name: only that file goes.
     const backlog = join(vault, 'lib.nvim', 'Backlog', 'TASKS');
-    if (existsSync(backlog)) for (const f of readdirSync(backlog)) if (f.endsWith(`_${stem}-cause.md`)) rmSync(join(backlog, f), { force: true });
+    if (existsSync(backlog)) for (const f of readdirSync(backlog)) if (f.endsWith(`_${stem}-cause.md`)) removeFile(join(backlog, f));
   }
 });
 

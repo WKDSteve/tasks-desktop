@@ -153,6 +153,10 @@ pnpm web:build && PLAYWRIGHT_BROWSERS_PATH="$PWD/node_modules/.cache/ms-playwrig
   oder per Taste.
 - Ein Route-Handler, der vor `route.continue()` wartet, fängt dessen Fehler (`.catch(() => undefined)`): eine Anfrage,
   die beim Ende des Tests noch gehalten wird, wirft sonst „Route is already handled!“ und macht den Test rot.
+- Was ein Browsertest anlegt, räumt er mit `removeFile` (`ui/e2e/hub.ts`) oder `removeTree` weg, nie mit `rmSync`:
+  Watcher, Engine oder Virenscanner halten eine Datei kurz, `rmSync` scheitert dann mit `EPERM` (Wächter in
+  `ui/web/tmp.test.mjs`). Logs der Attrappen (`editor.log`, `docmap.log`) nur über `logLines` (`ui/e2e/lines.ts`) lesen:
+  eine halb geschriebene Zeile zählt erst beim nächsten Blick.
 - Die Tests teilen einen Vault: Titel und Dateinamen müssen eindeutig sein (ein
   Suchbegriff darf keinen Task eines anderen Tests treffen).
 - `keyboard.press('F')` sendet kein Shift: Umschalt+f ist `press('Shift+f')`.

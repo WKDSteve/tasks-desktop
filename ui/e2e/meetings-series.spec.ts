@@ -1,9 +1,10 @@
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Page } from '@playwright/test';
 import { expect, isMachineFault, test } from './fixtures';
 import { expectAccessible, violations, watchViolations } from './a11y';
 import { STATE } from './global';
+import { removeFile } from './hub';
 
 // A series of meetings against the real hub and the real engine (capability `meeting_series`): the calendar shows its
 // occurrences (a sign, the one without a file dotted), the page of an occurrence names its day and its series, and the
@@ -98,7 +99,7 @@ test('a series in the calendar: its occurrences marked, the first entry into one
     expect(await violations(page)).toEqual([]);
     expect(problems).toEqual([]);
   } finally {
-    for (const file of [seriesFile, occurrenceFile]) if (existsSync(file)) rmSync(file, { force: true });
+    for (const file of [seriesFile, occurrenceFile]) if (existsSync(file)) removeFile(file);
   }
 });
 
@@ -134,7 +135,7 @@ test('an occurrence without a file moved in the hour grid gets its file at the n
     await expect(block).toHaveCSS('top', `${615 * 0.8}px`);
     expect(problems).toEqual([]);
   } finally {
-    for (const file of [s.seriesFile, s.occurrenceFile]) if (existsSync(file)) rmSync(file, { force: true });
+    for (const file of [s.seriesFile, s.occurrenceFile]) if (existsSync(file)) removeFile(file);
   }
 });
 
@@ -159,6 +160,6 @@ test('the day of an occurrence without a file is skipped as an exception of its 
     // page handles it (it closes, the chip goes, both checked above); the 404 itself is the noise of the deleted file.
     expect(problems.filter((p) => !p.includes('404'))).toEqual([]);
   } finally {
-    for (const file of [s.seriesFile, s.occurrenceFile]) if (existsSync(file)) rmSync(file, { force: true });
+    for (const file of [s.seriesFile, s.occurrenceFile]) if (existsSync(file)) removeFile(file);
   }
 });

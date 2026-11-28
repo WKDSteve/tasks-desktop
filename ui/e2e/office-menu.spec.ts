@@ -1,10 +1,11 @@
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Page } from '@playwright/test';
 import { expect, isMachineFault, test } from './fixtures';
 import { expectAccessible, watchViolations } from './a11y';
 import { STATE } from './global';
 import { menuTab } from './menu';
+import { removeFile } from './hub';
 
 // The tab Office of the menu bar against the real hub and engine: Dates (Meetings, Calendar, Timeline), Remind
 // (Reminders) and Create (New meeting), the views gone from View, the list of the meetings and its filters.
@@ -100,6 +101,6 @@ A meeting of one browser test.
     await expect(page.getByRole('dialog')).toBeVisible();
     expect(problems).toEqual([]);
   } finally {
-    for (const [slug] of files) rmSync(join(dir, `${slug}.md`), { force: true });
+    for (const [slug] of files) removeFile(join(dir, `${slug}.md`));
   }
 });

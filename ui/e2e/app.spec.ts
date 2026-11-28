@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import AxeBuilder from '@axe-core/playwright';
@@ -2522,7 +2522,7 @@ test('the tile Today counts only the tasks the filter of the list keeps: finishe
     await expect(card.locator('[data-filtered]')).toHaveCount(0);
     await expect.poll(async () => Number((await figure('finished').textContent())?.trim())).toBeGreaterThanOrEqual(2);
   } finally {
-    for (const [path] of files) rmSync(path, { force: true });
+    for (const [path] of files) removeFile(path);
   }
 });
 
@@ -2582,7 +2582,7 @@ test('a number of the tile Today opens the tasks it counts in a float; the title
     await expect(float).toBeHidden();
     await expect(page.locator('button.row')).toHaveText([/Dailylist o001/]);
   } finally {
-    for (const [path] of files) rmSync(path, { force: true });
+    for (const [path] of files) removeFile(path);
   }
 });
 
@@ -2615,7 +2615,7 @@ test('the float of the tile Today lists a task finished twice once per file, and
     await expect(float).toBeHidden();
     expect(errors).toEqual([]);
   } finally {
-    for (const [path] of files) rmSync(path, { force: true });
+    for (const [path] of files) removeFile(path);
   }
 });
 
@@ -2662,7 +2662,7 @@ test('the capture dialog writes after, plan, phase, due and start into the file'
 
   // The task lies in the plan that connects two areas: left in the shared vault it adds a link and the counts of the
   // connections tests are off by one. Its file is taken away again (the hub reads the folder anew).
-  rmSync(join(dir, file!));
+  removeFile(join(dir, file!));
 });
 
 test('a routine: the detail sets its interval and rhythm, finishing it names the next round, and Next task says it is later', async ({ page }) => {
@@ -2719,8 +2719,8 @@ test('a routine: the detail sets its interval and rhythm, finishing it names the
   } finally {
     // The next round would be offered by Next task to the other tests a week from now; the finished round stays in
     // the backlog like any other finished task of the tests.
-    rmSync(round, { force: true });
-    rmSync(join(dir, file!), { force: true });
+    removeFile(round);
+    removeFile(join(dir, file!));
   }
 });
 
@@ -2820,8 +2820,8 @@ test('a routine: its detail lists the finished rounds, and discarding it asks fi
     await expect.poll(() => readFileSync(current, 'utf8')).toContain('Discarded: no longer needed');
     expect(consoleProblems.get(page)).toEqual([]);
   } finally {
-    rmSync(current, { force: true });
-    rmSync(finished, { force: true });
+    removeFile(current);
+    removeFile(finished);
   }
 });
 
@@ -2892,9 +2892,9 @@ test('a ladder that waits for a finish: the detail names it and its round, the f
     await expect(done).toHaveCount(0);
     expect(consoleProblems.get(page)).toEqual([]);
   } finally {
-    rmSync(cause, { force: true });
-    rmSync(ladder, { force: true });
-    rmSync(finishedCause, { force: true });
+    removeFile(cause);
+    removeFile(ladder);
+    removeFile(finishedCause);
   }
 });
 
@@ -5843,7 +5843,7 @@ test('a task past its due date is marked on its board card and found by the over
   expect(await violations(page)).toEqual([]);
 
   // the task lies in the shared vault: taken away again
-  rmSync(join(dir, fileOf()!));
+  removeFile(join(dir, fileOf()!));
 });
 
 test('a step is ticked in the detail, the file changes when the engine wrote it, and undo takes it back', async ({ page }) => {
@@ -6295,7 +6295,7 @@ test('another vault is chosen: the page loads again and shows its tasks, and the
   await pair(page);
   await showList(page);
   const second = join(state().vault, '..', 'second-vault');
-  rmSync(second, { recursive: true, force: true });
+  removeFile(second);
   const tasks = join(second, 'solo.nvim', 'ROADMAP', 'tasks');
   mkdirSync(tasks, { recursive: true });
   writeFileSync(
@@ -7183,7 +7183,7 @@ test('the open questions of a task are shown with their options and answered wit
   await write(page, () => second.getByRole('button', { name: /Yes/ }).click());
   await expect.poll(() => readFileSync(file, 'utf8'), { timeout: WRITE_BUDGET }).toContain('### Written without a key [q2]');
   expect(readFileSync(file, 'utf8')).toContain('- [x] Yes');
-  rmSync(file, { force: true });
+  removeFile(file);
 });
 
 test('the context menu of a task changes its status and priority and shows it in the list; a view has its own entries', async ({ page }) => {
@@ -7231,7 +7231,7 @@ test('the context menu of a task changes its status and priority and shows it in
   // Where nobody offers anything the browser's menu stays: nothing opens on the bar.
   await page.getByRole('menubar').click({ button: 'right', position: { x: 2, y: 2 } });
   await expect(menu).toHaveCount(0);
-  rmSync(file, { force: true });
+  removeFile(file);
 });
 
 test('menus: every entry of every menu of the bar explains itself with a hint', async ({ page }) => {
@@ -8889,7 +8889,7 @@ test('the context menu copies a task, the marked ones it is opened on, and the t
   expect(lines[0]).toContain('id');
   expect(lines.length - 1).toBe(shown);
   expect(got[2]).toContain('lib.nvim/ctxcopy-r001-task');
-  for (const id of ['ctxcopy-r001-task', 'ctxcopy-r002-task']) rmSync(join(state().vault, 'lib.nvim', 'ROADMAP', 'tasks', `${id}.md`), { force: true });
+  for (const id of ['ctxcopy-r001-task', 'ctxcopy-r002-task']) removeFile(join(state().vault, 'lib.nvim', 'ROADMAP', 'tasks', `${id}.md`));
   expect(consoleProblems.get(page)).toEqual([]);
 });
 
@@ -9268,12 +9268,12 @@ test('an agent that claims a task and finishes it is seen: the mark, the job in 
     expect(consoleProblems.get(page)).toEqual([]);
   } finally {
     await ai.close();
-    rmSync(file, { force: true });
-    rmSync(join(vault, '.claims', 'nvim-config', `${slug}.json`), { force: true });
+    removeFile(file);
+    removeFile(join(vault, '.claims', 'nvim-config', `${slug}.json`));
     for (const kind of ['TASKS', 'FEATURES', 'BUGS']) {
       const dir = join(vault, 'nvim-config', 'Backlog', kind);
       if (!existsSync(dir)) continue;
-      for (const name of readdirSync(dir)) if (name.endsWith(`_${slug}.md`)) rmSync(join(dir, name), { force: true });
+      for (const name of readdirSync(dir)) if (name.endsWith(`_${slug}.md`)) removeFile(join(dir, name));
     }
     await page.evaluate(() => localStorage.removeItem('tasks-desktop.filter'));
   }
@@ -9481,9 +9481,9 @@ test('"Split into tasks": the plan and its tasks go to ai-desktop, only the tick
     await expect(dialog).toHaveCount(0);
   } finally {
     await ai.close();
-    for (const f of made()) rmSync(join(tasksDir, f), { force: true });
-    rmSync(member, { force: true });
-    rmSync(planFile, { force: true });
+    for (const f of made()) removeFile(join(tasksDir, f));
+    removeFile(member);
+    removeFile(planFile);
   }
 });
 
@@ -9612,7 +9612,7 @@ test('a finished task is checked against its acceptance: the review comes back a
   } finally {
     await ai.close();
     writeFileSync(file, original);
-    rmSync(join(state().vault, 'lib.nvim', 'ROADMAP', 'tasks', 'test-the-fix.md'), { force: true });
+    removeFile(join(state().vault, 'lib.nvim', 'ROADMAP', 'tasks', 'test-the-fix.md'));
   }
 });
 
@@ -10013,14 +10013,14 @@ test('a project: its page with goal, rollup, own tasks and the plans by stage, t
     expect(await violations(page)).toEqual([]);
     expect(consoleProblems.get(page) ?? []).toEqual([]);
   } finally {
-    for (const [path] of files) rmSync(path, { force: true });
+    for (const [path] of files) removeFile(path);
     if (existsSync(finishedDir)) {
       for (const name of readdirSync(finishedDir)) {
-        if (name.endsWith('_e2e-projplan-b001.md')) rmSync(join(finishedDir, name), { force: true });
+        if (name.endsWith('_e2e-projplan-b001.md')) removeFile(join(finishedDir, name));
       }
     }
     for (const [path, text] of kept) {
-      if (text === null) rmSync(path, { force: true });
+      if (text === null) removeFile(path);
       else writeFileSync(path, text);
     }
   }
@@ -10075,14 +10075,14 @@ test('the plan view finishes the chosen plan by hand, also one in no project; an
     expect(readdirSync(finishedDir).some((name) => name.endsWith('_e2e-loneplan-e001.md'))).toBe(true);
     expect(consoleProblems.get(page) ?? []).toEqual([]);
   } finally {
-    for (const [path] of files) rmSync(path, { force: true });
+    for (const [path] of files) removeFile(path);
     if (existsSync(finishedDir)) {
       for (const name of readdirSync(finishedDir)) {
-        if (name.endsWith('_e2e-loneplan-e001.md')) rmSync(join(finishedDir, name), { force: true });
+        if (name.endsWith('_e2e-loneplan-e001.md')) removeFile(join(finishedDir, name));
       }
     }
     for (const [path, text] of kept) {
-      if (text === null) rmSync(path, { force: true });
+      if (text === null) removeFile(path);
       else writeFileSync(path, text);
     }
   }
@@ -10204,7 +10204,7 @@ test('the plan view compares the open plans: the engine\'s figures, sorted by a 
     await expect(page.getByRole('group', { name: 'Show the plan as' }).getByRole('button', { name: 'Stages' })).toHaveAttribute('aria-pressed', 'true');
     expect(consoleProblems.get(page) ?? []).toEqual([]);
   } finally {
-    for (const [path] of files) rmSync(path, { force: true });
+    for (const [path] of files) removeFile(path);
     await page.evaluate(() => {
       localStorage.removeItem('tasks-desktop.plan-display');
       localStorage.removeItem('tasks-desktop.compare-sort');
@@ -10266,7 +10266,7 @@ test('a claimed task carries a mark in the list, the board and the detail, and t
     await expect(page.getByTestId('detail-claim')).toContainText('cdx:e2eother until 2099-01-01T00:00:00Z');
     expect(consoleProblems.get(page) ?? []).toEqual([]);
   } finally {
-    for (const [path] of files) rmSync(path, { force: true });
+    for (const [path] of files) removeFile(path);
     await page.evaluate(() => {
       localStorage.removeItem('tasks-desktop.claim-name');
       localStorage.removeItem('tasks-desktop.filter');
@@ -10308,7 +10308,7 @@ test('a view grouped by project: a task stands in the project of its plan or in 
     await expect(group).toContainText('Projown o002');
     await expectAccessible(page, 'a view grouped by project');
   } finally {
-    for (const [path] of files) rmSync(path, { force: true });
+    for (const [path] of files) removeFile(path);
   }
 });
 
@@ -10356,7 +10356,7 @@ test('a reason parks a task, the overview counts it by reason, and Bring all bac
     await expect(line).toHaveCount(0);
   } finally {
     // Left in the shared vault it would be one more open task of lib.nvim in the counts of other tests.
-    rmSync(file, { force: true });
+    removeFile(file);
   }
 });
 
@@ -10481,7 +10481,7 @@ test('repo tiles: groups and tiles are made, an image or a letter, moved with th
 
     // The menu of a tile opens its folder on the machine of the hub (the test writes down what would be opened).
     const log = join(state().config, '..', 'editor.log');
-    rmSync(log, { force: true });
+    removeFile(log);
     await tab.getByRole('button', { name: `Menu of plain-${tag}` }).click();
     await tab.getByRole('button', { name: 'Open the folder' }).click();
     await expect.poll(() => logLines(log).join('\n')).toContain(`plain-${tag}`);
@@ -10505,8 +10505,8 @@ test('repo tiles: groups and tiles are made, an image or a letter, moved with th
     // The one refusal above (the folder that is no folder) is a 400 the browser reports; nothing else.
     expect((consoleProblems.get(page) ?? []).filter((m) => !m.includes('status of 400'))).toEqual([]);
   } finally {
-    rmSync(root, { recursive: true, force: true });
-    rmSync(below, { recursive: true, force: true });
+    removeFile(root);
+    removeFile(below);
   }
 });
 
@@ -10551,7 +10551,7 @@ test('repo status: a tile has a row with its checkout, read again by the button;
     expect(await violations(page)).toEqual([]);
     expect(consoleProblems.get(page)).toEqual([]);
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    removeFile(root);
   }
 });
 
@@ -11604,9 +11604,9 @@ test('the minutes of a meeting: every kind of entry, a line turned into a decisi
     expect(await violations(page)).toEqual([]);
     expect(consoleProblems.get(page)).toEqual([]);
   } finally {
-    rmSync(join(meetings, slug), { recursive: true, force: true });
-    rmSync(file, { force: true });
-    for (const f of readdirSync(meetings)) if (!before.has(f)) rmSync(join(meetings, f), { recursive: true, force: true });
+    removeFile(join(meetings, slug));
+    removeFile(file);
+    for (const f of readdirSync(meetings)) if (!before.has(f)) removeFile(join(meetings, f));
   }
 });
 
@@ -11683,9 +11683,9 @@ test('the whiteboard of a meeting: drawn with a pen, a finger ignored, saved as 
     expect(await violations(page)).toEqual([]);
     expect(consoleProblems.get(page)).toEqual([]);
   } finally {
-    rmSync(join(meetings, slug), { recursive: true, force: true });
-    rmSync(file, { force: true });
-    for (const f of readdirSync(meetings)) if (!before.has(f)) rmSync(join(meetings, f), { recursive: true, force: true });
+    removeFile(join(meetings, slug));
+    removeFile(file);
+    for (const f of readdirSync(meetings)) if (!before.has(f)) removeFile(join(meetings, f));
   }
 });
 

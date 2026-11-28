@@ -1,9 +1,10 @@
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Page } from '@playwright/test';
 import { expect, isMachineFault, test } from './fixtures';
 import { expectAccessible, violations, watchViolations } from './a11y';
 import { STATE } from './global';
+import { removeFile } from './hub';
 
 // The images below `assets/` of a task and of a learning path against the real hub and the real engine (concept
 // "Lernplan" 11.3, E12): drawn as `<img>` from the page's own `blob:` addresses, a missing one as a line, larger on a
@@ -124,7 +125,7 @@ Foreign: ![Tracker](https://tracker.example/pixel.png)
     expect(await violations(page)).toEqual([]);
     expect(problems.filter((p) => !p.includes('404'))).toEqual([]);
   } finally {
-    rmSync(folder, { recursive: true, force: true });
+    removeFile(folder);
   }
 });
 
@@ -175,7 +176,7 @@ A path with pictures.
     expect(await violations(page)).toEqual([]);
     expect(problems.filter((p) => !p.includes('404'))).toEqual([]);
   } finally {
-    rmSync(folder, { recursive: true, force: true });
+    removeFile(folder);
   }
 });
 
@@ -245,6 +246,6 @@ A meeting of one browser test.
     expect(await violations(page)).toEqual([]);
     expect(problems.filter((p) => !p.includes('404'))).toEqual([]);
   } finally {
-    rmSync(folder, { recursive: true, force: true });
+    removeFile(folder);
   }
 });

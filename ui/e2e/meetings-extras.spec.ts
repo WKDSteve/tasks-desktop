@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Page } from '@playwright/test';
 import { expect, isMachineFault, test } from './fixtures';
@@ -6,6 +6,7 @@ import { expectAccessible, violations, watchViolations } from './a11y';
 import { STATE } from './global';
 import { localWall } from '../src/lib/zones';
 import { addDays, startOfWeek } from '../src/lib/calendar';
+import { removeFile } from './hub';
 
 // The extras of meetings against the real hub and the real engine (concept 4.4, 7.3): the agenda takes the chosen
 // proposals of the meeting's open tasks and questions (`agenda_proposals`, written with `add_steps`); the form names a
@@ -88,7 +89,7 @@ test('the agenda takes the chosen proposals of the open tasks and their question
     expect(await violations(page)).toEqual([]);
     expect(problems).toEqual([]);
   } finally {
-    for (const file of [taskFile, meetingFile]) if (existsSync(file)) rmSync(file, { force: true });
+    for (const file of [taskFile, meetingFile]) if (existsSync(file)) removeFile(file);
   }
 });
 
@@ -129,7 +130,7 @@ test.describe('a meeting of another zone', () => {
         expect(readFileSync(file, 'utf8')).toMatch(/tz: "?America\/New_York/);
         expect(problems).toEqual([]);
       } finally {
-        if (existsSync(file)) rmSync(file, { force: true });
+        if (existsSync(file)) removeFile(file);
       }
     });
   }
@@ -173,8 +174,8 @@ test('the form names a meeting at the same time, and makes the meeting with its 
     expect(await violations(page)).toEqual([]);
     expect(problems).toEqual([]);
   } finally {
-    for (const file of [busyFile, madeFile, prepFile]) if (existsSync(file)) rmSync(file, { force: true });
+    for (const file of [busyFile, madeFile, prepFile]) if (existsSync(file)) removeFile(file);
     // a folder the meeting may have got (attachments): nothing of this test is left
-    for (const name of readdirSync(dir)) if (name.startsWith('ext-e2e-m03')) rmSync(join(dir, name), { recursive: true, force: true });
+    for (const name of readdirSync(dir)) if (name.startsWith('ext-e2e-m03')) removeFile(join(dir, name));
   }
 });

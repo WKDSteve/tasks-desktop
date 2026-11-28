@@ -1,9 +1,10 @@
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import type { Page } from '@playwright/test';
 import { expect, isMachineFault, test } from './fixtures';
 import { expectAccessible, violations, watchViolations } from './a11y';
 import { STATE } from './global';
+import { removeFile } from './hub';
 
 // The badges and the rewards of all learning paths (`BadgesView`, `RewardsView`) against the real hub and the real engine
 // (`tasks.paths` with `levels`, capability `paths_levels`; `path_reward`): a path halfway with two levels in percent, one
@@ -115,7 +116,7 @@ test('the badges: earned and open from the engine, the ring of the next one, the
     expect(problems).toEqual([]);
     expect(await violations(page)).toEqual([]);
   } finally {
-    rmSync(folderOf(made), { recursive: true, force: true });
+    removeFile(folderOf(made));
   }
 });
 
@@ -161,6 +162,6 @@ test('the rewards: open, granted and coming; Granted writes the mark into the fi
     expect(problems).toEqual([]);
     expect(await violations(page)).toEqual([]);
   } finally {
-    rmSync(folderOf(made), { recursive: true, force: true });
+    removeFile(folderOf(made));
   }
 });
