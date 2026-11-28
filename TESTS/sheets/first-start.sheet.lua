@@ -53,7 +53,7 @@ return {
       note = "and Neovim is still the step",
     },
     {
-      click = "section[aria-labelledby=setup-install] button:not(:last-child)",
+      click = "section[aria-labelledby=setup-install] .row button:first-child",
       note = "install (the seam writes the command to a log instead of running it)",
     },
     {

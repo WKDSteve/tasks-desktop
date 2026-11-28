@@ -8,6 +8,11 @@
 
 local TRIGGER = "button.mb-trigger[data-for=learn]"
 local POPUP = "[role=menu][data-menu=learn]"
+-- The views of the tab (LEARN_SECTIONS of ui/src/lib/learnViews.ts); which of them the menu offers is the engine's
+-- (its capabilities) and the switch of gamification. These four need no capability of their own: always there.
+local TAB_VIEWS =
+  "['learn','learnnext','paths','pathmap','competences','learnstats','learntime','badges','rewards','evidence','learnnotes']"
+local ALWAYS = "['learn','paths','pathmap','learnstats']"
 
 return {
   id = "tasks.learn-tab",
@@ -52,13 +57,19 @@ return {
       note = "the learning paths, checked",
     },
     {
-      expect = "document.querySelectorAll('"
+      expect = "(() => { const ids = [...document.querySelectorAll('"
         .. POPUP
-        .. " [role=menuitemradio]').length === 6"
-        .. " && document.querySelector('"
+        .. " [role=menuitemradio]')].map((a) => new URLSearchParams((a.getAttribute('href') ?? '').replace(/^[^#]*#/, '')).get('view'));"
+        .. " return "
+        .. ALWAYS
+        .. ".every((v) => ids.includes(v)) && ids.every((v) => "
+        .. TAB_VIEWS
+        .. ".includes(v)) && document.querySelector('"
         .. POPUP
-        .. ' [href*="view=learnnotes"]\') === null',
-      note = "the six views the page has; one it does not have yet is missing, not greyed",
+        .. " [role=menuitemradio]:disabled, "
+        .. POPUP
+        .. " [aria-disabled=true]') === null; })()",
+      note = "the views the engine of the run allows: the four without a capability of their own, none of another tab, none greyed",
     },
     { shot = "tab-open" },
     { press = "Escape", note = "closed" },
@@ -70,27 +81,9 @@ return {
       note = "View has neither the learning paths nor the competence map any more",
     },
     { press = "Escape" },
-    {
-      expect = "(location.hash = '#view=learnnotes', location.reload(), true)",
-      note = "a link to a view of the tab that is not built yet (the page reloads with it)",
-    },
-    {
-      wait = "(document.querySelector('.toast')?.textContent ?? '').includes('learnnotes')",
-      timeout = 20000,
-      note = "a word says the view is not there yet",
-    },
-    {
-      expect = "document.querySelector('"
-        .. TRIGGER
-        .. " .mb-current') !== null"
-        .. " && location.hash.includes('view=paths')",
-      note = "and the page shows the learning paths",
-    },
-    { shot = "missing-view" },
   },
   judge = {
     "the dot before Learning plans reads as the mark of the view shown, as the dot of a checked item does",
     "the sections of the tab read as one menu with View and Options, in light and dark",
-    "the word about the missing view is readable and says where the page went",
   },
 }
