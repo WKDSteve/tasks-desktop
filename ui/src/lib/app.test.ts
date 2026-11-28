@@ -992,6 +992,30 @@ describe('App', () => {
     }
   });
 
+  it('asks for ai-desktop no more after stop(), also when two reads failed at once', async () => {
+    const { app, hub } = make({ token: 't' });
+    let asked = 0;
+    hub.aiDesktop = async () => {
+      asked += 1;
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      return null;
+    };
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      await app.start(null);
+      // The read of the start and the one of a focus are both on their way, and both fail: each plans a retry.
+      const both = Promise.all([app.loadEnums(), app.focused()]);
+      await vi.advanceTimersByTimeAsync(100);
+      await both;
+      const before = asked;
+      app.stop();
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(asked).toBe(before);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('keeps the switch "Show AI functions" in the browser: off wins over an ai-desktop that is found', async () => {
     const prefs = new Map<string, string>();
     const { app, hub } = make({ token: 't', prefs });

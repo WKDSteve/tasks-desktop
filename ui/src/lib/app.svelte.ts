@@ -4847,6 +4847,8 @@ export class App {
    */
   private async readAiDesktop(attempt = 0): Promise<void> {
     clearTimeout(this.#aiDesktopRetry);
+    // A retry of a second read that failed at the same time keeps no handle `stop()` could clear: it ends here.
+    if (attempt > 0 && this.stopped) return;
     const found = await this.env.hub.aiDesktop();
     if (found !== null) {
       this.aiDesktop = found;
