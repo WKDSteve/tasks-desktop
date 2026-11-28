@@ -202,8 +202,10 @@
     min-width: 0;
     display: grid;
     /* The title keeps a width of its own: the tags wrap before they push it to nothing. The id and the marks take
-       the widths the head of the list was dragged to (--col-id, --col-meta), else these defaults. */
-    grid-template-columns: var(--col-id, minmax(8rem, 14rem)) minmax(6rem, 1fr) var(--col-meta, auto);
+       the widths the head of the list was dragged to (--col-id, --col-meta), else these defaults. The marks have a
+       width of their own too (18rem where the row has room, down to the widest single tag where it has not), not the
+       width of what they hold: a mark that comes later (the links, `↔ n`) does not move the title. */
+    grid-template-columns: var(--col-id, minmax(8rem, 14rem)) minmax(6rem, 1fr) var(--col-meta, minmax(min-content, 18rem));
     gap: 0.75rem;
     align-items: baseline;
     width: 100%;
