@@ -149,6 +149,31 @@ describe('PathsView', () => {
     expect(m.app.pathPoint).toBeNull();
   });
 
+  it('focuses the asked point also when the path is read before the list of the paths (the tree waits for that list)', async () => {
+    Element.prototype.scrollIntoView = vi.fn();
+    const m = make({ token: 't' });
+    made = m;
+    m.hub.capabilities = null;
+    m.hub.doc = snapshot([task('lib/c-compiler', { status: 'doing' })], 'rev:1');
+    m.hub.pathsDoc = { kind: 'tasks.paths', rev: 'p1', digest: 'd', items: [ENTRY], incomplete: [] };
+    m.hub.pathDocs.set('lib/lua', doc());
+    // Under load the answer of the list came after the path's (seen in e2e/learn-steps.spec.ts, "Enter opens the point").
+    let listGo!: () => void;
+    m.hub.pathsGates.push(new Promise<void>((resolve) => (listGo = resolve)));
+    await m.app.start(null);
+    m.app.openPath('lib/lua', 'meta');
+    const page = document.createElement('div');
+    document.body.append(page);
+    mounted = mount(PathsView, { target: page, props: { app: m.app } });
+    await settle();
+    expect(m.hub.pathCalls).toContain('path lib/lua');
+    expect(page.querySelector('[data-point="meta"]')).toBeNull();
+    listGo();
+    await settle();
+    await vi.waitFor(() => expect(document.activeElement?.closest('[data-point]')?.getAttribute('data-point')).toBe('meta'));
+    expect(m.app.pathPoint).toBeNull();
+  });
+
   it('asks before it closes a point under {safety}, sends ack only after yes, and cancel sends nothing', async () => {
     const { m, page } = await show();
     const safe = doc('e1', [

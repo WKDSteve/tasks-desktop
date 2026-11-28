@@ -182,6 +182,8 @@
   // The paths of the areas the area filter of the page shows (lib/learnScope.ts).
   const scope = $derived(scopeOf(app));
   const shownList = $derived(list === null ? null : scope.keep(list));
+  /** Whether the list and with it the tree of the chosen path are drawn (the branches of the markup below). */
+  const treeDrawn = $derived(shownList !== null && shownList.length > 0);
   // Nothing chosen yet (or the chosen one is gone): the first path shown, so the view never stands empty beside a list.
   // A path chosen on purpose (`App.openPath` from the catalogue, a link, the history) stays, also when the filter hides
   // it from the list: it is shown beside the list of the others.
@@ -243,10 +245,11 @@
     });
   }
 
-  // A point asked for while its path is shown, or once it is read.
+  // A point asked for while its path is shown, or once it is read and drawn: the tree stands beside the list of the
+  // paths, so a path read before that list came has no point to focus yet (the asked one would be forgotten unfocused).
   $effect(() => {
     const read = doc;
-    if (app.pathPoint === null || read === null) return;
+    if (app.pathPoint === null || read === null || !treeDrawn) return;
     untrack(() => showAskedPoint(read));
   });
 
