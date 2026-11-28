@@ -1129,7 +1129,7 @@
                         class:chosen={option.chosen}
                         class:recommended={option.recommended}
                         aria-pressed={option.chosen}
-                        disabled={app.locked}
+                        disabled={app.locked || app.detailBehind(task.id)}
                         onclick={() => void app.answerQuestion(task.id, q.key ?? `#${q.n}`, option.chosen ? null : option.n, detail.doc.task.etag)}
                       >
                         <span aria-hidden="true">{option.chosen ? '◉' : '○'}</span>

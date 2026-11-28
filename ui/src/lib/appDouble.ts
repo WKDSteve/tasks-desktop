@@ -518,9 +518,17 @@ export class FakeHub {
   taskSignals: AbortSignal[] = [];
   /** The body every task's document has. */
   taskBody = 'body';
+  /** Each read of a task waits for the first of these, if any (a read on its way). */
+  taskGates: Promise<void>[] = [];
+  /** More of every task's document (its questions, rounds, ...). */
+  taskExtra: Partial<TaskDocument> = {};
   async task(id: string, signal?: AbortSignal): Promise<TaskDocument> {
     if (signal) this.taskSignals.push(signal);
-    return { task: this.doc.tasks.find((t) => t.id === id), body: this.taskBody, steps: [] } as never;
+    // The task as it is when asked, not when the gate opens: the hub reads the file at once.
+    const listed = this.doc.tasks.find((t) => t.id === id);
+    const gate = this.taskGates.shift();
+    if (gate) await gate;
+    return { task: listed, body: this.taskBody, steps: [], ...this.taskExtra } as never;
   }
   /** The meetings the hub knows (`meetings`, `meeting`), what was asked of them, and the proposals of the quick line. */
   meetingItems: MeetingEntry[] = [];

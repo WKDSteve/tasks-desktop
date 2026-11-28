@@ -400,6 +400,7 @@ const de: Record<PageKey, string> = {
   'paths.levels.add_first': 'Level und Belohnungen festlegen …',
   'paths.conflict': 'Der Pfad hat sich inzwischen geändert (in einem anderen Programm?). Er wurde neu gelesen: ansehen und nochmal versuchen.',
   'paths.saving': 'Speichere…',
+  'detail.busy_reading': 'Die Task wird noch gelesen - gleich noch einmal versuchen.',
   'paths.busy_reading': 'Der Pfad wird noch gelesen - gleich noch einmal versuchen.',
   'paths.points': '{n} Punkte',
   'nav.done': 'Erledigt',

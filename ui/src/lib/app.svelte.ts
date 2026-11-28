@@ -2688,7 +2688,24 @@ export class App {
    * Answer a question of the task: tick option `option` (1-based), or take the answer back with `null`. `etag` is the
    * version of the file the questions were read from; the engine refuses when it moved on.
    */
+  /**
+   * The open detail of `id` is older than the list: the file changed (a write of this page, or outside) and the detail is
+   * being read again. What it shows (which option is chosen, its version) is from before; a decision taken on it would
+   * be sent on the old state.
+   */
+  detailBehind(id: string): boolean {
+    const detail = this.detail;
+    if (detail.state !== 'ok' || detail.id !== id) return false;
+    const listed = this.tasks.find((t) => t.id === id)?.etag;
+    return listed !== undefined && listed !== detail.doc.task.etag;
+  }
+
   async answerQuestion(id: string, key: string, option: number | null, etag?: string): Promise<void> {
+    // Refused and said, not sent: the click chose by what the old detail showed (a second quick click on an answer).
+    if (this.detailBehind(id)) {
+      this.say('error', 'detail.busy_reading');
+      return;
+    }
     await this.write([
       {
         op: 'answer',

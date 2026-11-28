@@ -3,7 +3,7 @@
 // browser passes through while a year is typed; a `change` without a key (the browser's calendar) writes at once, and
 // a date the engine refused does not stay in the field. The real browser and engine are the browser tests'.
 import { flushSync, mount, tick, unmount } from 'svelte';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from '../lib/api';
 import { make, snapshot } from '../lib/appDouble';
 import { addDays } from '../lib/calendar';
@@ -105,5 +105,67 @@ describe('the date fields of the detail', () => {
     await settle();
     expect(sent(m)).toHaveLength(1);
     expect(field('due').value, 'the field shows the task again').toBe('');
+  });
+});
+
+describe('the answers of the open questions', () => {
+  const question = (chosen: number | null) => ({
+    questions: [
+      {
+        n: 1,
+        key: 'q1',
+        title: 'Which way?',
+        text: '',
+        answered: chosen !== null,
+        options: [1, 2].map((n) => ({ n, text: `Way ${n}`, recommended: false, chosen: n === chosen })),
+      },
+    ],
+  });
+
+  it('are not sent on the old state while the task is read again after a write', async () => {
+    const { m, root } = await (async () => {
+      const made0 = make({ token: 't' });
+      made = made0;
+      made0.hub.doc = snapshot([task('pub/a', { title: 'A task', etag: 'e1' })]);
+      made0.hub.taskExtra = question(null) as never;
+      made0.hub.capabilities = [...(made0.hub.capabilities ?? []), 'answer'];
+      await made0.app.start(null);
+      made0.app.select('pub/a');
+      const div = document.createElement('div');
+      document.body.append(div);
+      mounted = mount(Detail, { target: div, props: { app: made0.app } });
+      flushSync();
+      return { m: made0, root: div };
+    })();
+    const way = (n: number) =>
+      [...root.querySelectorAll<HTMLButtonElement>('button.option')].find((b) => b.textContent?.includes(`Way ${n}`))!;
+    await vi.waitFor(() => expect(way(1)).toBeTruthy());
+    const answers = () => m.hub.sent.flatMap((r) => r.ops).filter((op) => op.op === 'answer');
+
+    // The write changes the file: the list reads the new version, the detail is read again and held on its way.
+    let release!: () => void;
+    m.hub.taskGates.push(new Promise<void>((resolve) => (release = resolve)));
+    m.hub.doc = snapshot([task('pub/a', { title: 'A task', etag: 'e2' })], 'rev:2');
+    m.hub.taskExtra = question(1) as never;
+    way(1).click();
+    await vi.waitFor(() => expect(answers()).toHaveLength(1));
+    await vi.waitFor(() => expect(m.app.saving).toBe(false));
+    await settle();
+    expect(m.app.detailBehind('pub/a')).toBe(true);
+    // The detail still shows the state from before the write: its buttons are not to be used ...
+    expect(way(1).getAttribute('aria-pressed')).toBe('false');
+    expect(way(2).disabled).toBe(true);
+    // ... and a click that gets through anyway (a key, a script) is refused and said, nothing is sent.
+    await m.app.answerQuestion('pub/a', 'q1', 2, 'e1');
+    expect(answers()).toHaveLength(1);
+    expect(m.app.toast).toMatchObject({ kind: 'error', text: 'Die Task wird noch gelesen - gleich noch einmal versuchen.' });
+
+    // Read: the buttons show the file and are used again, on its version.
+    release();
+    await vi.waitFor(() => expect(way(1).getAttribute('aria-pressed')).toBe('true'));
+    expect(way(2).disabled).toBe(false);
+    way(2).click();
+    await vi.waitFor(() => expect(answers()).toHaveLength(2));
+    expect(answers()[1]).toMatchObject({ op: 'answer', id: 'pub/a', question: 'q1', option: 2, if_match: 'e2' });
   });
 });

@@ -399,6 +399,7 @@ const en = {
   'paths.levels.add_first': 'Set levels and rewards …',
   'paths.conflict': 'The path changed meanwhile (in another program?). It was read again: look and try once more.',
   'paths.saving': 'Saving…',
+  'detail.busy_reading': 'The task is still being read - try again in a moment.',
   'paths.busy_reading': 'The path is still being read - try again in a moment.',
   'paths.points': '{n} points',
   'nav.done': 'Finished',
