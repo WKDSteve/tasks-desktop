@@ -409,6 +409,9 @@ const UPLOAD_REFUSALS = new Map<string, string>([
 
 /** A window that gets the focus reads the start at login again at most this often (it can change in hub-desktop). */
 const AUTOSTART_EVERY_MS = 30_000;
+/** A failed first read of ai-desktop is asked again after 1 s, 2 s and 4 s, then at the next focus of the window. */
+const AI_DESKTOP_RETRIES = 3;
+const AI_DESKTOP_RETRY_MS = 1_000;
 
 export class App {
   phase = $state<Phase>('starting');
@@ -4836,11 +4839,23 @@ export class App {
     return results;
   }
 
-  /** A read that fails (a hub that is restarting) keeps what was known: the switch does not come and go with it. */
-  private async readAiDesktop(): Promise<void> {
+  /**
+   * A read that fails (a hub that is restarting) keeps what was known: the switch does not come and go with it. While
+   * nothing is known yet (the read at the start failed: a refused request, a network fault of the machine) it is asked
+   * again a few times, a little later each time; otherwise the AI functions would stay away until the window next gets
+   * the focus.
+   */
+  private async readAiDesktop(attempt = 0): Promise<void> {
+    clearTimeout(this.#aiDesktopRetry);
     const found = await this.env.hub.aiDesktop();
-    if (found !== null) this.aiDesktop = found;
+    if (found !== null) {
+      this.aiDesktop = found;
+      return;
+    }
+    if (this.aiDesktop !== null || attempt >= AI_DESKTOP_RETRIES || this.stopped || this.env.mode === 'web') return;
+    this.#aiDesktopRetry = setTimeout(() => void this.readAiDesktop(attempt + 1), AI_DESKTOP_RETRY_MS * 2 ** attempt);
   }
+  #aiDesktopRetry: ReturnType<typeof setTimeout> | undefined;
 
   setShortAreas(on: boolean): void {
     this.shortAreas = on;
@@ -5608,6 +5623,7 @@ export class App {
   }
 
   stop(): void {
+    clearTimeout(this.#aiDesktopRetry);
     this.#handoffStop?.();
     this.stream.stop();
     this.checkState.invalidate();

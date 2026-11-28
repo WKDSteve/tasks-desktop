@@ -950,6 +950,48 @@ describe('App', () => {
     app.stop();
   });
 
+  it('asks for ai-desktop again when the read at the start failed, without waiting for the focus of the window', async () => {
+    // A refused request or a network fault of the machine on this one read left the AI functions away until the window
+    // next got the focus (the button "Check against the acceptance" was missing once in a full e2e run).
+    const { app, hub } = make({ token: 't' });
+    const asked: number[] = [];
+    hub.aiDesktop = async () => {
+      asked.push(Date.now());
+      return asked.length === 1 ? null : { installed: true, running: true };
+    };
+    await app.start(null);
+    await app.loadEnums();
+    await vi.waitFor(() => expect(app.aiFeatures).toBe(true), { timeout: 3_000 });
+    expect(asked).toHaveLength(2);
+    app.stop();
+  });
+
+  it('gives up asking for ai-desktop after a few failed reads, and asks no more once the page went', async () => {
+    const { app, hub } = make({ token: 't' });
+    let asked = 0;
+    hub.aiDesktop = async () => {
+      asked += 1;
+      return null;
+    };
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      await app.start(null);
+      await app.loadEnums();
+      await vi.advanceTimersByTimeAsync(60_000);
+      // The first read and three more (1 s, 2 s, 4 s later), then only the next focus asks.
+      expect(asked).toBe(4);
+      expect(app.aiDesktop).toBeNull();
+      await app.focused();
+      await vi.advanceTimersByTimeAsync(500);
+      const before = asked;
+      app.stop();
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(asked).toBe(before);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('keeps the switch "Show AI functions" in the browser: off wins over an ai-desktop that is found', async () => {
     const prefs = new Map<string, string>();
     const { app, hub } = make({ token: 't', prefs });
