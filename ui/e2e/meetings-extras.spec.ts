@@ -5,6 +5,7 @@ import { expect, isMachineFault, test } from './fixtures';
 import { expectAccessible, violations, watchViolations } from './a11y';
 import { STATE } from './global';
 import { localWall } from '../src/lib/zones';
+import { addDays, startOfWeek } from '../src/lib/calendar';
 
 // The extras of meetings against the real hub and the real engine (concept 4.4, 7.3): the agenda takes the chosen
 // proposals of the meeting's open tasks and questions (`agenda_proposals`, written with `add_steps`); the form names a
@@ -48,6 +49,10 @@ function day(plus = 0): string {
 }
 
 test('the agenda takes the chosen proposals of the open tasks and their questions', async ({ page }) => {
+  // The page's today is fixed in the middle of a month: the month view shows only the weeks of its month, so a
+  // meeting three days ahead would leave it on the last days of some months.
+  const today = '2026-11-11';
+  await page.clock.setFixedTime(new Date(`${today}T10:00:00Z`));
   const vault = state().vault;
   const taskFile = join(vault, 'lib.nvim', 'ROADMAP', 'tasks', 'ext-e2e-t01.md');
   const dir = join(vault, 'lib.nvim', 'MEETINGS');
@@ -59,7 +64,7 @@ test('the agenda takes the chosen proposals of the open tasks and their question
   );
   writeFileSync(
     meetingFile,
-    `---\ntitle: Ext e2e m01\nstatus: planned\ndate: ${day(3)}\ntime: "10:00"\nduration: 30m\ntasks: [lib.nvim/ext-e2e-t01]\n---\n\n## Agenda\n\n- [ ] Ext e2e opening\n`,
+    `---\ntitle: Ext e2e m01\nstatus: planned\ndate: ${addDays(today, 3)}\ntime: "10:00"\nduration: 30m\ntasks: [lib.nvim/ext-e2e-t01]\n---\n\n## Agenda\n\n- [ ] Ext e2e opening\n`,
   );
   try {
     const problems = await pair(page, '/#view=calendar');
@@ -92,32 +97,42 @@ test.describe('a meeting of another zone', () => {
   // on every day of the year, summer time or not
   test.use({ timezoneId: 'Europe/Vienna' });
 
-  test('stands at the time of this machine with its own time beside it, and a move keeps its zone', async ({ page }) => {
-    const dir = join(state().vault, 'lib.nvim', 'MEETINGS');
-    mkdirSync(dir, { recursive: true });
-    const file = join(dir, 'ext-e2e-m04.md');
-    const date = day(2);
-    writeFileSync(file, `---\ntitle: Ext e2e m04\nstatus: planned\ndate: ${date}\ntime: "08:00"\nduration: 30m\ntz: America/New_York\n---\n\nAcross the ocean.\n`);
-    const here = localWall(`${date}T08:00`, 'America/New_York', 'Europe/Vienna');
-    try {
-      const problems = await pair(page, '/#view=calendar');
-      await page.getByRole('combobox', { name: 'Show' }).selectOption('week');
-      const block = page.locator('[data-timegrid="week"]').locator('.block[data-meeting="lib.nvim/ext-e2e-m04"]');
-      await expect(block).toBeVisible();
-      await expect(block.locator('.time')).toContainText(here.slice(11, 16));
-      await expect(block.locator('.open')).toHaveAttribute('aria-label', /\(08:00 New York\)/);
-      // a quarter later here is a quarter later in New York: the file keeps its zone
-      await block.locator('.open').focus();
-      const answer = nextAnswer(page);
-      await page.keyboard.press('Shift+ArrowDown');
-      await answer;
-      await expect.poll(() => readFileSync(file, 'utf8'), { timeout: WRITE_BUDGET }).toMatch(/time: "?08:15/);
-      expect(readFileSync(file, 'utf8')).toMatch(/tz: "?America\/New_York/);
-      expect(problems).toEqual([]);
-    } finally {
-      if (existsSync(file)) rmSync(file, { force: true });
-    }
-  });
+  // The page's today is fixed, once on a weekday and once on a Saturday: the meeting must stand in the week the view
+  // shows, whatever day the test runs on.
+  for (const { on, today } of [
+    { on: 'a Wednesday', today: '2026-11-25' },
+    { on: 'a Saturday', today: '2026-11-28' },
+  ]) {
+    test(`stands at the time of this machine with its own time beside it, and a move keeps its zone (on ${on})`, async ({ page }) => {
+      await page.clock.setFixedTime(new Date(`${today}T10:00:00Z`));
+      const dir = join(state().vault, 'lib.nvim', 'MEETINGS');
+      mkdirSync(dir, { recursive: true });
+      const file = join(dir, 'ext-e2e-m04.md');
+      // The Wednesday of the week the view shows (it begins on Monday, as the page reckons it): a day a fixed number of
+      // days ahead leaves that week from Thursday or later on.
+      const date = addDays(startOfWeek(today), 2);
+      writeFileSync(file, `---\ntitle: Ext e2e m04\nstatus: planned\ndate: ${date}\ntime: "08:00"\nduration: 30m\ntz: America/New_York\n---\n\nAcross the ocean.\n`);
+      const here = localWall(`${date}T08:00`, 'America/New_York', 'Europe/Vienna');
+      try {
+        const problems = await pair(page, '/#view=calendar');
+        await page.getByRole('combobox', { name: 'Show' }).selectOption('week');
+        const block = page.locator('[data-timegrid="week"]').locator('.block[data-meeting="lib.nvim/ext-e2e-m04"]');
+        await expect(block).toBeVisible();
+        await expect(block.locator('.time')).toContainText(here.slice(11, 16));
+        await expect(block.locator('.open')).toHaveAttribute('aria-label', /\(08:00 New York\)/);
+        // a quarter later here is a quarter later in New York: the file keeps its zone
+        await block.locator('.open').focus();
+        const answer = nextAnswer(page);
+        await page.keyboard.press('Shift+ArrowDown');
+        await answer;
+        await expect.poll(() => readFileSync(file, 'utf8'), { timeout: WRITE_BUDGET }).toMatch(/time: "?08:15/);
+        expect(readFileSync(file, 'utf8')).toMatch(/tz: "?America\/New_York/);
+        expect(problems).toEqual([]);
+      } finally {
+        if (existsSync(file)) rmSync(file, { force: true });
+      }
+    });
+  }
 });
 
 test('the form names a meeting at the same time, and makes the meeting with its preparation task and overlap: ok', async ({ page }) => {
