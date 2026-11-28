@@ -10,6 +10,7 @@ import { aiDesktopDoubleIn } from './ai-desktop';
 import { STATE } from './global';
 import { ABNAHME_SLUG, HAND_KEYS_SLUG, HAND_SLUG, MIXED_SLUG, origin, pairingLink, pickedFolder, removeFile } from './hub';
 import { chooseFromMenu, openExportMenu } from './menu';
+import { logLines } from './lines';
 
 test.use({ locale: 'en-US' });
 
@@ -6195,7 +6196,7 @@ test('a new vault is made from an empty folder and added, and the folder of the 
   const fresh = join(state().vault, '..', 'new-vault-e2e');
   removeFile(fresh);
   const log = join(state().config, '..', 'editor.log');
-  const shown = (): string[] => (existsSync(log) ? readFileSync(log, 'utf8').split('\n').filter((l) => l.startsWith('reveal ')) : []);
+  const shown = (): string[] => logLines(log).filter((l) => l.startsWith('reveal '));
   const before = shown().length;
 
   await page.getByRole('menuitem', { name: 'Project', exact: true }).click();
@@ -6547,8 +6548,8 @@ test('a task is opened in Neovim by the hub: the page names the task, the hub th
 
   await page.locator('aside.detail').getByRole('button', { name: 'Open in Neovim' }).click();
   await expect(page.getByRole('status').getByText('Opened in Neovim.')).toBeVisible();
-  await expect.poll(() => (existsSync(log) ? readFileSync(log, 'utf8') : '')).toContain('alpha.md');
-  const opened = readFileSync(log, 'utf8').trim().split('\n');
+  await expect.poll(() => logLines(log).join('\n')).toContain('alpha.md');
+  const opened = logLines(log);
   expect(opened).toHaveLength(1);
   // The file is the one inside the vault (links resolved), and the page never saw its path.
   expect(opened[0]?.replace(/\\/g, '/')).toMatch(/lib\.nvim\/ROADMAP\/tasks\/alpha\.md$/);
@@ -6599,8 +6600,8 @@ test('"Open in DocMap" at a task starts docmap-desktop with the repo and the lin
   const button = page.locator('aside.detail').getByRole('button', { name: 'Open in DocMap' });
   await expect(button).toHaveCount(1);
   await button.click();
-  await expect.poll(() => (existsSync(log) ? readFileSync(log, 'utf8') : '')).toContain('lua/a.lua:3-9');
-  const lines = readFileSync(log, 'utf8').trim().split('\n');
+  await expect.poll(() => logLines(log).join('\n')).toContain('lua/a.lua:3-9');
+  const lines = logLines(log);
   expect(lines).toHaveLength(1);
   const [flag, folder, at] = (lines[0] ?? '').split('\t');
   expect([flag, at]).toEqual(['--open-at', 'lua/a.lua:3-9']);
@@ -10483,7 +10484,7 @@ test('repo tiles: groups and tiles are made, an image or a letter, moved with th
     rmSync(log, { force: true });
     await tab.getByRole('button', { name: `Menu of plain-${tag}` }).click();
     await tab.getByRole('button', { name: 'Open the folder' }).click();
-    await expect.poll(() => (existsSync(log) ? readFileSync(log, 'utf8') : '')).toContain(`plain-${tag}`);
+    await expect.poll(() => logLines(log).join('\n')).toContain(`plain-${tag}`);
 
     // The folders below REPOS_DIR of the hub are suggested by name (read with the tiles: the reload above saw the new
     // folder); a name of the list is the folder of that name there, and a folder that became a tile is offered no more.

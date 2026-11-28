@@ -21,7 +21,7 @@ const docIndex = JSON.stringify(
 
 const test = {
   environment: 'node' as const,
-  include: ['src/**/*.test.ts', 'e2e-device/**/*.test.ts'],
+  include: ['src/**/*.test.ts', 'e2e/**/*.test.ts', 'e2e-device/**/*.test.ts'],
   // Both languages at once (the page loads one on demand, i18n.ts): a test switches the language synchronously.
   setupFiles: ['src/test-setup.ts'],
   // Four workers, not one per core: on the busy runner eleven workers starting at once did not all answer within the

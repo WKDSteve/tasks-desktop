@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { expectAccessible, watchViolations } from './a11y';
 import { expect, test } from './fixtures';
 import { env, exe, prepareVault } from './hub';
+import { logLines } from './lines';
 import { freePort } from 'appkit-web/e2e-node';
 import { removeTree } from '../web/tmp.mjs';
 
@@ -99,8 +100,8 @@ test('without docmap-desktop the button opens the generated page of the repo at 
     await expect(buttons).toHaveCount(2);
     await expect(buttons.first()).toHaveAttribute('data-way', 'page');
     await buttons.first().click();
-    await expect.poll(() => (existsSync(log) ? readFileSync(log, 'utf8') : '')).toContain('e2e.core');
-    const [folder, relative, node] = (readFileSync(log, 'utf8').trim().split('\n')[0] ?? '').split('\t');
+    await expect.poll(() => logLines(log).join('\n')).toContain('e2e.core');
+    const [folder, relative, node] = (logLines(log)[0] ?? '').split('\t');
     expect((folder ?? '').replaceAll('\\', '/')).toMatch(/\/repos\/docmap-e2e$/);
     expect([relative, node]).toEqual(['build/site/index.html', 'e2e.core']);
     // The page of the hub never saw the folder of the repo or the path of the page.
