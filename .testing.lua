@@ -138,6 +138,39 @@ return {
         },
         ready = { stdout = "^http://127%.0%.0%.1:%d+/#pair=", as = "link" },
       },
+      -- `levels-hub` for the phone page (TESTS/sheets/phone-login-busy.sheet.lua): the page of mobile.lock built into
+      -- the hub, the link of /m/ (TASKS_SETUP_HUB_PHONE), and appkit's guard of pairing, challenge and device session
+      -- lowered to 2 a minute (TASKS_DESKTOP_TEST_EXCHANGE_MAX, read by a debug build only), so the second login of the
+      -- phone gets 429.
+      ["busy-hub"] = {
+        build = {
+          { "python", "tools/build-mobile.py" },
+          { "pnpm", "--dir", "ui", "build" },
+          { "cargo", "build", "-p", "tasks-hub", "--example", "setup-hub", "--locked" },
+        },
+        prepare = { "node", "tools/sheet-levels-vault.mjs", "${temp}" },
+        run = { "target/debug/examples/setup-hub.exe" },
+        env = {
+          TASKS_SETUP_HUB_PHONE = "1",
+          TASKS_DESKTOP_TEST_EXCHANGE_MAX = "2",
+          TASKS_DESKTOP_CONFIG_DIR = "${temp}/cfg",
+          TASKS_VAULT = "${temp}/vault",
+          TASKS_MARKER_DOCS = "",
+          TASKS_EXTRA_AREAS = "",
+          TASKS_LISTS_FILE = "${temp}/lists.json",
+          TASKS_FRECENCY_FILE = "${temp}/frecency.json",
+          TASKS_LINKS = "",
+          TASKS_TRUST_VAULT_LINT = "",
+          TASKS_DESKTOP_TAILNET = "",
+          NVIM_CONFIG_DIR = "",
+          TASKS_DESKTOP_NO_GH = "1",
+          TASKS_DESKTOP_EDITOR_LOG = "${temp}/editor.log",
+          TASKS_DESKTOP_PICK_RESULT = "${temp}/picked",
+          APPKIT_FAMILY_DIR = "${temp}/family",
+          AI_DESKTOP_CONFIG_DIR = "${temp}/ai-desktop",
+        },
+        ready = { stdout = "^http://127%.0%.0%.1:%d+/m/#pair=", as = "link" },
+      },
       -- The same hub with the vault of the meetings sheet (tools/sheet-meetings-vault.mjs: the fixture vault and one
       -- meeting of lib.nvim/alpha that is over); everything else as `levels-hub`.
       ["meetings-hub"] = {

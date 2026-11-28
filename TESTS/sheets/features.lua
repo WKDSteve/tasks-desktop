@@ -19,6 +19,11 @@ return {
     docs = "README.md",
   },
   {
+    id = "tasks.phone-login-busy",
+    title = "The phone page against a hub with too many logins (429): said as such, not as offline, not the pairing screen, and back by itself after the minute of the guard",
+    docs = "README.md",
+  },
+  {
     id = "tasks.path-levels",
     title = "The levels of a learning path set in a form: written to ## Level with a badge and rewards, refused by the engine, the XP of a promoted task",
     docs = "README.md",
