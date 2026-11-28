@@ -1079,6 +1079,26 @@ describe('App', () => {
     app.stop();
   });
 
+  it('names the task of a finished hand-over by its title when the job ends, not when it began', async () => {
+    const { app, hub } = make({ token: 't' });
+    hub.aiDesktopFound = { installed: true, running: true };
+    await app.start(null);
+    await app.loadEnums();
+    await vi.waitFor(() => expect(app.aiFeatures).toBe(true));
+    hub.agentAnswer = { job_id: '0123456789abcdef', status: 'running', private: false, port: 47123 };
+    hub.resultQueue = [{ status: 'running' }];
+    app.openAgent('pub/a');
+    await app.handToAgent('run', 'handoff');
+    await vi.waitFor(() => expect(hub.resultCalls.length).toBeGreaterThan(0));
+    // The list is read again while the job runs (up to 6 h): the task got another title meanwhile.
+    app.tasks = app.tasks.map((t) => (t.id === 'pub/a' ? { ...t, title: 'Renamed while the agent ran' } : t));
+    const md = '## Getan\n- a\n\n## Commits\nrepo@abc1234\n\n## Prüfungen\nCLEAN\n\n## Offen\n-\n';
+    hub.resultQueue = [{ status: 'done', summary: { job_id: '0123456789abcdef', date: '2026-11-23', markdown: md } }];
+    await vi.waitFor(() => expect(app.answer).toMatchObject({ kind: 'handoff', phase: 'shown', id: 'pub/a' }));
+    expect(app.answer?.title).toBe('Renamed while the agent ran');
+    app.stop();
+  });
+
   it('counts a running ai-desktop without an installer as found', async () => {
     const { app, hub } = make({ token: 't' });
     hub.aiDesktopFound = { installed: false, running: true };

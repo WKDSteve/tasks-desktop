@@ -4605,7 +4605,10 @@ export class App {
           get answer() {
             return self.answer;
           },
-          tasks: this.tasks,
+          // Read when the job ends (up to hours later): the list may have been read again meanwhile.
+          get tasks() {
+            return self.tasks;
+          },
           say: (kind, key, params) => this.say(kind, key, params),
           showAnswer: (view) => this.showAnswer(view),
         },
