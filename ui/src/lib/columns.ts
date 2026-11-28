@@ -1,6 +1,6 @@
 // The widths of the columns of the list. The id and the marks on the right can be dragged to a width; the title
 // takes what is left. A column that was never dragged has no width here and takes the width the row gives it by
-// default (the marks as wide as they are, the title the rest).
+// default (the marks 18rem, at most 30 % of the row, whatever they hold; the title the rest).
 
 export const COLUMN_KEYS = ['id', 'meta'] as const;
 export type ColumnKey = (typeof COLUMN_KEYS)[number];

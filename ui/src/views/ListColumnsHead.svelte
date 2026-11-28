@@ -33,7 +33,7 @@
 
   /**
    * The width a column has by default. The id lays out alike in the head and in every row. The marks have a width of
-   * their own (18rem where there is room), down to the widest single tag of a row where there is not: the head holds
+   * their own (18rem, at most 30 % of the row, less where the row has no room): the head holds
    * only their name, so the default is the widest of the rows drawn, and the name in the head when no row is drawn.
    */
   function defaultWidth(key: ColumnKey): number {
@@ -166,7 +166,7 @@
     min-width: 0;
     display: grid;
     /* The same columns as the rows (TaskRow.svelte). */
-    grid-template-columns: var(--col-id, minmax(8rem, 14rem)) minmax(6rem, 1fr) var(--col-meta, minmax(min-content, 18rem));
+    grid-template-columns: var(--col-id, minmax(8rem, 14rem)) minmax(6rem, 1fr) var(--col-meta, minmax(0, min(18rem, 30%)));
     gap: 0.75rem;
     padding: 0.25rem 0.6rem;
   }
