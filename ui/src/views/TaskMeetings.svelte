@@ -6,7 +6,7 @@
   import type { App } from '../lib/app.svelte';
   import type { MeetingEntry, TaskEntry } from '../lib/contract';
   import { translate, type Key } from '../lib/i18n';
-  import { splitMeetings, whenText } from '../lib/meetings';
+  import { MEETING_PAGES, splitMeetings, whenText } from '../lib/meetings';
   import { addDays } from '../lib/calendar';
   import { foldSeries, joinPages, seriesNote } from '../lib/series';
   import { markHidden } from '../lib/text';
@@ -25,6 +25,25 @@
   // meetings are read; a reread of the same task keeps its list until the new one is there.
   let readFor = '';
 
+  /**
+   * The meetings of task `id`, the earliest first. More than a page is a series of many weeks: its pages are read on
+   * (at most `MEETING_PAGES`, the engine lists at most 500 occurrences of a series), so that a past occurrence with a
+   * file between the first page and today is listed too; only when the pages run out are the coming occurrences read
+   * from yesterday on.
+   */
+  async function readAll(id: string, signal: AbortSignal): Promise<MeetingEntry[]> {
+    const items: MeetingEntry[] = [];
+    let offset: number | undefined = 0;
+    for (let page = 0; page < MEETING_PAGES && offset !== undefined; page += 1) {
+      const doc = await app.meetingsOfTask(id, signal, undefined, offset);
+      items.push(...doc.items);
+      offset = doc.next_offset;
+    }
+    if (offset === undefined) return items;
+    const later = await app.meetingsOfTask(id, signal, addDays(app.today, -1));
+    return joinPages(items, later.items);
+  }
+
   $effect(() => {
     const id = task.id;
     void key;
@@ -40,14 +59,7 @@
       return;
     }
     const abort = new AbortController();
-    app
-      .meetingsOfTask(id, abort.signal)
-      .then(async (doc) => {
-        // More than a page: a series of many weeks; its coming occurrences are read from yesterday on.
-        if (doc.next_offset === undefined) return doc.items;
-        const later = await app.meetingsOfTask(id, abort.signal, addDays(app.today, -1));
-        return joinPages(doc.items, later.items);
-      })
+    readAll(id, abort.signal)
       .then((list) => {
         if (abort.signal.aborted) return;
         items = list;

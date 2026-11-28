@@ -1962,10 +1962,14 @@ export class App {
   /**
    * The meetings of task `id`, whenever they are (the engine's order: the earliest first). The task names at most 20
    * (`meetings`), so one page holds them all; a window of the engine's default (30 days back, 90 ahead) or of a year
-   * would leave out a meeting the task counts. A series is listed as its occurrences: `since` reads from a later day.
+   * would leave out a meeting the task counts. A series is listed as its occurrences: `since` reads from a later day,
+   * `offset` the next page (`next_offset` of the one before).
    */
-  meetingsOfTask(id: string, signal?: AbortSignal, since: string = MEETINGS_EVER.since): Promise<Meetings> {
-    return this.env.hub.meetings({ task: id, since, until: MEETINGS_EVER.until, limit: 100 }, signal);
+  meetingsOfTask(id: string, signal?: AbortSignal, since: string = MEETINGS_EVER.since, offset = 0): Promise<Meetings> {
+    return this.env.hub.meetings(
+      { task: id, since, until: MEETINGS_EVER.until, limit: 100, ...(offset > 0 ? { offset } : {}) },
+      signal,
+    );
   }
 
   /**

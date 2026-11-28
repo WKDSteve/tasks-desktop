@@ -116,10 +116,57 @@ it('shows of a long series its occurrences with a file and the next one, also wh
   document.body.append(target);
   mounted = mount(TaskMeetings, { target, props: { app: m.app, task: a } });
   await vi.waitFor(() => expect(target.textContent).toContain('Meeting pub/sync-2026-11-27'));
-  expect(m.hub.meetingQueries.map((q) => q.since)).toEqual(['1900-01-01', '2026-11-19']);
+  // the second page holds the rest: no read from yesterday on
+  expect(m.hub.meetingQueries.map((q) => [q.since, q.offset])).toEqual([['1900-01-01', undefined], ['1900-01-01', 3]]);
   expect(target.textContent).toContain('Meeting pub/sync-2026-11-06');
   expect(target.textContent).not.toContain('pub/sync-2026-10-30');
   expect(target.textContent).not.toContain('pub/sync-2026-11-13');
   expect(target.textContent).not.toContain('pub/sync-2026-12-04');
   expect(target.querySelectorAll('[data-series="pub/sync"]')).toHaveLength(2);
+});
+
+it('lists a past occurrence with a file beyond the first page, and reads the coming ones only when the pages run out', async () => {
+  const m = make({ token: 't', now: new Date('2026-11-20T10:00:00').getTime() });
+  stop = () => m.app.stop();
+  m.hub.capabilities = ['meetings', 'meeting', 'meeting_ops', 'meeting_series'];
+  const a = task('pub/a', { meetings: ['pub/sync'] } as Partial<TaskEntry>);
+  m.hub.doc = snapshot([a]);
+  const occ = (day: string, virtual: boolean): MeetingEntry =>
+    ({
+      ...entry(`pub/sync-${day}`, 'pub/a'),
+      date: day,
+      starts_at: `${day}T14:00`,
+      ends_at: `${day}T15:00`,
+      series: 'pub/sync',
+      occurrence: day,
+      ...(virtual ? { virtual: true } : {}),
+    }) as MeetingEntry;
+  // The minutes of 13 November lie on the second page, before yesterday: a read from yesterday on does not find them.
+  m.hub.meetingItems = [
+    occ('2026-10-30', true),
+    occ('2026-11-02', true),
+    occ('2026-11-06', true),
+    occ('2026-11-13', false),
+    occ('2026-11-27', true),
+    occ('2026-12-04', true),
+  ];
+  m.hub.meetingPageSize = 3;
+  await m.app.start(null);
+  m.app.stop();
+
+  const target = document.createElement('div');
+  document.body.append(target);
+  mounted = mount(TaskMeetings, { target, props: { app: m.app, task: a } });
+  await vi.waitFor(() => expect(target.textContent).toContain('Meeting pub/sync-2026-11-27'));
+  expect(target.textContent).toContain('Meeting pub/sync-2026-11-13');
+  expect(m.hub.meetingQueries).toHaveLength(2);
+  if (mounted) void unmount(mounted);
+  mounted = undefined;
+
+  // A page of one: the pages run out after MEETING_PAGES (5), and the coming ones are read from yesterday on.
+  m.hub.meetingPageSize = 1;
+  m.hub.meetingQueries = [];
+  mounted = mount(TaskMeetings, { target, props: { app: m.app, task: a } });
+  await vi.waitFor(() => expect(target.textContent).toContain('Meeting pub/sync-2026-11-27'));
+  expect(m.hub.meetingQueries.map((q) => q.since)).toEqual([...Array(5).fill('1900-01-01'), '2026-11-19']);
 });
