@@ -269,6 +269,12 @@ describe('LearnNotesView', () => {
     await settle();
     await vi.waitFor(() => expect(page.querySelector('[data-truncated]')?.textContent).toContain('notes of these areas may be missing'));
     expect(page.textContent).not.toContain('Showing 3 of 345');
+    // nothing of these areas in the cut list: the empty view says the same, not only "No notes yet"
+    m.app.hubAreas = ['lib', 'my area', 'other area'].map((name) => ({ name }) as never);
+    m.app.filter = { ...m.app.filter, areas: ['other area', 'my area'] };
+    await settle();
+    await vi.waitFor(() => expect(page.textContent).toContain('No notes yet.'));
+    expect(page.querySelector('[data-truncated]')?.textContent).toContain('notes of these areas may be missing');
   });
   it('keeps the filter lists of the newer read when an older answer comes late', async () => {
     const { m, page } = await show();

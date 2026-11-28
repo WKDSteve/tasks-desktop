@@ -82,10 +82,10 @@ test('a permission the browser never says is listed as one to ask for, and a cli
   assert.deepEqual(log, ['query b', 'grant b', 'reload']);
 });
 
-test('a list of folders the browser never hands out shows none, and a click on a vault finds it gone', async () => {
+test('a list of folders the browser never hands out shows none, and a click on a vault is refused, not called gone', async () => {
   const { vaults, log } = setup({ list: () => new Promise(() => {}), waitMs: 20 });
   assert.deepEqual(await vaults.list(), []);
-  assert.equal(await vaults.select('b'), 'gone');
+  assert.equal(await vaults.select('b'), 'denied');
   assert.deepEqual(log, []);
 });
 

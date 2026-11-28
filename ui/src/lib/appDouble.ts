@@ -545,6 +545,11 @@ export class FakeHub {
   meetingsError: ApiError | null = null;
   /** Pages of this many meetings, as the engine pages them (`offset`, `next_offset`); null: one page holds all. */
   meetingPageSize: number | null = null;
+  /**
+   * The most occurrences of a series the engine lists in a window, counted from `since` (`MAX_OCCURRENCES`, 500 in the
+   * engine); null: no cut. The double holds one series, so the cut is of all its meetings.
+   */
+  meetingCap: number | null = null;
   async meetings(query: { task?: string; area?: string; since?: string; until?: string; limit?: number; offset?: number }): Promise<Meetings> {
     this.meetingQueries.push({ ...query });
     if (this.holdMeetings) await this.holdMeetings;
@@ -552,12 +557,13 @@ export class FakeHub {
     // as the engine: the meetings whose days touch the window (default: 30 days back, 90 ahead of 2026-11-19 here)
     const since = query.since ?? '2026-10-20';
     const until = query.until ?? '2027-02-17';
-    const items = this.meetingItems.filter(
+    const all = this.meetingItems.filter(
       (m) =>
         (query.task === undefined || m.tasks.includes(query.task)) &&
         (m.starts_at ?? '').slice(0, 10) <= until &&
         (m.ends_at ?? m.starts_at ?? '').slice(0, 10) >= since,
     );
+    const items = this.meetingCap === null ? all : all.slice(0, this.meetingCap);
     if (this.meetingPageSize !== null) {
       const offset = query.offset ?? 0;
       const size = this.meetingPageSize;

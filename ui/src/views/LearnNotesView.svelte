@@ -285,6 +285,7 @@
       {#if shown.length === 0}
         <!-- Under the area filter the note says why; the way to a first note stays below it, for a vault that has none. -->
         {#if query.trim() === '' && !filtered && scope.active}<LearnScopeNote {app} {scope} />{/if}
+        {#if doc.truncated && narrowedHere}<p class="note" role="note" data-truncated>{t('learnnotes.truncated_scope')}</p>{/if}
         <div class="empty">
           {#if query.trim() !== ''}
             <p>{t('learnnotes.no_hit', { text: markHidden(query.trim()) })}</p>

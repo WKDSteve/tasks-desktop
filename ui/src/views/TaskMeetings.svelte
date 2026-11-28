@@ -27,9 +27,10 @@
 
   /**
    * The meetings of task `id`, the earliest first. More than a page is a series of many weeks: its pages are read on
-   * (at most `MEETING_PAGES`, the engine lists at most 500 occurrences of a series), so that a past occurrence with a
-   * file between the first page and today is listed too; only when the pages run out are the coming occurrences read
-   * from yesterday on.
+   * (at most `MEETING_PAGES`), so that a past occurrence with a file between the first page and today is listed too.
+   * The engine lists at most 500 occurrences of a series in a window, counted from its start: a series longer than that
+   * fills the pages from 1900 with past ones. Its coming occurrences are therefore read from yesterday on whenever there
+   * was more than one page.
    */
   async function readAll(id: string, signal: AbortSignal): Promise<MeetingEntry[]> {
     const items: MeetingEntry[] = [];
@@ -38,8 +39,8 @@
       const doc = await app.meetingsOfTask(id, signal, undefined, offset);
       items.push(...doc.items);
       offset = doc.next_offset;
+      if (page === 0 && offset === undefined) return items;
     }
-    if (offset === undefined) return items;
     const later = await app.meetingsOfTask(id, signal, addDays(app.today, -1));
     return joinPages(items, later.items);
   }

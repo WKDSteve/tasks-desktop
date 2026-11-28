@@ -63,7 +63,7 @@ export class FolderVaults {
 
   /** The folders used before, the one used last first, with the access each has now (asked side by side). */
   async list(): Promise<FolderVault[]> {
-    const entries = await this.entries();
+    const entries = (await this.entries()) ?? [];
     return Promise.all(
       entries.map(async (entry) => ({
         id: entry.id,
@@ -78,9 +78,9 @@ export class FolderVaults {
     return this.deps.waitMs ?? LOOK_WAIT_MS;
   }
 
-  /** The stored folders; none when the browser does not hand them out in time. A failure to read still throws. */
-  private async entries(): Promise<Recent[]> {
-    return within<Recent[]>(this.deps.recent.list(), this.wait, []);
+  /** The stored folders; `null` when the browser does not hand them out in time. A failure to read still throws. */
+  private async entries(): Promise<Recent[] | null> {
+    return within<Recent[] | null>(this.deps.recent.list(), this.wait, null);
   }
 
   /** The permission now, within the limit (`prompt` without an answer); a failure is no permission. */
@@ -100,7 +100,10 @@ export class FolderVaults {
    */
   async select(id: string): Promise<SwitchResult> {
     if (id === this.deps.active) return 'same';
-    const entry = (await this.entries()).find((e) => e.id === id);
+    const entries = await this.entries();
+    // The browser did not hand the list out: the folder is not known to be gone, the access is not there now.
+    if (entries === null) return 'denied';
+    const entry = entries.find((e) => e.id === id);
     if (!entry) return 'gone';
     const grant = this.deps.grantAccess ?? grantAccess;
     // Asking again is not limited: it waits for the person's answer in the browser's dialog.
