@@ -75,8 +75,10 @@ test('a number of the overview opens the history of its figure; the period is re
   await expect(trend).toBeVisible();
   await expect(page.getByRole('region', { name: 'History' })).toHaveCount(0);
 
-  await page.reload();
+  // The address first, then the reload: the page starts with #view=stats. A change of the hash alone right after a
+  // reload can come while the page still starts, and a slow start (CI run 46141689290) then left it on its last view.
   await page.goto('/#view=stats');
+  await page.reload();
   await expect(section.locator('[data-history-period]')).toHaveValue('7d');
   await expect(section.locator('[data-history-metric]')).toHaveValue('ready');
   // opened by the address, not from a number: there is no way back to offer
