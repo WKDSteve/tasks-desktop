@@ -2721,6 +2721,9 @@ pub(super) fn guard_rules() -> GuardRules {
         ],
     )
     .with_upload_path(crate::IDENTITY.route("upload"))
+    // A whiteboard with a picture behind is a body of several MiB: past the guard's 1 MiB only as an upload path. Its
+    // own limit (48 MiB), the JSON it must carry and the time it may take are then the route's (`boards::within_board`).
+    .with_upload_path(crate::IDENTITY.route("board"))
     // The phone page (tasks-mobile) under /m/, with its manifest, its worker and the Trusted Types policy it
     // registers the worker with (tasks-mobile/src/lib/worker.ts).
     .with_installable_page("/m", MOBILE_WORKER_POLICY)

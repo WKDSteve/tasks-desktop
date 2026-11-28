@@ -426,7 +426,9 @@ fn app_routes(core: &Arc<Shared>) -> Router<Arc<Shared>> {
         // as texts, written to the upload folder by the hub.
         .route(
             &r("board"),
-            post(self::boards::board).layer(DefaultBodyLimit::max(self::boards::BOARD_MAX_BYTES)),
+            post(self::boards::board)
+                .layer(DefaultBodyLimit::max(self::boards::BOARD_MAX_BYTES))
+                .layer(axum::middleware::from_fn(self::boards::within_board)),
         )
         .route(
             &r("sheet_run"),

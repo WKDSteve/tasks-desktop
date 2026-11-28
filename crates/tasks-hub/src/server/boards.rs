@@ -18,6 +18,34 @@ use super::*;
 pub(super) const BOARD_MAX_BYTES: usize = 48 * 1024 * 1024;
 /// The longest name of a board (the engine takes an asset name; the page names boards by date and time).
 const MAX_NAME: usize = 80;
+/// The longest a request of `board` may take, its body read and the engine's answer included: what the guard of appkit
+/// gives every route that is no upload path (`Limits::request_timeout`).
+pub(super) const BOARD_TIMEOUT: Duration = Duration::from_secs(30);
+
+/// What the guard does for every other mutation and no longer does for `board`, an upload path for the sake of its
+/// size (`guard_rules`): the body is JSON (a form or a file is none), and a request that stalls (a body that comes
+/// slower than the engine could take it) is ended after [`BOARD_TIMEOUT`]. The limit of the body is
+/// [`BOARD_MAX_BYTES`], a layer of the route.
+pub(super) async fn within_board(
+    req: axum::extract::Request,
+    next: axum::middleware::Next,
+) -> Response {
+    if !appkit_hub::guard::is_json_content_type(req.headers()) {
+        return error_body(
+            StatusCode::UNSUPPORTED_MEDIA_TYPE,
+            "bad_content_type",
+            "application/json required",
+        );
+    }
+    match tokio::time::timeout(BOARD_TIMEOUT, next.run(req)).await {
+        Ok(response) => response,
+        Err(_) => error_body(
+            StatusCode::REQUEST_TIMEOUT,
+            "timeout",
+            "the request took too long",
+        ),
+    }
+}
 
 fn not_for_devices() -> Response {
     error_body(

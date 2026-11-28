@@ -1042,3 +1042,48 @@ false true
     assert_eq!(status, 400, "{doc}");
     assert_eq!(doc["error"]["code"], "bad_query", "{doc}");
 }
+
+/// A whiteboard with a picture behind is a body of several MiB. The guard of appkit refuses any body over 1 MiB with
+/// `413` before a route sees it, unless the route is an upload path; `board` is one, and keeps what the guard would
+/// have done (JSON only) at its own door. Its limit is the route's (48 MiB).
+#[tokio::test]
+async fn a_board_over_the_guards_mib_reaches_the_engine_and_a_board_that_is_no_json_does_not() {
+    let _one_at_a_time = ONE_AT_A_TIME.lock().await;
+    let r = rig("board-large").await;
+    // A picture behind the strokes, as the page puts it into the preview: a data URL of 2 MiB.
+    let picture = "A".repeat(2 * 1024 * 1024);
+    let svg = format!(
+        r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><image href="data:image/png;base64,{picture}"/></svg>"#
+    );
+    let body = serde_json::json!({
+        "id": "alpha.nvim/t1", "name": "sketch",
+        "ink": r#"{"schema":"tasks-ink/1","pages":[]}"#, "svg": svg,
+    })
+    .to_string();
+    assert!(body.len() > 2 * 1024 * 1024);
+
+    // Not JSON: refused at the door of the route, as the guard refuses it on every other route; nothing is staged. (A
+    // small body: the refusal comes before the body is read, and the connection closes under a writer of 2 MiB.)
+    let small = r#"{"id":"alpha.nvim/t1","name":"sketch","ink":"{}","svg":"<svg/>"}"#;
+    let (status, doc) = post(&r, "/api/tasks/board", small, "text/plain", true).await;
+    assert_eq!(
+        (status, doc["error"]["code"].clone()),
+        (415, Value::from("bad_content_type")),
+        "{doc}"
+    );
+    assert!(
+        !r.vault.join(".fake-upload").exists(),
+        "nothing reached the engine"
+    );
+
+    // JSON: through the guard, staged and handed to the engine, the staged files gone afterwards.
+    let (status, doc) = post(&r, "/api/tasks/board", &body, "application/json", true).await;
+    assert_eq!(status, 200, "{doc}");
+    let reached = std::fs::read_to_string(r.vault.join(".fake-upload")).unwrap_or_default();
+    assert!(reached.starts_with("sketch "), "{reached}");
+    assert_eq!(leftovers(&r), 0);
+
+    // Without the session it is refused as before: the guard still asks who it is.
+    let (status, _) = post(&r, "/api/tasks/board", small, "application/json", false).await;
+    assert_eq!(status, 401);
+}
