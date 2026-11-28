@@ -4,7 +4,7 @@
 // the series; the next steps, the running paths by their last day, the levels within reach and the open rewards, and
 // a guide when there is no path.
 import { flushSync, mount, tick, unmount } from 'svelte';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { make, snapshot } from '../lib/appDouble';
 import LearnView from './LearnView.svelte';
 
@@ -281,5 +281,22 @@ describe('LearnView, the other tiles', () => {
     await settle();
     expect(m.app.filter.areas).toEqual([]);
     expect(text(fig(page, 'xp'))).toBe('XP 35 ▲ +15 vs last week to Wednesday');
+  });
+
+  it('names the streak of all paths when the filter cannot be asked of the hub (a name with a blank)', async () => {
+    const { m, page } = await show();
+    expect(text(fig(page, 'streak'))).toMatch(/^Streak 🔥/);
+    m.app.hubAreas = ['lib', 'ops', 'my area'].map((name) => ({ name }) as never);
+    m.app.filter = { ...m.app.filter, areas: ['my area'] };
+    await settle();
+    // asked for all areas: the streak is of all paths, and the figure says so
+    expect(m.hub.learnQueries.filter(([name]) => name === 'learn_history').at(-1)?.[1]).not.toHaveProperty('area');
+    m.app.filter = { ...m.app.filter, areas: ['lib', 'my area'] };
+    await settle();
+    await vi.waitFor(() => expect(text(fig(page, 'streak'))).toMatch(/^Streak of all paths 🔥/));
+    // a filter the hub takes: the streak is of its areas
+    m.app.filter = { ...m.app.filter, areas: ['ops'] };
+    await settle();
+    await vi.waitFor(() => expect(text(fig(page, 'streak'))).toMatch(/^Streak 🔥/));
   });
 });

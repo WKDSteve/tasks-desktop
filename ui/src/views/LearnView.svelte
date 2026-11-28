@@ -218,6 +218,8 @@
 
   const steps = $derived(next !== null && next !== 'failed' ? scope.keep(next.items).slice(0, 3) : []);
   const streak = $derived(history?.streak);
+  // A filter the hub cannot be asked for: the series is of all areas (narrowed here only by path), and so is its streak.
+  const streakOfAll = $derived(scope.active && Object.keys(scope.query).length === 0);
   function streakText(n: number): string {
     return n === 0 ? t('learnov.streak_none') : n === 1 ? t('learnov.streak_one') : t('learnov.streak', { n });
   }
@@ -304,7 +306,7 @@
               {#if learning}<dd class="cmp" data-dir={learning.mark}><span aria-hidden="true">{learning.mark}</span> {learning.text}</dd>{/if}
             </div>
             <div class="fig" data-fig="streak">
-              <dt>{t('learnov.fig.streak')}</dt>
+              <dt>{t(streakOfAll ? 'learnov.fig.streak_all' : 'learnov.fig.streak')}</dt>
               <dd class="big"><span aria-hidden="true">🔥</span> {streakText(streak?.current ?? 0)}</dd>
               <dd class="cmp">{t('learnov.longest', { n: streak?.longest ?? 0 })}</dd>
             </div>

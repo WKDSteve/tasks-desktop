@@ -162,6 +162,8 @@ describe('EvidenceView', () => {
     m.app.filter = { ...m.app.filter, areas: ['elsewhere'] };
     await settle();
     await vi.waitFor(() => expect(page.querySelector('.scope-note p')?.textContent).toBe('The area filter (elsewhere) hides the learning paths here.'));
+    // and below the note the way to a first proof, for a vault that has none at all
+    expect(page.querySelector('.scope-note + [data-evidence-empty]')).not.toBeNull();
     expect(m.hub.learnQueries.filter(([name]) => name === 'learn_evidence').at(-1)).toEqual(['learn_evidence', { include_done: true, area: 'elsewhere' }]);
     // the fields only name what is proved: asked for all of them
     expect(m.hub.learnQueries.filter(([name]) => name === 'competences').every(([, q]) => JSON.stringify(q) === '{}')).toBe(true);

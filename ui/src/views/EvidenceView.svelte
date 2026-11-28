@@ -114,9 +114,9 @@
     <p class="none" role="alert">{t('evidence.failed')} <button type="button" onclick={() => void read()}>{t('paths.retry')}</button></p>
   {:else if doc === null}
     <p class="none" role="status">{t('evidence.reading')}</p>
-  {:else if items.length === 0 && scope.active}
-    <LearnScopeNote {app} {scope} />
   {:else if items.length === 0}
+    <!-- Under the area filter the note says why; the way to a first proof stays below it, for a vault that has none. -->
+    {#if scope.active}<LearnScopeNote {app} {scope} />{/if}
     <div class="empty" data-evidence-empty>
       <p>{t('evidence.none')}</p>
       <p class="none">{t('evidence.none_how')}</p>

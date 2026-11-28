@@ -260,6 +260,16 @@ describe('LearnNotesView', () => {
     const { page } = await show(doc as LearnNotes);
     expect(page.textContent).toContain('Showing 3 of 345: narrow the search to see the rest.');
   });
+  it('says that notes of the filtered areas may be missing when a cut list of all areas was narrowed here', async () => {
+    const doc = { ...notes(), total: 345, truncated: true };
+    const { m, page } = await show(doc as LearnNotes);
+    // a name with a blank: the hub cannot be asked for it, the engine answers for all areas and the page narrows
+    m.app.hubAreas = ['lib', 'my area'].map((name) => ({ name }) as never);
+    m.app.filter = { ...m.app.filter, areas: ['lib', 'my area'] };
+    await settle();
+    await vi.waitFor(() => expect(page.querySelector('[data-truncated]')?.textContent).toContain('notes of these areas may be missing'));
+    expect(page.textContent).not.toContain('Showing 3 of 345');
+  });
   it('keeps the filter lists of the newer read when an older answer comes late', async () => {
     const { m, page } = await show();
     const paths = (id: string, title: string) => ({ kind: 'tasks.paths', rev: 'p2', digest: 'd', items: [ENTRY(id, title, ['ALL/os'])], incomplete: [] });
@@ -296,6 +306,8 @@ describe('LearnNotesView', () => {
     m.app.filter = { ...m.app.filter, areas: ['elsewhere'] };
     await settle();
     await vi.waitFor(() => expect(page.querySelector('.scope-note p')?.textContent).toBe('The area filter (elsewhere) hides the learning paths here.'));
+    // and below the note the way to a first note, for a vault that has none at all
+    expect(page.querySelector('.scope-note + .empty')?.textContent).toContain('No notes yet.');
     expect(notesAsked(m).at(-1)).toEqual({ area: 'elsewhere' });
     const clear = page.querySelector<HTMLButtonElement>('.scope-note button')!;
     expect(clear.textContent).toBe('Clear filter');

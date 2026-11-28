@@ -54,6 +54,9 @@
   // The area filter of the page (lib/learnScope.ts): the engine searches the paths of its areas.
   const scope = $derived(scopeOf(app));
   const asking = $derived(JSON.stringify(scope.query));
+  // A filter the hub cannot be asked for (a name with a blank, too many names): the engine answers for all areas and
+  // the page narrows. The engine's limit then cut before the filter did, and its figures are of all areas.
+  const narrowedHere = $derived(scope.active && Object.keys(scope.query).length === 0);
   let asked = 0;
   async function read(): Promise<void> {
     const mine = ++asked;
@@ -279,9 +282,9 @@
       {#if doc.incomplete.length > 0}
         <p class="note" role="note">{t('learnnotes.incomplete', { list: doc.incomplete.map(markHidden).join(', ') })}</p>
       {/if}
-      {#if shown.length === 0 && query.trim() === '' && !filtered && scope.active}
-        <LearnScopeNote {app} {scope} />
-      {:else if shown.length === 0}
+      {#if shown.length === 0}
+        <!-- Under the area filter the note says why; the way to a first note stays below it, for a vault that has none. -->
+        {#if query.trim() === '' && !filtered && scope.active}<LearnScopeNote {app} {scope} />{/if}
         <div class="empty">
           {#if query.trim() !== ''}
             <p>{t('learnnotes.no_hit', { text: markHidden(query.trim()) })}</p>
@@ -360,8 +363,10 @@
             </li>
           {/each}
         </ul>
-        {#if doc.truncated}
-          <p class="note">{t('learnnotes.truncated', { shown: doc.items.length, total: doc.total })}</p>
+        {#if doc.truncated && narrowedHere}
+          <p class="note" role="note" data-truncated>{t('learnnotes.truncated_scope')}</p>
+        {:else if doc.truncated}
+          <p class="note" data-truncated>{t('learnnotes.truncated', { shown: doc.items.length, total: doc.total })}</p>
         {/if}
       {/if}
     {/if}

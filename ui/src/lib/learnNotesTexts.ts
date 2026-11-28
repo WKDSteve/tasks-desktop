@@ -32,6 +32,8 @@ const EN = {
   'learnnotes.count': '{n} hits',
   'learnnotes.count_one': '1 hit',
   'learnnotes.truncated': 'Showing {shown} of {total}: narrow the search to see the rest.',
+  'learnnotes.truncated_scope':
+    'The list of all areas was cut before the area filter narrowed it: notes of these areas may be missing. Narrow the search to see them.',
   'learnnotes.open': 'Open in the path: {crumbs}',
   'learnnotes.crumbs': '{path} › {stage} › {point}',
   'learnnotes.path_done': 'finished path',
@@ -89,6 +91,8 @@ const DE: Record<LearnNotesKey, string> = {
   'learnnotes.count': '{n} Treffer',
   'learnnotes.count_one': '1 Treffer',
   'learnnotes.truncated': '{shown} von {total} gezeigt: die Suche eingrenzen, um den Rest zu sehen.',
+  'learnnotes.truncated_scope':
+    'Die Liste aller Bereiche wurde gekappt, bevor der Bereichsfilter sie eingrenzte: Notizen dieser Bereiche können fehlen. Die Suche eingrenzen, um sie zu sehen.',
   'learnnotes.open': 'Im Pfad öffnen: {crumbs}',
   'learnnotes.crumbs': '{path} › {stage} › {point}',
   'learnnotes.path_done': 'fertiger Pfad',

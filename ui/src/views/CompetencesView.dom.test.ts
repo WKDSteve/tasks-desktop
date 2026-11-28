@@ -187,6 +187,19 @@ describe('CompetencesView', () => {
     expect(web.page.querySelector('[data-competence-detail="ALL/os"] button.open-editor')).toBeNull();
   });
 
+  it('offers Neovim only for a field whose id the hub takes: not for a name with a blank or an umlaut', async () => {
+    const odd = { ...COMPETENCES, items: [...COMPETENCES.items, field('Bürokratie lernen', { title: 'Paperwork' }), field('.hidden', { title: 'Hidden' })] };
+    const { page } = await show({ competences: odd });
+    for (const [id, offered] of [['ALL/os', true], ['ALL/Bürokratie lernen', false], ['ALL/.hidden', false]] as const) {
+      await vi.waitFor(() => expect(row(page, id)).not.toBeNull());
+      row(page, id)!.querySelector<HTMLButtonElement>('[data-competence-more]')!.click();
+      await settle();
+      const detail = page.querySelector(`[data-competence-detail="${id}"]`);
+      expect(detail, id).not.toBeNull();
+      expect(detail!.querySelector('button.open-editor') !== null, id).toBe(offered);
+    }
+  });
+
   it('filters by target, by path and by text, orders by distance, and lists the paths without a field last', async () => {
     const { page } = await show();
     await vi.waitFor(() => expect(row(page, 'ALL/os')).not.toBeNull());
@@ -236,6 +249,9 @@ describe('CompetencesView', () => {
     m.app.filter = { ...m.app.filter, areas: ['elsewhere'] };
     await settle();
     await vi.waitFor(() => expect(page.querySelector('.scope-note p')?.textContent).toBe('The area filter (elsewhere) hides the learning paths here.'));
+    // and below the note the way to a first field, for a vault that has none at all (the page cannot tell without a
+    // second read)
+    expect(page.querySelector('.scope-note + [data-competences-empty]')).not.toBeNull();
     // the evidence is asked for that area; the fields are read whole and narrowed by the area of their file
     expect(m.hub.learnQueries.filter(([name]) => name === 'competences').every(([, q]) => JSON.stringify(q) === '{}')).toBe(true);
     expect(m.hub.learnQueries.filter(([name]) => name === 'learn_evidence').at(-1)).toEqual(['learn_evidence', { include_done: true, area: 'elsewhere' }]);

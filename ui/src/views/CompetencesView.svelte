@@ -34,6 +34,12 @@
 
   let { app }: { app: App } = $props();
   const t = (key: CompetenceKey | Key, params: Record<string, string | number> = {}) => competenceTexts.t(app.lang, key, params);
+  /**
+   * An id the route `open` takes (`valid_task_id` of the hub): `<area>/<slug>`, both plain names (letters, digits, `.`
+   * `_` `-`, not starting with a dot, an area not ending with one). A field whose file has a blank or an umlaut in its
+   * name would only end in a refusal (400): it gets no button.
+   */
+  const OPENABLE = /^(?!\.)[A-Za-z0-9._-]{1,128}(?<!\.)\/(?!\.)[A-Za-z0-9._-]{1,128}$/;
 
   const usable = $derived(app.can('competences'));
   const withEvidence = $derived(app.can('learn_evidence'));
@@ -170,9 +176,9 @@
     <p class="none" role="alert">{t('competences.failed')} <button type="button" onclick={() => void read()}>{t('paths.retry')}</button></p>
   {:else if doc === null}
     <p class="none" role="status">{t('competences.reading')}</p>
-  {:else if items.length === 0 && scope.active}
-    <LearnScopeNote {app} {scope} />
   {:else if items.length === 0}
+    <!-- Under the area filter the note says why; the way to a first field stays below it, for a vault that has none. -->
+    {#if scope.active}<LearnScopeNote {app} {scope} />{/if}
     <div class="empty" data-competences-empty>
       <p>{t('competences.none')}</p>
       <p class="none">{t('competences.none_how')}</p>
@@ -293,7 +299,7 @@
                       {/if}
                       <p class="file">
                         {t('competences.file')}: <code translate="no">{markHidden(item.file)}</code>
-                        {#if app.machineActions}
+                        {#if app.machineActions && OPENABLE.test(item.id)}
                           <!-- The hub opens the file the engine names for this id; the page sends the id, never the path. -->
                           <button
                             type="button"
