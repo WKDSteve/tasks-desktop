@@ -1913,3 +1913,42 @@ async fn the_test_sheets_of_a_task_are_asked_at_the_level_they_need_and_only_of_
         "{status} {doc}"
     );
 }
+
+/// The areas of a phone come from the answer of `areas` the hub holds. An area that went since (an empty one, deleted:
+/// the state of the vault does not move) made the engine refuse the whole `learn_history` as `not_found` until the held
+/// answer ran out; now the hub reads the areas anew and asks once more.
+#[tokio::test]
+async fn learn_history_of_a_phone_survives_an_area_the_held_list_still_names() {
+    let _one = ONE_AT_A_TIME.lock().await;
+    let r = Rig::new("areas-gone").await;
+    let vault = r._dir.join("vault");
+    // gamma.nvim (public, released) is an area of the vault: the hub holds it in its answer of `areas`.
+    std::fs::write(vault.join(".fake-areas-extra"), "gamma.nvim\n").unwrap();
+    let (_device, phone) = r.phone().await;
+    let (status, _) = r.send("GET", "/api/tasks/snapshot", &phone, "").await;
+    assert_eq!(status, 200);
+    let (status, doc) = r
+        .send("GET", "/api/tasks/learn_history?step=day", &phone, "")
+        .await;
+    assert_eq!(status, 200, "{doc}");
+
+    // gamma.nvim is gone; the held answer still names it.
+    std::fs::remove_file(vault.join(".fake-areas-extra")).unwrap();
+    let (status, doc) = r
+        .send("GET", "/api/tasks/learn_history?step=day", &phone, "")
+        .await;
+    assert_eq!(status, 200, "{doc}");
+    let calls = std::fs::read_to_string(vault.join(".fake-calls-learn_history")).unwrap();
+    let lines: Vec<&str> = calls.lines().collect();
+    assert_eq!(lines.len(), 3, "{calls}");
+    assert!(
+        lines[0].contains(r#""areas":["alpha.nvim","gamma.nvim"]"#),
+        "{calls}"
+    );
+    assert!(
+        lines[1].contains(r#""areas":["alpha.nvim","gamma.nvim"]"#),
+        "{calls}"
+    );
+    // asked once more, with the areas read anew
+    assert!(lines[2].contains(r#""areas":["alpha.nvim"]"#), "{calls}");
+}

@@ -29,6 +29,8 @@
 //! * `.fake-not-tasks`: lines `<id>`, files of the vault that are no task (a meeting, a plan, a learning path): `task`
 //!   answers `not_found` for them, while `ops` (`attach`) takes them, as the engine's `attach` takes such a file when
 //!   no open task has the id; `alpha.nvim/missing` names nothing at all, and `ops` refuses it with `not_found`;
+//! * `.fake-areas-extra`: lines `<area>`, areas the engine knows besides `alpha.nvim`, `beta.nvim` and `secret-area`
+//!   (`areas` lists them); `learn_history` refuses an `areas` naming one it does not know with `not_found`;
 //! * `.fake-meetings`: lines `<id>`, the meetings of the vault: `meeting` answers one of them, `not_found` for others;
 //! * `.fake-attach-dirs`: written by an `ops` request that carries `attach_dirs` (the folders the hub
 //!   named), as JSON: what reached the engine;
@@ -102,6 +104,25 @@ fn state(vault: &Path) -> Option<u64> {
     std::fs::read_to_string(vault.join(".fake-n"))
         .ok()
         .and_then(|t| t.trim().parse().ok())
+}
+
+/// `.fake-areas-extra`: lines `<area>`, areas the engine knows besides its own three (`areas`).
+fn extra_areas(vault: &Path) -> Vec<String> {
+    std::fs::read_to_string(vault.join(".fake-areas-extra"))
+        .map(|text| {
+            text.lines()
+                .map(str::trim)
+                .filter(|l| !l.is_empty())
+                .map(str::to_owned)
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Does the engine know `area` now?
+fn known_area(vault: &Path, area: &str) -> bool {
+    matches!(area, "alpha.nvim" | "beta.nvim" | "secret-area")
+        || extra_areas(vault).iter().any(|a| a == area)
 }
 
 fn tasks_fill(call: &Call<'_>, doc: &mut Value) {
@@ -334,11 +355,34 @@ fn tasks_fill(call: &Call<'_>, doc: &mut Value) {
             doc["incomplete"] = json!([]);
         }
         "areas" => {
-            doc["areas"] = json!([
-                { "name": "alpha.nvim", "open": 1 },
-                { "name": "beta.nvim", "open": 0 },
-                { "name": "secret-area", "open": 2 },
-            ]);
+            let mut areas = vec![
+                json!({ "name": "alpha.nvim", "open": 1 }),
+                json!({ "name": "beta.nvim", "open": 0 }),
+                json!({ "name": "secret-area", "open": 2 }),
+            ];
+            areas.extend(
+                extra_areas(vault)
+                    .into_iter()
+                    .map(|name| json!({ "name": name, "open": 0 })),
+            );
+            doc["areas"] = json!(areas);
+        }
+        // An area asked for that the engine does not know (any more): the whole read is refused, as the engine does.
+        "learn_history"
+            if params
+                .get("areas")
+                .and_then(Value::as_array)
+                .is_some_and(|asked| {
+                    asked
+                        .iter()
+                        .filter_map(Value::as_str)
+                        .any(|a| !known_area(vault, a))
+                }) =>
+        {
+            doc["kind"] = json!(call.dialect.error_kind);
+            doc["code"] = json!("not_found");
+            doc["message"] = json!("unknown area");
+            doc["retryable"] = json!(false);
         }
         // `.fake-meetings`: lines `<id>`, the meetings of the vault. With the file, `meeting` answers one of them as that
         // meeting and anything else `not_found`; without it, the plain document (a test merges its own).

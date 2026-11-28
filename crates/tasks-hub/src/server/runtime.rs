@@ -294,6 +294,13 @@ impl Details {
             .map(|(_, doc)| doc.clone())
     }
 
+    /// Drop the answer `id`: it was found out of date although the state of the vault did not change.
+    pub(super) fn drop_one(&mut self, id: &str) {
+        if self.docs.remove(id).is_some() {
+            self.order.retain(|held| held != id);
+        }
+    }
+
     /// Drop every document held: a write changed something the state of the vault may not show.
     pub(super) fn forget(&mut self) {
         self.docs.clear();

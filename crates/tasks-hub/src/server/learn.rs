@@ -322,7 +322,31 @@ async fn read_for(
     let device = is_device(caller);
     let request = match (request, narrow) {
         (Err(why), _) => return bad_query(why),
-        (Ok(r), Narrow::Areas) if device => for_device(st, r).await,
+        (Ok(r), Narrow::Areas) if device => {
+            let narrowed = for_device(st, r.clone()).await;
+            match ask_as(st, device, method, Some(&narrowed)).await {
+                // The areas came from the answer of `areas` the hub holds (`device_areas`). One that went since (deleted
+                // or renamed in an empty area, which moves no state) makes the engine refuse the whole read as
+                // `not_found` (unknown area): the held answer is dropped and the read asked once more with the areas
+                // read anew.
+                Err(response) if response.status() == StatusCode::NOT_FOUND => {
+                    if let Ok(mut held) = st.rt().details.lock() {
+                        held.drop_one(AREAS_KEY);
+                    }
+                    for_device(st, r).await
+                }
+                Ok(reply) => {
+                    let doc =
+                        serde_json::from_str::<serde_json::Value>(&reply.text).unwrap_or_default();
+                    return json_response(
+                        StatusCode::OK,
+                        cut(&st.rt().classes, &doc).to_string(),
+                        None,
+                    );
+                }
+                Err(response) => return response,
+            }
+        }
         (Ok(r), Narrow::AskedArea) if device => {
             let asked = r.get("area").and_then(|a| a.as_str());
             if asked.is_some_and(|area| !device_cut::released(&st.rt().classes, area)) {
